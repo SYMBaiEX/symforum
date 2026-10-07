@@ -40,6 +40,7 @@ import {
 } from "../lib/editorial-quality";
 import {
   assessForumContentFit,
+  assessForumReadability,
   assessForumStructuredValue,
   validateForumContentCompleteness,
 } from "../lib/forum-content-quality";
@@ -78,7 +79,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v21-evidence-sized-editorial";
+const PROMPT_VERSION = "suki-forum-v22-reader-value";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // Two bounded corrections can repair distinct issues; the shared action deadline
 // reserves time for the mandatory independent review and commit.
@@ -989,6 +990,7 @@ export async function runForumResearchSlot(
     const reviewPrompt = forumEditorialReviewPrompt({
       title: draft.title,
       body: draft.body,
+      contentFormat: selection.contentFormat,
       board: category,
       sources: snapshots.map((source) => ({
         id: source.id,
@@ -2203,10 +2205,10 @@ export function finalizeForumBody(
     .slice(0, 6)
     .map(
       (snapshot) =>
-        `[*][url=${escapeBbcodeUrl(snapshot.url)}]${escapeBbcodeText(snapshot.articleTitle)}[/url] — ${escapeBbcodeText(snapshot.sourceName)}`,
+        `[url=${escapeBbcodeUrl(snapshot.url)}]${escapeBbcodeText(snapshot.articleTitle)}[/url] — ${escapeBbcodeText(snapshot.sourceName)}`,
     )
     .join("\n");
-  const sourceBlock = `[b]Sources and further reading[/b]\n[list]\n${sourceItems}\n[/list]`;
+  const sourceBlock = `[b]Sources and further reading[/b]\n${sourceItems}`;
   const existingQuestions = forumBodyQuestions(withoutUnverifiedLinks);
   const question =
     options?.discussionQuestion &&
@@ -2217,7 +2219,7 @@ export function finalizeForumBody(
           options.discussionQuestion ?? "",
         ) >= 0.55,
     )
-      ? `\n\n[h3]Over to the board[/h3]\n${escapeBbcodeText(options.discussionQuestion)}`
+      ? `\n\n${escapeBbcodeText(options.discussionQuestion)}`
       : "";
   const related = (options?.relatedThreads ?? [])
     .filter((thread) =>
@@ -2559,15 +2561,17 @@ export function evaluateForumDraft(args: {
     blockingIssues.push(issue);
   }
 
-  const originalValueCoverage =
+  // Field consistency only: matching a body quotation does not establish a
+  // useful contribution. Mandatory independent semantic review judges that.
+  const originalValueFieldCoverage =
     args.draft.originalValue.filter(
       (value) =>
         lexicalEvidenceCoverage(value, plainForumDraftText(args.draft.body)) >=
         0.65,
     ).length / args.draft.originalValue.length;
-  if (originalValueCoverage < 0.6) {
+  if (originalValueFieldCoverage < 0.6) {
     const issue =
-      "Make the submitted original-value statements concrete and visible in the body";
+      "Copy the submitted originalValue entries from the body; matching these fields does not establish a useful contribution";
     feedback.push(issue);
     blockingIssues.push(issue);
   }
@@ -2575,15 +2579,9 @@ export function evaluateForumDraft(args: {
   feedback.push(...markupValidation.feedback);
   if (!markupValidation.valid)
     blockingIssues.push(...markupValidation.feedback);
-  const utilityScore = Math.round(
-    Math.min(
-      100,
-      bodyClaimCoverage * 30 +
-        originalValueCoverage * 30 +
-        (questionValid ? 25 : 5) +
-        (structure.blockCount === 0 || structure.addsInformation ? 15 : 0),
-    ),
-  );
+  // Legacy numeric diagnostic, 0 means unmeasured at this lexical stage.
+  // Do not award usefulness points for quotations, optional questions, or markup.
+  const utilityScore = 0;
   const words = plainWordCount(args.draft.body);
   const [minimumWords, maximumWords] = contentFormatWordRange(
     args.selection.contentFormat,
@@ -2595,7 +2593,7 @@ export function evaluateForumDraft(args: {
     );
     blockingIssues.push(feedback.at(-1)!);
   }
-  const presentation = evaluateForumPresentation(args.draft.body, words);
+  const presentation = evaluateForumPresentation(args.draft.body);
   feedback.push(...presentation.feedback);
   if (presentation.blocking) blockingIssues.push(...presentation.feedback);
   const hygiene = evaluateAgentPublicationHygiene([
@@ -2612,11 +2610,11 @@ export function evaluateForumDraft(args: {
   const formatScore =
     (correctLength ? 55 : 20) + (markupValidation.valid ? 45 : 0);
   let qualityScore = Math.round(
-    groundingScore * 0.35 +
+    (groundingScore * 0.35 +
       noveltyScore * 0.15 +
-      utilityScore * 0.25 +
       formatScore * 0.1 +
-      presentationScore * 0.15,
+      presentationScore * 0.15) /
+      0.75,
   );
   if (!markupValidation.valid) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
@@ -2627,7 +2625,8 @@ export function evaluateForumDraft(args: {
   if (
     bodyClaimCoverage < 1 ||
     unsupportedBodyTokens.length > 0 ||
-    originalValueCoverage < 0.6 ||
+    originalValueFieldCoverage < 0.6 ||
+    presentation.blocking ||
     !questionValid ||
     !correctLength
   ) {
@@ -2644,25 +2643,21 @@ export function evaluateForumDraft(args: {
   };
 }
 
-function evaluateForumPresentation(body: string, words: number) {
-  const paragraphs = body
-    .split(/\n\s*\n/)
-    .map(plainWordCount)
-    .filter(Boolean);
-  const longestParagraph = Math.max(0, ...paragraphs);
-  const headings = (body.match(/\[h[23]\]/gi) ?? []).length;
-  const feedback: string[] = [];
-  if (words >= 700 && headings < 2)
-    feedback.push("Break longer posts into descriptive sections");
-  if (longestParagraph > 160)
-    feedback.push("Split dense paragraphs for mobile readability");
+function evaluateForumPresentation(body: string) {
+  const readability = assessForumReadability(body);
   const score = Math.max(
     0,
     100 -
-      (longestParagraph > 160 ? 35 : 0) -
-      (words >= 700 && headings < 2 ? 25 : 0),
+      readability.issues.reduce(
+        (penalty, issue) => penalty + (issue.blocking ? 35 : 10),
+        0,
+      ),
   );
-  return { score, feedback, blocking: longestParagraph > 250 };
+  return {
+    score,
+    feedback: readability.feedback,
+    blocking: !readability.valid,
+  };
 }
 
 function plainForumDraftText(value: string) {

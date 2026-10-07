@@ -7,6 +7,7 @@ import {
   forumGenerationStageTimeout,
 } from "../lib/forum-generation-budget";
 import { validateForumAgentMarkup } from "../lib/editorial-quality";
+import { assessForumReadability } from "../lib/forum-content-quality";
 import {
   FORUM_EDITORIAL_CONTRACT,
   FORUM_EDITORIAL_REVIEW_CONTRACT,
@@ -66,7 +67,7 @@ import {
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v15-compact-source-led-editions";
+const BELLE_PROMPT_VERSION = "belle-forum-v16-reader-value";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -130,19 +131,23 @@ const BELLE_RESEARCH_CONFIG: ForumResearchAgentConfig = {
     "Belle owns reported intelligence: timely news, scene analysis, human consequences, ecosystem shifts, and evidence-led explainers.",
 };
 
+// Plain prose only: sentence endings can precede ASCII or Unicode closing quotes.
+const BELLE_COMPLETE_PROSE = /^[^<>[\]]*[.!?]["')’”]*\s*$/;
+const BELLE_OPTIONAL_PROSE = /^(?:[^<>[\]]*[.!?]["')’”]*\s*)?$/;
+
 const digestDraftSchema = z.object({
   headline: z.string().min(12).max(125),
-  opening: z.string().min(20).max(500),
+  opening: z.string().min(20).max(500).regex(BELLE_COMPLETE_PROSE),
   briefs: z
     .array(
       z.object({
         hnItemId: z.number().int().positive(),
-        summary: z.string().min(40).max(450),
-        analysis: z.string().max(350),
+        summary: z.string().min(40).max(450).regex(BELLE_COMPLETE_PROSE),
+        analysis: z.string().max(350).regex(BELLE_OPTIONAL_PROSE),
       }),
     )
     .length(BELLE_DIGEST_STORY_LIMIT),
-  closing: z.string().max(500),
+  closing: z.string().max(500).regex(BELLE_OPTIONAL_PROSE),
   claims: z
     .array(
       z.object({
@@ -633,6 +638,12 @@ export const runDailyHackerNewsDigest = internalAction({
                 snapshots[index]?.sourceFetchSucceeded !== true,
             })),
           });
+          const readability = assessForumReadability(body);
+          if (!readability.valid) {
+            throw new AgentPublicationQualityError(
+              readability.feedback.join("; "),
+            );
+          }
           const title = `${displayDate(runDate)} — ${normalizeGeneratedHeadline(
             draft.headline,
           )}`;
@@ -684,6 +695,7 @@ export const runDailyHackerNewsDigest = internalAction({
           const evidenceReviewPrompt = forumEditorialReviewPrompt({
             title,
             body,
+            contentFormat: "digest",
             board: {
               slug: "news-hacker-news",
               name: "Hacker News",
@@ -1147,6 +1159,7 @@ ${FORUM_EDITORIAL_CONTRACT}
 Reporting rules:
 - Use only facts present in successfully retrieved original articles. Entries marked originalSourceRetrieved:false are headline/link listings only: leave analysis empty and do not infer article details.
 - Summarize each story briefly. Add analysis only when it adds an evidence-backed implication; otherwise use an empty string. Do not repeat the summary.
+- Opening, summaries, analysis, and closing are plain text without HTML or BBCode. Every nonempty field must end with a complete sentence ending in . ! or ? (optionally followed by closing quotation marks). Only analysis and closing may be empty. Stay inside each field's character limit; never truncate a sentence to fit.
 - Distinguish reporting from your interpretation. Be willing to have an opinion, but explain the evidence behind it.
 - Respect each story's actual scope. A cross-story connection must be supported and useful, never imposed.
 - Do not invent quotes, details, motivations, benchmarks, or outcomes.
@@ -1190,12 +1203,13 @@ export function clipGeneratedProse(
   maximumLength: number,
   field: "summary" | "analysis" | "opening" | "closing",
 ) {
-  const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
-  if (!/[.!?]["')\]]*$/.test(clean)) {
+  if (value === "" && (field === "analysis" || field === "closing")) return "";
+  if (!BELLE_COMPLETE_PROSE.test(value)) {
     throw new AgentPublicationQualityError(
-      `Belle ${field} ends with a dangling sentence.`,
+      `Belle ${field} ends with a dangling sentence or contains markup instead of plain prose.`,
     );
   }
+  const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
   if (clean.length <= maximumLength) return clean;
   const sentences = new Intl.Segmenter("en", {
     granularity: "sentence",
@@ -1217,7 +1231,7 @@ export function clipGeneratedProse(
     clipped = candidate;
     pending = "";
   }
-  if (!clipped) {
+  if (!clipped || !BELLE_COMPLETE_PROSE.test(clipped)) {
     throw new AgentPublicationQualityError(
       `Belle ${field} cannot be clipped safely within ${maximumLength} characters.`,
     );

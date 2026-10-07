@@ -1317,9 +1317,10 @@ describe("forum notification preferences", () => {
       status: "active",
       authorId: infrastructure.agentUserId,
     });
-    expect(stored?.body).toContain(
+    expect(stored?.body).not.toContain(
       "AI-assisted research draft authored by Suki",
     );
+    expect(stored?.body).toBe(body);
     expect(stored?.body).not.toMatch(
       /\[(?:img|chart|table|decision|sourcecards)/i,
     );

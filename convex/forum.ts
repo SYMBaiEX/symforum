@@ -4,6 +4,7 @@ import {
   FORUM_FEED_DIGEST_BACKFILL_KEY,
 } from "./forumThreadDigest";
 import { countForumExperience } from "./forumExperienceMetrics";
+import { assessForumReadability } from "../lib/forum-content-quality";
 import {
   diversifyForumPage,
   forumSourceDomain,
@@ -12095,25 +12096,23 @@ export const publishSukiForumThread = internalMutation({
 
     assertAgentPublicationHygiene([args.title, args.body]);
     const title = normalizeTitle(args.title);
-    const authoredBody = normalizeThreadBody(args.body);
-    const body = normalizeThreadBody(
-      `${authoredBody}\n\n[i]AI-assisted research draft authored by ${agentName}; source links and editorial review signals are recorded with this publication.[/i]`,
-    );
-    // A trusted attribution footer must never fill an empty final section or
-    // hide an unfinished authored passage. Check both authored and stored copy.
-    for (const publicationBody of [authoredBody, body]) {
-      const markup = validateForumAgentMarkup(publicationBody, {
-        trustedSourceFooter: true,
-      });
-      const completeness = validateForumContentCompleteness(publicationBody, {
-        title,
-        trustedSourceFooter: true,
-      });
-      if (!markup.valid || !completeness.valid) {
-        throw new Error(
-          `${agentName}'s final forum topic is incomplete: ${[...new Set([...markup.feedback, ...completeness.feedback])].join("; ")}`,
-        );
-      }
+    // The acting profile supplies the AI label; provenance remains in records.
+    // Store the reviewed contribution without public review-process boilerplate.
+    const body = normalizeThreadBody(args.body);
+    const readability = assessForumReadability(body, {
+      trustedSourceFooter: true,
+    });
+    const markup = validateForumAgentMarkup(body, {
+      trustedSourceFooter: true,
+    });
+    const completeness = validateForumContentCompleteness(body, {
+      title,
+      trustedSourceFooter: true,
+    });
+    if (!readability.valid || !markup.valid || !completeness.valid) {
+      throw new Error(
+        `${agentName}'s final forum topic is incomplete or too dense: ${[...new Set([...readability.feedback, ...markup.feedback, ...completeness.feedback])].join("; ")}`,
+      );
     }
     const poll = normalizePollInput(args.poll);
     const sources = args.sources.slice(0, 12);

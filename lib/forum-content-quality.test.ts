@@ -1,12 +1,155 @@
 import { describe, expect, test } from "vitest";
 import {
   assessForumContentFit,
+  assessForumReadability,
   assessForumStructuredValue,
   validateForumContentCompleteness,
 } from "./forum-content-quality";
 
 const codes = (body: string) =>
   validateForumContentCompleteness(body).issues.map((issue) => issue.code);
+
+describe("forum prose readability", () => {
+  const releaseParagraphs = [
+    "The Orion model release reports higher scores on several coding and reasoning benchmarks, with a smaller gap on instruction following and mixed results on multilingual tasks. The published table lists performance across different sizes, but the headline figures come from a particular prompting setup and do not establish what happens in a production workflow. Some comparisons use different inference budgets, so the ranking alone does not tell us which model is the better choice for a constrained deployment.",
+    "For someone already running a local assistant, the useful next step is a small evaluation with representative requests. Keep the current model as the baseline, include a few failures you have actually seen, and record response quality alongside latency and memory use. Check whether the improvement survives your own system prompt and whether the model still follows the tool contract when a request is ambiguous. A benchmark lead would be less useful if routine calls become less reliable.",
+    "I would treat this release as a candidate for testing rather than an automatic upgrade. The source provides reported results, but it leaves enough deployment questions open that a short comparison on real tasks could change the decision. The immediate takeaway is to test the claimed gain where it matters to you before spending time migrating the rest of your setup.",
+  ];
+  const words = (count: number) => Array.from({ length: count }, () => "word").join(" ");
+
+  test("holds a dense model-release wall and accepts the same substance grouped naturally", () => {
+    const dense = assessForumReadability(releaseParagraphs.join(" "));
+    expect(dense).toMatchObject({ valid: false, formattingOnly: true, paragraphCount: 1 });
+    expect(dense.maxParagraphWords).toBeGreaterThan(200);
+    expect(dense.issues).toEqual([
+      expect.objectContaining({ code: "long_prose_paragraph", paragraph: 1, blocking: true }),
+    ]);
+    expect(dense.feedback[0]).toContain("natural change of thought");
+    expect(assessForumReadability(releaseParagraphs.join("\n\n"))).toMatchObject({
+      valid: true, paragraphCount: 3, issues: [],
+    });
+  });
+
+  test("recommends a split above 100 words and holds only above 120", () => {
+    expect(assessForumReadability(words(100)).issues).toEqual([]);
+    for (const count of [101, 120]) {
+      expect(assessForumReadability(words(count))).toMatchObject({
+        valid: true,
+        issues: [{ code: "long_prose_paragraph", wordCount: count, blocking: false }],
+      });
+    }
+    expect(assessForumReadability(words(121))).toMatchObject({
+      valid: false,
+      issues: [{ code: "long_prose_paragraph", wordCount: 121, blocking: true }],
+    });
+  });
+
+  test("keeps compact discoveries, questions, answers, and source links free of templates", () => {
+    for (const body of [
+      "A small SDK change worth checking: retries now preserve the request identifier. [url=https://example.com/release]Release notes[/url]",
+      "Does anyone have a reproducible case where this model loses a tool call?",
+      "Try disabling automatic retries first. That should distinguish a malformed response from a duplicate request.",
+      "",
+    ]) expect(assessForumReadability(body), body).toMatchObject({ valid: true, issues: [] });
+  });
+
+  test("does not treat soft line wraps, style tags, or quotations as paragraph breaks", () => {
+    for (const body of [
+      `${words(70)}\n${words(70)}`,
+      `[b]${words(70)}[/b] [i]${words(70)}[/i]`,
+      `[quote]${words(140)}[/quote]`,
+      `${words(70)}[br]${words(70)}`,
+    ]) expect(assessForumReadability(body), body).toMatchObject({ valid: false, maxParagraphWords: 140 });
+  });
+
+  test("preserves real paragraphs and headings without requiring them", () => {
+    for (const body of [
+      `[p]${words(70)}[/p][p]${words(70)}[/p]`,
+      `${words(70)}\n[h2]A separate consideration[/h2]\n${words(70)}`,
+      `${words(70)}\n\n${words(70)}`,
+      `${words(70)}\n## A separate consideration\n${words(70)}`,
+    ]) expect(assessForumReadability(body), body).toMatchObject({ valid: true, issues: [] });
+  });
+
+  test("excludes closed code, tables, and math from prose paragraph totals", () => {
+    const blocks = [
+      `[code=ts]// ${words(150)}\nconst markup = '[list]';[/code]`,
+      `\`\`\`ts\n// ${words(150)}\n\`\`\``,
+      `~~~text\n${words(150)}\n~~~`,
+      `[math]${words(150)}[/math]`,
+      `[latex]${words(150)}[/latex]`,
+      `$$${words(150)}$$`,
+      `\\[${words(150)}\\]`,
+      `[table][tr][td]${words(75)}[/td][td]${words(75)}[/td][/tr][/table]`,
+      `| Option | Tradeoff |\n| --- | --- |\n| A | ${words(75)} |\n| B | ${words(75)} |`,
+      `[decision]A | ${words(75)}\nB | ${words(75)}[/decision]`,
+    ];
+    for (const block of blocks) {
+      expect(assessForumReadability(`A useful example.\n\n${block}\n\nTry it on a small test first.`), block)
+        .toMatchObject({ valid: true, paragraphCount: 2, issues: [] });
+      expect(assessForumReadability(`${words(140)}\n\n${block}`), block).toMatchObject({ valid: false });
+    }
+  });
+
+  test("assesses Markdown list entries individually rather than summing the entire list", () => {
+    const list = ["-", "*", "1.", "2)"].map((marker) => `${marker} ${words(55)}\n  ${words(15)}`).join("\n");
+    expect(assessForumReadability(list)).toMatchObject({ valid: true, paragraphCount: 4, maxParagraphWords: 70 });
+    expect(assessForumReadability(`- ${words(140)}`)).toMatchObject({ valid: false });
+  });
+
+  test("holds a long BBCode bullet while preserving short and nested bullet lists", () => {
+    expect(assessForumReadability(`[list][*]${words(150)}[/list]`)).toMatchObject({
+      valid: false,
+      issues: [{ code: "long_prose_paragraph", wordCount: 150, blocking: true }],
+    });
+    const list = `[list]${Array.from({ length: 10 }, () => `[*]${words(25)}`).join("")}[/list]`;
+    expect(assessForumReadability(list)).toMatchObject({ valid: true, paragraphCount: 10, maxParagraphWords: 25 });
+    expect(assessForumReadability(`[list][*]${words(60)}[list][*]${words(60)}[/list][*]${words(60)}[/list]`))
+      .toMatchObject({ valid: true, paragraphCount: 3, maxParagraphWords: 60 });
+    expect(assessForumReadability(`[list][*]A code example: [code]${words(150)}[/code][*]A small follow-up[/list]`))
+      .toMatchObject({ valid: true, issues: [] });
+  });
+
+  test("excludes only an explicitly trusted final source footer", () => {
+    const footer = `\n[b]Sources and further reading[/b]\n${Array.from({ length: 3 }, (_, index) => `[url=https://example.com/${index}]${words(60)}[/url]`).join("\n")}`;
+    const body = `This compact discovery is worth a small local test.${footer}`;
+    expect(assessForumReadability(body)).toMatchObject({ valid: false });
+    expect(assessForumReadability(body, { trustedSourceFooter: true })).toMatchObject({
+      valid: true, paragraphCount: 1, issues: [],
+    });
+    const forged = `A short opening.\n[b]Sources and further reading[/b]\n${words(150)}${footer}`;
+    expect(assessForumReadability(forged, { trustedSourceFooter: true })).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "long_prose_paragraph", blocking: true })],
+    });
+    expect(assessForumReadability(`${words(150)}${footer}`, { trustedSourceFooter: true }))
+      .toMatchObject({ valid: false, maxParagraphWords: 150 });
+    // Without a newline marker, even a trusted caller cannot hide the body.
+    expect(assessForumReadability(`[b]Sources and further reading[/b] ${words(150)}`, { trustedSourceFooter: true }))
+      .toMatchObject({ valid: false });
+  });
+
+  test("unfinished display markup cannot hide dense prose", () => {
+    for (const body of [
+      `[code]${words(140)}`,
+      `[list][*]${words(140)}`,
+      `[table]${words(140)}`,
+      `\`\`\`text\n${words(140)}`,
+      `$$${words(140)}`,
+      `${words(70)} | ${words(70)}`,
+    ]) expect(assessForumReadability(body), body).toMatchObject({ valid: false });
+  });
+
+  test("holds oversized authored bodies explicitly rather than passing a scanned prefix", () => {
+    expect(assessForumReadability("short\n\n" + "x".repeat(64_000))).toMatchObject({
+      valid: false,
+      issues: [{ code: "readability_scan_limit", blocking: true, paragraph: 0 }],
+      paragraphCount: 0,
+    });
+    expect(assessForumReadability(`A short post.\n[b]Sources and further reading[/b]\n${"x".repeat(64_000)}`, { trustedSourceFooter: true }))
+      .toMatchObject({ valid: false, issues: [{ code: "readability_scan_limit", blocking: true }] });
+  });
+});
 
 describe("forum publication completeness", () => {
   test("rejects the audited empty LiquidAI sections and empty callouts", () => {

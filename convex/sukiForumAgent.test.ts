@@ -646,7 +646,10 @@ ${"A useful field note. ".repeat(800)}`,
     expect(body).toContain(
       "[url=https://example.com/research]Primary research[/url] — Example Research",
     );
-    expect(body.endsWith("[/list]")).toBe(true);
+    expect(body.endsWith(" — Example Research")).toBe(true);
+    expect(body).not.toContain("[list]");
+    expect(body).not.toContain("AI-assisted research draft");
+    expect(body).not.toContain("editorial review signals");
   });
 
   test("does not duplicate a paraphrased closing question and excludes weak related links", () => {
@@ -1172,6 +1175,8 @@ What would you verify first?`,
     });
     expect(result.blockingIssues).toEqual([]);
     expect(forumDraftPassesGate(result)).toBe(true);
+    // The quotation is field-consistent, not proof of a useful contribution.
+    expect(result.utilityScore).toBe(0);
     const finalBody = finalizeForumBody(body, snapshots, {
       discussionQuestion: "",
       subjectTitle: draft.title,
@@ -1181,6 +1186,85 @@ What would you verify first?`,
     expect(finalBody).not.toContain("Over to the board");
     expect(
       validateForumAgentMarkup(finalBody, { trustedSourceFooter: true }).valid,
+    ).toBe(true);
+  });
+
+  test("holds a fully sourced prose wall for rewriting while preserving readable paragraph alternatives", () => {
+    const sentences = Array.from(
+      { length: 8 },
+      (_, index) =>
+        `The benchmark reports ${70 + index}% accuracy for configuration ${index + 1} using the same held-out prompts and unchanged evaluation method.`,
+    );
+    const snapshot = {
+      ...checkpointSnapshot(),
+      articleTitle: "Benchmark accuracy across evaluated configurations",
+      articleDescription:
+        "Each configuration uses the same held-out prompts and evaluation method.",
+      articleText: sentences.join(" "),
+    };
+    const draft = {
+      title: "Read benchmark results against the evaluation workload",
+      body: sentences.join(" "),
+      poll: null,
+      imageCandidateId: null,
+      claims: sentences.map((claim) => ({
+        claim,
+        sourceCandidateId: "source-a",
+        confidence: "high" as const,
+        kind: "fact" as const,
+      })),
+      originalValue: [sentences[0]],
+      discussionQuestion: "",
+    };
+    const evaluate = (body: string) =>
+      evaluateForumDraft({
+        draft: { ...draft, body },
+        selection: { ...discoverySelection(), contentFormat: "brief" },
+        snapshots: [snapshot],
+        recentThreadTitles: [],
+      });
+    const dense = evaluate(draft.body);
+    expect(dense.groundingScore).toBe(100);
+    expect(dense.blockingIssues.join(" ")).toContain(
+      "Split it at a natural change of thought",
+    );
+    expect(dense.qualityScore).toBeLessThan(78);
+    expect(forumDraftPassesGate(dense)).toBe(false);
+    const readable = evaluate(
+      `${sentences.slice(0, 4).join(" ")}\n\n${sentences.slice(4).join(" ")}`,
+    );
+    expect(readable.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(readable)).toBe(true);
+    expect(readable.utilityScore).toBe(0);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: [
+          "The statistics are supported, but the post offers no distinct useful contribution.",
+        ],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+  });
+
+  test("appends a genuine optional question as plain prose and keeps compact verified attribution", () => {
+    const question = "Which stopped-job boundary would you compare first?";
+    const body = finalizeForumBody(
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+      [checkpointSnapshot()],
+      { discussionQuestion: question },
+    );
+    expect(body).toContain(
+      `\n\n${question}\n\n[b]Sources and further reading[/b]`,
+    );
+    expect(body).toContain(
+      "[url=https://example.com/checkpoint]Checkpoint recovery release[/url] — Example",
+    );
+    expect(body).not.toContain("Over to the board");
+    expect(body).not.toContain("[list]");
+    expect(body).not.toContain("AI-assisted research draft");
+    expect(body).not.toContain("editorial review signals");
+    expect(
+      validateForumAgentMarkup(body, { trustedSourceFooter: true }).valid,
     ).toBe(true);
   });
 

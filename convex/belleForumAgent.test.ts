@@ -22,6 +22,101 @@ import type { ArticleSnapshot } from "./sukiForumAgent";
 import { AgentPublicationQualityError } from "../lib/agent-publication-quality";
 
 describe("Belle Hacker News digest", () => {
+  test("model prose schema rejects unfinished copy and markup while allowing optional empty fields", () => {
+    const schema = belleDigestOutputSchema([
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+    ]);
+    const output = groupedDigestFixture();
+    expect(schema.safeParse(output).success).toBe(true);
+    const unfinished = "The article explains recovery but leaves the next step";
+    for (const field of ["opening", "closing"] as const) {
+      expect(schema.safeParse({ ...output, [field]: unfinished }).success).toBe(
+        false,
+      );
+    }
+    for (const field of ["summary", "analysis"] as const) {
+      expect(
+        schema.safeParse({
+          ...output,
+          briefs: output.briefs.map((brief, index) =>
+            index === 0 ? { ...brief, [field]: unfinished } : brief,
+          ),
+        }).success,
+      ).toBe(false);
+    }
+    for (const markup of [
+      "[b]The source describes checkpoint recovery.[/b]",
+      "<b>The source describes checkpoint recovery.</b>",
+    ]) {
+      expect(schema.safeParse({ ...output, opening: markup }).success).toBe(
+        false,
+      );
+      expect(() => clipGeneratedProse(markup, 500, "opening")).toThrow(
+        AgentPublicationQualityError,
+      );
+    }
+    expect(schema.safeParse({ ...output, opening: "" }).success).toBe(false);
+    expect(
+      schema.safeParse({
+        ...output,
+        briefs: output.briefs.map((brief, index) =>
+          index === 0 ? { ...brief, summary: "" } : brief,
+        ),
+      }).success,
+    ).toBe(false);
+    expect(clipGeneratedProse("", 350, "analysis")).toBe("");
+    expect(clipGeneratedProse("", 500, "closing")).toBe("");
+    const jsonSchema = z.toJSONSchema(schema);
+    expect(jsonSchema.properties?.opening).toHaveProperty("pattern");
+    expect(jsonSchema.properties?.closing).toHaveProperty("pattern");
+  });
+
+  test("schema and renderer preserve complete sentences ending in Unicode closing quotes", () => {
+    const schema = belleDigestOutputSchema([
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+    ]);
+    for (const prose of [
+      "The release notes say: “Checkpoint recovery is now available.”",
+      "The release notes say: ‘Checkpoint recovery is now available.’",
+    ]) {
+      const output = {
+        ...groupedDigestFixture(),
+        opening: prose,
+        closing: prose,
+        briefs: groupedDigestFixture().briefs.map((brief) => ({
+          ...brief,
+          summary: prose,
+          analysis: prose,
+        })),
+      };
+      expect(schema.safeParse(output).success).toBe(true);
+      for (const field of [
+        "opening",
+        "summary",
+        "analysis",
+        "closing",
+      ] as const) {
+        expect(clipGeneratedProse(prose, 500, field)).toBe(prose);
+        expect(() => clipGeneratedProse(prose, 25, field)).toThrow(
+          /cannot be clipped safely/,
+        );
+      }
+      const rendered = buildDigestBody({
+        date: "2026-10-07",
+        opening: prose,
+        closing: prose,
+        requestedBriefs: [output.briefs[0]],
+        stories: [
+          { hnItemId: 1, rank: 1, title: "Checkpoint recovery release" },
+        ],
+      });
+      expect(rendered).toContain(prose);
+      expect(rendered).not.toContain("…");
+    }
+  });
+
   test("model JSON schema requires a factual group for every retrieved source", () => {
     const sources = [
       { id: "hn-1-0", sourceFetchSucceeded: true },
