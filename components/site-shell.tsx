@@ -132,7 +132,8 @@ export function SiteShell({
         Skip to content
       </a>
       <SiteHeader
-        blogHref={primarySiteHref}
+        currentPathname={pathname ?? "/"}
+        homeHref={primarySiteHref}
         initialForumHost={initialForumHost}
         initialPrimarySiteHref={initialPrimarySiteHref}
       />
@@ -207,11 +208,13 @@ function SiteFooter({
 }
 
 function SiteHeader({
-  blogHref,
+  currentPathname,
+  homeHref,
   initialForumHost,
   initialPrimarySiteHref,
 }: {
-  blogHref: string;
+  currentPathname: string;
+  homeHref: string;
   initialForumHost: boolean;
   initialPrimarySiteHref: string;
 }) {
@@ -221,7 +224,8 @@ function SiteHeader({
         <div className="flex min-w-0 items-center">
           <SiteSurfaceSwitcher
             activeSurface="blog"
-            blogHref={blogHref}
+            currentPathname={currentPathname}
+            homeHref={homeHref}
             forumHref={initialForumHost ? "/" : "/forum"}
             className="font-mono text-sm"
           />

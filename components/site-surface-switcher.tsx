@@ -1,8 +1,17 @@
 "use client";
 
-import { Check, ChevronDown, MessageSquare, Newspaper } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  Home,
+  Mail,
+  MessageSquare,
+  Newspaper,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { FORUM_SITE_URL } from "@/lib/site-urls";
+import { primarySiteHrefForForumHost } from "@/components/forum/forum-host-url";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,30 +31,75 @@ export function resolveSiteSurfaceForumHref(href: string, hostname: string) {
 
 export function SiteSurfaceSwitcher({
   activeSurface,
-  blogHref,
+  currentPathname,
+  homeHref,
   forumHref,
   className,
   showForumMark = false,
 }: {
   activeSurface: "blog" | "forum";
-  blogHref: string;
+  currentPathname: string;
+  homeHref: string;
   forumHref: string;
   className?: string;
   showForumMark?: boolean;
 }) {
+  const pathname = currentPathname;
   const [resolvedForumHref, setResolvedForumHref] = useState(forumHref);
+  const [resolvedPrimaryHrefs, setResolvedPrimaryHrefs] = useState({
+    blog: "/blog",
+    news: "/news",
+    newsletter: "/newsletter",
+  });
   useEffect(() => {
     setResolvedForumHref(
       resolveSiteSurfaceForumHref(forumHref, window.location.hostname),
     );
+    setResolvedPrimaryHrefs({
+      blog: primarySiteHrefForForumHost("/blog", window.location),
+      news: primarySiteHrefForForumHost("/news", window.location),
+      newsletter: primarySiteHrefForForumHost("/newsletter", window.location),
+    });
   }, [forumHref]);
+  const isPath = (route: string) =>
+    pathname === route || pathname.startsWith(`${route}/`);
+  const currentRoute = isPath("/news")
+    ? "news"
+    : isPath("/newsletter")
+      ? "newsletter"
+      : isPath("/blog")
+        ? "blog"
+        : activeSurface === "forum" || isPath("/forum")
+          ? "forum"
+          : "home";
   const surfaces = [
+    {
+      value: "home",
+      label: "Home",
+      description: "The SYMBaiEX home page",
+      href: homeHref,
+      Icon: Home,
+    },
     {
       value: "blog",
       label: "Blog",
-      description: "Articles, research & news",
-      href: blogHref,
+      description: "Articles and research",
+      href: resolvedPrimaryHrefs.blog,
+      Icon: BookOpen,
+    },
+    {
+      value: "news",
+      label: "News",
+      description: "Stories and source index",
+      href: resolvedPrimaryHrefs.news,
       Icon: Newspaper,
+    },
+    {
+      value: "newsletter",
+      label: "Newsletter",
+      description: "Daily signals and field notes",
+      href: resolvedPrimaryHrefs.newsletter,
+      Icon: Mail,
     },
     {
       value: "forum",
@@ -92,7 +146,7 @@ export function SiteSurfaceSwitcher({
           Explore SYMBaiEX
         </DropdownMenuLabel>
         {surfaces.map(({ value, label, description, href, Icon }) => {
-          const current = activeSurface === value;
+          const current = currentRoute === value;
           return (
             <DropdownMenuItem
               key={value}
