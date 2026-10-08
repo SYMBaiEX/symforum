@@ -1,4 +1,4 @@
-import { SignInPanel } from "@/components/signin-panel";
+import { AuthEntryPanel } from "@/components/auth/auth-entry-panel";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -37,7 +37,7 @@ export default function SignInPage() {
         </div>
         <div className="md:col-span-5 md:col-start-8">
           {configured ? (
-            <SignInPanel />
+            <AuthEntryPanel />
           ) : (
             <div className="border border-row-border p-5">
               <h2 className="text-xl font-semibold">
