@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { agentBearerChallenge } from "./agent-auth-metadata";
+import { validateWorkOSAgentRegistrationCredential } from "./workos-agent-registration";
 
 export const AGENT_DATA_MAX_BODY_BYTES = 32 * 1024;
 export const AGENT_DATA_MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -560,6 +562,29 @@ export async function relayAgentData(
       request,
       { error: "idempotency-key must be 8-96 safe identifier characters." },
       400,
+    );
+  const workosCredentialStatus =
+    await validateWorkOSAgentRegistrationCredential(
+      authorization,
+      process.env,
+    );
+  if (workosCredentialStatus === "invalid") {
+    const response = agentDataJson(
+      request,
+      { error: "The WorkOS agent credential is invalid or revoked." },
+      401,
+    );
+    response.headers.set(
+      "WWW-Authenticate",
+      agentBearerChallenge(401, { invalidToken: true }),
+    );
+    return response;
+  }
+  if (workosCredentialStatus === "unavailable")
+    return agentDataJson(
+      request,
+      { error: "WorkOS agent credential validation is temporarily unavailable." },
+      503,
     );
   const encoded = JSON.stringify({
     operation,

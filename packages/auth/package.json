@@ -1,0 +1,25 @@
+{
+  "name": "@symbaiex/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.tsx",
+    "./query-cache": "./src/query-cache.ts",
+    "./routes": "./src/routes.ts",
+    "./server": "./src/server.tsx"
+  },
+  "dependencies": {
+    "@convex-dev/auth": "0.0.95",
+    "@convex-dev/workos": "0.0.3",
+    "@workos-inc/authkit-nextjs": "4.4.0",
+    "convex-helpers": ">=0.1.124",
+    "server-only": "0.0.1"
+  },
+  "peerDependencies": {
+    "convex": "1.46.0",
+    "convex-helpers": ">=0.1.124",
+    "next": "16.4.0",
+    "react": "19.2.8"
+  }
+}

@@ -77,3 +77,13 @@ export function useReportWebVitals() {
 export function headers() {
   return new Headers();
 }
+
+export async function cookies() {
+  return {
+    get: () => undefined,
+    getAll: () => [],
+    has: () => false,
+    set: () => undefined,
+    delete: () => undefined,
+  };
+}

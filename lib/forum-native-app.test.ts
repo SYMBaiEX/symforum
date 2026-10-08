@@ -46,7 +46,7 @@ describe("automatic native forum parity", () => {
   });
   test("every actual forum route is compiled from its original page module", () => {
     expect(FORUM_NATIVE_ROUTES.map((route) => route.source).sort()).toEqual(
-      pages("app/forum").sort(),
+      pages("apps/forum/app/forum").sort(),
     );
     const imports = readFileSync(
       "components/forum/plugin-adapter/routes.generated.ts",

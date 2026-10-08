@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { GET as prm } from "../app/.well-known/oauth-protected-resource/route";
+import { GET as prm } from "../apps/platform/app/.well-known/oauth-protected-resource/route";
 import {
   serviceAuthMetadata,
   serviceAuthEnabled,

@@ -7,12 +7,12 @@ import { ProfileNewsletterPreferences } from "@/components/profile-newsletter-pr
 import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
 import { asRoute } from "@/lib/typed-route";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export function CurrentProfilePanel() {
-  const { signOut } = useAuthActions();
   const viewer = useQuery(convexRefs.users.maybeViewer, { includeBio: true });
 
   if (viewer === undefined) {
@@ -70,14 +70,7 @@ export function CurrentProfilePanel() {
               <Link href="/admin">Open admin</Link>
             </Button>
           ) : null}
-          <Button
-            onClick={() => void signOut()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Sign out
-          </Button>
+          <SignOutButton />
         </div>
         <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2">
           <MetaItem
@@ -138,6 +131,31 @@ export function CurrentProfilePanel() {
         <ProfileNewsletterPreferences />
       </aside>
     </div>
+  );
+}
+
+function SignOutButton() {
+  if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true") {
+    return <WorkOSSignOut />;
+  }
+  return <LegacySignOut />;
+}
+
+function WorkOSSignOut() {
+  const { signOut } = useAuth();
+  return (
+    <Button type="button" onClick={() => void signOut()} size="sm" variant="outline">
+      Sign out
+    </Button>
+  );
+}
+
+function LegacySignOut() {
+  const { signOut } = useAuthActions();
+  return (
+    <Button type="button" onClick={() => void signOut()} size="sm" variant="outline">
+      Sign out
+    </Button>
   );
 }
 

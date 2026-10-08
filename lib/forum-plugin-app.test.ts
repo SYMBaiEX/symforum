@@ -1367,8 +1367,8 @@ describe("forum MCP App resource", () => {
 
   test("ships exactly the canonical forum stylesheet in the portable resource", () => {
     const sharedCss = readFileSync(new URL("../styles/forum-shared.css", import.meta.url), "utf8");
-    const nativeCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-    expect(nativeCss).toContain('@import "../styles/forum-shared.css"');
+    const nativeCss = readFileSync(new URL("../apps/forum/app/globals.css", import.meta.url), "utf8");
+    expect(nativeCss).toContain('@import "../../../styles/forum-shared.css"');
     expect(FORUM_PLUGIN_APP_HTML).toContain(sharedCss);
     expect(FORUM_PLUGIN_APP_HTML).toContain('data-forum-plugin');
     expect(sharedCss).toContain('.dark .forum-app-shell, .dark [data-surface=forum], :root[data-forum-plugin][data-theme=dark]');

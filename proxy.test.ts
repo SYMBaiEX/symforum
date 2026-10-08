@@ -35,6 +35,15 @@ vi.mock("@convex-dev/auth/nextjs/server", () => ({
     }),
 }));
 
+vi.mock("@workos-inc/authkit-nextjs", () => ({
+  applyResponseHeaders: (response: Response) => response,
+  authkit: async () => ({ headers: new Headers(), session: null }),
+  partitionAuthkitHeaders: () => ({
+    requestHeaders: new Headers(),
+    responseHeaders: new Headers(),
+  }),
+}));
+
 describe("proxy forum routing", () => {
   test("keeps OAuth completion identifiers out of referrers, caches and indexing", async () => {
     const proxy = await loadProxy();

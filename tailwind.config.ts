@@ -6,7 +6,8 @@ export default {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./apps/*/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./apps/*/components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   safelist: ["dark"],
   theme: {

@@ -2,12 +2,17 @@ import { ConvexError, v } from "convex/values";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
 import {
+  env,
   internalMutation,
   internalQuery,
   mutation,
   query,
 } from "./_generated/server";
-import { hasSiteAdminAccess, requireAuthenticatedUser } from "./authz";
+import {
+  hasSiteAdminAccess,
+  isWorkOSAuthKitIdentity,
+  requireAuthenticatedUser,
+} from "./authz";
 import {
   buildAgentLoginMessage,
   canonicalAgentLoginAudience,
@@ -17,6 +22,7 @@ import {
 } from "./agentIdentityCrypto";
 import { agentScopeValidator, type AgentScope } from "./authz";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { workosAgentRegistrationConfig } from "../lib/workos-config";
 import {
   DEFAULT_HARD_CAP_UNITS,
   DEFAULT_PER_AGENT_MONTHLY_LIMIT_UNITS,
@@ -31,6 +37,8 @@ const MAX_AGENT_ID_LENGTH = 64;
 const MAX_AUDIENCE_LENGTH = 128;
 const MAX_CONSOLE_AGENTS = 50;
 const MAX_ENROLLED_AGENTS_PER_OWNER = MAX_CONSOLE_AGENTS;
+const MAX_WORKOS_AGENT_REGISTRATIONS_PER_OWNER = 100;
+const WORKOS_REGISTRATION_PATTERN = /^agent_reg_[A-Za-z0-9]{8,64}$/;
 const agentEnrollmentRateLimiter = new RateLimiter(components.rateLimiter, {
   enrollmentPerOwner: {
     kind: "token bucket",
@@ -222,6 +230,201 @@ export const listMyAgentConsoleStatus = query({
       truncated: identityPage.length > MAX_CONSOLE_AGENTS,
       agents: agents.sort((a, b) => a.agentId.localeCompare(b.agentId)),
     };
+  },
+});
+
+export const listMyWorkOSAgentRegistrations = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      registrationId: v.string(),
+      agentId: v.string(),
+      status: v.union(v.literal("active"), v.literal("revoked")),
+      createdAt: v.number(),
+      revokedAt: v.union(v.number(), v.null()),
+    }),
+  ),
+  handler: async (ctx) => {
+    const owner = await requireAuthenticatedUser(ctx);
+    if (owner.isAgent === true || owner.isAnonymous === true) {
+      throw new ConvexError({
+        code: "HUMAN_ACCOUNT_REQUIRED",
+        message: "A human account is required to manage agent registrations.",
+      });
+    }
+    const rows = await ctx.db
+      .query("workosAgentRegistrations")
+      .withIndex("by_ownerUserId_and_status", (q) =>
+        q.eq("ownerUserId", owner._id),
+      )
+      .order("desc")
+      .take(MAX_WORKOS_AGENT_REGISTRATIONS_PER_OWNER);
+    const linked = await Promise.all(
+      rows.map(async (row) => {
+        const agent = await ctx.db.get("agentIdentities", row.agentIdentityId);
+        return agent
+          ? {
+              registrationId: row.registrationId,
+              agentId: agent.agentId,
+              status: row.status,
+              createdAt: row.createdAt,
+              revokedAt: row.revokedAt ?? null,
+            }
+          : null;
+      }),
+    );
+    return linked.filter((item) => item !== null);
+  },
+});
+
+export const linkMyWorkOSAgentRegistration = mutation({
+  args: { registrationId: v.string(), agentId: v.string() },
+  returns: v.object({ status: v.literal("linked"), agentId: v.string() }),
+  handler: async (ctx, args) => {
+    const owner = await requireAuthenticatedUser(ctx);
+    if (owner.isAgent === true || owner.isAnonymous === true) {
+      throw new ConvexError({
+        code: "HUMAN_ACCOUNT_REQUIRED",
+        message: "A human account is required to link an agent registration.",
+      });
+    }
+    if (!workosAgentRegistrationConfig(env)) {
+      throw new ConvexError({
+        code: "WORKOS_AGENT_REGISTRATION_DISABLED",
+        message: "WorkOS Agent Registration is not enabled for this deployment.",
+      });
+    }
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || !isWorkOSAuthKitIdentity(identity)) {
+      throw new ConvexError({
+        code: "WORKOS_AUTH_REQUIRED",
+        message: "Sign in with WorkOS before linking an agent registration.",
+      });
+    }
+    const identityLink = await ctx.db
+      .query("authIdentityLinks")
+      .withIndex("by_tokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .unique();
+    if (
+      !identity.subject ||
+      !identityLink ||
+      identityLink.userId !== owner._id ||
+      identityLink.workosUserId !== identity.subject
+    ) {
+      throw new ConvexError({
+        code: "WORKOS_ACCOUNT_LINK_REQUIRED",
+        message: "Connect this WorkOS identity to the existing human account first.",
+      });
+    }
+    if (!WORKOS_REGISTRATION_PATTERN.test(args.registrationId)) {
+      throw new ConvexError({
+        code: "INVALID_WORKOS_REGISTRATION_ID",
+        message: "Enter the agent_reg_ identifier issued by WorkOS.",
+      });
+    }
+
+    const agentId = resolveAgentId({ agentId: args.agentId });
+    const agent = await findIdentityByAgentId(ctx, agentId);
+    if (
+      !agent ||
+      agent.ownerUserId !== owner._id ||
+      agent.status !== "active" ||
+      !agent.scopes.includes("evidence")
+    ) {
+      throw new ConvexError({
+        code: "AGENT_NOT_AVAILABLE",
+        message: "Choose an active evidence agent enrolled by your account.",
+      });
+    }
+
+    const existingRegistration = await ctx.db
+      .query("workosAgentRegistrations")
+      .withIndex("by_registrationId", (q) =>
+        q.eq("registrationId", args.registrationId),
+      )
+      .unique();
+    if (existingRegistration) {
+      if (
+        existingRegistration.status === "active" &&
+        existingRegistration.agentIdentityId === agent._id &&
+        existingRegistration.ownerUserId === owner._id &&
+        existingRegistration.ownerWorkosUserId === identity.subject
+      )
+        return { status: "linked" as const, agentId: agent.agentId };
+      throw new ConvexError({
+        code: "WORKOS_REGISTRATION_ALREADY_LINKED",
+        message: "This WorkOS registration is already linked or was revoked.",
+      });
+    }
+    const existingAgentRegistration = await ctx.db
+      .query("workosAgentRegistrations")
+      .withIndex("by_agentIdentityId_and_status", (q) =>
+        q.eq("agentIdentityId", agent._id).eq("status", "active"),
+      )
+      .first();
+    if (existingAgentRegistration) {
+      throw new ConvexError({
+        code: "AGENT_REGISTRATION_ALREADY_LINKED",
+        message: "Revoke the active WorkOS registration before linking another.",
+      });
+    }
+    const activeRegistrations = await ctx.db
+      .query("workosAgentRegistrations")
+      .withIndex("by_ownerUserId_and_status", (q) =>
+        q.eq("ownerUserId", owner._id).eq("status", "active"),
+      )
+      .take(MAX_WORKOS_AGENT_REGISTRATIONS_PER_OWNER);
+    if (activeRegistrations.length >= MAX_WORKOS_AGENT_REGISTRATIONS_PER_OWNER) {
+      throw new ConvexError({
+        code: "WORKOS_REGISTRATION_LIMIT",
+        message: "Revoke an unused WorkOS agent registration before adding another.",
+      });
+    }
+
+    await ctx.db.insert("workosAgentRegistrations", {
+      registrationId: args.registrationId,
+      ownerUserId: owner._id,
+      ownerWorkosUserId: identity.subject,
+      agentIdentityId: agent._id,
+      status: "active",
+      createdAt: Date.now(),
+    });
+    return { status: "linked" as const, agentId: agent.agentId };
+  },
+});
+
+export const revokeMyWorkOSAgentRegistration = mutation({
+  args: { registrationId: v.string() },
+  returns: v.object({ status: v.literal("revoked") }),
+  handler: async (ctx, args) => {
+    const owner = await requireAuthenticatedUser(ctx);
+    if (owner.isAgent === true || owner.isAnonymous === true) {
+      throw new ConvexError({
+        code: "HUMAN_ACCOUNT_REQUIRED",
+        message: "A human account is required to revoke an agent registration.",
+      });
+    }
+    const row = await ctx.db
+      .query("workosAgentRegistrations")
+      .withIndex("by_registrationId", (q) =>
+        q.eq("registrationId", args.registrationId),
+      )
+      .unique();
+    if (!row || row.ownerUserId !== owner._id) {
+      throw new ConvexError({
+        code: "WORKOS_REGISTRATION_NOT_FOUND",
+        message: "That WorkOS agent registration is not linked to your account.",
+      });
+    }
+    if (row.status === "active") {
+      await ctx.db.patch("workosAgentRegistrations", row._id, {
+        status: "revoked",
+        revokedAt: Date.now(),
+      });
+    }
+    return { status: "revoked" as const };
   },
 });
 

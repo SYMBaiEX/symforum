@@ -13,6 +13,62 @@ import { addForumPluginRoutes } from "./forumPluginHttp";
 const http = httpRouter();
 addServiceAuthRoutes(http);
 addForumPluginRoutes(http);
+http.route({
+  path: "/auth/handle-login",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const configuredSecret = env.AUTH_HANDLE_LOOKUP_SECRET;
+    const suppliedSecret = request.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "");
+    if (
+      !configuredSecret ||
+      configuredSecret.length < 32 ||
+      !suppliedSecret ||
+      !constantTimeEqual(suppliedSecret, configuredSecret)
+    ) {
+      return privateJson({ error: "not_found" }, 404);
+    }
+    if (
+      request.headers.get("content-type")?.split(";")[0].trim() !==
+      "application/json"
+    ) {
+      return privateJson({ error: "invalid_request" }, 400);
+    }
+    const contentLength = Number(request.headers.get("content-length") ?? 0);
+    if (contentLength > 1024) {
+      return privateJson({ error: "invalid_request" }, 413);
+    }
+    let body: unknown;
+    try {
+      const text = await request.text();
+      if (text.length > 1024) {
+        return privateJson({ error: "invalid_request" }, 413);
+      }
+      body = JSON.parse(text);
+    } catch {
+      return privateJson({ error: "invalid_request" }, 400);
+    }
+    const handle =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).handle
+        : null;
+    if (
+      typeof handle !== "string" ||
+      handle.length > 32 ||
+      !/^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/i.test(handle)
+    ) {
+      return privateJson({ error: "invalid_request" }, 400);
+    }
+    const result = await ctx.runQuery(
+      internal.authKitIdentity.getVerifiedEmailForHandle,
+      { handle: handle.toLowerCase() },
+    );
+    return result
+      ? privateJson(result, 200)
+      : privateJson({ error: "not_found" }, 404);
+  }),
+});
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const FORUM_ATTACHMENT_ALLOWED_CONTENT_TYPES = new Set([
   "image/gif",
@@ -62,6 +118,26 @@ const agentSemanticDispatchRef = makeFunctionReference<
 >("agentSemanticApi:dispatch");
 
 auth.addHttpRoutes(http);
+
+function privateJson(value: unknown, status: number) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: {
+      "Cache-Control": "no-store, private",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function constantTimeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
 
 for (const path of [
   "/agent/auth/challenge",

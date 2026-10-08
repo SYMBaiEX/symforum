@@ -8,6 +8,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const environmentPath = resolve(projectRoot, ".env");
 
 const convexEnvironmentKeys = [
+  "AUTH_HANDLE_LOOKUP_SECRET",
   "AUTH_GOOGLE_ID",
   "AUTH_GOOGLE_SECRET",
   "CONTACT_FROM_EMAIL",

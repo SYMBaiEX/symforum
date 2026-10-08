@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useAccessToken } from "@workos-inc/authkit-nextjs/components";
 import { useForumRuntime } from "./forum-runtime-context";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -222,9 +223,14 @@ export async function uploadSelectedForumAgentFiles(
   policyVersion: number,
   idempotencyKey: string,
   signal: AbortSignal,
+  getAccessToken?: () => Promise<string | undefined>,
 ) {
   assertActive(signal);
   const files = selectedForumAgentFiles(document);
+  const accessToken = await getAccessToken?.();
+  if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" && !accessToken) {
+    throw new Error("Sign in again before uploading forum attachments.");
+  }
   const attachments: unknown[] = [];
   const proposals: unknown[] = [];
   for (let index = 0; index < files.length; index++) {
@@ -235,6 +241,7 @@ export async function uploadSelectedForumAgentFiles(
       credentials: "same-origin",
       signal,
       headers: {
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": forumAttachmentContentTypeForFile(file)!,
         "X-Forum-Attachment-Filename": encodeURIComponent(file.name),
         "X-Forum-Plugin-Connection": connectionId,
@@ -296,6 +303,7 @@ export function ForumWebMcp() {
 function LiveForumWebMcp() {
   const pathname = usePathname();
   const convex = useConvex();
+  const { getAccessToken } = useAccessToken();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const connectionId = useForumBrowserConnectionId();
   const viewer = useQuery(api.users.maybeViewer, isAuthenticated ? {} : "skip");
@@ -348,6 +356,7 @@ function LiveForumWebMcp() {
               activeContext.policyVersion,
               key,
               signal,
+              getAccessToken,
             )
         : undefined,
     );
@@ -369,7 +378,7 @@ function LiveForumWebMcp() {
         new Error("Forum navigation, session or connection changed."),
       );
     };
-  }, [pathname, convex, isAuthenticated, isLoading, connectionId, context]);
+  }, [pathname, convex, getAccessToken, isAuthenticated, isLoading, connectionId, context]);
   return null;
 }
 

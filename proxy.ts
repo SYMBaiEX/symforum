@@ -4,6 +4,11 @@ import {
   nextjsMiddlewareRedirect,
 } from "@convex-dev/auth/nextjs/server";
 import {
+  applyResponseHeaders,
+  authkit,
+  partitionAuthkitHeaders,
+} from "@workos-inc/authkit-nextjs";
+import {
   isPrivateAiReadablePath,
   normalizePathname,
 } from "@/lib/ai-readable-path";
@@ -27,36 +32,15 @@ const SONNER_STYLE_HASHES = [
 ];
 const proxy = convexConfigured
   ? convexAuthNextjsMiddleware(
-      async (request, { convexAuth }) => {
-        const policy = contentSecurityPolicy();
-        if (isSignInPage(request) && (await convexAuth.isAuthenticated())) {
-          const redirectTo = cleanRedirect(
-            request.nextUrl.searchParams.get("redirectTo"),
-          );
-          return applySecurityHeaders(
-            nextjsMiddlewareRedirect(request, redirectTo),
-            policy,
-            request,
-          );
-        }
-        return applySecurityHeaders(
-          nextOrForumRewrite(request, policy),
-          policy,
-          request,
-        );
-      },
+      async (request, { convexAuth }) =>
+        proxyRequest(request, await convexAuth.isAuthenticated()),
       {
         convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
         cookieConfig: { maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
       },
     )
   : function proxy(request: NextRequest) {
-      const policy = contentSecurityPolicy();
-      return applySecurityHeaders(
-        nextOrForumRewrite(request, policy),
-        policy,
-        request,
-      );
+      return proxyRequest(request, false);
     };
 
 export default proxy;
@@ -82,8 +66,40 @@ function cleanRedirect(value: string | null) {
   return value;
 }
 
-function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
-  const requestHeaders = new Headers(request.headers);
+async function proxyRequest(
+  request: NextRequest,
+  legacyAuthenticated: boolean,
+) {
+  const authKitConfigured =
+    process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" &&
+    Boolean(process.env.WORKOS_CLIENT_ID);
+  const authKit = authKitConfigured
+    ? await authkit(request, { eagerAuth: true })
+    : null;
+  const { requestHeaders, responseHeaders } = partitionAuthkitHeaders(
+    request,
+    authKit?.headers ?? new Headers(),
+  );
+  const policy = contentSecurityPolicy();
+  const response =
+    isSignInPage(request) && (authKit?.session.user || legacyAuthenticated)
+      ? nextjsMiddlewareRedirect(
+          request,
+          cleanRedirect(request.nextUrl.searchParams.get("redirectTo")),
+        )
+      : nextOrForumRewrite(request, policy, requestHeaders);
+  return applyResponseHeaders(
+    applySecurityHeaders(response, policy, request),
+    responseHeaders,
+  );
+}
+
+function nextWithNonce(
+  request: NextRequest,
+  policy: SecurityPolicy,
+  forwardedHeaders: Headers,
+) {
+  const requestHeaders = new Headers(forwardedHeaders);
   requestHeaders.delete(MARKDOWN_404_SIGNAL_HEADER);
   if (acceptsMediaType(request.headers.get("accept"), "text/markdown")) {
     requestHeaders.set(MARKDOWN_404_SIGNAL_HEADER, "1");
@@ -101,15 +117,19 @@ function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
   return response;
 }
 
-function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
-  const markdownResponse = markdownRewrite(request, policy);
+function nextOrForumRewrite(
+  request: NextRequest,
+  policy: SecurityPolicy,
+  forwardedHeaders: Headers,
+) {
+  const markdownResponse = markdownRewrite(request, policy, forwardedHeaders);
   if (markdownResponse !== null) {
     return markdownResponse;
   }
 
   const forumRoute = forumSubdomainRoute(request);
   if (forumRoute === null) {
-    return nextWithNonce(request, policy);
+    return nextWithNonce(request, policy, forwardedHeaders);
   }
   if (forumRoute.kind === "redirect") {
     return applySecurityHeaders(
@@ -124,7 +144,7 @@ function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
   return NextResponse.rewrite(forumRoute.url, {
     request: {
       headers: nonceRequestHeaders(
-        new Headers(request.headers),
+        new Headers(forwardedHeaders),
         policy,
         request.nextUrl.pathname,
       ),
@@ -132,7 +152,11 @@ function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
   });
 }
 
-function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
+function markdownRewrite(
+  request: NextRequest,
+  policy: SecurityPolicy,
+  forwardedHeaders: Headers,
+) {
   const markdownRequest = getMarkdownRequest(request);
   if (markdownRequest === null) {
     return null;
@@ -175,7 +199,7 @@ function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
   const url = request.nextUrl.clone();
   url.pathname = `/markdown${internalPath === "/" ? "" : internalPath}`;
   const headers = nonceRequestHeaders(
-    new Headers(request.headers),
+    new Headers(forwardedHeaders),
     policy,
     sourcePath,
   );

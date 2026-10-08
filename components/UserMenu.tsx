@@ -10,9 +10,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { User } from "lucide-react";
 import { ReactNode } from "react";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export function UserMenu({ children }: { children: ReactNode }) {
   return (
@@ -40,6 +41,20 @@ export function UserMenu({ children }: { children: ReactNode }) {
 }
 
 function SignOutButton() {
+  if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true") {
+    return <WorkOSSignOutButton />;
+  }
+  return <LegacySignOutButton />;
+}
+
+function WorkOSSignOutButton() {
+  const { signOut } = useAuth();
+  return (
+    <DropdownMenuItem onClick={() => void signOut()}>Sign out</DropdownMenuItem>
+  );
+}
+
+function LegacySignOutButton() {
   const { signOut } = useAuthActions();
   return (
     <DropdownMenuItem onClick={() => void signOut()}>Sign out</DropdownMenuItem>

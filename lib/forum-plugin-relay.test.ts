@@ -6,7 +6,7 @@ import {
   hasForumPluginAudience,
   relayForumPlugin,
 } from "./forum-plugin-relay";
-import { GET } from "../app/.well-known/oauth-protected-resource/api/plugin/mcp/route";
+import { GET } from "../apps/platform/app/.well-known/oauth-protected-resource/api/plugin/mcp/route";
 function token(aud: unknown) {
   return `Bearer ${btoa("{}")}.${btoa(JSON.stringify({ aud }))}.signature`;
 }
