@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const SERVER_INFO = {
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
-  version: "2.2.2",
+  version: "2.2.3",
   icons: [FORUM_PLUGIN_ICON],
 };
 const FORUM_PLUGIN_PROTOCOL_VERSIONS = [
@@ -54,7 +54,7 @@ function rpc(
   error?: { code: number; message: string; data?: unknown },
 ) {
   if (error)
-    console.warn("forum-plugin-protocol-error", { code: error.code, message: error.message });
+    console.warn("forum-plugin-protocol-error", { code: error.code, message: error.message, ...(isRecord(error.data) && typeof error.data.method === "string" ? { method: error.data.method.slice(0, 120) } : {}) });
   const headers = forumPluginHeaders(request);
   const responseResult =
     protocol === "modern" && isRecord(result)
@@ -246,6 +246,11 @@ export async function POST(request: Request) {
         ...(protocol === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
       }),
     );
+  if (body.method === "resources/templates/list")
+    return rpc(request, protocol, id, resultEnvelope(protocol, {
+      resourceTemplates: [],
+      ...(protocol === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
+    }));
   if (body.method === "resources/read") {
     if (!isForumAppResourceUri(params.uri))
       return rpc(request, protocol, id, undefined, {
@@ -274,6 +279,7 @@ export async function POST(request: Request) {
     return rpc(request, protocol, id, undefined, {
       code: -32601,
       message: "Method not found",
+      data: { method: body.method },
     });
   if (!isAllowedForumPluginOrigin(request))
     return Response.json(

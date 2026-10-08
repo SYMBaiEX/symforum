@@ -284,7 +284,8 @@ function App() {
         }}
       >
         <div
-          data-native-forum-runtime="2.2.2"
+          data-native-forum-runtime="2.2.3"
+          data-forum-app-rendered="true"
           data-connection-revision={revision}
         >
           <ForumSiteShell
@@ -325,7 +326,7 @@ class HostBoundary extends Component<
   }
   render() {
     return this.state.failed ? (
-      <section className="page-frame page-frame-dense">
+      <section data-forum-app-rendered="true" className="page-frame page-frame-dense">
         <ForumPageHeader title="Reconnect to the forum" />
         <ForumStatusBox
           title="The connection could not continue"

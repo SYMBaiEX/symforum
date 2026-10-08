@@ -22,4 +22,7 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun ci
+      - run: bunx playwright install --with-deps chromium
       - run: bun run verify
+      - run: bun run ui:check
+      - run: bun run test:forum:render

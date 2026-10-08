@@ -1,13 +1,9 @@
 "use client";
 
 import { ConvexProviderWithAuthKit } from "@convex-dev/workos";
+import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
-import {
-  ConvexProviderWithAuth,
-  ConvexReactClient,
-  useConvexAuth,
-  useMutation,
-} from "convex/react";
+import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import {
   AuthKitProvider,
   useAccessToken,
@@ -59,17 +55,14 @@ export function AuthKitConvexProvider({ children }: { children: ReactNode }) {
           </ConvexQueryCacheProvider>
         </ConvexProviderWithAuthKit>
       ) : (
-        <ConvexProviderWithAuth
-          client={client}
-          useAuth={useUnauthenticatedConvexAuth}
-        >
+        <ConvexAuthNextjsProvider client={client}>
           <ConvexQueryCacheProvider
             expiration={CONVEX_QUERY_CACHE_EXPIRATION_MS}
             maxIdleEntries={CONVEX_QUERY_CACHE_MAX_IDLE_ENTRIES}
           >
             {children}
           </ConvexQueryCacheProvider>
-        </ConvexProviderWithAuth>
+        </ConvexAuthNextjsProvider>
       )}
     </AuthKitProvider>
   );
@@ -94,16 +87,6 @@ function ConvexUnavailable() {
       </section>
     </main>
   );
-}
-
-const unauthenticatedConvexAuth = {
-  isLoading: false,
-  isAuthenticated: false,
-  fetchAccessToken: async () => null,
-};
-
-function useUnauthenticatedConvexAuth() {
-  return unauthenticatedConvexAuth;
 }
 
 function AuthKitIdentityBootstrap({ children }: { children: ReactNode }) {
