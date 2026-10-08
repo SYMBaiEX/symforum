@@ -4,10 +4,6 @@ import type { NextConfig } from "next";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
 const forumSiteUrl = process.env.NEXT_PUBLIC_FORUM_SITE_URL ?? "https://forum.symbaiex.com";
-const blogSiteUrl = process.env.NEXT_PUBLIC_BLOG_SITE_URL ?? "https://blog.symbaiex.com";
-const newsSiteUrl = process.env.NEXT_PUBLIC_NEWS_SITE_URL ?? "https://news.symbaiex.com";
-const newsletterSiteUrl =
-  process.env.NEXT_PUBLIC_NEWSLETTER_SITE_URL ?? "https://newsletter.symbaiex.com";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: join(appDirectory, "../.."),
@@ -44,42 +40,6 @@ const nextConfig: NextConfig = {
       {
         source: "/agent/forum-connect",
         destination: `${forumSiteUrl}/agent/forum-connect`,
-        permanent: true,
-      },
-      {
-        source: "/blog",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${blogSiteUrl}/blog`,
-        permanent: true,
-      },
-      {
-        source: "/blog/:path*",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${blogSiteUrl}/blog/:path*`,
-        permanent: true,
-      },
-      {
-        source: "/news",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${newsSiteUrl}/news`,
-        permanent: true,
-      },
-      {
-        source: "/news/:path*",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${newsSiteUrl}/news/:path*`,
-        permanent: true,
-      },
-      {
-        source: "/newsletter",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${newsletterSiteUrl}/newsletter`,
-        permanent: true,
-      },
-      {
-        source: "/newsletter/:path*",
-        has: [{ type: "host", value: "www.symbaiex.com" }],
-        destination: `${newsletterSiteUrl}/newsletter/:path*`,
         permanent: true,
       },
       {
