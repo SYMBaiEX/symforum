@@ -4,6 +4,17 @@ import { FORUM_PLUGIN_STARTUP_HTML, FORUM_PLUGIN_STARTUP_JS } from "./forum-plug
 
 import { FORUM_NATIVE_RESOURCE_URI } from "./forum-native-revision.generated";
 
+const FORUM_PLUGIN_CSP = {
+  connectDomains: [],
+  resourceDomains: [
+    "https://strong-bee-384.convex.cloud",
+    "https://forum.symbaiex.com",
+    "https://www.symbaiex.com",
+    "https://lh3.googleusercontent.com",
+  ],
+  frameDomains: [],
+} as const;
+
 export const FORUM_PLUGIN_APP_RESOURCE = {
   uri: FORUM_NATIVE_RESOURCE_URI,
   name: "symbaiex-forum",
@@ -16,18 +27,15 @@ export const FORUM_PLUGIN_APP_RESOURCE = {
       availableDisplayModes: ["fullscreen"],
       preferredDisplayMode: "fullscreen",
     },
+    // Keep ChatGPT's older widget CSP reader in sync with the MCP Apps field.
+    "openai/widgetCSP": {
+      connect_domains: FORUM_PLUGIN_CSP.connectDomains,
+      resource_domains: FORUM_PLUGIN_CSP.resourceDomains,
+      frame_domains: FORUM_PLUGIN_CSP.frameDomains,
+    },
     ui: {
       prefersBorder: false,
-      csp: {
-        connectDomains: [],
-        resourceDomains: [
-          "https://strong-bee-384.convex.cloud",
-          "https://forum.symbaiex.com",
-          "https://www.symbaiex.com",
-          "https://lh3.googleusercontent.com",
-        ],
-        frameDomains: [],
-      },
+      csp: FORUM_PLUGIN_CSP,
     },
   },
 } as const;
