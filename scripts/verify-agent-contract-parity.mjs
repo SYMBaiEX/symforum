@@ -21,14 +21,14 @@ for (const event of ["evidence.research.completed", "evidence.export.completed"]
   if (!asyncApi.channels?.[event] || !asyncApi.components?.messages) throw new Error(`AsyncAPI is missing ${event}`);
 }
 
-requireText("app/api/agent/openapi.json/route.ts", [
+requireText("apps/platform/app/api/agent/openapi.json/route.ts", [
   '"/v1/research-jobs"',
   '"/v1/exports/{jobId}/manifest"',
   '"/mcp"',
   "AgentError",
   "ArtifactMetadata",
 ]);
-requireText("app/api/agent/mcp/route.ts", ["tools/list", "tools/call"]);
+requireText("apps/platform/app/api/agent/mcp/route.ts", ["tools/list", "tools/call"]);
 requireText("lib/agent-data-api-relay.ts", ["research_artifact", "export_manifest"]);
 requireText("packages/agent-sdk/src/index.ts", ["waitForResearch", "waitForExport", "verifyExportManifest", "verifyWebhookSignature", "paginate"]);
 requireText("packages/agent-python-sdk/src/symbaiex_agent/client.py", ["wait_for_research", "wait_for_export", "verify_export_manifest", "verify_webhook_signature", "paginate"]);

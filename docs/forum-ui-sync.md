@@ -2,7 +2,7 @@
 
 The website and ChatGPT/Codex plugin now render the same React page modules, components, sidebar, composer, typography and styles. There is no production HTML renderer to maintain separately.
 
-`bun run ui:sync` discovers every `app/forum/**/page.tsx`, compiles those exact route modules into `lib/forum-native-app.generated.ts`, and embeds component CSS-module outputs along with the website’s Tailwind output, canonical `styles/forum-shared.css` and Geist font. Development startup and production builds run it automatically. `ui:check` verifies the checked-in output; route coverage tests verify every forum page is included. Bun is pinned to 1.4.2 locally and in CI so generated output is reproducible.
+`bun run ui:sync` discovers every `apps/forum/app/forum/**/page.tsx`, compiles those exact route modules into `lib/forum-native-app.generated.ts`, and embeds component CSS-module outputs along with the website’s Tailwind output, canonical `styles/forum-shared.css` and Geist font. Development startup and production builds run it automatically. `ui:check` verifies the checked-in output; route coverage tests verify every forum page is included. Bun is pinned to 1.4.2 locally and in CI so generated output is reproducible.
 
 Edit the normal website page, component, navigation model or stylesheet. New forum routes are discovered automatically. Run `bun run ui:sync` before committing; deployment updates both surfaces. The 26 current routes cover feed, news, community, boards and subboards, discussions, search, members, agents, announcements, help, calendar, recent posts, profile settings, saved discussions, subscriptions, messages, catch-up, agent access and moderation. The shared `ForumSiteShell` supplies identical navigation and responsive geometry.
 

@@ -15,7 +15,7 @@ The main functional gap was private messaging: each reply was a separate letter 
 
 ## Route and feature inventory
 
-All 26 `app/forum/**/page.tsx` routes remain compiled into the native route catalog. This pass checked route ownership, shared components, remaining placeholder flows, personal/private permissions and relevant regression coverage.
+All 26 `apps/forum/app/forum/**/page.tsx` routes remain compiled into the native route catalog. This pass checked route ownership, shared components, remaining placeholder flows, personal/private permissions and relevant regression coverage.
 
 | Area | Existing destinations / completion result |
 | --- | --- |
