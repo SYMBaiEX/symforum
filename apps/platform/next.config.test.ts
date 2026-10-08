@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import nextConfig from "./next.config";
 
-describe("Platform content subdomain redirects", () => {
-  test("redirects content paths only from the primary www host", async () => {
+describe("Platform content routes", () => {
+  test("does not add cross-host redirects for the shared content routes", async () => {
     const redirects = await nextConfig.redirects?.();
     const contentPaths = [
       "/blog",
@@ -17,9 +17,6 @@ describe("Platform content subdomain redirects", () => {
       contentPaths.includes(rule.source),
     );
 
-    expect(contentRules).toHaveLength(6);
-    for (const rule of contentRules ?? []) {
-      expect(rule.has).toEqual([{ type: "host", value: "www.symbaiex.com" }]);
-    }
+    expect(contentRules).toHaveLength(0);
   });
 });

@@ -49,14 +49,14 @@ describe("proxy forum routing", () => {
     ["blog.symbaiex.com", "/blog"],
     ["news.symbaiex.com", "/news"],
     ["newsletter.symbaiex.com", "/newsletter"],
-  ])("sends the %s root to its content route", async (host, route) => {
+  ])("rewrites the %s root to its content route", async (host, route) => {
     const proxy = await loadProxy();
     const response = await proxy(requestFor(`https://${host}/?source=home`));
 
-    expect(response.status).toBe(308);
-    expect(response.headers.get("location")).toBe(
+    expect(response.headers.get("x-middleware-rewrite")).toBe(
       `https://${host}${route}?source=home`,
     );
+    expect(response.headers.get("location")).toBeNull();
   });
 
   test("keeps OAuth completion identifiers out of referrers, caches and indexing", async () => {

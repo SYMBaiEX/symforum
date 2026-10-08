@@ -135,7 +135,15 @@ function nextOrForumRewrite(
   if (contentRootPath !== null) {
     const url = request.nextUrl.clone();
     url.pathname = contentRootPath;
-    return absoluteRedirect(url);
+    return NextResponse.rewrite(url, {
+      request: {
+        headers: nonceRequestHeaders(
+          new Headers(forwardedHeaders),
+          policy,
+          request.nextUrl.pathname,
+        ),
+      },
+    });
   }
 
   const forumRoute = forumSubdomainRoute(request);
