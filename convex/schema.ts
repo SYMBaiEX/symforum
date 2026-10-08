@@ -23,6 +23,25 @@ export default defineSchema({
   ...authTables,
   ...serviceAuthTables,
   ...forumPluginTables,
+  authIdentityLinks: defineTable({
+    tokenIdentifier: v.string(),
+    provider: v.literal("workos-authkit"),
+    workosUserId: v.string(),
+    userId: v.id("users"),
+    email: v.string(),
+    linkedAt: v.number(),
+  })
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
+    .index("by_workosUserId", ["workosUserId"])
+    .index("by_userId", ["userId"]),
+  authIdentityLinkChallenges: defineTable({
+    challengeHash: v.string(),
+    userId: v.id("users"),
+    expectedEmail: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  }).index("by_challengeHash", ["challengeHash"]),
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),
@@ -299,6 +318,18 @@ export default defineSchema({
     .index("by_externalAuthHash", ["externalAuthHash"])
     .index("by_ownerUserId_and_status", ["ownerUserId", "status"])
     .index("by_ownerUserId_and_createdAt", ["ownerUserId", "createdAt"]),
+  workosAgentRegistrations: defineTable({
+    registrationId: v.string(),
+    ownerUserId: v.id("users"),
+    ownerWorkosUserId: v.string(),
+    agentIdentityId: v.id("agentIdentities"),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_registrationId", ["registrationId"])
+    .index("by_agentIdentityId_and_status", ["agentIdentityId", "status"])
+    .index("by_ownerUserId_and_status", ["ownerUserId", "status"]),
   organizations: defineTable({
     slug: v.string(),
     name: v.string(),

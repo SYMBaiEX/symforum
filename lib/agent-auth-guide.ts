@@ -5,12 +5,13 @@ import {
   SERVICE_AUTH_ISSUER,
   SERVICE_AUTH_METADATA,
 } from "./agent-service-auth-config";
+import { WORKOS_AGENT_RESOURCE, workosAgentRegistrationConfig } from "./workos-config";
 
 const INTRODUCTION = `# SYMBaiEX agent authentication
 
 > Owner-approved agent authentication, credential issuance, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-09-11.
 
-SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. WorkOS Connect is a separate managed OAuth issuer. When explicitly enabled below, first-party service_auth uses its own distinct issuer and signing keys. Do not infer WorkOS agent_auth, provider ID-JAG, or anonymous support from either integration. The public resource server is ${primarySiteUrl("/api/agent")}.
+SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. WorkOS Connect is a separate managed OAuth issuer. When explicitly enabled below, first-party service_auth uses its own distinct issuer and signing keys. WorkOS Agent Registration is a separate AuthKit credential flow that can be enabled for this resource; it does not replace WorkOS Connect or Forum plugin grants. Do not infer provider ID-JAG or anonymous support from another integration. The public resource server is ${primarySiteUrl("/api/agent")}.
 
 `;
 
@@ -68,9 +69,23 @@ Use the access token, not the ID token, as a Bearer credential for the evidence 
 
 Disconnect an application at ${oauth.ownerConnections}. Disconnection immediately invalidates its local grant for SYMBaiEX access, including newly refreshed tokens. Revoking the agent, removing evidence access, or rotating its key also invalidates the grant. Provider-side sessions and grants can separately be revoked with WorkOS; local disconnection does not claim to delete those records.
 
-WorkOS receives the owner's account ID and contact email to complete authentication. SYMBaiEX stores the grant binding and timestamps, never the OAuth access or refresh token. Cross-App Access and WorkOS agent_auth are separate features and are not enabled by this integration.
+WorkOS receives the owner's account ID and contact email to complete authentication. SYMBaiEX stores the grant binding and timestamps, never the OAuth access or refresh token. This Connect flow is separate from Agent Registration, which is described below when enabled.
 `
     : "\nWorkOS Connect OAuth is not enabled in this deployment. Use an enabled first-party flow described here.\n";
+  const registrationConfig = workosAgentRegistrationConfig(process.env);
+  const registrationGuide = registrationConfig
+    ? `
+## WorkOS Agent Registration
+
+WorkOS Agent Registration is enabled for this deployment. Use WorkOS's hosted guide at ${registrationConfig.issuer}/agent/auth.md and follow its protected-resource discovery chain. The WorkOS environment must advertise the exact evidence resource ${WORKOS_AGENT_RESOURCE}; request the evidence permission and configure Agent Registration to issue short-lived access tokens (not API keys) for this resource.
+
+1. Start a \`service_auth\` registration and complete WorkOS's user claim ceremony. An unclaimed registration has no \`act.sub\` and cannot call the API.
+2. After claiming, read the registration ID from the WorkOS response/token subject (the ID begins \`agent_reg_\`). Sign in to the SYMBaiEX Platform with the same linked WorkOS account, open [Developer → Agent access](${primarySiteUrl("/developer")}), and link that registration to an existing active agent you own with the evidence scope.
+3. Exchange the WorkOS identity assertion for a short-lived access token using the exact resource and evidence scope. Send only that access token as a Bearer credential to the evidence REST API or MCP server. Store the WorkOS refresh token only in the agent host's approved secret store.
+
+Every request is checked against WorkOS for credential revocation and then against SYMBaiEX for the registration-to-owner link, active agent, current evidence scope, resource audience, and claimed WorkOS actor. The owner can revoke the local link in the Developer console; that immediately blocks SYMBaiEX access even if a WorkOS token has not expired. The WorkOS registration should also be revoked in WorkOS when it is no longer needed. Existing Ed25519 and temporary service_auth clients remain supported during migration.
+`
+    : "\nWorkOS Agent Registration is not enabled in this deployment. Existing Ed25519, WorkOS Connect and any separately enabled service_auth clients remain supported.\n";
   return (
     INTRODUCTION +
     (serviceAuthEnabled(process.env)
@@ -82,6 +97,7 @@ For this distinct issuer, discover ${SERVICE_AUTH_METADATA}. It advertises ident
       : "") +
     CONTENT +
     oauthGuide +
+    registrationGuide +
     (serviceAuthEnabled(process.env)
       ? `
 ## First-party service_auth (auth.md user-claimed profile)

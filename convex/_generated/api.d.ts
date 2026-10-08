@@ -32,6 +32,7 @@ import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
 import type * as apiCommerce from "../apiCommerce.js";
 import type * as auth from "../auth.js";
+import type * as authKitIdentity from "../authKitIdentity.js";
 import type * as authz from "../authz.js";
 import type * as belleForumAgent from "../belleForumAgent.js";
 import type * as comments from "../comments.js";
@@ -139,6 +140,7 @@ import type * as universalSearch from "../universalSearch.js";
 import type * as universalSearchProjection from "../universalSearchProjection.js";
 import type * as users from "../users.js";
 import type * as webVitals from "../webVitals.js";
+import type * as workosAgentRegistrationPrincipal from "../workosAgentRegistrationPrincipal.js";
 
 import type {
   ApiFromModules,
@@ -171,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   apiCommerce: typeof apiCommerce;
   auth: typeof auth;
+  authKitIdentity: typeof authKitIdentity;
   authz: typeof authz;
   belleForumAgent: typeof belleForumAgent;
   comments: typeof comments;
@@ -278,6 +281,7 @@ declare const fullApi: ApiFromModules<{
   universalSearchProjection: typeof universalSearchProjection;
   users: typeof users;
   webVitals: typeof webVitals;
+  workosAgentRegistrationPrincipal: typeof workosAgentRegistrationPrincipal;
 }>;
 
 /**

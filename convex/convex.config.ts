@@ -12,11 +12,13 @@ import migrations from "@convex-dev/migrations/convex.config.js";
 const app = defineApp({
   env: {
     AI_USAGE_SETTLEMENT_SECRET: v.optional(v.string()),
+    AUTH_HANDLE_LOOKUP_SECRET: v.optional(v.string()),
     AGENT_SERVICE_AUTH_ENABLED: v.optional(v.string()),
     AGENT_SERVICE_AUTH_PRIVATE_JWK: v.optional(v.string()),
     AGENT_SERVICE_AUTH_PUBLIC_JWKS: v.optional(v.string()),
     AGENT_SERVICE_AUTH_RELAY_SECRET: v.optional(v.string()),
     WORKOS_CONNECT_ENABLED: v.optional(v.string()),
+    WORKOS_AGENT_REGISTRATION_ENABLED: v.optional(v.string()),
     WORKOS_AUTHKIT_ISSUER: v.optional(v.string()),
     WORKOS_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.optional(v.string()),

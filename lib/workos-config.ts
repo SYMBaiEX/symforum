@@ -43,6 +43,45 @@ export function workosConfig(environment: {
   };
 }
 
+export function workosAgentRegistrationConfig(environment: {
+  [key: string]: string | undefined;
+  WORKOS_AGENT_REGISTRATION_ENABLED?: string;
+  WORKOS_AUTHKIT_ISSUER?: string;
+}) {
+  if (environment.WORKOS_AGENT_REGISTRATION_ENABLED !== "true") return null;
+  const issuer = normalizeAuthKitIssuer(environment.WORKOS_AUTHKIT_ISSUER);
+  return {
+    issuer,
+    audience: WORKOS_AGENT_RESOURCE,
+    jwks: `${issuer}/oauth2/jwks`,
+  };
+}
+
+function normalizeAuthKitIssuer(value: string | undefined) {
+  if (!value)
+    throw new Error(
+      "WORKOS_AUTHKIT_ISSUER is required when Agent Registration is enabled.",
+    );
+  const url = new URL(value);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    !(
+      url.hostname.endsWith(".authkit.app") ||
+      url.hostname.endsWith(".symbaiex.com")
+    )
+  )
+    throw new Error(
+      "WorkOS issuer must be an HTTPS AuthKit or SYMBaiEX origin.",
+    );
+  return url.origin;
+}
+
 export function workosPluginConfig(
   environment: Parameters<typeof workosConfig>[0],
 ) {

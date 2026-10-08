@@ -1,0 +1,16 @@
+{
+  "name": "@symbaiex/forum-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme": "./src/theme.ts"
+  },
+  "peerDependencies": {
+    "convex": "1.46.0",
+    "next": "16.4.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}

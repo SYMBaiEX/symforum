@@ -25,7 +25,7 @@ function rebuild() {
     console.error(error);
   });
 }
-const watchers = ["app", "components", "lib", "styles"].map((directory) =>
+const watchers = ["apps/forum/app", "components", "lib", "styles"].map((directory) =>
   watch(resolve(root, directory), { recursive: true }, (_event, file) => {
     if (
       !file ||

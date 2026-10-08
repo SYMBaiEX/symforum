@@ -1,5 +1,8 @@
 import type { AuthConfig } from "convex/server";
-import { workosConfig } from "../lib/workos-config";
+import {
+  workosAgentRegistrationConfig,
+  workosConfig,
+} from "../lib/workos-config";
 import {
   serviceAuthEnabled,
   SERVICE_AUTH_ISSUER,
@@ -7,8 +10,30 @@ import {
 } from "../lib/agent-service-auth-config";
 
 const workos = workosConfig(process.env);
+const workosAgentRegistration = workosAgentRegistrationConfig(process.env);
+const workosAuthKitClientId = process.env.WORKOS_CLIENT_ID;
+const workosAuthKitJwks = workosAuthKitClientId
+  ? `https://api.workos.com/sso/jwks/${workosAuthKitClientId}`
+  : null;
 const authConfig = {
   providers: [
+    ...(workosAuthKitClientId && workosAuthKitJwks
+      ? [
+          {
+            type: "customJwt" as const,
+            issuer: "https://api.workos.com/",
+            applicationID: workosAuthKitClientId,
+            jwks: workosAuthKitJwks,
+            algorithm: "RS256" as const,
+          },
+          {
+            type: "customJwt" as const,
+            issuer: `https://api.workos.com/user_management/${workosAuthKitClientId}`,
+            jwks: workosAuthKitJwks,
+            algorithm: "RS256" as const,
+          },
+        ]
+      : []),
     ...(serviceAuthEnabled(process.env)
       ? [
           {
@@ -35,7 +60,17 @@ const authConfig = {
             algorithm: "RS256" as const,
           },
         ]
-      : []),
+      : workosAgentRegistration
+        ? [
+            {
+              type: "customJwt" as const,
+              issuer: workosAgentRegistration.issuer,
+              applicationID: workosAgentRegistration.audience,
+              jwks: workosAgentRegistration.jwks,
+              algorithm: "RS256" as const,
+            },
+          ]
+        : []),
   ],
 } satisfies AuthConfig;
 

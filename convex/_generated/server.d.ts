@@ -36,6 +36,7 @@ type Env = {
   readonly AGENT_SERVICE_AUTH_PUBLIC_JWKS: string | undefined;
   readonly AGENT_SERVICE_AUTH_RELAY_SECRET: string | undefined;
   readonly AI_USAGE_SETTLEMENT_SECRET: string | undefined;
+  readonly AUTH_HANDLE_LOOKUP_SECRET: string | undefined;
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
   readonly CRON_WATCHDOG_ENABLED: string | undefined;
@@ -66,6 +67,7 @@ type Env = {
   readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
   readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
   readonly WEB_VITALS_SLO_ENABLED: string | undefined;
+  readonly WORKOS_AGENT_REGISTRATION_ENABLED: string | undefined;
   readonly WORKOS_API_KEY: string | undefined;
   readonly WORKOS_AUTHKIT_ISSUER: string | undefined;
   readonly WORKOS_CONNECT_ENABLED: string | undefined;

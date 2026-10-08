@@ -4,8 +4,12 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { env } from "./_generated/server";
-import { workosConfig } from "../lib/workos-config";
+import {
+  workosAgentRegistrationConfig,
+  workosConfig,
+} from "../lib/workos-config";
 import { resolveOAuthAgent } from "./agentOAuthPrincipal";
+import { resolveWorkOSAgentRegistration } from "./workosAgentRegistrationPrincipal";
 import { resolveServiceAuthAgent } from "./agentServiceAuthPrincipal";
 import {
   serviceAuthEnabled,
@@ -26,6 +30,18 @@ export const AGENT_SCOPES = [
 ] as const;
 
 export type AgentScope = (typeof AGENT_SCOPES)[number];
+
+const WORKOS_AUTHKIT_ISSUER = "https://api.workos.com/";
+
+export function isWorkOSAuthKitIdentity(identity: {
+  issuer: string;
+} | null | undefined) {
+  return (
+    identity?.issuer === WORKOS_AUTHKIT_ISSUER ||
+    identity?.issuer.startsWith(`${WORKOS_AUTHKIT_ISSUER}user_management/`) ===
+      true
+  );
+}
 
 export const agentScopeValidator = v.union(
   v.literal("forum"),
@@ -87,10 +103,20 @@ export function hasSiteAdminAccess(user: Doc<"users"> | null | undefined) {
 }
 
 /** Only Convex Auth may interpret a token subject as a first-party user ID. */
-export async function getFirstPartyAuthUserId(ctx: { auth: Auth }) {
+export async function getFirstPartyAuthUserId(ctx: DatabaseCtx & { auth: Auth }) {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity || identity.issuer !== env.CONVEX_SITE_URL) return null;
-  return await getAuthUserId(ctx);
+  if (!identity) return null;
+  if (identity.issuer === env.CONVEX_SITE_URL) {
+    return await getAuthUserId(ctx);
+  }
+  if (!isWorkOSAuthKitIdentity(identity)) return null;
+  const link = await ctx.db
+    .query("authIdentityLinks")
+    .withIndex("by_tokenIdentifier", (q) =>
+      q.eq("tokenIdentifier", identity.tokenIdentifier),
+    )
+    .unique();
+  return link?.userId ?? null;
 }
 
 export async function getCurrentUser(ctx: DatabaseCtx) {
@@ -101,8 +127,22 @@ export async function getCurrentUser(ctx: DatabaseCtx) {
       : null;
   }
   const workos = workosConfig(env);
-  if (identity && workos && identity.issuer === workos.issuer) {
-    return await resolveOAuthAgent(ctx, identity, workos.issuer);
+  const workosAgentRegistration = workosAgentRegistrationConfig(env);
+  const workosResourceIssuer =
+    workos?.issuer ?? workosAgentRegistration?.issuer;
+  if (identity && workosResourceIssuer === identity.issuer) {
+    if (identity.subject.startsWith("agent_reg_")) {
+      return workosAgentRegistration
+        ? await resolveWorkOSAgentRegistration(
+            ctx,
+            identity,
+            workosAgentRegistration.issuer,
+          )
+        : null;
+    }
+    if (workos) {
+      return await resolveOAuthAgent(ctx, identity, workos.issuer);
+    }
   }
   // Standalone Connect also uses the owner's local ID as its subject. The issuer
   // boundary must hold even when Connect is disabled or its configuration changes.

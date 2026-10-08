@@ -1,20 +1,20 @@
 "use client";
 
-import { asRoute } from "@/lib/typed-route";
-
-import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { ConvexError } from "convex/values";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
+import { LegacySignInPanel } from "@/components/auth/legacy-signin-panel";
 
 export function SignInPanel() {
   return (
     <Suspense fallback={<PasswordPanelSkeleton />}>
-      <PasswordPanel />
+      {process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" ? (
+        <PasswordPanel />
+      ) : (
+        <LegacySignInPanel />
+      )}
     </Suspense>
   );
 }
@@ -54,79 +54,51 @@ function PasswordPanel() {
   const initialMode =
     searchParams.get("mode") === "signIn" ? "signIn" : "signUp";
   const [mode, setMode] = useState<"signIn" | "signUp">(initialMode);
-  const [generated, setGenerated] = useState(() =>
-    initialMode === "signUp" ? randomSymHandle() : "",
-  );
-  const [username, setUsername] = useState(generated);
-  const [pendingMethod, setPendingMethod] = useState<
-    "google" | "password" | null
-  >(null);
-  const { signIn } = useAuthActions();
-  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [pending, setPending] = useState(false);
+  const status = searchParams.get("status");
 
   function selectMode(next: "signIn" | "signUp") {
     setMode(next);
-    if (next === "signIn" && username === generated) {
-      setUsername("");
-    } else if (next === "signUp" && username.trim() === "") {
-      const handle = randomSymHandle();
-      setGenerated(handle);
-      setUsername(handle);
-    }
   }
 
-  async function submit(formData: FormData) {
-    setPendingMethod("password");
-    formData.set("flow", mode);
-    formData.set("username", username);
-    formData.set("email", usernameCredential(username));
-    formData.set("redirectTo", redirectTo);
-    try {
-      await signIn("password", formData);
-      toast.success(mode === "signUp" ? "Account created" : "Signed in");
-      router.push(asRoute(redirectTo));
-    } catch (error) {
-      reportAppError(error, {
-        scope: "auth",
-        eventType: "signin_failed",
-        component: "PasswordPanel",
-        action: mode,
-        level: "warn",
-        notify: false,
-      });
-      const data = error instanceof ConvexError ? error.data : null;
-      const message =
-        typeof data === "string" && data.trim()
-          ? data
-          : mode === "signIn"
-            ? "Wrong username or password."
-            : "Could not create account. Try a different username.";
-      toast.error(message);
-    } finally {
-      setPendingMethod(null);
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    if (mode === "signUp") {
+      const normalizedHandle = username.trim().toLowerCase();
+      if (!HANDLE_PATTERN.test(normalizedHandle)) {
+        toast.error("Use 3–32 letters, numbers, underscores, or dashes.");
+        setPending(false);
+        return;
+      }
+      if (!isValidEmail(email)) {
+        toast.error("Enter an email address you can verify.");
+        setPending(false);
+        return;
+      }
+      window.sessionStorage.setItem("symbaiex.auth.signup-handle", normalizedHandle);
+      window.sessionStorage.setItem("symbaiex.auth.signup-returnTo", redirectTo);
+      // The API route must receive a document navigation so its WorkOS redirect is followed.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(
+        `/api/auth/sign-up?email=${encodeURIComponent(email.trim())}&returnTo=${encodeURIComponent("/auth/complete-signup")}`,
+      );
+      return;
     }
-  }
 
-  async function continueWithGoogle() {
-    setPendingMethod("google");
-    try {
-      const oauthRedirectTo = new URL(
-        redirectTo,
-        window.location.origin,
-      ).toString();
-      await signIn("google", { redirectTo: oauthRedirectTo });
-    } catch (error) {
-      reportAppError(error, {
-        scope: "auth",
-        eventType: "google_signin_failed",
-        component: "PasswordPanel",
-        action: mode,
-        level: "warn",
-        notify: false,
-      });
-      toast.error("Google sign-in could not start. Please try again.");
-      setPendingMethod(null);
+    const identifier = username.trim();
+    if (!identifier) {
+      toast.error("Enter your email or SYM handle.");
+      setPending(false);
+      return;
     }
+    // The API route must receive a document navigation so its WorkOS redirect is followed.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(
+      `/api/auth/sign-in?identifier=${encodeURIComponent(identifier)}&returnTo=${encodeURIComponent(redirectTo)}`,
+    );
   }
 
   return (
@@ -147,117 +119,77 @@ function PasswordPanel() {
           Sign in
         </Button>
       </div>
-      <Button
-        className="w-full"
-        disabled={pendingMethod !== null}
-        onClick={() => void continueWithGoogle()}
-        type="button"
-        variant="outline"
-      >
-        <GoogleMark />
-        {pendingMethod === "google"
-          ? "Opening Google..."
-          : "Continue with Google"}
-      </Button>
-      <div className="my-5 flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-row-border" />
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">
-          Or use a SYM handle
-        </span>
-        <span className="h-px flex-1 bg-row-border" />
-      </div>
-      <form action={submit} className="flex flex-col gap-4">
+      {status === "account-not-found" ? (
+        <p role="status" className="mb-4 text-sm text-muted-foreground">
+          We could not find a verified email for that identifier. Older accounts
+          can connect an email through the account migration page.
+        </p>
+      ) : null}
+      {status === "verified-email-required" ? (
+        <p role="status" className="mb-4 text-sm text-muted-foreground">
+          A verified email is required to create or connect an account.
+        </p>
+      ) : null}
+      {status === "handle-unavailable" ? (
+        <p role="status" className="mb-4 text-sm text-muted-foreground">
+          That handle is already in use. Choose another handle or migrate the existing account.
+        </p>
+      ) : null}
+      <form onSubmit={submit} className="flex flex-col gap-4">
         <label className="flex flex-col gap-2 text-sm font-medium">
-          Username
+          {mode === "signUp" ? "Choose a handle" : "Email or SYM handle"}
           <div className="flex gap-2">
             <Input
               name="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
+              autoComplete={mode === "signUp" ? "username" : "username email"}
+              placeholder={mode === "signUp" ? "your-handle" : "handle or email"}
               required
             />
-            {mode === "signUp" ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const handle = randomSymHandle();
-                  setGenerated(handle);
-                  setUsername(handle);
-                }}
-              >
-                Random
-              </Button>
-            ) : null}
           </div>
         </label>
         {mode === "signUp" ? (
           <label className="flex flex-col gap-2 text-sm font-medium">
-            Email (optional)
+            Verified email
             <Input
               name="contactEmail"
               type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               autoComplete="email"
-              placeholder="austin@example.com"
+              placeholder="you@example.com"
+              required
             />
           </label>
         ) : null}
-        <label className="flex flex-col gap-2 text-sm font-medium">
-          Password
-          <Input
-            name="password"
-            type="password"
-            autoComplete={
-              mode === "signUp" ? "new-password" : "current-password"
-            }
-            minLength={8}
-            required
-          />
-        </label>
-        <Button type="submit" disabled={pendingMethod !== null}>
-          {pendingMethod === "password"
-            ? "Working..."
+        <Button type="submit" disabled={pending}>
+          {pending
+            ? "Opening WorkOS..."
             : mode === "signUp"
-              ? "Create account"
-              : "Sign in"}
+              ? "Continue with WorkOS"
+              : "Continue with WorkOS"}
         </Button>
+        <p className="text-xs leading-5 text-muted-foreground">
+          WorkOS securely handles passwords, social sign-in, and email
+          verification. Existing SYM handles remain available for sign-in.
+        </p>
       </form>
+      <Button
+        asChild
+        className="mt-4 w-full"
+        variant="ghost"
+      >
+        <a href="/account/migrate">Migrate an existing account</a>
+      </Button>
     </div>
   );
 }
 
-function GoogleMark() {
-  return (
-    <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24">
-      <path
-        d="M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.2c1.9-1.8 3.1-4.4 3.1-7.6Z"
-        fill="#4285F4"
-      />
-      <path
-        d="M12 22c2.7 0 5-.9 6.7-2.3l-3.2-2.6c-.9.6-2 1-3.5 1a5.9 5.9 0 0 1-5.5-4.1H3.2v2.6A10.1 10.1 0 0 0 12 22Z"
-        fill="#34A853"
-      />
-      <path
-        d="M6.5 14a6 6 0 0 1 0-3.9V7.5H3.2a10 10 0 0 0 0 9.1L6.5 14Z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M12 6a5.4 5.4 0 0 1 3.8 1.5l2.9-2.8A9.7 9.7 0 0 0 12 2a10.1 10.1 0 0 0-8.8 5.5l3.3 2.6A5.9 5.9 0 0 1 12 6Z"
-        fill="#EA4335"
-      />
-    </svg>
-  );
-}
+const HANDLE_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/i;
 
-function randomSymHandle() {
-  return `SYM-${Math.floor(Math.random() * 100_000_000)
-    .toString()
-    .padStart(8, "0")}`;
-}
-
-function usernameCredential(username: string) {
-  return `${username.trim().toLowerCase()}@users.symbaiex.local`;
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function cleanRedirect(value: string | null) {

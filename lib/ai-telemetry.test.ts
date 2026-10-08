@@ -33,7 +33,7 @@ describe("owner admin AI telemetry", () => {
 
   test("applies telemetry, phase timeouts, and client cancellation to the owner stream", () => {
     const routeSource = readFileSync(
-      new URL("../app/api/admin/ai/route.ts", import.meta.url),
+      new URL("../apps/platform/app/api/admin/ai/route.ts", import.meta.url),
       "utf8",
     );
 

@@ -568,7 +568,7 @@ describe("OpenRouter-only model routing", () => {
       new URL("../convex/semanticSearch.ts", import.meta.url),
       new URL("../convex/forumAgentMemory.ts", import.meta.url),
       new URL("../convex/forumAgentMaintenance.ts", import.meta.url),
-      new URL("../app/api/admin/ai/route.ts", import.meta.url),
+      new URL("../apps/platform/app/api/admin/ai/route.ts", import.meta.url),
     ];
     const source = files.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(source).toContain("https://openrouter.ai/api/v1");

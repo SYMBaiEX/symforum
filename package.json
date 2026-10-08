@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
+    "apps/*",
+    "packages/*",
     "packages/agent-sdk",
     "packages/agent-cli",
     "workers/socials"
@@ -13,13 +15,13 @@
   },
   "scripts": {
     "dev": "npm-run-all --parallel dev:frontend dev:backend",
-    "dev:frontend": "bun run ui:sync && npm-run-all --parallel ui:watch dev:next",
+    "dev:frontend": "bun run --cwd apps/platform dev",
     "dev:backend": "convex dev",
     "env:check": "bun scripts/sync-convex-env.mjs --check",
     "env:push": "bun scripts/sync-convex-env.mjs",
     "env:push:prod": "bun scripts/sync-convex-env.mjs --prod",
-    "build": "bun run ui:sync && next build",
-    "start": "next start",
+    "build": "bun run build:platform",
+    "start": "bun run --cwd apps/platform start",
     "deps:audit": "bun audit --production",
     "test": "vitest run",
     "test:devtools": "vitest run convex/agentIdentity.test.ts packages/agent-sdk/src/index.test.ts packages/agent-cli/src/token-store.test.ts packages/agent-cli/bin/symbaiex.test.ts",
@@ -34,12 +36,18 @@
     "socials:test": "bun run --cwd workers/socials test",
     "socials:typecheck": "bun run --cwd workers/socials typecheck",
     "socials:deploy": "bun run --cwd workers/socials deploy",
-    "verify": "bun run ui:check && bun run deps:audit && bun run typecheck && bun run typecheck:convex && bun run lint && bun run test && bun run --cwd packages/agent-sdk build && bun run --cwd packages/agent-sdk test && bun run --cwd packages/agent-cli build && bun run --cwd packages/agent-cli test && bun run socials:typecheck && bun run socials:test && bun run --cwd workers/socials deploy:dry && bun run build",
+    "verify": "bun run ui:check && bun run deps:audit && bun run typecheck && bun run typecheck:convex && bun run lint && bun run test && bun run --cwd packages/agent-sdk build && bun run --cwd packages/agent-sdk test && bun run --cwd packages/agent-cli build && bun run --cwd packages/agent-cli test && bun run socials:typecheck && bun run socials:test && bun run --cwd workers/socials deploy:dry && bun run build:apps",
     "ui:sync": "bun scripts/sync-forum-ui.mjs && bun scripts/build-native-forum-app.mjs",
     "ui:check": "bun scripts/sync-forum-ui.mjs --check && bun scripts/build-native-forum-app.mjs --check",
     "ui:watch": "bun scripts/watch-forum-ui.mjs",
-    "dev:next": "next dev",
-    "eval:forum:content": "bun scripts/eval-forum-content.ts"
+    "dev:next": "bun run --cwd apps/platform dev",
+    "eval:forum:content": "bun scripts/eval-forum-content.ts",
+    "build:platform": "bun run --cwd apps/platform build",
+    "build:forum": "bun run --cwd apps/forum build",
+    "build:blog": "bun run --cwd apps/blog build",
+    "build:news": "bun run --cwd apps/news build",
+    "build:newsletter": "bun run --cwd apps/newsletter build",
+    "build:apps": "bun run build:platform && bun run build:forum && bun run build:blog && bun run build:news && bun run build:newsletter"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.53",
@@ -79,7 +87,7 @@
     "jose": "6.2.10",
     "katex": "0.18.7",
     "lucide-react": "0.469.0",
-    "next": "16.3.6",
+    "next": "16.4.0",
     "next-themes": "^0.4.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -96,7 +104,9 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "web-bot-auth": "0.1.3",
-    "zod": "4.6.1"
+    "zod": "4.6.1",
+    "@workos-inc/authkit-nextjs": "4.4.0",
+    "@convex-dev/workos": "0.0.3"
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "4.0.0",
@@ -110,7 +120,7 @@
     "convex-test": "0.0.59",
     "dotenv": "17.4.2",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.4.0",
     "npm-run-all": "^4.1.5",
     "postcss": "^8.5.26",
     "postcss-load-config": "6.0.1",

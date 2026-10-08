@@ -4,6 +4,7 @@ import { SignInPanel } from "@/components/signin-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { convexRefs, type AgentScope } from "@/lib/convex-refs";
+import { WorkOSAgentRegistrationPanel } from "@/components/workos-agent-registration-panel";
 import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useState } from "react";
@@ -285,6 +286,7 @@ export function DeveloperAgentConsole() {
 
   return (
     <div className="space-y-6">
+      <WorkOSAgentRegistrationPanel />
       <section className="border border-row-border bg-card p-5">
         <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
           UTC month {status.monthKey}

@@ -10,6 +10,7 @@ const requiredBun = manifest.packageManager.replace(/^bun@/, "");
 if (Bun.version !== requiredBun)
   throw new Error(`Native forum generation requires Bun ${requiredBun}; received ${Bun.version}. Use the repository's pinned build runtime.`);
 const directory = resolve(root, "components/forum/plugin-adapter");
+const forumAppRoot = "apps/forum/app";
 const pages = [];
 async function collect(path) {
   for (const item of await readdir(path, { withFileTypes: true })) {
@@ -19,10 +20,14 @@ async function collect(path) {
       pages.push(relative(root, file).replaceAll("\\", "/"));
   }
 }
-await collect(resolve(root, "app/forum"));
+await collect(resolve(root, forumAppRoot, "forum"));
 const routes = pages
   .map((page, index) => {
-    const path = "/" + page.replace(/\/page.tsx$/, "").replace(/^app\//, "");
+    const path =
+      "/" +
+      page
+        .replace(new RegExp(`^${forumAppRoot}/`), "")
+        .replace(/\/page.tsx$/, "");
     return {
       path: path.replace(/\/\([^/]+\)/g, ""),
       module: `Page${index}`,
@@ -45,6 +50,9 @@ const router =
 await mkdir(directory, { recursive: true });
 await writeFile(resolve(directory, "routes.generated.ts"), router);
 const aliases = {
+  "@/app/forum/layout": resolve(root, forumAppRoot, "forum/layout.tsx"),
+  "@/app/forum/error": resolve(root, forumAppRoot, "forum/error.tsx"),
+  "@/app/forum/not-found": resolve(root, forumAppRoot, "forum/not-found.tsx"),
   "convex/react": "data.ts",
   "convex-helpers/react/cache/hooks": "data.ts",
   "next/navigation": "router.tsx",
@@ -99,16 +107,16 @@ const code = await javascript.text();
 // can silently lose its styles in the plugin even though its React is shared.
 const componentStyles = await Promise.all(result.outputs.filter(output => output.path.endsWith(".css")).map(output => output.text()));
 // Follow the real root layout's stylesheet imports, including KaTeX for forum math.
-const layout = await readFile(resolve(root, "app/layout.tsx"), "utf8");
+const layout = await readFile(resolve(root, forumAppRoot, "layout.tsx"), "utf8");
 const styles = [];
 for (const match of layout.matchAll(/import ["']([^"']+\.css)["'];/g)) {
   const specifier = match[1];
   const file = specifier.startsWith(".")
-    ? resolve(root, "app", specifier)
+    ? resolve(root, forumAppRoot, specifier)
     : resolve(root, "node_modules", specifier);
   let text = await readFile(file, "utf8");
   text = text.replace(
-    '@import "../styles/forum-shared.css";',
+      '@import "../../../styles/forum-shared.css";',
     await readFile(resolve(root, "styles/forum-shared.css"), "utf8"),
   );
   const directory = resolve(file, "..");
@@ -127,7 +135,7 @@ const source = [...styles, ...componentStyles].join("\n");
 const css = String(
   await postcss([
     tailwindcss({ config: resolve(root, "tailwind.config.ts") }),
-  ]).process(source, { from: resolve(root, "app/globals.css") }),
+  ]).process(source, { from: resolve(root, forumAppRoot, "globals.css") }),
 );
 const output =
   "/* Generated from the real Next.js forum pages and components. Do not edit. */\nexport const FORUM_NATIVE_APP_JS=" +

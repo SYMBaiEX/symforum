@@ -23,6 +23,12 @@
       }
     ],
     "paths": {
+      "@/app/*": ["./apps/platform/app/*"],
+      "@symbaiex/auth/*": ["./packages/auth/src/*"],
+      "@symbaiex/forum-plugin-contract": [
+        "./packages/forum-plugin-contract/src/index.ts"
+      ],
+      "@symbaiex/forum-ui/*": ["./packages/forum-ui/src/*"],
       "@/*": [
         "./*"
       ]

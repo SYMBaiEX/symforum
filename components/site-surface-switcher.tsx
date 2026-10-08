@@ -10,7 +10,12 @@ import {
   Newspaper,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { FORUM_SITE_URL } from "@/lib/site-urls";
+import {
+  BLOG_SITE_URL,
+  FORUM_SITE_URL,
+  NEWS_SITE_URL,
+  NEWSLETTER_SITE_URL,
+} from "@/lib/site-urls";
 import { primarySiteHrefForForumHost } from "@/components/forum/forum-host-url";
 import {
   DropdownMenu,
@@ -52,14 +57,26 @@ export function SiteSurfaceSwitcher({
     newsletter: "/newsletter",
   });
   useEffect(() => {
+    const hostname = window.location.hostname;
+    const productionHost = isProductionSiteHostname(hostname);
     setResolvedForumHref(
-      resolveSiteSurfaceForumHref(forumHref, window.location.hostname),
+      productionHost && !hostname.startsWith("forum.")
+        ? canonicalForumSurfaceHref(forumHref)
+        : resolveSiteSurfaceForumHref(forumHref, hostname),
     );
-    setResolvedPrimaryHrefs({
-      blog: primarySiteHrefForForumHost("/blog", window.location),
-      news: primarySiteHrefForForumHost("/news", window.location),
-      newsletter: primarySiteHrefForForumHost("/newsletter", window.location),
-    });
+    setResolvedPrimaryHrefs(
+      productionHost
+        ? {
+            blog: `${BLOG_SITE_URL}/blog`,
+            news: `${NEWS_SITE_URL}/news`,
+            newsletter: `${NEWSLETTER_SITE_URL}/newsletter`,
+          }
+        : {
+            blog: primarySiteHrefForForumHost("/blog", window.location),
+            news: primarySiteHrefForForumHost("/news", window.location),
+            newsletter: primarySiteHrefForForumHost("/newsletter", window.location),
+          },
+    );
   }, [forumHref]);
   const isPath = (route: string) =>
     pathname === route || pathname.startsWith(`${route}/`);
@@ -184,4 +201,25 @@ export function SiteSurfaceSwitcher({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function isProductionSiteHostname(hostname: string) {
+  return [
+    "symbaiex.com",
+    "www.symbaiex.com",
+    "forum.symbaiex.com",
+    "blog.symbaiex.com",
+    "news.symbaiex.com",
+    "newsletter.symbaiex.com",
+  ].includes(hostname);
+}
+
+function canonicalForumSurfaceHref(href: string) {
+  const path =
+    href === "/forum"
+      ? "/"
+      : href.startsWith("/forum/")
+        ? href.slice("/forum".length)
+        : href;
+  return new URL(path, FORUM_SITE_URL).toString();
 }
