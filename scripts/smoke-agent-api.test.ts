@@ -89,6 +89,16 @@ describe("public authentication release smoke", () => {
           String(url).endsWith("/oauth-authorization-server"),
         ),
       ).toBe(oauth);
+      if (oauth) {
+        const discovery = fetcher.mock.calls.find(([url]) =>
+          String(url).endsWith("/oauth-authorization-server"),
+        );
+        expect(String(discovery?.[0])).toBe(
+          `${issuer}/.well-known/oauth-authorization-server`,
+        );
+        expect(discovery?.[1]?.redirect).toBe("error");
+        expect(discovery?.[1]?.headers).not.toHaveProperty("Authorization");
+      }
     },
   );
   test("fails mismatched advertised issuers", async () => {
