@@ -32,7 +32,7 @@ export function ForumSiteShell({
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
       <SurfaceScope.Provider value="forum">
-        <ForumShellFrame>
+        <ForumShellFrame surface={surface}>
           <WebVitalsReporter />
           <a
             href="#main-content"
@@ -117,11 +117,18 @@ export function ForumSiteShell({
   );
 }
 
-function ForumShellFrame({ children }: { children: ReactNode }) {
+function ForumShellFrame({
+  children,
+  surface,
+}: {
+  children: ReactNode;
+  surface: "forum" | "newsletter";
+}) {
   const { compactNavigation } = useForumShellContext();
   return (
     <div
       data-navigation={compactNavigation ? "compact" : "expanded"}
+      data-surface={surface}
       className="forum-app-shell relative z-10 min-h-dvh min-w-0 bg-background text-foreground [--site-footer-offset:0px]"
     >
       {children}

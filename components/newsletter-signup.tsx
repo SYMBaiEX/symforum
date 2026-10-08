@@ -87,7 +87,7 @@ export function NewsletterSignup({
         "grid gap-2",
         variant === "footer"
           ? "relative grid-cols-[minmax(0,1fr)_auto]"
-          : "sm:grid-cols-[1fr_auto]",
+          : "grid-cols-1",
         className,
       )}
     >
@@ -103,7 +103,7 @@ export function NewsletterSignup({
         onChange={(event) => setEmail(event.target.value)}
         placeholder="Sign up for Newsletter"
         autoComplete="email"
-        className="h-9 rounded-none border-row-border bg-background/50 font-mono text-xs"
+        className="h-9 w-full rounded-none border-row-border bg-background/50 font-mono text-xs"
         required
       />
       <Button
@@ -111,7 +111,9 @@ export function NewsletterSignup({
         size="sm"
         className={cn(
           "h-9 rounded-none bg-pink-700 text-white hover:bg-pink-800",
-          variant === "footer" && "w-9 px-0 sm:w-auto sm:px-2.5",
+          variant === "footer"
+            ? "w-9 px-0 sm:w-auto sm:px-2.5"
+            : "w-full dark:!text-white",
         )}
         disabled={pending}
         aria-label={pending ? "Sending subscription" : "Subscribe"}
@@ -131,7 +133,7 @@ export function NewsletterSignup({
             ? result
               ? "absolute bottom-[calc(100%+0.5rem)] left-0 z-10 max-w-full border border-row-border bg-background px-2 py-1 shadow-sm"
               : "sr-only"
-            : "sm:col-span-2",
+            : "col-span-full",
         )}
       >
         {result?.text ?? ""}

@@ -8,8 +8,6 @@ import {
   Menu,
   MessageSquare,
   Newspaper,
-  PanelLeftClose,
-  PanelLeftOpen,
   Radio,
   Settings2,
   UserRound,
@@ -72,33 +70,13 @@ const iconControl =
 
 export function NewsletterNavigation() {
   const pathname = usePathname();
-  const { primarySiteHref, compactNavigation, toggleNavigation } =
-    useForumShellContext();
+  const { primarySiteHref } = useForumShellContext();
   const signInHref = `/signin?${new URLSearchParams({ redirectTo: pathname ?? "/newsletter" })}`;
 
   return (
     <>
       <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card pt-[env(safe-area-inset-top)]">
         <div className="forum-topbar-inner flex items-center gap-2 px-3 sm:gap-3">
-          <button
-            type="button"
-            onClick={toggleNavigation}
-            aria-label={
-              compactNavigation ? "Expand navigation" : "Collapse navigation"
-            }
-            aria-expanded={!compactNavigation}
-            aria-controls="newsletter-navigation-rail"
-            className={`${iconControl} forum-navigation-toggle hidden md:inline-flex`}
-            title={
-              compactNavigation ? "Expand navigation" : "Collapse navigation"
-            }
-          >
-            {compactNavigation ? (
-              <PanelLeftOpen className="size-[18px]" aria-hidden="true" />
-            ) : (
-              <PanelLeftClose className="size-[18px]" aria-hidden="true" />
-            )}
-          </button>
           <SiteSurfaceSwitcher
             activeSurface="newsletter"
             currentPathname={pathname ?? "/newsletter"}
@@ -183,57 +161,6 @@ export function NewsletterNavigation() {
           </DropdownMenu>
         </div>
       </header>
-
-      <aside
-        id="newsletter-navigation-rail"
-        className="forum-left-rail fixed bottom-0 top-[var(--site-header-offset)] z-30 hidden overflow-y-auto overscroll-contain md:block"
-        aria-label="Newsletter navigation"
-      >
-        <nav aria-label="Newsletter sections" className="space-y-1">
-          {newsletterNavigation.map(({ href, label, icon: Icon, id }) => {
-            const current =
-              id === "latest" && isNewsletterContentPath(pathname);
-            return (
-              <Link
-                key={id}
-                href={href}
-                title={label}
-                aria-label={label}
-                aria-current={current ? "page" : undefined}
-                className={cn("forum-rail-link", current && "is-active")}
-              >
-                <Icon aria-hidden="true" className="size-[19px]" />
-                <span className="forum-nav-label">{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        <details className="forum-rail-group group/rail mt-5" open>
-          <summary className="forum-rail-heading focus-ring flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-            <span className="flex-1">Explore</span>
-            <ChevronDown
-              className="size-3 transition-transform group-open/rail:rotate-180"
-              aria-hidden="true"
-            />
-          </summary>
-          <nav aria-label="More SYMBaiEX sites" className="space-y-1">
-            <Link className="forum-rail-link" href="/news">
-              <Newspaper aria-hidden="true" className="size-[19px]" />
-              <span className="forum-nav-label">News</span>
-            </Link>
-            <Link className="forum-rail-link" href="/forum">
-              <MessageSquare aria-hidden="true" className="size-[19px]" />
-              <span className="forum-nav-label">Forum</span>
-            </Link>
-          </nav>
-        </details>
-        <Link
-          className="forum-rail-home focus-ring mt-4 block px-3 py-3 text-xs text-muted-foreground hover:text-foreground"
-          href={primarySiteHref}
-        >
-          SYMBaiEX home ↗
-        </Link>
-      </aside>
 
       <nav
         aria-label="Newsletter sections on mobile"
