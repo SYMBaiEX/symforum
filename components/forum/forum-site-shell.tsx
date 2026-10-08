@@ -5,6 +5,7 @@ import {
   useForumShellContext,
 } from "./forum-shell-context";
 import { ForumNavigation } from "./forum-navigation";
+import { NewsletterNavigation } from "@/components/newsletter-navigation";
 import { ForumLink } from "./forum-link";
 import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
@@ -20,11 +21,13 @@ export function ForumSiteShell({
   footerRef,
   forumHost,
   primarySiteHref,
+  surface = "forum",
 }: {
   children: ReactNode;
   footerRef: RefObject<HTMLElement | null>;
   forumHost: boolean;
   primarySiteHref: string;
+  surface?: "forum" | "newsletter";
 }) {
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
@@ -37,13 +40,21 @@ export function ForumSiteShell({
           >
             Skip to content
           </a>
-          <ForumNavigation />
+          {surface === "newsletter" ? (
+            <NewsletterNavigation />
+          ) : (
+            <ForumNavigation />
+          )}
           <main
             id="main-content"
             tabIndex={-1}
             className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
           >
-            {children}
+            {surface === "newsletter" ? (
+              <div className="forum-surface newsletter-surface">{children}</div>
+            ) : (
+              children
+            )}
           </main>
           <Suspense fallback={null}>
             <AnalyticsTracker />
@@ -51,25 +62,42 @@ export function ForumSiteShell({
           <AppErrorSurface />
           <footer
             ref={footerRef}
-            className="forum-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:pb-8"
+            className={`forum-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:pb-8 ${surface === "newsletter" ? "newsletter-footer" : ""}`}
           >
             <a
               className="focus-ring py-2 hover:text-foreground"
-              href={primarySiteHref}
+              href={surface === "newsletter" ? "/newsletter" : primarySiteHref}
             >
-              SYMBaiEX
+              {surface === "newsletter" ? "SYMBaiEX Newsletter" : "SYMBaiEX"}
             </a>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              <ForumLink
-                className="focus-ring py-2 hover:text-foreground"
-                href={
-                  forumHost
-                    ? "/control-panel/agent-access"
-                    : "/forum/control-panel/agent-access"
-                }
-              >
-                Agent access
-              </ForumLink>
+              {surface === "newsletter" ? (
+                <>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href="/newsletter/preferences"
+                  >
+                    Subscription preferences
+                  </a>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href="/forum"
+                  >
+                    Forum
+                  </a>
+                </>
+              ) : (
+                <ForumLink
+                  className="focus-ring py-2 hover:text-foreground"
+                  href={
+                    forumHost
+                      ? "/control-panel/agent-access"
+                      : "/forum/control-panel/agent-access"
+                  }
+                >
+                  Agent access
+                </ForumLink>
+              )}
               {socialItems.map(({ href, label }) => (
                 <a
                   key={href}

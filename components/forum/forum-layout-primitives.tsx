@@ -48,9 +48,13 @@ export function ForumPageHeader({
 export function ForumBodyGrid({
   children,
   sidebar,
+  mobileSidebarLabel = "Around the forum",
+  mobileSidebarAlwaysOpen = false,
 }: {
   children: ReactNode;
   sidebar?: ReactNode;
+  mobileSidebarLabel?: string;
+  mobileSidebarAlwaysOpen?: boolean;
 }) {
   const [contextOpen, setContextOpen] = useState(false);
   const contextId = useId();
@@ -61,22 +65,24 @@ export function ForumBodyGrid({
       <div className="forum-body-content min-w-0">{children}</div>
       {sidebar ? (
         <div className="forum-context-panel min-w-0">
-          <button
-            type="button"
-            aria-expanded={contextOpen}
-            aria-controls={contextId}
-            onClick={() => setContextOpen((open) => !open)}
-            className="forum-context-toggle focus-ring flex min-h-11 w-full items-center justify-between rounded-xl bg-card px-4 text-sm font-medium"
-          >
-            Around the forum
-            <ChevronDown
-              aria-hidden="true"
-              className={`size-4 ${contextOpen ? "rotate-180" : ""}`}
-            />
-          </button>
+          {!mobileSidebarAlwaysOpen ? (
+            <button
+              type="button"
+              aria-expanded={contextOpen}
+              aria-controls={contextId}
+              onClick={() => setContextOpen((open) => !open)}
+              className="forum-context-toggle focus-ring flex min-h-11 w-full items-center justify-between rounded-xl bg-card px-4 text-sm font-medium"
+            >
+              {mobileSidebarLabel}
+              <ChevronDown
+                aria-hidden="true"
+                className={`size-4 ${contextOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+          ) : null}
           <div
             id={contextId}
-            className={`forum-context-content ${contextOpen ? "is-open" : ""}`}
+            className={`forum-context-content ${contextOpen || mobileSidebarAlwaysOpen ? "is-open" : ""}`}
           >
             {sidebar}
           </div>
