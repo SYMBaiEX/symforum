@@ -1,3 +1,7 @@
+import { App } from "@modelcontextprotocol/ext-apps";
+import { OpenAIExtensions } from "@openai/mcp-extensions/app";
+import { JSONRPCMessageSchema, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ForumPluginResult } from "@/lib/forum-plugin-contract";
 import type { ForumAttachmentDraft } from "../forum-compose";
 
@@ -43,17 +47,37 @@ export function unwrapToolResult(value: unknown): ForumPluginResult {
   return payload as ForumPluginResult;
 }
 
+/** SDK transport with the source-less dispatch used by native webviews.
+ * Browser frames must still be our parent; a foreign origin is never accepted.
+ */
+class ForumWindowTransport implements Transport {
+  onmessage?: Transport["onmessage"];
+  onerror?: Transport["onerror"];
+  onclose?: Transport["onclose"];
+  constructor(private target: Window) {}
+  private receive = (event: MessageEvent) => {
+    const native = event.source === null && event.origin === "";
+    if (event.source !== this.target.parent && event.source !== this.target && !native) return;
+    const parsed = JSONRPCMessageSchema.safeParse(event.data);
+    if (parsed.success) this.onmessage?.(parsed.data);
+    else this.onerror?.(new Error("Invalid forum host message."));
+  };
+  async start() { this.target.addEventListener("message", this.receive); }
+  async send(message: JSONRPCMessage) { this.target.parent.postMessage(message, "*"); }
+  async close() {
+    this.target.removeEventListener("message", this.receive);
+    this.onclose?.();
+  }
+}
+
 export class ForumHostBridge {
-  private sequence = 0;
   private stopped = false;
-  private pending = new Map<
-    number,
-    {
-      resolve: (value: unknown) => void;
-      reject: (error: Error) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
+  private app: App;
+  private transport: ForumWindowTransport;
+  private connection?: Promise<void>;
+  private hostInitialization?: Promise<void>;
+  private launchReceived = false;
+  private resolveLaunch?: () => void;
   private host: OpenAIHost;
   private listeners = new Set<() => void>();
   private uploads = new Map<
@@ -76,7 +100,34 @@ export class ForumHostBridge {
   ready = false;
   constructor(private target: Window) {
     this.host = (target as Window & { openai?: OpenAIHost }).openai ?? {};
-    target.addEventListener("message", this.onMessage);
+    this.transport = new ForumWindowTransport(target);
+    this.app = new App(
+      { name: "SYMBaiEX Forum", version: "2.2.3" },
+      { availableDisplayModes: ["fullscreen"] },
+      { autoResize: false },
+    );
+    // Bun isolates the same App 1.7.5 under two peer snapshots (Zod differs).
+    // Runtime SDK version is identical; bridge the private-class type identity.
+    new OpenAIExtensions(this.app as unknown as ConstructorParameters<typeof OpenAIExtensions>[0]);
+    // Register before connect: the initial opener result follows initialized.
+    this.app.ontoolresult = (result) => {
+      this.launchReceived = true;
+      this.resolveLaunch?.();
+      try {
+        const value = unwrapToolResult(result);
+        if (record(value.data).connectionId) this.acceptStatus(value);
+        else this.target.dispatchEvent(new Event("forum:host-refresh"));
+      } catch {
+        void this.refreshStatus().catch(() => {});
+      }
+    };
+    this.app.onhostcontextchanged = (context) => this.applyContext(context);
+    this.app.ontoolcancelled = () => this.target.dispatchEvent(new Event("forum:host-refresh"));
+    this.app.onteardown = async () => {
+      // Let the SDK acknowledge before closing its transport.
+      setTimeout(() => this.destroy(), 0);
+      return {};
+    };
   }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -107,107 +158,44 @@ export class ForumHostBridge {
         new CustomEvent("forum:host-route", { detail: path }),
       );
   }
-  private onMessage = (event: MessageEvent) => {
-    // Native webviews inject MessageEvents without a source/origin; browser
-    // frames carry a WindowProxy and must still match our parent or self.
-    const nativeDispatch = event.source === null && event.origin === "";
-    if (event.source !== this.target.parent && event.source !== this.target && !nativeDispatch) return;
-    const message = record(event.data);
-    if (message.jsonrpc !== "2.0") return;
-    // Request IDs are independent in each direction. A host health check may
-    // use the same ID as our pending initialize request; it is not its reply.
-    if (message.method === "ping" && (typeof message.id === "number" || typeof message.id === "string")) {
-      this.target.parent.postMessage({ jsonrpc: "2.0", id: message.id, result: {} }, "*");
-      return;
-    }
-    if (typeof message.method !== "string" && typeof message.id === "number" && this.pending.has(message.id)) {
-      const pending = this.pending.get(message.id)!;
-      this.pending.delete(message.id);
-      clearTimeout(pending.timer);
-      if (message.error)
-        pending.reject(
-          new Error(
-            String(record(message.error).message ?? "Host request failed."),
-          ),
-        );
-      else pending.resolve(message.result);
-    } else if (message.method === "ui/notifications/host-context-changed")
-      this.applyContext(message.params);
-    else if (message.method === "ui/notifications/tool-result") {
-      try {
-        const value = unwrapToolResult(message.params);
-        if (record(value.data).connectionId) this.acceptStatus(value);
-        else this.target.dispatchEvent(new Event("forum:host-refresh"));
-      } catch {
-        void this.refreshStatus().catch(() => {});
-      }
-    } else if (message.method === "ui/resource-teardown") {
-      if (message.id !== undefined)
-        this.target.parent.postMessage(
-          { jsonrpc: "2.0", id: message.id, result: {} },
-          "*",
-        );
-      this.destroy();
-    }
-  };
-  request(
-    method: string,
-    params: Json = {},
-    timeout = 20_000,
-  ): Promise<unknown> {
-    if (this.stopped)
-      return Promise.reject(new Error("Reopen the forum to continue."));
-    const id = ++this.sequence;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(
-          new Error(
-            "The host did not respond. Your draft is preserved; try again.",
-          ),
-        );
-      }, timeout);
-      this.pending.set(id, { resolve, reject, timer });
-      this.target.parent.postMessage(
-        { jsonrpc: "2.0", id, method, params },
-        "*",
-      );
+  notify(method: string, params: Json = {}) {
+    if (!this.stopped && this.app.getHostCapabilities() && method === "ui/notifications/size-changed")
+      void this.app.sendSizeChanged({ width: Number(params.width), height: Number(params.height) }).catch(() => {});
+  }
+  connect() {
+    return this.connection ??= this.initialize();
+  }
+  private ensureHost() {
+    return this.hostInitialization ??= this.app.connect(this.transport, {
+      timeout: this.host.callTool ? 2000 : 20_000,
     });
   }
-  notify(method: string, params: Json = {}) {
-    if (!this.stopped)
-      this.target.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
-  }
-  async connect() {
+  private async initialize() {
     try {
-      const result = record(
-        await this.request(
-          "ui/initialize",
-          {
-            protocolVersion: "2026-01-26",
-            appInfo: { name: "SYMBaiEX Forum", version: "2.2.2" },
-            appCapabilities: { availableDisplayModes: ["fullscreen"] },
-          },
-          this.host.callTool ? 2000 : 20_000,
-        ),
-      );
-      this.applyContext(result.hostContext);
-      this.notify("ui/notifications/initialized");
-      const context = record(result.hostContext);
-      if (
-        context.displayMode !== "fullscreen" &&
-        Array.isArray(context.availableDisplayModes) &&
-        context.availableDisplayModes.includes("fullscreen")
-      )
-        void this.request("ui/request-display-mode", {
-          mode: "fullscreen",
-        }).catch(() => {});
+      await this.ensureHost();
+      const context = this.app.getHostContext();
+      this.applyContext(context);
+      if (context?.displayMode !== "fullscreen" && context?.availableDisplayModes?.includes("fullscreen"))
+        void this.app.requestDisplayMode({ mode: "fullscreen" }).catch(() => {});
+      // Use the host's launch result instead of immediately duplicating forum_status.
+      if (!this.launchReceived && !this.host.toolOutput) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await new Promise<void>((resolve) => {
+          this.resolveLaunch = resolve;
+          timer = setTimeout(resolve, 1000);
+        });
+        clearTimeout(timer);
+        this.resolveLaunch = undefined;
+      }
     } catch (error) {
       if (!this.host.callTool) throw error;
     }
-    const launch = unwrapToolResult(this.host.toolOutput ?? {});
-    if (record(launch.data).connectionId) this.acceptStatus(launch);
-    else await this.refreshStatus();
+    if (!this.status.connectionId) {
+      const launch = unwrapToolResult(this.host.toolOutput ?? {});
+      if (record(launch.data).connectionId) this.acceptStatus(launch);
+      else await this.refreshStatus();
+    }
+    if (this.stopped) throw new Error("Reopen the forum to continue.");
     this.ready = true;
     this.emit();
   }
@@ -246,11 +234,19 @@ export class ForumHostBridge {
     }
   }
   async tool(name: string, args: Json) {
+    if (this.stopped) throw new Error("Reopen the forum to continue.");
+    if (!this.host.callTool) {
+      // Child effects can run before the root connects. Wait for the launch
+      // identity too; the bootstrap status call must not await itself.
+      if (!this.ready && name !== "forum_status") await this.connect();
+      await this.ensureHost();
+    }
+    if (this.stopped) throw new Error("Reopen the forum to continue.");
     const authority = this.authority();
     const result = unwrapToolResult(
       this.host.callTool
         ? await this.host.callTool(name, args)
-        : await this.request("tools/call", { name, arguments: args }),
+        : await this.app.callServerTool({ name, arguments: args }, { timeout: 20_000 }),
     );
     if (
       authority !== this.authority() &&
@@ -266,7 +262,10 @@ export class ForumHostBridge {
     if (!["https:", "http:"].includes(target.protocol))
       throw new Error("This link cannot be opened.");
     if (this.host.openExternal) this.host.openExternal({ href: target.href });
-    else await this.request("ui/open-link", { url: target.href });
+    else {
+      await this.ensureHost();
+      await this.app.openLink({ url: target.href });
+    }
   }
   async uploadFiles(files: File[]): Promise<ForumAttachmentDraft[]> {
     if (!this.host.uploadFile || !this.host.getFileDownloadUrl)
@@ -352,13 +351,10 @@ export class ForumHostBridge {
     return attachments as ForumAttachmentDraft[];
   }
   destroy() {
+    if (this.stopped) return;
     this.stopped = true;
-    this.target.removeEventListener("message", this.onMessage);
-    for (const item of this.pending.values()) {
-      clearTimeout(item.timer);
-      item.reject(new Error("Forum closed."));
-    }
-    this.pending.clear();
+    this.resolveLaunch?.();
+    void this.app.close();
     this.listeners.clear();
   }
 }

@@ -5,13 +5,19 @@ import {
   signOut,
 } from "@workos-inc/authkit-nextjs";
 import { NextResponse } from "next/server";
+import { assertHumanAuthConfiguration } from "./session-config";
 
 const HANDLE_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const authCallback = handleAuth();
+const handleCallback = handleAuth();
+export const authCallback: typeof handleCallback = (request) => {
+  assertHumanAuthConfiguration(process.env);
+  return handleCallback(request);
+};
 
 export async function authSignIn(request: Request) {
+  assertHumanAuthConfiguration(process.env);
   const url = new URL(request.url);
   const identifier = (url.searchParams.get("identifier") ?? "").trim();
   const loginHint = identifier.includes("@")
@@ -32,6 +38,7 @@ export async function authSignIn(request: Request) {
 }
 
 export async function authSignUp(request: Request) {
+  assertHumanAuthConfiguration(process.env);
   const url = new URL(request.url);
   const email = validEmail(url.searchParams.get("email") ?? "");
   if (email === null) {
@@ -52,6 +59,7 @@ export async function authSignUp(request: Request) {
 }
 
 export async function authSignOut(request: Request) {
+  assertHumanAuthConfiguration(process.env);
   const url = new URL(request.url);
   await signOut({ returnTo: new URL("/signin", url.origin).toString() });
   return NextResponse.redirect(new URL("/signin", url.origin), 303);
@@ -83,16 +91,19 @@ async function lookupVerifiedEmailForHandle(handle: string) {
     throw new Error("Handle login lookup is not configured.");
   }
 
-  const response = await fetch(`${endpoint.replace(/\/$/, "")}/auth/handle-login`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${endpoint.replace(/\/$/, "")}/auth/handle-login`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ handle: handle.toLowerCase() }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
     },
-    body: JSON.stringify({ handle: handle.toLowerCase() }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(5_000),
-  });
+  );
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error("Handle login lookup failed.");

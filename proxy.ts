@@ -17,6 +17,11 @@ import { contentSubdomainRootPath } from "@/lib/content-subdomain-routing";
 import { resolveForumSubdomainRoute } from "@/lib/forum-subdomain-routing";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { assertHumanAuthConfiguration } from "./packages/auth/src/session-config";
+import {
+  usesHumanSession,
+  withSharedLegacySession,
+} from "./packages/auth/src/shared-session";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
@@ -31,18 +36,23 @@ const SONNER_STYLE_HASHES = [
   "'sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo='",
   "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='",
 ];
-const proxy = convexConfigured
-  ? convexAuthNextjsMiddleware(
-      async (request, { convexAuth }) =>
-        proxyRequest(request, await convexAuth.isAuthenticated()),
-      {
-        convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-        cookieConfig: { maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
-      },
-    )
-  : function proxy(request: NextRequest) {
-      return proxyRequest(request, false);
-    };
+const proxy =
+  process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
+    ? withSharedLegacySession(
+        convexAuthNextjsMiddleware(
+          async (request, { convexAuth }) =>
+            proxyRequest(request, await convexAuth.isAuthenticated()),
+          {
+            convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
+            cookieConfig: { maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
+          },
+        ),
+        process.env,
+        (request) => proxyRequest(request, false),
+      )
+    : function proxy(request: NextRequest) {
+        return proxyRequest(request, false);
+      };
 
 export default proxy;
 
@@ -71,7 +81,10 @@ async function proxyRequest(
   request: NextRequest,
   legacyAuthenticated: boolean,
 ) {
+  const humanSession = usesHumanSession(request.nextUrl.pathname);
+  if (humanSession) assertHumanAuthConfiguration(process.env);
   const authKitConfigured =
+    humanSession &&
     process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" &&
     Boolean(process.env.WORKOS_CLIENT_ID);
   const authKit = authKitConfigured
@@ -83,7 +96,8 @@ async function proxyRequest(
   );
   const policy = contentSecurityPolicy();
   const response =
-    isSignInPage(request) && (authKit?.session.user || legacyAuthenticated)
+    isSignInPage(request) &&
+    (authKitConfigured ? authKit?.session.user : legacyAuthenticated)
       ? nextjsMiddlewareRedirect(
           request,
           cleanRedirect(request.nextUrl.searchParams.get("redirectTo")),

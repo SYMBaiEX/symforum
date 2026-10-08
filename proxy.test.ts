@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 
 const authState = vi.hoisted(() => ({
   authenticated: false,
+  workosAuthenticated: false,
+  legacyCalls: 0,
+  workosCalls: 0,
   middlewareOptions: null as {
     cookieConfig?: { maxAge: number | null };
   } | null,
@@ -19,12 +23,14 @@ vi.mock("@convex-dev/auth/nextjs/server", () => ({
     options: { cookieConfig?: { maxAge: number | null } },
   ) => {
     authState.middlewareOptions = options;
-    return (request: NextRequest) =>
-      handler(request, {
+    return (request: NextRequest) => {
+      authState.legacyCalls += 1;
+      return handler(request, {
         convexAuth: {
           isAuthenticated: async () => authState.authenticated,
         },
       });
+    };
   },
   nextjsMiddlewareRedirect: (request: NextRequest, redirectTo: string) =>
     new Response(null, {
@@ -37,9 +43,17 @@ vi.mock("@convex-dev/auth/nextjs/server", () => ({
 
 vi.mock("@workos-inc/authkit-nextjs", () => ({
   applyResponseHeaders: (response: Response) => response,
-  authkit: async () => ({ headers: new Headers(), session: null }),
-  partitionAuthkitHeaders: () => ({
-    requestHeaders: new Headers(),
+  authkit: async () => {
+    authState.workosCalls += 1;
+    return ({
+    headers: new Headers(),
+    session: {
+      user: authState.workosAuthenticated ? { id: "user_test" } : null,
+    },
+    });
+  },
+  partitionAuthkitHeaders: (request: NextRequest) => ({
+    requestHeaders: new Headers(request.headers),
     responseHeaders: new Headers(),
   }),
 }));
@@ -74,9 +88,94 @@ describe("proxy forum routing", () => {
   beforeEach(() => {
     vi.resetModules();
     authState.authenticated = false;
+    authState.workosAuthenticated = false;
+    authState.legacyCalls = 0;
+    authState.workosCalls = 0;
     authState.middlewareOptions = null;
     delete process.env.NEXT_PUBLIC_CONVEX_URL;
     delete process.env.WEBMCP_ORIGIN_TRIAL_TOKEN;
+    delete process.env.AUTH_SHARED_SESSION_SECRET;
+  });
+
+  test("WorkOS sessions use their own identity without falling back to legacy cookies", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
+    vi.stubEnv("NEXT_PUBLIC_WORKOS_ENABLED", "true");
+    vi.stubEnv("WORKOS_CLIENT_ID", "client_test");
+    vi.stubEnv("WORKOS_API_KEY", "test-key");
+    vi.stubEnv(
+      "WORKOS_COOKIE_PASSWORD",
+      "test-only-password-at-least-32-characters",
+    );
+    vi.stubEnv("WORKOS_COOKIE_DOMAIN", ".symbaiex.com");
+    vi.stubEnv(
+      "NEXT_PUBLIC_WORKOS_REDIRECT_URI",
+      "https://forum.symbaiex.com/callback",
+    );
+    authState.authenticated = true;
+    const proxy = await loadProxy();
+    const request = requestFor("https://forum.symbaiex.com/signin");
+    expect((await proxy(request)).headers.get("location")).toBeNull();
+    expect(authState.middlewareOptions).toBeNull();
+
+    authState.workosAuthenticated = true;
+    expect((await proxy(request)).headers.get("location")).toBe(
+      "https://forum.symbaiex.com/",
+    );
+  });
+
+  test.each([
+    "/api/plugin/mcp",
+    "/api/agent/mcp",
+    "/api/agent/auth/register",
+    "/agent-auth/token",
+    "/agent-auth/register",
+    "/api/admin/upload",
+  ])("remote %s bypasses browser middleware with shared sessions enabled", async (path) => {
+    vi.stubEnv("NEXT_PUBLIC_WORKOS_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
+    vi.stubEnv("AUTH_SHARED_SESSION_SECRET", "1".repeat(64));
+    const proxy = await loadProxy();
+    const req = new NextRequest(`https://forum.symbaiex.com${path}`, {
+      method: "POST",
+      headers: {
+        host: "forum.symbaiex.com",
+        origin: "https://chatgpt.com",
+        authorization: "Bearer remote",
+        cookie: "__Secure-symbaiex-session=malformed; __Host-__convexAuthJWT=ambient",
+      },
+    });
+    const response = await proxy(req);
+    expect(response.status).toBe(200);
+    expect(authState.legacyCalls).toBe(0);
+    expect(authState.workosCalls).toBe(0);
+    expect(req.headers.get("authorization")).toBe("Bearer remote");
+    expect(req.cookies.get("__Host-__convexAuthJWT")?.value).toBe("ambient");
+    expect(response.headers.get("x-middleware-request-authorization")).toBe("Bearer remote");
+    expect(response.headers.get("x-middleware-request-cookie")).toBe(req.headers.get("cookie"));
+    expect(response.headers.getSetCookie()).toEqual([]);
+  });
+
+  test("human auth endpoint rejects foreign POST before invoking browser middleware", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WORKOS_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
+    vi.stubEnv("AUTH_SHARED_SESSION_SECRET", "1".repeat(64));
+    const proxy = await loadProxy();
+    const response = await proxy(new NextRequest("https://forum.symbaiex.com/api/auth", {
+      method: "POST",
+      headers: { host: "forum.symbaiex.com", origin: "https://chatgpt.com" },
+    }));
+    expect(response.status).toBe(403);
+    expect(authState.legacyCalls).toBe(0);
+  });
+
+  test("stateless API does not initialize enabled human AuthKit", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WORKOS_ENABLED", "true");
+    vi.stubEnv("WORKOS_CLIENT_ID", "client_test");
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor("https://forum.symbaiex.com/api/plugin/mcp"));
+    expect(response.status).toBe(200);
+    expect(authState.workosCalls).toBe(0);
+    expect(authState.legacyCalls).toBe(0);
   });
 
   test("scopes an opt-in WebMCP trial token to canonical HTML tool pages", async () => {
@@ -190,9 +289,7 @@ describe("proxy forum routing", () => {
 
   test("allows cross-subdomain navigation between the published surfaces", async () => {
     const proxy = await loadProxy();
-    const response = await proxy(
-      requestFor("https://news.symbaiex.com/news"),
-    );
+    const response = await proxy(requestFor("https://news.symbaiex.com/news"));
     const policy = response.headers.get("content-security-policy") ?? "";
 
     expect(policy).toContain("https://forum.symbaiex.com");

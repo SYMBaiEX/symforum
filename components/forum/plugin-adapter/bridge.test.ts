@@ -25,58 +25,56 @@ const status = {
   },
 };
 describe("native forum host boundary", () => {
-  test("accepts native webview replies with no source/origin while rejecting foreign delivery", async () => {
-    const { target, bridge, parent, win } = hostFixture();
-    for (const source of [null, win]) {
-      const pending = bridge.request("ui/initialize");
-      const id = parent.postMessage.mock.calls.at(-1)![0].id;
-      target.dispatchEvent(Object.assign(new Event("message"), { data: { jsonrpc: "2.0", id, result: "foreign" }, source: null, origin: "https://foreign.example" }));
-      target.dispatchEvent(Object.assign(new Event("message"), { data: { jsonrpc: "2.0", id, result: "native" }, source, origin: "" }));
-      await expect(pending).resolves.toBe("native");
-    }
-    bridge.destroy();
+  test("child reads wait for host initialization and launch identity", async () => {
+    const f = hostFixture();
+    const pending = f.bridge.tool("forum_overview", {});
+    f.bridge.notify("ui/notifications/size-changed", { width: 400, height: 800 });
+    await vi.waitFor(() => expect(f.parent.postMessage).toHaveBeenCalled());
+    expect(f.parent.postMessage.mock.calls.map(([m]) => m.method)).toEqual(["ui/initialize"]);
+    const initialize = f.parent.postMessage.mock.calls[0][0];
+    f.deliver({ jsonrpc: "2.0", id: initialize.id, result: {
+      protocolVersion: "2026-01-26", hostInfo: { name: "test", version: "1" },
+      hostCapabilities: { serverTools: {} }, hostContext: { displayMode: "fullscreen" },
+    } });
+    await vi.waitFor(() => expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "ui/notifications/initialized")).toBe(true));
+    expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "tools/call")).toBe(false);
+    f.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [], structuredContent: status } });
+    await vi.waitFor(() => expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "tools/call")).toBe(true));
+    const request = f.parent.postMessage.mock.calls.find(([m]) => m.method === "tools/call")![0];
+    f.deliver({ jsonrpc: "2.0", id: request.id, result: { content: [], structuredContent: { data: "current-profile" } } });
+    await expect(pending).resolves.toEqual({ data: "current-profile" });
+    f.bridge.destroy();
   });
-  test("answers host health checks without consuming a colliding app request ID", async () => {
-    const { bridge, parent, deliver } = hostFixture();
-    const pending = bridge.request("ui/initialize");
-    const request = parent.postMessage.mock.calls[0][0];
-    deliver({ jsonrpc: "2.0", method: "ping", id: request.id });
-    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id: request.id, result: {} }, "*");
-    deliver({ jsonrpc: "2.0", id: request.id, result: { hostContext: { theme: "dark" } } });
-    await expect(pending).resolves.toEqual({ hostContext: { theme: "dark" } });
-    deliver({ jsonrpc: "2.0", method: "ping", id: "host-health" });
-    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id: "host-health", result: {} }, "*");
-    bridge.destroy();
-  });
-  test("acknowledges teardown even when its ID matches an outstanding app request", async () => {
-    const { bridge, parent, deliver } = hostFixture();
-    const pending = bridge.request("tools/call");
-    const id = parent.postMessage.mock.calls[0][0].id;
-    deliver({ jsonrpc: "2.0", method: "ui/resource-teardown", id });
-    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id, result: {} }, "*");
-    await expect(pending).rejects.toThrow("Forum closed");
-  });
-  test("ignores responses from other frames and cleans up outstanding requests", async () => {
-    const { bridge, parent, deliver } = hostFixture();
-    const response = bridge.request("tools/call", { name: "forum_overview" });
-    const request = parent.postMessage.mock.calls[0][0];
-    deliver({ jsonrpc: "2.0", id: request.id, result: "untrusted" }, {});
-    deliver({ jsonrpc: "2.0", id: request.id, result: "correct" });
-    await expect(response).resolves.toBe("correct");
-    const closed = bridge.request("tools/call");
-    bridge.destroy();
-    await expect(closed).rejects.toThrow("Forum closed");
-    await expect(bridge.request("tools/call")).rejects.toThrow("Reopen");
-  });
-  test("acknowledges resource teardown as a request and rejects pending work", async () => {
-    const { bridge, parent, deliver } = hostFixture();
-    const waiting = bridge.request("tools/call");
-    deliver({ jsonrpc: "2.0", method: "ui/resource-teardown", id: 70 });
-    expect(parent.postMessage).toHaveBeenCalledWith(
-      { jsonrpc: "2.0", id: 70, result: {} },
-      "*",
-    );
-    await expect(waiting).rejects.toThrow("Forum closed");
+  test("SDK handshake consumes the launch result and avoids a duplicate status read", async () => {
+    const f = hostFixture();
+    const connected = f.bridge.connect();
+    await vi.waitFor(() => expect(f.parent.postMessage).toHaveBeenCalled());
+    const initialize = f.parent.postMessage.mock.calls.find(([m]) => m.method === "ui/initialize")![0];
+    f.deliver({ jsonrpc: "2.0", id: initialize.id, result: {
+      protocolVersion: "2026-01-26", hostInfo: { name: "test", version: "1" },
+      hostCapabilities: { serverTools: {} }, hostContext: { displayMode: "fullscreen" },
+    } });
+    await vi.waitFor(() => expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "ui/notifications/initialized")).toBe(true));
+    f.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [], structuredContent: status } });
+    await connected;
+    expect(f.bridge.status.connectionId).toBe("connection");
+    expect(f.bridge.ready).toBe(true);
+    expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "tools/call")).toBe(false);
+    const pending = f.bridge.tool("forum_overview", {});
+    await vi.waitFor(() => expect(f.parent.postMessage.mock.calls.some(([m]) => m.method === "tools/call")).toBe(true));
+    const request = f.parent.postMessage.mock.calls.find(([m]) => m.method === "tools/call")![0];
+    f.deliver({ jsonrpc: "2.0", method: "ping", id: request.id });
+    await vi.waitFor(() => expect(f.parent.postMessage).toHaveBeenCalledWith({ jsonrpc: "2.0", id: request.id, result: {} }, "*"));
+    // A foreign frame and a source-less foreign origin cannot resolve the call.
+    f.deliver({ jsonrpc: "2.0", id: request.id, result: { content: [], structuredContent: { data: "foreign" } } }, {});
+    f.target.dispatchEvent(Object.assign(new Event("message"), { source: null, origin: "https://foreign.example", data: { jsonrpc: "2.0", id: request.id, result: {} } }));
+    f.target.dispatchEvent(Object.assign(new Event("message"), { source: null, origin: "", data: { jsonrpc: "2.0", id: request.id, result: { content: [], structuredContent: { data: "native" } } } }));
+    await expect(pending).resolves.toEqual({ data: "native" });
+    const closed = expect(f.bridge.tool("forum_overview", {})).rejects.toThrow();
+    f.deliver({ jsonrpc: "2.0", method: "ui/resource-teardown", id: "host-close", params: {} });
+    await vi.waitFor(() => expect(f.parent.postMessage).toHaveBeenCalledWith({ jsonrpc: "2.0", id: "host-close", result: {} }, "*"));
+    await closed;
+    await expect(f.bridge.tool("forum_overview", {})).rejects.toThrow("Reopen");
   });
   test("uses structured or text tool results and retains typed errors", () => {
     expect(unwrapToolResult({ structuredContent: status })).toEqual(status);

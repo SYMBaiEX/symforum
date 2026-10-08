@@ -29,6 +29,11 @@ function pages(path: string): string[] {
   );
 }
 describe("automatic native forum parity", () => {
+  test("excludes first-party Next server runtime from the host browser bundle", () => {
+    // AuthKit's component entry imports server tracing. A native browser has
+    // no Node process, so even syntactically valid JS crashes before mounting.
+    expect(FORUM_NATIVE_APP_JS).not.toMatch(/process\.env\.(?:NEXT_OTEL_PERFORMANCE_PREFIX|NEXT_RUNTIME|__NEXT_DEV_SERVER)/);
+  });
   test("advertises a content-addressed UI revision so client caches cannot pin an older renderer", () => {
     const revision = createHash("sha256")
       .update(readFileSync("lib/forum-native-app.generated.ts"))

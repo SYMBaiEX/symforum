@@ -66,6 +66,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("forum MCP protocol boundary", () => {
+  test("resource discovery supports the standard empty template list", async () => {
+    const response = await POST(request("resources/templates/list"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).result).toEqual({ resourceTemplates: [] });
+  });
+  test("unknown methods are identified without logging request payloads", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await POST(request("unknown/host-method", { token: "secret-must-not-log" }));
+    expect((await response.json()).error.data).toEqual({ method: "unknown/host-method" });
+    expect(warn).toHaveBeenCalledWith("forum-plugin-protocol-error", expect.objectContaining({ method: "unknown/host-method" }));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-must-not-log");
+    warn.mockRestore();
+  });
+
   test.each([
     FORUM_PLUGIN_APP_URI,
     "ui://symbaiex/forum.html",
@@ -96,7 +110,7 @@ describe("forum MCP protocol boundary", () => {
       request("initialize", { protocolVersion: "2025-06-18" }),
     );
     const server = (await initialized.json()).result.serverInfo;
-    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.2.2" });
+    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.2.3" });
     const listed = await POST(request("tools/list"));
     const tools = (await listed.json()).result.tools;
     const opener = tools.find(
@@ -213,7 +227,7 @@ describe("forum MCP protocol boundary", () => {
           headers,
         ),
       );
-      expect(response.headers.get("Mcp-Server-Version")).toBe("2.2.2");
+      expect(response.headers.get("Mcp-Server-Version")).toBe("2.2.3");
       expect(await response.json()).toMatchObject({
         result: {
           structuredContent: { status: "completed", actingAs: null, data: {} },
@@ -673,7 +687,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "2.2.2",
+            version: "2.2.3",
           },
         },
       },

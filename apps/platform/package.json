@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "bun ../../scripts/sync-forum-ui.mjs && bun ../../scripts/build-native-forum-app.mjs && next build",
     "start": "next start",
     "lint": "eslint"
   },

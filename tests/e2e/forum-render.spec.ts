@@ -1,0 +1,62 @@
+import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_SCRIPT } from "../../lib/forum-plugin-app";
+import { matchForumRoute } from "../../lib/forum-native-routing";
+import { FORUM_NATIVE_ROUTES } from "../../lib/forum-native-app.generated";
+
+// Public snapshots only; no cookies, access tokens, private data or live writes.
+const fixtures = JSON.parse(readFileSync("tests/e2e/fixtures/forum-public.json", "utf8"));
+const html = `<!doctype html><body style="margin:0"><iframe title="Forum fixture" style="border:0;width:100vw;height:100vh"></iframe><script>
+const frame = document.querySelector('iframe');
+window.addEventListener('message', event => {
+  if (event.source !== frame.contentWindow) return;
+  const m = event.data;
+  const reply = result => frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result},'*');
+  if (m.method === 'ui/initialize') reply({protocolVersion:'2026-01-26',hostInfo:{name:'Isolated test host',version:'1'},hostCapabilities:{serverTools:{}},hostContext:{theme:'dark',displayMode:'fullscreen',availableDisplayModes:['fullscreen']}});
+  if (m.method === 'ui/notifications/initialized') frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:{status:'completed',actingAs:null,data:{}}}},'*');
+  if (m.method === 'tools/call') reply((${JSON.stringify(fixtures).replaceAll("<", "\\u003c")})[m.params.name] || {isError:true,content:[],structuredContent:{code:'AUTH_REQUIRED',error:'Connect a profile to continue.'}});
+});
+frame.srcdoc = ${JSON.stringify(FORUM_PLUGIN_APP_HTML).replaceAll("<", "\\u003c")};
+</script>`;
+
+for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
+  test(`renders and navigates the shipped forum at ${viewport.width}px`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.setViewportSize(viewport);
+    // Every request is intercepted. This test cannot reach ChatGPT or mutate the forum.
+    await page.route("**/*", route => {
+      const url = route.request().url();
+      if (url === "http://127.0.0.1:43191/") return route.fulfill({ contentType: "text/html", body: html });
+      if (url === "https://www.symbaiex.com/api/plugin/assets/current/forum.js")
+        return route.fulfill({ contentType: "text/javascript", body: FORUM_PLUGIN_APP_SCRIPT });
+      return route.abort();
+    });
+    await page.goto("http://127.0.0.1:43191/");
+    const app = page.frameLocator('iframe[title="Forum fixture"]');
+    await expect(app.getByRole("heading", { name: "Feed", exact: true })).toBeVisible();
+    expect(await app.locator("html").evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await expect(app.getByText("The connection could not continue")).toHaveCount(0);
+    await expect(app.locator("#forum-app-startup")).toHaveCount(0);
+    // Validate all rendered internal links against the real shared route catalog.
+    for (const href of await app.locator("a[href]").evaluateAll(elements => elements.map(a => a.getAttribute("href")))) {
+      if (!href || !href.startsWith("/forum")) continue;
+      expect(matchForumRoute(FORUM_NATIVE_ROUTES.map(r => ({ ...r, path: r.path })), href.split(/[?#]/)[0]), `Dead native forum route: ${href}`).toBeTruthy();
+    }
+    await app.getByRole("link", { name: "Boards", exact: true }).click();
+    await expect(app.getByRole("heading", { name: "Boards", exact: true })).toBeVisible();
+    await app.locator('a[href="/forum?view=news"]:visible').getByText("News", { exact: true }).click();
+    await expect(app.getByRole("heading", { name: "News", exact: true }).first()).toBeVisible();
+    await page.screenshot({ path: `tmp/forum-render-tests/forum-${viewport.width}.png` });
+    expect(errors).toEqual([]);
+  });
+}
+
+test("blocked UI bundle leaves a visible recovery message", async ({ page }) => {
+  await page.route("**/*", route => route.request().url() === "http://127.0.0.1:43191/"
+    ? route.fulfill({ contentType: "text/html", body: html }) : route.abort());
+  await page.goto("http://127.0.0.1:43191/");
+  const app = page.frameLocator('iframe[title="Forum fixture"]');
+  await expect(app.getByRole("status")).toContainText("could not start");
+  await expect(app.getByRole("link", { name: "Open the forum website" })).toBeVisible();
+});

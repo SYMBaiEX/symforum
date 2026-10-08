@@ -5,6 +5,9 @@ import { compareForumRoutePatterns } from "../lib/forum-native-routing.ts";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 const root = resolve(import.meta.dirname, "..");
+// Tailwind's content globs resolve against cwd. App-local Vercel builds must
+// generate the same styles as root development and CI commands.
+process.chdir(root);
 const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const requiredBun = manifest.packageManager.replace(/^bun@/, "");
 if (Bun.version !== requiredBun)
@@ -69,6 +72,9 @@ const aliases = {
   "@/components/structured-data": "framework.tsx",
   "@/components/web-vitals-reporter": "framework.tsx",
   "@/components/analytics-tracker": "framework.tsx",
+  // Browser WebMCP uses first-party authentication; the embedded forum uses
+  // its host MCP connection. Never pull AuthKit/Next server modules into it.
+  "@workos-inc/authkit-nextjs/components": "framework.tsx",
   "@/components/app-error-surface": "errors.tsx",
 };
 const result = await Bun.build({

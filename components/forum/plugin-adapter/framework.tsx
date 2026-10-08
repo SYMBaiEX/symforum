@@ -71,6 +71,11 @@ export function WebVitalsReporter() {
 export function AnalyticsTracker() {
   return null;
 }
+export function useAccessToken() {
+  // WebMCP exits in plugin mode; all embedded requests use the host's OAuth
+  // principal. First-party browser credentials are never available here.
+  return { getAccessToken: async () => null };
+}
 export function useReportWebVitals() {
   return undefined;
 }

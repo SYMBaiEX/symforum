@@ -1,4 +1,4 @@
-# Shared native forum UI — runtime 2.2.2
+# Shared native forum UI — runtime 2.2.3
 
 The website and ChatGPT/Codex plugin now render the same React page modules, components, sidebar, composer, typography and styles. There is no production HTML renderer to maintain separately.
 
@@ -27,3 +27,33 @@ Spatial design and development parity (2.2.0): the same shell now uses a 56px he
 The adapter keeps its connection metadata outside the shared site shell. Actual route pages remain direct children of the shared forum surface, so page spacing and reading-width selectors apply identically in both hosts. Component stylesheet outputs are included in the native bundle, with a regression check matching the board shortcut CSS module to its generated JavaScript class.
 
 `bun run dev:frontend` now runs `ui:watch` alongside Next.js after the initial sync. Source edits under app, components, lib and styles, plus Tailwind config changes, automatically rebuild the native resource. The watcher ignores generated outputs and test files, debounces bursts, and serializes builds. Reopen or reload a mounted plugin preview to load its newly generated resource. Production builds always regenerate it; the content-addressed resource and compatible old-resource aliases continue to serve the current UI without reinstalling the MCP connection.
+
+## Host initialization and browser runtime repair (2.2.3)
+
+The embedded build replaces the first-party WorkOS access-token hook with its
+host integration. Importing AuthKit's normal component entry pulled Next.js
+server tracing into the standalone browser bundle, producing `process is not
+defined` before React mounted. The native view retains the same forum pages and
+WebMCP context strip; requests use the host MCP connection, never website cookies.
+
+The bridge now uses `@modelcontextprotocol/ext-apps` 1.7.5 with
+`@openai/mcp-extensions` 0.1.0. It registers launch-result handling before
+initialization, waits for the host and acting identity before child reads,
+and lets the SDK handle health checks, display mode and teardown. A small
+transport preserves empty-origin native-webview delivery while rejecting
+foreign frames. Legacy `window.openai` support remains. The independent loading
+shell disappears only after an explicit React render marker, so startup failures
+retain a recovery message.
+
+The server supports core MCP 2026-07-28 and the existing 2025-11-25 compatibility
+path. The UI protocol is separately versioned at 2026-01-26. Resource-template
+discovery returns an empty standard result; unknown-method diagnostics record
+only the method name, without arguments or credentials.
+
+Run `bun run test:forum:render` after installing Chromium with
+`bunx playwright install chromium`. CI installs Chromium and runs this check.
+It renders the actual shipped script at 1440px and 390px with intercepted public
+fixtures, verifies feed/board/news navigation and internal routes, and checks the
+recovery state when the bundle cannot load. These isolated rendering checks do
+not prove behavior inside the real ChatGPT host. Shared website sign-in is
+documented separately in [shared-human-sessions.md](shared-human-sessions.md).
