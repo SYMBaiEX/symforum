@@ -48,31 +48,37 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/blog",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${blogSiteUrl}/blog`,
         permanent: true,
       },
       {
         source: "/blog/:path*",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${blogSiteUrl}/blog/:path*`,
         permanent: true,
       },
       {
         source: "/news",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${newsSiteUrl}/news`,
         permanent: true,
       },
       {
         source: "/news/:path*",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${newsSiteUrl}/news/:path*`,
         permanent: true,
       },
       {
         source: "/newsletter",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${newsletterSiteUrl}/newsletter`,
         permanent: true,
       },
       {
         source: "/newsletter/:path*",
+        has: [{ type: "host", value: "www.symbaiex.com" }],
         destination: `${newsletterSiteUrl}/newsletter/:path*`,
         permanent: true,
       },
