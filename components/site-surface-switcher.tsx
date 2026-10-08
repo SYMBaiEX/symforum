@@ -42,7 +42,7 @@ export function SiteSurfaceSwitcher({
   className,
   showForumMark = false,
 }: {
-  activeSurface: "blog" | "forum" | "newsletter";
+  activeSurface: "blog" | "forum" | "news" | "newsletter";
   currentPathname: string;
   homeHref: string;
   forumHref: string;

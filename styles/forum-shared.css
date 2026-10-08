@@ -285,8 +285,8 @@
 .forum-app-shell :is(.forum-page-header h1,.forum-account-heading h1) { font-size: clamp(21px,1.7vw,25px); line-height: 1.2; letter-spacing: -.03em; text-wrap: pretty; }
 .forum-app-shell .forum-page-header h1 { max-width: 45ch; }
 .forum-app-shell .forum-page-header:has(h1) > div > div:first-child { padding-left: 10px; border-left: 2px solid hsl(var(--accent)/.65); }
-.forum-app-shell[data-surface=newsletter] .forum-page-header:has(h1) > div > div:first-child { padding-left: 0; border-left: 0; }
-.dark .forum-app-shell[data-surface=newsletter] { --primary-foreground: 0 0% 100%; }
+.forum-app-shell:is([data-surface=newsletter],[data-surface=news]) .forum-page-header:has(h1) > div > div:first-child { padding-left: 0; border-left: 0; }
+.dark .forum-app-shell:is([data-surface=newsletter],[data-surface=news]) { --primary-foreground: 0 0% 100%; }
 .forum-app-shell .forum-panel { padding: 14px; box-shadow: none; }
 .forum-app-shell .forum-context-panel .forum-panel { background: hsl(var(--card)/.7); padding: 14px; }
 .forum-app-shell .forum-home-context > section:first-child > p { margin-top: 8px; }

@@ -30,6 +30,7 @@ import { headers } from "next/headers";
 const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
 const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
 const NEWSLETTER_PRODUCTION_HOSTNAME = new URL(newsletterSiteUrl("/")).hostname;
+const NEWS_PRODUCTION_HOSTNAME = new URL(newsSiteUrl("/")).hostname;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -133,12 +134,15 @@ export default async function RootLayout({
   const initialForumHost = isForumSubdomainHost(host);
   const initialNewsletterHost =
     host?.split(":")[0]?.toLowerCase() === NEWSLETTER_PRODUCTION_HOSTNAME;
-  const initialPrimarySiteHref = initialNewsletterHost
-    ? primarySiteUrl("/")
-    : primarySiteHrefFromForumHost({
-        host,
-        protocol: requestHeaders.get("x-forwarded-proto"),
-      });
+  const initialNewsHost =
+    host?.split(":")[0]?.toLowerCase() === NEWS_PRODUCTION_HOSTNAME;
+  const initialPrimarySiteHref =
+    initialNewsletterHost || initialNewsHost
+      ? primarySiteUrl("/")
+      : primarySiteHrefFromForumHost({
+          host,
+          protocol: requestHeaders.get("x-forwarded-proto"),
+        });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -213,6 +217,7 @@ export default async function RootLayout({
             <SiteShell
               initialForumHost={initialForumHost}
               initialNewsletterHost={initialNewsletterHost}
+              initialNewsHost={initialNewsHost}
               initialPrimarySiteHref={initialPrimarySiteHref}
             >
               {children}
