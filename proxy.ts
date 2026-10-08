@@ -13,6 +13,7 @@ import {
   normalizePathname,
 } from "@/lib/ai-readable-path";
 import { DISCOVERY_LINK_HEADER } from "@/lib/agent-discovery";
+import { contentSubdomainRootPath } from "@/lib/content-subdomain-routing";
 import { resolveForumSubdomainRoute } from "@/lib/forum-subdomain-routing";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -125,6 +126,16 @@ function nextOrForumRewrite(
   const markdownResponse = markdownRewrite(request, policy, forwardedHeaders);
   if (markdownResponse !== null) {
     return markdownResponse;
+  }
+
+  const contentRootPath = contentSubdomainRootPath({
+    host: request.headers.get("host"),
+    pathname: request.nextUrl.pathname,
+  });
+  if (contentRootPath !== null) {
+    const url = request.nextUrl.clone();
+    url.pathname = contentRootPath;
+    return absoluteRedirect(url);
   }
 
   const forumRoute = forumSubdomainRoute(request);

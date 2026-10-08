@@ -45,6 +45,20 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({
 }));
 
 describe("proxy forum routing", () => {
+  test.each([
+    ["blog.symbaiex.com", "/blog"],
+    ["news.symbaiex.com", "/news"],
+    ["newsletter.symbaiex.com", "/newsletter"],
+  ])("sends the %s root to its content route", async (host, route) => {
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor(`https://${host}/?source=home`));
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe(
+      `https://${host}${route}?source=home`,
+    );
+  });
+
   test("keeps OAuth completion identifiers out of referrers, caches and indexing", async () => {
     const proxy = await loadProxy();
     const response = await proxy(
