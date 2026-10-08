@@ -64,9 +64,21 @@ export async function publicSmoke() {
   );
   const oauth = manifest?.authentication?.oauth2;
   if (oauth && typeof oauth === "object") {
+    const issuer = new URL(oauth.issuer);
+    assert(
+      issuer.protocol === "https:" &&
+        !issuer.username && !issuer.password && !issuer.search && !issuer.hash,
+      "OAuth issuer must be an HTTPS URL without credentials, query or fragment.",
+    );
+    // RFC 8414 discovery belongs to the advertised issuer. The site endpoint
+    // can redirect to WorkOS; credential-bearing requests still reject redirects.
+    const metadataUrl = new URL(
+      `/.well-known/oauth-authorization-server${issuer.pathname.replace(/\/$/, "")}`,
+      issuer,
+    );
     const metadata = await request(
       "GET",
-      `${new URL(baseUrl).origin}/.well-known/oauth-authorization-server`,
+      metadataUrl.href,
       null,
       null,
       200,
