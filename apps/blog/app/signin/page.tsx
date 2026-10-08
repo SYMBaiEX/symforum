@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignInPanel } from "@/components/signin-panel";
+import { AuthEntryPanel } from "@/components/auth/auth-entry-panel";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -23,7 +23,7 @@ export default function SignInPage() {
         </p>
       </section>
       <section className="md:col-span-6 md:col-start-7">
-        <SignInPanel />
+        <AuthEntryPanel />
       </section>
     </main>
   );
