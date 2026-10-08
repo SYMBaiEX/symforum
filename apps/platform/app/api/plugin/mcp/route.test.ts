@@ -161,6 +161,30 @@ describe("forum MCP protocol boundary", () => {
     );
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+  test("supports the 2025-11-25 Streamable HTTP handshake and follow-up requests", async () => {
+    const initialized = await POST(
+      request("initialize", {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "chatgpt", version: "1" },
+      }),
+    );
+    expect(initialized.status).toBe(200);
+    expect(await initialized.json()).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { protocolVersion: "2025-11-25" },
+    });
+
+    const listed = await POST(
+      request("tools/list", undefined, undefined, {
+        "mcp-protocol-version": "2025-11-25",
+      }),
+    );
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).result.tools.length).toBeGreaterThan(80);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
   test.each(["legacy", "modern"])(
     "%s forum launch returns an anonymous shell without reading content",
     async (protocol) => {

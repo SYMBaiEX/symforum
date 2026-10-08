@@ -12,6 +12,7 @@ export type DocsProtocol = "modern" | "legacy";
 export function validateDocsProtocol(
   request: Request,
   body: Record<string, unknown>,
+  supportedVersions: readonly string[] = DOCS_MCP_PROTOCOL_VERSIONS,
 ): DocsProtocol | ProtocolError {
   const version = request.headers.get("mcp-protocol-version");
   const params = isRecord(body.params) ? body.params : null;
@@ -19,14 +20,15 @@ export function validateDocsProtocol(
   const metaVersion = meta?.["io.modelcontextprotocol/protocolVersion"];
   if (metaVersion === undefined && version !== DOCS_MCP_MODERN_VERSION) {
     return version === null ||
-      DOCS_MCP_PROTOCOL_VERSIONS.some((v) => v === version)
+      supportedVersions.some((v) => v === version)
       ? "legacy"
-      : unsupported(version);
+      : unsupported(version, supportedVersions);
   }
   if (typeof metaVersion !== "string" || version !== metaVersion) {
     return mismatch("MCP-Protocol-Version must match request _meta.");
   }
-  if (metaVersion !== DOCS_MCP_MODERN_VERSION) return unsupported(metaVersion);
+  if (metaVersion !== DOCS_MCP_MODERN_VERSION)
+    return unsupported(metaVersion, supportedVersions);
   if (!isRecord(meta?.["io.modelcontextprotocol/clientCapabilities"])) {
     return {
       code: -32600,
@@ -70,11 +72,14 @@ function mismatch(message: string): ProtocolError {
   return { code: -32020, message: `Header mismatch: ${message}` };
 }
 
-function unsupported(requested: string): ProtocolError {
+function unsupported(
+  requested: string,
+  supportedVersions: readonly string[] = DOCS_MCP_PROTOCOL_VERSIONS,
+): ProtocolError {
   return {
     code: -32022,
     message: "Unsupported protocol version",
-    data: { supported: DOCS_MCP_PROTOCOL_VERSIONS, requested },
+    data: { supported: supportedVersions, requested },
   };
 }
 
