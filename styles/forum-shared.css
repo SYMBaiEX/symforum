@@ -326,7 +326,7 @@
 .forum-app-shell .forum-subboard-row { padding-block: 10px; }
 @media (min-width: 768px) {
  .forum-app-shell .forum-main,.forum-app-shell .forum-footer { margin-left: var(--forum-rail-width); }
- .forum-app-shell[data-surface=newsletter] .forum-main,.forum-app-shell[data-surface=newsletter] .forum-footer { margin-left: 0; }
+ .forum-app-shell:is([data-surface=newsletter],[data-surface=news]) .forum-main,.forum-app-shell:is([data-surface=newsletter],[data-surface=news]) .forum-footer { margin-left: 0; }
  .forum-app-shell .forum-footer { padding-bottom: 24px; }
  .forum-app-shell .forum-bottom-nav { display: none; }
  .forum-app-shell .forum-topbar :is(button,a) { min-height: 36px; }
