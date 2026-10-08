@@ -577,6 +577,7 @@ function ForumNewsRows({
                 <h3 className="text-lg font-semibold leading-6 tracking-tight sm:text-[19px] sm:leading-7">
                   <ForumLink
                     href={discussionUrl}
+                    preserveForumPrefix
                     prefetch
                     className="focus-ring inline-flex min-h-11 max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
                   >
@@ -630,6 +631,7 @@ function ForumNewsRows({
                 ) : null}
                 <ForumLink
                   href={discussionUrl}
+                  preserveForumPrefix
                   prefetch
                   className="forum-action-pill focus-ring inline-flex min-h-11 items-center gap-1.5 px-3 font-semibold hover:text-primary"
                   aria-label={`Discuss ${story.title} on the forum`}

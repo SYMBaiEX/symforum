@@ -27,6 +27,7 @@ import {
   CONVEX_QUERY_CACHE_EXPIRATION_MS,
   CONVEX_QUERY_CACHE_MAX_IDLE_ENTRIES,
 } from "./query-cache";
+import { authKitProviderProps } from "./provider-state";
 
 export {
   CONVEX_QUERY_CACHE_EXPIRATION_MS,
@@ -35,6 +36,7 @@ export {
 
 export function AuthKitConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  const workosEnabled = process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true";
   const client = useMemo(
     () =>
       convexUrl ? new ConvexReactClient(convexUrl, { verbose: false }) : null,
@@ -46,8 +48,8 @@ export function AuthKitConvexProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthKitProvider>
-      {process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" ? (
+    <AuthKitProvider {...authKitProviderProps(workosEnabled)}>
+      {workosEnabled ? (
         <ConvexProviderWithAuthKit client={client} useAuth={useAuthForConvex}>
           <ConvexQueryCacheProvider
             expiration={CONVEX_QUERY_CACHE_EXPIRATION_MS}

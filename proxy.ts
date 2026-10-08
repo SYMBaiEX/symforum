@@ -430,7 +430,7 @@ function contentSecurityPolicy(): SecurityPolicy {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
-    `connect-src 'self' https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
+    `connect-src 'self' https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://${FORUM_PRODUCTION_HOSTNAME} https://blog.symbaiex.com https://news.symbaiex.com https://newsletter.symbaiex.com https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -188,6 +188,19 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("allows cross-subdomain navigation between the published surfaces", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(
+      requestFor("https://news.symbaiex.com/news"),
+    );
+    const policy = response.headers.get("content-security-policy") ?? "";
+
+    expect(policy).toContain("https://forum.symbaiex.com");
+    expect(policy).toContain("https://blog.symbaiex.com");
+    expect(policy).toContain("https://news.symbaiex.com");
+    expect(policy).toContain("https://newsletter.symbaiex.com");
+  });
+
   test("serves the forum manifest through native same-origin Next metadata", async () => {
     const proxy = await loadProxy();
     const response = await proxy(
