@@ -83,13 +83,13 @@ export default async function NewsletterPreferencesPage({
   const manageable = subscriber?.status === "confirmed" && tokenHash !== null;
 
   return (
-    <section className="page-frame page-frame-spacious">
-      <div className="page-content-readable">
-        <p className="page-kicker">Newsletter</p>
-        <h1 className="page-title-display mt-3">Preferences</h1>
+    <section className="page-frame page-frame-dense newsletter-page">
+      <div className="forum-panel newsletter-transaction-card page-content-readable p-4 md:p-5">
+        <p className="page-kicker text-primary">Newsletter</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">Preferences</h1>
         {manageable && subscriber ? (
           <>
-            <p className="page-lede mt-5">
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Choose the cadence that earns a place in your inbox. Turning both
               off pauses editorial broadcasts without deleting your confirmed
               subscription.
@@ -99,7 +99,7 @@ export default async function NewsletterPreferencesPage({
                 Preferences saved.
               </p>
             ) : null}
-            <form action={updateTopicsAction} className="mt-6 grid gap-3">
+            <form action={updateTopicsAction} className="mt-4 grid gap-2">
               <input type="hidden" name="tokenHash" value={tokenHash} />
               <PreferenceChoice
                 defaultChecked={subscriber.dailyOptIn}
@@ -128,12 +128,12 @@ export default async function NewsletterPreferencesPage({
           </>
         ) : (
           <>
-            <p className="page-lede mt-5">
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Enter your email below. Confirmed subscribers receive a private
               link to choose daily signals, weekly field notes, or unsubscribe;
               new addresses receive a confirmation link.
             </p>
-            <div className="mt-6 max-w-xl">
+            <div className="mt-4 max-w-xl">
               <NewsletterSignup source="preferences" />
             </div>
           </>
@@ -155,7 +155,7 @@ function PreferenceChoice({
   name: string;
 }) {
   return (
-    <label className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 border border-row-border p-4">
+    <label className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card p-4">
       <input
         className="mt-1 size-4 accent-primary"
         defaultChecked={defaultChecked}

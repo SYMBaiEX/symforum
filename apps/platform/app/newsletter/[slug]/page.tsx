@@ -71,7 +71,7 @@ export default async function NewsletterIssuePage({ params }: PageProps) {
   }
 
   return (
-    <section className="page-frame page-frame-dense">
+    <section className="page-frame page-frame-dense newsletter-page">
       <StructuredData
         data={(() => {
           const payload = parseEditorialNewsletterPayload(issue.body);

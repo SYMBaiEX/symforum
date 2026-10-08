@@ -29,6 +29,7 @@ import { headers } from "next/headers";
 
 const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
 const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
+const NEWSLETTER_PRODUCTION_HOSTNAME = new URL(newsletterSiteUrl("/")).hostname;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -130,10 +131,14 @@ export default async function RootLayout({
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-symbaiex-pathname");
   const initialForumHost = isForumSubdomainHost(host);
-  const initialPrimarySiteHref = primarySiteHrefFromForumHost({
-    host,
-    protocol: requestHeaders.get("x-forwarded-proto"),
-  });
+  const initialNewsletterHost =
+    host?.split(":")[0]?.toLowerCase() === NEWSLETTER_PRODUCTION_HOSTNAME;
+  const initialPrimarySiteHref = initialNewsletterHost
+    ? primarySiteUrl("/")
+    : primarySiteHrefFromForumHost({
+        host,
+        protocol: requestHeaders.get("x-forwarded-proto"),
+      });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -207,6 +212,7 @@ export default async function RootLayout({
           <ConvexClientProvider>
             <SiteShell
               initialForumHost={initialForumHost}
+              initialNewsletterHost={initialNewsletterHost}
               initialPrimarySiteHref={initialPrimarySiteHref}
             >
               {children}

@@ -98,12 +98,12 @@ export default async function NewsletterUnsubscribePage({
   }
 
   return (
-    <section className="page-frame page-frame-spacious">
-      <div className="page-content-readable">
-        <p className="page-kicker">Newsletter</p>
-        <h1 className="page-title-display mt-3">{title}</h1>
-        <p className="page-lede mt-5">{lede}</p>
-        <div className="mt-6 flex flex-wrap gap-2">
+    <section className="page-frame page-frame-dense newsletter-page">
+      <div className="forum-panel newsletter-transaction-card page-content-readable p-4 md:p-5">
+        <p className="page-kicker text-primary">Newsletter</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">{title}</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{lede}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
           {showConfirm && tokenHash ? (
             <form action={unsubscribeAction}>
               <input type="hidden" name="tokenHash" value={tokenHash} />

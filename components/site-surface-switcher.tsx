@@ -42,7 +42,7 @@ export function SiteSurfaceSwitcher({
   className,
   showForumMark = false,
 }: {
-  activeSurface: "blog" | "forum";
+  activeSurface: "blog" | "forum" | "newsletter";
   currentPathname: string;
   homeHref: string;
   forumHref: string;
@@ -74,7 +74,10 @@ export function SiteSurfaceSwitcher({
         : {
             blog: primarySiteHrefForForumHost("/blog", window.location),
             news: primarySiteHrefForForumHost("/news", window.location),
-            newsletter: primarySiteHrefForForumHost("/newsletter", window.location),
+            newsletter: primarySiteHrefForForumHost(
+              "/newsletter",
+              window.location,
+            ),
           },
     );
   }, [forumHref]);

@@ -24,6 +24,7 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
+import { primarySiteUrl } from "@/lib/site-urls";
 
 const AnalyticsTracker = dynamic(
   () =>
@@ -54,27 +55,41 @@ const socialItems = [
 export function SiteShell({
   children,
   initialForumHost = false,
+  initialNewsletterHost = false,
   initialPrimarySiteHref = "/",
 }: {
   children: ReactNode;
   initialForumHost?: boolean;
+  initialNewsletterHost?: boolean;
   initialPrimarySiteHref?: string;
 }) {
   const pathname = usePathname();
   const footerRef = useRef<HTMLElement | null>(null);
   const [footerOffset, setFooterOffset] = useState<number | null>(null);
   const [forumHost, setForumHost] = useState(initialForumHost);
+  const [newsletterHost, setNewsletterHost] = useState(initialNewsletterHost);
   const [primarySiteHref, setPrimarySiteHref] = useState(
     initialPrimarySiteHref,
   );
   const forumShell = shouldUseForumShell({ forumHost, pathname });
+  const newsletterShell =
+    !forumShell &&
+    (newsletterHost ||
+      pathname === "/newsletter" ||
+      pathname?.startsWith("/newsletter/"));
 
   useEffect(() => {
     if (isForumHostname(window.location.hostname)) {
       setForumHost(true);
+      setNewsletterHost(false);
       setPrimarySiteHref(primarySiteHrefForForumHost("/", window.location));
+    } else if (window.location.hostname === "newsletter.symbaiex.com") {
+      setForumHost(false);
+      setNewsletterHost(true);
+      setPrimarySiteHref(primarySiteUrl("/"));
     } else {
       setForumHost(false);
+      setNewsletterHost(false);
       setPrimarySiteHref("/");
     }
   }, []);
@@ -102,12 +117,13 @@ export function SiteShell({
     };
   }, []);
 
-  if (forumShell) {
+  if (forumShell || newsletterShell) {
     return (
       <ForumSiteShell
         footerRef={footerRef}
         forumHost={forumHost}
         primarySiteHref={primarySiteHref}
+        surface={newsletterShell ? "newsletter" : "forum"}
       >
         {children}
       </ForumSiteShell>
@@ -153,7 +169,6 @@ export function SiteShell({
     </div>
   );
 }
-
 
 function SiteFooter({
   agentHref,

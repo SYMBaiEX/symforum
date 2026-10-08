@@ -1,10 +1,16 @@
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+} from "@/components/forum/forum-layout-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { getDailyNews } from "@/lib/news-data";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
 import { newsStoryPath } from "@/lib/news-slugs";
 import type { Metadata } from "next";
+import { ArrowUpRight, BookOpen, Radio } from "lucide-react";
 import Link from "next/link";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -55,192 +61,224 @@ export default async function NewsletterArchivePage() {
   const [featured, ...rest] = issues;
 
   return (
-    <section className="page-frame page-frame-spacious">
+    <section className="page-frame page-frame-dense newsletter-page">
       <StructuredData
         data={breadcrumbStructuredData([
           { name: "Home", url: primarySiteUrl("/") },
           { name: "Newsletter", url: primarySiteUrl("/newsletter") },
         ])}
       />
-      <header className="grid gap-7 border-y border-row-border py-6 md:grid-cols-12 md:gap-8 md:py-9">
-        <div className="md:col-span-8">
-          <p className="page-kicker text-accent-canary">
-            Belle&apos;s desk / dispatches
-          </p>
-          <h1 className="page-title mt-3">Newsletter</h1>
-          <p className="mt-2 max-w-3xl text-xl font-medium leading-tight md:text-3xl">
-            Daily signals. Weekly field notes.
-          </p>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-            Source-linked stories with the context, evidence, and practical
-            questions kept together. Subscribe for new editions or read the
-            archive below.
-          </p>
-        </div>
-        <aside className="border-l-2 border-accent-canary pl-4 md:col-span-4 md:self-end">
-          <p className="page-kicker">Get the next edition</p>
-          <NewsletterSignup className="mt-3" source="newsletter-archive" />
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            Daily signals and weekly field notes, with source references beside
-            the editorial context.
-          </p>
-        </aside>
-      </header>
 
-      <div className="mt-8 grid gap-9 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
-        <div className="min-w-0">
-          {featured ? (
-            <article className="border border-row-border bg-muted/10">
-              <div className="grid gap-5 p-5 md:grid-cols-[10rem_minmax(0,1fr)] md:gap-7 md:p-7">
-                <div className="border-b border-row-border pb-4 md:border-b-0 md:border-r md:pb-0 md:pr-5">
-                  <p className="page-kicker text-accent-canary">
-                    Latest edition
-                  </p>
-                  <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
-                    {formatDate(featured.sentAt ?? featured.updatedAt)}
-                  </p>
-                  <p className="mt-4 inline-flex border border-row-border px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
-                    {featured.edition === "weekly-field-note"
-                      ? "Field note"
-                      : "Daily signal"}
-                  </p>
-                  {featured.sourceCount > 0 ? (
-                    <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                      {featured.qualityScore !== undefined
-                        ? `Quality ${featured.qualityScore}/100 · `
-                        : ""}
-                      {featured.sourceCount} source anchors
-                    </p>
-                  ) : null}
-                </div>
-                <div>
-                  <h2 className="max-w-4xl text-2xl font-semibold leading-tight md:text-4xl">
-                    {featured.headline}
-                  </h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
-                    {featured.dek}
-                  </p>
-                  <Button asChild className="mt-5 rounded-none" size="sm">
-                    <Link href={`/newsletter/${featured.slug}`}>
-                      Read the edition
-                    </Link>
-                  </Button>
-                </div>
+      <ForumPageHeader
+        title="Newsletter"
+        description="Daily signals and weekly field notes, with the sources and context kept close."
+        actions={
+          <Link
+            className="forum-primary-action focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground"
+            href="#newsletter-subscribe"
+          >
+            <Radio aria-hidden="true" className="size-4" />
+            Get the next edition
+          </Link>
+        }
+      />
+
+      {featured ? (
+        <article
+          id="latest-edition"
+          className="forum-panel newsletter-featured-edition scroll-mt-24 p-4 md:p-5"
+        >
+          <div className="grid gap-4 md:grid-cols-[9.5rem_minmax(0,1fr)] md:gap-5">
+            <div className="flex gap-3 border-b border-border pb-3 md:block md:border-b-0 md:border-r md:pb-0 md:pr-4">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <BookOpen aria-hidden="true" className="size-4" />
               </div>
-            </article>
-          ) : (
-            <div className="border-y border-row-border py-7">
-              <p className="page-kicker">The public archive</p>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                The next reviewed edition will appear here. You can subscribe
-                above or follow the live news index in the meantime.
-              </p>
-              <Link
-                className="focus-ring mt-4 inline-flex font-mono text-[10px] uppercase text-foreground underline decoration-accent-cyan underline-offset-4 transition-colors hover:text-accent-cyan"
-                href="/news"
-              >
-                Open the live news index
-              </Link>
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Latest edition
+                </p>
+                <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                  {formatDate(featured.sentAt ?? featured.updatedAt)}
+                </p>
+                <p className="mt-2 inline-flex rounded-full bg-muted px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
+                  {featured.edition === "weekly-field-note"
+                    ? "Field note"
+                    : "Daily signal"}
+                </p>
+                {featured.sourceCount > 0 ? (
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {featured.qualityScore !== undefined
+                      ? `Quality ${featured.qualityScore}/100 · `
+                      : ""}
+                    {featured.sourceCount} source anchors
+                  </p>
+                ) : null}
+              </div>
             </div>
-          )}
+            <div className="min-w-0 self-center">
+              <h2 className="max-w-4xl text-xl font-bold leading-tight tracking-tight md:text-2xl">
+                {featured.headline}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {featured.dek}
+              </p>
+              <Button asChild className="forum-primary-action mt-4" size="sm">
+                <Link href={`/newsletter/${featured.slug}`}>
+                  Read the edition
+                  <ArrowUpRight aria-hidden="true" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </article>
+      ) : (
+        <section id="latest-edition" className="forum-panel forum-status-box">
+          <p className="page-kicker text-primary">Latest edition</p>
+          <p className="mt-2 font-semibold">
+            The public archive is ready for its next issue.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Subscribe for the next reviewed dispatch, or follow today&apos;s
+            stories on the live desk.
+          </p>
+          <Link className="forum-action-pill mt-3 inline-flex" href="/news">
+            Open the live news index
+            <ArrowUpRight aria-hidden="true" className="size-4" />
+          </Link>
+        </section>
+      )}
 
-          {rest.length > 0 ? (
+      <ForumBodyGrid
+        mobileSidebarLabel="Newsletter context"
+        mobileSidebarAlwaysOpen
+        sidebar={
+          <div className="grid gap-3">
             <section
-              aria-labelledby="newsletter-archive-heading"
-              className="mt-9"
+              id="newsletter-subscribe"
+              className="forum-panel scroll-mt-24 p-4"
             >
-              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-row-border pb-3">
-                <div>
-                  <p className="page-kicker">The archive</p>
-                  <h2
-                    className="mt-1 text-xl font-semibold"
-                    id="newsletter-archive-heading"
-                  >
-                    Previous editions
-                  </h2>
-                </div>
-                <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                  Newest first
-                </span>
+              <ForumSectionHeader title="Get the next edition" />
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Source-linked stories, sent as daily signals and weekly field
+                notes.
+              </p>
+              <NewsletterSignup className="mt-3" source="newsletter-archive" />
+              <Link
+                className="focus-ring mt-3 inline-flex min-h-9 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                href="/newsletter/preferences"
+              >
+                Manage subscription preferences
+                <ArrowUpRight aria-hidden="true" className="size-3.5" />
+              </Link>
+            </section>
+
+            <section
+              id="live-desk"
+              className="forum-panel scroll-mt-24 overflow-hidden p-0"
+            >
+              <ForumSectionHeader title="On the live desk">
+                <Radio aria-hidden="true" className="size-4 text-primary" />
+              </ForumSectionHeader>
+              <div className="px-4 pb-2 pt-1">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Today&apos;s reading list from the live news index.
+                </p>
               </div>
-              <div className="mt-2 divide-y divide-row-border border-y border-row-border">
-                {rest.map((issue) => (
-                  <Link
-                    className="group grid gap-2 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[7.5rem_minmax(0,1fr)_7rem] md:items-start md:gap-4 md:px-2"
-                    href={`/newsletter/${issue.slug}`}
-                    key={issue._id}
-                  >
-                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                      {formatDate(issue.sentAt ?? issue.updatedAt)}
-                    </span>
-                    <span>
-                      <span className="block text-base font-semibold leading-6 transition-colors group-hover:text-primary">
-                        {issue.headline}
-                      </span>
-                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                        {issue.dek}
-                      </span>
-                    </span>
-                    <span className="font-mono text-[10px] uppercase text-muted-foreground md:text-right">
-                      {issue.edition === "weekly-field-note"
-                        ? "Field note"
-                        : "Daily signal"}
-                    </span>
-                  </Link>
-                ))}
+              {currentStories.length > 0 ? (
+                <ol className="divide-y divide-border border-t border-border">
+                  {currentStories.map((story) => (
+                    <li className="px-4 py-3" key={story.hnItemId}>
+                      <Link
+                        className="focus-ring text-sm font-medium leading-5 transition-colors hover:text-primary"
+                        href={newsStoryPath(story)}
+                      >
+                        {story.title}
+                      </Link>
+                      <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                        #{String(story.rank).padStart(2, "0")} /{" "}
+                        {story.host ?? "Hacker News"}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="border-t border-border px-4 py-3 text-sm leading-6 text-muted-foreground">
+                  The live index is temporarily unavailable.
+                </p>
+              )}
+              <div className="border-t border-border px-4 py-2">
+                <Link
+                  className="focus-ring inline-flex min-h-9 items-center gap-1 font-mono text-[10px] uppercase text-muted-foreground hover:text-primary"
+                  href="/news"
+                >
+                  Open full news index
+                  <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                </Link>
               </div>
             </section>
-          ) : null}
-        </div>
 
-        <aside className="self-start lg:sticky lg:top-4">
-          <section className="border border-row-border bg-muted/10 p-4">
-            <p className="page-kicker text-accent-cyan">On the live desk</p>
-            <h2 className="mt-2 text-lg font-semibold">
-              Today&apos;s reading list
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Current stories from the Hacker News index.
-            </p>
-            {currentStories.length > 0 ? (
-              <ol className="mt-4 divide-y divide-row-border border-y border-row-border">
-                {currentStories.map((story) => (
-                  <li className="py-3" key={story.hnItemId}>
-                    <Link
-                      className="focus-ring text-sm font-medium leading-5 transition-colors hover:text-accent-cyan"
-                      href={newsStoryPath(story)}
-                    >
-                      {story.title}
-                    </Link>
-                    <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
-                      #{String(story.rank).padStart(2, "0")} /{" "}
-                      {story.host ?? "Hacker News"}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-4 border-y border-row-border py-3 text-sm leading-6 text-muted-foreground">
-                The live index is temporarily unavailable.
+            <section className="forum-panel p-4">
+              <p className="page-kicker">Editorial approach</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Each issue keeps its sources visible and separates the reported
+                signal from Belle&apos;s analysis.
               </p>
-            )}
-            <Link
-              className="focus-ring mt-4 inline-flex font-mono text-[10px] uppercase text-foreground underline decoration-accent-cyan underline-offset-4 transition-colors hover:text-accent-cyan"
-              href="/news"
-            >
-              Open the full news index
-            </Link>
-          </section>
-
-          <div className="mt-6 border-t border-row-border pt-4">
-            <p className="page-kicker">Editorial approach</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Each issue makes its sources visible and separates the reported
-              signal from Belle&apos;s analysis.
-            </p>
+            </section>
           </div>
-        </aside>
-      </div>
+        }
+      >
+        <section
+          id="newsletter-archive"
+          aria-labelledby="newsletter-archive-heading"
+          className="forum-panel newsletter-archive-list scroll-mt-24 overflow-hidden p-0"
+        >
+          <ForumSectionHeader
+            title="Previous editions"
+            id="newsletter-archive-heading"
+          >
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              Newest first
+            </span>
+          </ForumSectionHeader>
+          {rest.length > 0 ? (
+            <div className="divide-y divide-border border-t border-border">
+              {rest.map((issue) => (
+                <Link
+                  className="group grid gap-2 px-4 py-3 transition-colors hover:bg-muted/35 md:grid-cols-[minmax(0,1fr)_8.5rem] md:items-center"
+                  href={`/newsletter/${issue.slug}`}
+                  key={issue._id}
+                >
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+                      <span>{formatDate(issue.sentAt ?? issue.updatedAt)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {issue.edition === "weekly-field-note"
+                          ? "Field note"
+                          : "Daily signal"}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-sm font-semibold leading-5 transition-colors group-hover:text-primary">
+                      {issue.headline}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {issue.dek}
+                    </span>
+                  </span>
+                  <span className="hidden items-center justify-end gap-1 text-xs font-medium text-muted-foreground group-hover:text-primary md:flex">
+                    Read edition
+                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="border-t border-border px-4 py-4 text-sm leading-6 text-muted-foreground">
+              Previous editions will appear here after publication.
+            </p>
+          )}
+        </section>
+      </ForumBodyGrid>
     </section>
   );
 }
