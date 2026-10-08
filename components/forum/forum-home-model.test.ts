@@ -21,6 +21,9 @@ test("view navigation accepts only supported views and preserves sort on either 
     "/forum?view=community&sort=new",
   );
   expect(forumHrefForPathname(href, "/")).toBe("/?view=community&sort=new");
+  expect(
+    forumHrefForPathname("/forum/stories/50002008", "/news", true),
+  ).toBe("/forum/stories/50002008");
 });
 
 test("cursor overlap does not duplicate articles or replace their loaded state", () => {

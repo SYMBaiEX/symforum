@@ -379,7 +379,14 @@ export function forumPath(categorySlug?: string, threadSlug?: string) {
   return asRoute(`/forum/${categorySlug}/${threadSlug}`);
 }
 
-export function forumHrefForPathname(href: string, pathname: string | null) {
+export function forumHrefForPathname(
+  href: string,
+  pathname: string | null,
+  preserveForumPrefix = false,
+) {
+  if (preserveForumPrefix) {
+    return asRoute(href);
+  }
   if (pathname?.startsWith("/forum")) {
     return asRoute(href);
   }

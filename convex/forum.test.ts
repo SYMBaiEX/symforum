@@ -2043,7 +2043,9 @@ describe("forum notification preferences", () => {
     const t = setup();
     const seed = await seedForum(t);
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    const runDate = "2026-10-07";
+    const runDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago",
+    }).format(Date.now());
     const runs = await t.run(async (ctx) => {
       const now = Date.now();
       await ctx.db.insert("aiOperationalStates", {

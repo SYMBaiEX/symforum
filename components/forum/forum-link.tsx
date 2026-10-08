@@ -7,8 +7,14 @@ import { forwardRef, type ComponentProps } from "react";
 
 export const ForumLink = forwardRef<
   HTMLAnchorElement,
-  Omit<ComponentProps<typeof Link>, "href"> & { href: string }
->(function ForumLink({ href, prefetch, onClick, ...props }, ref) {
+  Omit<ComponentProps<typeof Link>, "href"> & {
+    href: string;
+    preserveForumPrefix?: boolean;
+  }
+>(function ForumLink(
+  { href, prefetch, onClick, preserveForumPrefix = false, ...props },
+  ref,
+) {
   const pathname = usePathname();
   return (
     <Link
@@ -24,7 +30,7 @@ export const ForumLink = forwardRef<
         )
           window.dispatchEvent(new Event("forum:reading-navigation"));
       }}
-      href={forumHrefForPathname(href, pathname)}
+      href={forumHrefForPathname(href, pathname, preserveForumPrefix)}
       prefetch={prefetch}
       ref={ref}
     />

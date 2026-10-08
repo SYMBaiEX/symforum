@@ -193,7 +193,7 @@ test("forum news keeps ranked source and local discussion activity distinct", ()
   expect(html).toContain("Discuss on SYMBaiEX");
   expect(html).toContain('dateTime="2026-10-03T00:00:00.000Z"');
   expect(html).toContain(
-    'href="/stories/42"',
+    'href="/forum/stories/42"',
   );
   expect(html).toContain('href="https://example.com/story"');
   expect(html).toContain('rel="noopener noreferrer"');
