@@ -36,10 +36,7 @@ export async function generateMetadata({
     : primarySiteUrl(`/news/${encodeURIComponent(hnItemId)}`);
   return {
     title: {
-      absolute: compactSeoTitle(
-        story?.title ?? "Indexed story",
-        SITE_BRAND,
-      ),
+      absolute: compactSeoTitle(story?.title ?? "Indexed story", SITE_BRAND),
     },
     description: story?.host
       ? `${story.host} indexed from Hacker News`
@@ -100,7 +97,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
 
   return (
     <>
-      <article className="page-frame max-w-[820px]">
+      <div className="page-frame page-frame-dense mx-auto w-full max-w-[1100px]">
         <StructuredData
           data={[
             {
@@ -129,91 +126,95 @@ export default async function NewsStoryPage({ params }: PageProps) {
             ]),
           ]}
         />
-        <div className="page-content">
-          <Link
-            href="/news"
-            className="focus-ring mb-6 inline-flex rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ← Daily news
-          </Link>
-          <h1 className="text-3xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
-            {story.title}
-          </h1>
-          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-[13px] leading-6 text-muted-foreground">
-            <a
-              href={`https://news.ycombinator.com/item?id=${story.hnItemId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="focus-ring rounded-sm text-primary transition-colors hover:text-foreground"
+        <article className="forum-panel mx-auto max-w-[820px] p-4 sm:p-6">
+          <div className="page-content">
+            <Link
+              href="/news"
+              className="focus-ring mb-6 inline-flex rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              Hacker News
-            </a>
-            {story.timePosted ? (
-              <span>{formatDate(story.timePosted * 1000)}</span>
-            ) : null}
-            <span>{story.host ?? "news.ycombinator.com"}</span>
-            {story.score !== undefined ? (
-              <span>{compactNumber(story.score)} HN points</span>
-            ) : null}
-            {story.descendants !== undefined ? (
-              <span>{compactNumber(story.descendants)} HN comments</span>
-            ) : null}
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            {sourceUrl ? (
-              <Button asChild size="sm">
-                <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
-                  Read source
-                  <ArrowUpRight />
-                </a>
-              </Button>
-            ) : null}
-            {convexEnabled ? (
-              <div
-                className="flex flex-wrap items-center gap-2"
-                role="group"
-                aria-label="SYMBaiEX votes and saves"
+              ← Daily news
+            </Link>
+            <h1 className="text-3xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
+              {story.title}
+            </h1>
+            <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-[13px] leading-6 text-muted-foreground">
+              <a
+                href={`https://news.ycombinator.com/item?id=${story.hnItemId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="focus-ring rounded-sm text-primary transition-colors hover:text-foreground"
               >
-                <span className="text-xs text-muted-foreground">SYMBaiEX</span>
-                <InteractionBar entityType="hnStory" entityId={entityId} />
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Voting and saves are temporarily unavailable.
-              </p>
-            )}
+                Hacker News
+              </a>
+              {story.timePosted ? (
+                <span>{formatDate(story.timePosted * 1000)}</span>
+              ) : null}
+              <span>{story.host ?? "news.ycombinator.com"}</span>
+              {story.score !== undefined ? (
+                <span>{compactNumber(story.score)} HN points</span>
+              ) : null}
+              {story.descendants !== undefined ? (
+                <span>{compactNumber(story.descendants)} HN comments</span>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {sourceUrl ? (
+                <Button asChild size="sm">
+                  <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
+                    Read source
+                    <ArrowUpRight />
+                  </a>
+                </Button>
+              ) : null}
+              {convexEnabled ? (
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="SYMBaiEX votes and saves"
+                >
+                  <span className="text-xs text-muted-foreground">
+                    SYMBaiEX
+                  </span>
+                  <InteractionBar entityType="hnStory" entityId={entityId} />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Voting and saves are temporarily unavailable.
+                </p>
+              )}
+            </div>
+
+            <section className="page-content-readable mt-8">
+              {body ? (
+                <div className="flex flex-col gap-4">
+                  {body.split(/\n{2,}/).map((paragraph, index) => (
+                    <p key={index} className="text-sm leading-7 md:text-base">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm leading-7 text-muted-foreground md:text-base">
+                  Read the original article at {story.host ?? "the source"},
+                  then share your thoughts with the community below.
+                </p>
+              )}
+            </section>
+
+            <section className="page-content-readable mt-10">
+              <h2 className="mb-5 text-xl font-semibold tracking-tight">
+                SYMBaiEX discussion
+              </h2>
+              <CommentsPanel
+                entityType="hnStory"
+                entityId={entityId}
+                enabled={convexEnabled}
+              />
+            </section>
           </div>
-
-          <section className="page-content-readable mt-8">
-            {body ? (
-              <div className="flex flex-col gap-4">
-                {body.split(/\n{2,}/).map((paragraph, index) => (
-                  <p key={index} className="text-sm leading-7 md:text-base">
-                    {paragraph}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm leading-7 text-muted-foreground md:text-base">
-                Read the original article at {story.host ?? "the source"}, then
-                share your thoughts with the community below.
-              </p>
-            )}
-          </section>
-
-          <section className="page-content-readable mt-10">
-            <h2 className="mb-5 text-xl font-semibold tracking-tight">
-              SYMBaiEX discussion
-            </h2>
-            <CommentsPanel
-              entityType="hnStory"
-              entityId={entityId}
-              enabled={convexEnabled}
-            />
-          </section>
-        </div>
-      </article>
+        </article>
+      </div>
     </>
   );
 }

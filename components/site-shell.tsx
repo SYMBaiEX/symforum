@@ -56,11 +56,13 @@ export function SiteShell({
   children,
   initialForumHost = false,
   initialNewsletterHost = false,
+  initialNewsHost = false,
   initialPrimarySiteHref = "/",
 }: {
   children: ReactNode;
   initialForumHost?: boolean;
   initialNewsletterHost?: boolean;
+  initialNewsHost?: boolean;
   initialPrimarySiteHref?: string;
 }) {
   const pathname = usePathname();
@@ -77,6 +79,10 @@ export function SiteShell({
     (newsletterHost ||
       pathname === "/newsletter" ||
       pathname?.startsWith("/newsletter/"));
+  const newsShell =
+    !forumShell &&
+    !newsletterShell &&
+    (initialNewsHost || pathname === "/news" || pathname?.startsWith("/news/"));
 
   useEffect(() => {
     if (isForumHostname(window.location.hostname)) {
@@ -86,6 +92,10 @@ export function SiteShell({
     } else if (window.location.hostname === "newsletter.symbaiex.com") {
       setForumHost(false);
       setNewsletterHost(true);
+      setPrimarySiteHref(primarySiteUrl("/"));
+    } else if (window.location.hostname === "news.symbaiex.com") {
+      setForumHost(false);
+      setNewsletterHost(false);
       setPrimarySiteHref(primarySiteUrl("/"));
     } else {
       setForumHost(false);
@@ -117,13 +127,13 @@ export function SiteShell({
     };
   }, []);
 
-  if (forumShell || newsletterShell) {
+  if (forumShell || newsletterShell || newsShell) {
     return (
       <ForumSiteShell
         footerRef={footerRef}
         forumHost={forumHost}
         primarySiteHref={primarySiteHref}
-        surface={newsletterShell ? "newsletter" : "forum"}
+        surface={newsletterShell ? "newsletter" : newsShell ? "news" : "forum"}
       >
         {children}
       </ForumSiteShell>

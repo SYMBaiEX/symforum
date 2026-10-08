@@ -6,6 +6,7 @@ import {
 } from "./forum-shell-context";
 import { ForumNavigation } from "./forum-navigation";
 import { NewsletterNavigation } from "@/components/newsletter-navigation";
+import { NewsNavigation } from "@/components/news-navigation";
 import { ForumLink } from "./forum-link";
 import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
@@ -27,7 +28,7 @@ export function ForumSiteShell({
   footerRef: RefObject<HTMLElement | null>;
   forumHost: boolean;
   primarySiteHref: string;
-  surface?: "forum" | "newsletter";
+  surface?: "forum" | "newsletter" | "news";
 }) {
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
@@ -42,6 +43,8 @@ export function ForumSiteShell({
           </a>
           {surface === "newsletter" ? (
             <NewsletterNavigation />
+          ) : surface === "news" ? (
+            <NewsNavigation />
           ) : (
             <ForumNavigation />
           )}
@@ -50,8 +53,12 @@ export function ForumSiteShell({
             tabIndex={-1}
             className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
           >
-            {surface === "newsletter" ? (
-              <div className="forum-surface newsletter-surface">{children}</div>
+            {surface === "newsletter" || surface === "news" ? (
+              <div
+                className={`forum-surface ${surface === "news" ? "news-surface" : "newsletter-surface"}`}
+              >
+                {children}
+              </div>
             ) : (
               children
             )}
@@ -68,7 +75,11 @@ export function ForumSiteShell({
               className="focus-ring py-2 hover:text-foreground"
               href={surface === "newsletter" ? "/newsletter" : primarySiteHref}
             >
-              {surface === "newsletter" ? "SYMBaiEX Newsletter" : "SYMBaiEX"}
+              {surface === "newsletter"
+                ? "SYMBaiEX Newsletter"
+                : surface === "news"
+                  ? "SYMBaiEX News"
+                  : "SYMBaiEX"}
             </a>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
               {surface === "newsletter" ? (
@@ -78,6 +89,21 @@ export function ForumSiteShell({
                     href="/newsletter/preferences"
                   >
                     Subscription preferences
+                  </a>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href="/forum"
+                  >
+                    Forum
+                  </a>
+                </>
+              ) : surface === "news" ? (
+                <>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href="/newsletter"
+                  >
+                    Newsletter
                   </a>
                   <a
                     className="focus-ring py-2 hover:text-foreground"
@@ -122,7 +148,7 @@ function ForumShellFrame({
   surface,
 }: {
   children: ReactNode;
-  surface: "forum" | "newsletter";
+  surface: "forum" | "newsletter" | "news";
 }) {
   const { compactNavigation } = useForumShellContext();
   return (
