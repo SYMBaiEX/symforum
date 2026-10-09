@@ -180,13 +180,19 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
       stars: 2,
     },
     {
-      key: "gitshipt",
-      label: "GitShipt",
-      fullName: "SYMBaiEX/GitShipt",
-      repoUrl: "https://github.com/SYMBaiEX/GitShipt",
+      key: "usagemax",
+      label: "UsageMax",
+      fullName: "SYMBaiEX/usagemax",
+      repoUrl: "https://github.com/SYMBaiEX/usagemax",
       avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
       language: "TypeScript",
-      stars: 4,
+    },
+    {
+      key: "symclick",
+      label: "SymClick",
+      fullName: "SYMBaiEX/symclick",
+      repoUrl: "https://github.com/SYMBaiEX/symclick",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
     },
     {
       key: "symindx",
@@ -196,15 +202,6 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
       avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
       language: "TypeScript",
       stars: 9,
-    },
-    {
-      key: "arklib",
-      label: "ArkLib",
-      fullName: "lalalune/ArkLib",
-      repoUrl: "https://github.com/lalalune/ArkLib",
-      avatarUrl: "https://avatars.githubusercontent.com/u/18633264?v=4",
-      language: "Lean",
-      stars: 5,
     },
   ],
 };
@@ -235,7 +232,6 @@ export async function getGithubPortfolioMetrics(options?: {
       babylonRepo,
       hyperiaRepo,
       openControllerRepo,
-      arkLibRepo,
       authenticatedCommitMetric,
     ] = await Promise.all([
       getPublicContributionActivity().catch(() => null),
@@ -258,9 +254,6 @@ export async function getGithubPortfolioMetrics(options?: {
       githubJson<GithubRepo>(
         "https://api.github.com/repos/SYMBaiEX/OpenController",
       ),
-      githubJson<GithubRepo>(
-        "https://api.github.com/repos/lalalune/ArkLib",
-      ).catch(() => null),
       getAuthenticatedCommitMetric(user).catch((error) => {
         console.warn("Falling back to public GitHub commit metric", error);
         return null;
@@ -312,7 +305,6 @@ export async function getGithubPortfolioMetrics(options?: {
         ),
         projectMetric("opencontroller", "OpenController", openControllerRepo),
         ...ownedProjectMetrics(repos),
-        ...(arkLibRepo ? [projectMetric("arklib", "ArkLib", arkLibRepo)] : []),
       ].filter(
         (metric, index, allMetrics) =>
           allMetrics.findIndex((item) => item.key === metric.key) === index,
@@ -529,11 +521,11 @@ function projectMetric(
 
 function ownedProjectMetrics(repos: GithubRepo[]) {
   const projectRepos = [
-    ["gitshipt", "GitShipt", "SYMBaiEX/GitShipt"],
+    ["usagemax", "UsageMax", "SYMBaiEX/usagemax"],
+    ["symclick", "SymClick", "SYMBaiEX/symclick"],
     ["symindx", "SYMindX", "SYMBaiEX/SYMindX"],
     ["doolittle", "doolittle", "SYMBaiEX/doolittle"],
     ["symlog", "SYMLog", "SYMBaiEX/SYMLog"],
-    ["pod-protocol", "PoD Protocol", "SYMBaiEX/PoD-Protocol"],
   ] as const;
   const reposByFullName = new Map(
     repos.map((repo) => [repo.full_name.toLowerCase(), repo]),
