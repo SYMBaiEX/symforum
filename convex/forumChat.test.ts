@@ -50,24 +50,28 @@ describe("General live chat domain", () => {
     expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toEqual([]);
     await expect(t.withIdentity({ subject: s.staff }).mutation(api.forum.moderateChatMessage, { messageId: result.messageId, status: "active" })).rejects.toThrow("unavailable");
   });
-  test("pending messages are actor-private and a real staff queue publishes them", async () => {
+  test("new members publish immediately while legacy pending messages remain staff-moderated", async () => {
     const t = setup();
     const s = await seed(t, false);
     const owner = t.withIdentity({ subject: s.owner });
     const result = await owner.mutation(api.forum.sendChatMessage, { body: "My first message" });
-    expect(result).toMatchObject({ status: "pending", publicationStatus: "pending_moderation", pendingContentUrl: "https://forum.symbaiex.com/#forum-chat", moderationUrl: "https://forum.symbaiex.com/#forum-chat" });
-    expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toEqual([]);
-    expect((await owner.query(api.forum.listChatMessages, pageArgs)).pending).toHaveLength(1);
+    expect(result).toMatchObject({ status: "active", publicationStatus: "published" });
+    expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toHaveLength(1);
+    expect((await owner.query(api.forum.listChatMessages, pageArgs)).pending).toEqual([]);
     expect((await t.withIdentity({ subject: s.stranger }).query(api.forum.listChatMessages, pageArgs)).pending).toEqual([]);
     await expect(owner.query(api.forum.listChatPendingMessages, pageArgs)).rejects.toThrow("moderator access");
+    const legacyPendingId = await t.run(async ctx => ctx.db.insert("forumChatMessages", {
+      categoryId: s.category, authorId: s.owner, ownerUserId: s.owner,
+      body: "Previously queued message", status: "pending", createdAt: Date.now(), updatedAt: Date.now(),
+    }));
     const staff = t.withIdentity({ subject: s.staff });
     expect((await staff.query(api.forum.listChatPendingMessages, pageArgs)).page).toHaveLength(1);
-    await staff.mutation(api.forum.moderateChatMessage, { messageId: result.messageId, status: "active" });
+    await staff.mutation(api.forum.moderateChatMessage, { messageId: legacyPendingId, status: "active" });
     expect((await owner.query(api.forum.listChatMessages, pageArgs)).pending).toEqual([]);
+    expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toHaveLength(2);
+    await staff.mutation(api.forum.moderateChatMessage, { messageId: legacyPendingId, status: "hidden" });
     expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toHaveLength(1);
-    await staff.mutation(api.forum.moderateChatMessage, { messageId: result.messageId, status: "hidden" });
-    expect((await t.query(api.forum.listChatMessages, pageArgs)).page).toEqual([]);
-    await t.run(async ctx => { expect(await ctx.db.get("forumChatMessages", result.messageId)).toMatchObject({ moderatedBy: s.staff, moderatedOwnerUserId: s.staff }); });
+    await t.run(async ctx => { expect(await ctx.db.get("forumChatMessages", legacyPendingId)).toMatchObject({ moderatedBy: s.staff, moderatedOwnerUserId: s.staff }); });
   });
   test("owned native agents use owner trust on trusted boards and never inherit staff authority", async () => {
     const t = setup();
@@ -77,11 +81,11 @@ describe("General live chat domain", () => {
     const result = await agent.mutation(api.forum.sendChatMessage, { body: "An owned agent says hello" });
     expect(result.status).toBe("active");
     expect(result.message.authorIdentity.isAgent).toBe(true);
-    expect((await agent.query(api.forum.listChatMessages, pageArgs)).viewer).toMatchObject({ canRead: true, canSend: true, canModerate: false, postingTrust: "trusted" });
+    expect((await agent.query(api.forum.listChatMessages, pageArgs)).viewer).toMatchObject({ canRead: true, canSend: true, canModerate: false });
     await expect(agent.query(api.forum.listChatPendingMessages, pageArgs)).rejects.toThrow("moderator access");
     await t.run(async ctx => { await ctx.db.patch("users", s.owner, { forumRole: undefined, forumTrustRevokedAt: Date.now() }); await ctx.db.patch("forumCategories", s.category, { replyAccess: "members", viewAccess: "public" }); await ctx.db.patch("users", s.agent, { forumTrustedAt: Date.now() }); });
     const held = await agent.mutation(api.forum.sendChatMessage, { body: "Owner trust revoked" });
-    expect(held.status).toBe("pending");
+    expect(held.status).toBe("active");
   });
   test.each(["owner", "agent"] as const)("current %s restrictions reject atomically", async who => {
     const t = setup();
@@ -148,21 +152,27 @@ describe("General live chat domain", () => {
       expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
   });
-  test("moderator cannot publish a queued message after its owner is banned", async () => {
+  test("moderator cannot publish legacy queued content after its owner is banned", async () => {
     const t = setup();
     const s = await seed(t, false);
-    const result = await t.withIdentity({ subject: s.owner }).mutation(api.forum.sendChatMessage, { body: "Waiting" });
+    const messageId = await t.run(async ctx => ctx.db.insert("forumChatMessages", {
+      categoryId: s.category, authorId: s.owner, ownerUserId: s.owner,
+      body: "Waiting", status: "pending", createdAt: Date.now(), updatedAt: Date.now(),
+    }));
     await t.run(ctx => ctx.db.patch("users", s.owner, { forumBannedAt: Date.now() }));
-    await expect(t.withIdentity({ subject: s.staff }).mutation(api.forum.moderateChatMessage, { messageId: result.messageId, status: "active" })).rejects.toThrow("banned");
-    await t.run(async ctx => { expect((await ctx.db.get("forumChatMessages", result.messageId))?.status).toBe("pending"); });
+    await expect(t.withIdentity({ subject: s.staff }).mutation(api.forum.moderateChatMessage, { messageId, status: "active" })).rejects.toThrow("banned");
+    await t.run(async ctx => { expect((await ctx.db.get("forumChatMessages", messageId))?.status).toBe("pending"); });
   });
-  test("moderator cannot publish queued agent content after its credential is revoked", async () => {
+  test("moderator cannot publish legacy queued agent content after its credential is revoked", async () => {
     const t = setup();
     const s = await seed(t, false);
-    const result = await t.withIdentity({ subject: s.agent }).mutation(api.forum.sendChatMessage, { body: "Waiting for approval" });
+    const messageId = await t.run(async ctx => ctx.db.insert("forumChatMessages", {
+      categoryId: s.category, authorId: s.agent, ownerUserId: s.owner,
+      body: "Waiting for approval", status: "pending", createdAt: Date.now(), updatedAt: Date.now(),
+    }));
     await t.run(ctx => ctx.db.patch("agentIdentities", s.credential, { status: "revoked" }));
-    await expect(t.withIdentity({ subject: s.staff }).mutation(api.forum.moderateChatMessage, { messageId: result.messageId, status: "active" })).rejects.toThrow("authorization has changed");
-    await t.run(async ctx => { expect((await ctx.db.get("forumChatMessages", result.messageId))?.status).toBe("pending"); });
+    await expect(t.withIdentity({ subject: s.staff }).mutation(api.forum.moderateChatMessage, { messageId, status: "active" })).rejects.toThrow("authorization has changed");
+    await t.run(async ctx => { expect((await ctx.db.get("forumChatMessages", messageId))?.status).toBe("pending"); });
   });
   test("native agent board assignments cannot grant undelegated staff-only chat access", async () => {
     const t = setup();

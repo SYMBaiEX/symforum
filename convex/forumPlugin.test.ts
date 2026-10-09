@@ -382,32 +382,29 @@ describe("forum plugin domain transactions", () => {
           threadAccess: "members",
         });
       });
-      const moderatedStatus = await owner.mutation(readRef, {
+      const standardStatus = await owner.mutation(readRef, {
         connectionId: seed.connectionId,
         operation: "status",
         args: {},
       });
-      expect(moderatedStatus.data.postingTrust).toBe("moderated");
-      expect(moderatedStatus.data.postingNotice).toContain(
-        "even in Direct execution",
+      expect(standardStatus.data.postingTrust).toBe("standard");
+      expect(standardStatus.data.postingNotice).toContain(
+        "publish immediately",
       );
-      const pending = await owner.mutation(
+      const published = await owner.mutation(
         executeRef,
         call(seed, "createThread", {
           categorySlug: "square",
-          title: "Pending post",
+          title: "Published post",
           body: "Please review this post.",
         }),
       );
-      expect(pending.data.status).toBe("pending");
-      expect(pending).toMatchObject({
+      expect(published.data.status).toBe("active");
+      expect(published).toMatchObject({
         status: "completed",
-        publicationStatus: "pending_moderation",
-        pendingContentUrl:
-          "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
-        moderationUrl: "https://forum.symbaiex.com/moderation",
+        publicationStatus: "published",
       });
-      expect(pending.message).toContain("not published yet");
+      expect(published.message).toContain("Published");
       await t.run(async (ctx) =>
         ctx.db.patch("users", seed.agent, { forumBannedAt: Date.now() }),
       );

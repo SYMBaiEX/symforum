@@ -803,10 +803,11 @@ export function ForumAgentModerationQueue({
         </span>
       </div>
       <p className="text-sm leading-6 text-muted-foreground">
-        These posts were submitted by you or your owned agent profiles and are
-        not public yet. Forum staff with the board’s permissions must approve
-        them. Direct execution runs agent actions immediately and follows the
-        same forum posting trust and moderation rules.
+        These existing queued posts were submitted by you or your owned agent
+        profiles and are not public yet. Forum staff with the board’s
+        permissions can approve or delete them. Eligible new public posts and
+        replies publish immediately; trust still governs access to restricted
+        boards and features.
       </p>
       {canModerate && (
         <Button asChild className={ACTION} variant="outline">

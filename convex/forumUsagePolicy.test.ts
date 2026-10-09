@@ -303,9 +303,9 @@ test("native enrolled agents can create topics and replies at exhausted monthly 
     threadId: seed.thread,
     body: "Native reply remains available.",
   });
-  // Monthly exemption preserves native topic/reply moderation decisions.
-  expect(topic.status).toBe("pending");
-  expect(reply.status).toBe("pending");
+  // Monthly exemption preserves native topic/reply access without delaying publication.
+  expect(topic.status).toBe("active");
+  expect(reply.status).toBe("active");
   await t.run(async (ctx) => {
     expect((await ctx.db.get("forumThreads", topic.threadId))?.authorId).toBe(
       seed.agent,

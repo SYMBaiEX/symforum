@@ -371,10 +371,9 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     postingLabel.replaceChildren();
     postingLabel.hidden = !actingAs.username || !connection.postingTrust;
     if (!postingLabel.hidden) {
-      const moderated = connection.postingTrust === "moderated";
-      postingLabel.append(element("span", text(connection.postingNotice, moderated ? "Posts require forum moderation." : "Trusted posting profile.")));
-      if (moderated) {
-        modeLabel.textContent += " · Posts require forum moderation";
+      const standard = connection.postingTrust === "standard";
+      postingLabel.append(element("span", text(connection.postingNotice, standard ? "Eligible public posts publish immediately." : "Trusted posting profile.")));
+      if (standard) {
         const queueUrl = text(connection.pendingContentUrl);
         if (safeForumUrl(queueUrl)) postingLabel.append(link("View your pending posts ↗", queueUrl));
       }

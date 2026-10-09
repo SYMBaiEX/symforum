@@ -398,7 +398,7 @@ describe("forum plugin live chat integration", () => {
   });
 
   test.each(["human", "agent"] as const)(
-    "moderated %s messages have actionable receipts without leaking to public or foreign readers",
+    "standard-trust %s messages publish immediately to public readers",
     async (mode) => {
       const t = setup();
       const seed = await fixture(t, mode);
@@ -412,36 +412,31 @@ describe("forum plugin live chat integration", () => {
       const sent = await owner.mutation(
         execute,
         write(seed, "sendChatMessage", {
-          body: "Only this profile and authorized staff may see this pending content.",
+        body: "New public chat is available immediately.",
         }),
       );
       expect(sent).toMatchObject({
         status: "completed",
-        publicationStatus: "pending_moderation",
-        data: { status: "pending" },
+        publicationStatus: "published",
+        data: { status: "active" },
         url: "https://forum.symbaiex.com/#forum-chat",
       });
-      expect(sent.message).toMatch(/not published|not public|moderation/i);
-      expect(sent.pendingContentUrl).toMatch(
-        /^https:\/\/forum\.symbaiex\.com\//,
-      );
+      expect(sent.message).toMatch(/published/i);
       const publicView = await t.mutation(read, {
         operation: "listChatMessages",
         args: pageArgs,
       });
-      expect(publicView.data.page).toEqual([]);
+      expect(publicView.data.page.map((message: { _id: string }) => message._id)).toContain(sent.data.messageId);
       expect(publicView.data.pending).toEqual([]);
       const ownView = await owner.mutation(
         read,
         readInput(seed, "listChatMessages"),
       );
-      expect(
-        ownView.data.pending.map((message: { _id: string }) => message._id),
-      ).toContain(sent.data.messageId);
+      expect(ownView.data.pending).toEqual([]);
       const foreign = await t
         .withIdentity({ subject: seed.stranger })
         .mutation(read, { operation: "listChatMessages", args: pageArgs });
-      expect(foreign.data.page).toEqual([]);
+      expect(foreign.data.page.map((message: { _id: string }) => message._id)).toContain(sent.data.messageId);
       expect(foreign.data.pending).toEqual([]);
       await expect(
         owner.mutation(read, readInput(seed, "listChatPendingMessages")),

@@ -1531,7 +1531,7 @@ describe("forum MCP App resource", () => {
     expect(body.value).toBe("Keep my draft when the theme changes");
   });
 
-  test("shows the connected owner and posting trust independently of direct execution without clearing the action receipt", async () => {
+  test("shows standard trust without claiming new posts require moderation", async () => {
     const app = appHarness();
     await app.connect();
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=queued#review-queue" } } });
@@ -1540,20 +1540,20 @@ describe("forum MCP App resource", () => {
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
       status: "completed", actingAs: { userId: "agent", username: "Forum assistant", isAgent: true }, data: {
         capabilities: ["read", "participate"], executionMode: "direct", policyVersion: 2,
-        ownerProfile: { userId: "owner", username: "austin-hamilton-8fjcv2" }, postingTrust: "moderated",
-        postingNotice: "The connected owner is awaiting forum posting trust.", pendingContentUrl,
+        ownerProfile: { userId: "owner", username: "austin-hamilton-8fjcv2" }, postingTrust: "standard",
+        postingNotice: "Eligible public posts and replies publish immediately.", pendingContentUrl,
       },
     } } });
     expect(app.nodes.get("identity")!.textContent).toBe("Forum assistant · AI agent");
     expect(app.nodes.get("connection-owner")!.textContent).toBe("Connected owner: austin-hamilton-8fjcv2");
-    expect(app.nodes.get("mode")!.textContent).toBe("Direct execution · Posts require forum moderation");
-    expect(app.nodes.get("posting-trust")!.textContent).toContain("awaiting forum posting trust");
+    expect(app.nodes.get("mode")!.textContent).toBe("Direct execution");
+    expect(app.nodes.get("posting-trust")!.textContent).toContain("publish immediately");
     app.nodes.get("posting-trust")!.querySelector("a")!.fire("click");
     expect(app.latest("tools/call").params?.name).toBe("forum_list_my_pending_forum_content");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { threads: [], posts: [] } } }); await app.flush();
     expect(app.nodes.get("status")!.textContent).toBe(receipt);
 
-    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: [], postingTrust: "moderated" } } } });
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: [], postingTrust: "standard" } } } });
     expect(app.nodes.get("identity")!.textContent).toBe("Public browsing");
     expect(app.nodes.get("mode")!.textContent).toBe("Connect a profile to participate");
     expect(app.nodes.get("connection-owner")!.hidden).toBe(true);
@@ -1561,13 +1561,13 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("status")!.textContent).toBe(receipt);
   });
 
-  test("removes the moderation warning and queue link when current owner posting trust becomes trusted", async () => {
+  test("both standard and trusted profiles use direct publication status copy", async () => {
     const app = appHarness();
     await app.connect();
-    for (const postingTrust of ["moderated", "trusted"]) {
+    for (const postingTrust of ["standard", "trusted"]) {
       app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "owner", username: "Forum member", isAgent: false }, data: {
         capabilities: ["read", "participate"], executionMode: "direct", ownerProfile: { userId: "owner", username: "Forum member" }, postingTrust,
-        postingNotice: postingTrust === "trusted" ? "Current posting trust permits immediate publication; forum permissions still apply." : "Posts require moderator approval.",
+        postingNotice: postingTrust === "trusted" ? "Trusted accounts can access restricted boards. Public posts publish immediately." : "Eligible public posts publish immediately; restricted-board access follows permissions.",
         pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
       } } } });
     }

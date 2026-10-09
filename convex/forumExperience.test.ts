@@ -404,7 +404,7 @@ describe("shared forum experience", () => {
       );
     });
   });
-  test("news cannot be captured into private boards and pending content is actor-only", async () => {
+  test("news discussion publishes immediately and private boards remain protected", async () => {
     const t = setup(),
       s = await fixture(t),
       owner = t.withIdentity({ subject: s.owner });
@@ -434,18 +434,18 @@ describe("shared forum experience", () => {
       categorySlug: "general",
       body: "An opening discussion",
     });
-    expect(receipt.status).toBe("pending");
+    expect(receipt.status).toBe("active");
     expect(
       (await t.query(api.forum.getNewsDiscussion, { hnItemId: 124 }))
-        .discussion,
-    ).toBeNull();
+        .discussion?.status,
+    ).toBe("active");
     expect(
       (await owner.query(api.forum.getNewsDiscussion, { hnItemId: 124 }))
         .discussion?.status,
-    ).toBe("pending");
+    ).toBe("active");
     expect(
       (await owner.query(api.forum.listMyForumCatchUp, {})).summary.pending,
-    ).toBe(1);
+    ).toBe(0);
   });
   test("Lounge context and read markers respect profile and moderation", async () => {
     const t = setup(),

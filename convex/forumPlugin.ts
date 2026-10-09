@@ -179,10 +179,10 @@ async function postingContext(
     },
     postingTrust: profile.trusted
       ? ("trusted" as const)
-      : ("moderated" as const),
+      : ("standard" as const),
     postingNotice: profile.trusted
-      ? "The connected owner's posting trust permits immediate publication. Forum permissions and restrictions still apply."
-      : "The connected owner is awaiting forum posting trust. Posts and replies require forum staff moderation even in Direct execution; the owner can review saved submissions in Agent access.",
+      ? "The connected owner's trust permits access to trust-restricted boards and features. Eligible public posts publish immediately; forum permissions and restrictions still apply."
+      : "The connected owner does not have enhanced forum trust. Eligible public posts and replies publish immediately; access to trust-restricted boards and features still follows forum permissions.",
     pendingContentUrl:
       "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
   };
