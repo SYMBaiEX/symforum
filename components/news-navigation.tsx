@@ -55,73 +55,75 @@ export function NewsNavigation() {
   return (
     <>
       <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card pt-[env(safe-area-inset-top)]">
-        <div className="forum-topbar-inner flex items-center gap-2 px-3 sm:gap-3">
+        <div className="forum-topbar-inner flex items-center justify-between gap-2 px-3 sm:gap-3">
           <SiteSurfaceSwitcher
             activeSurface="news"
             currentPathname={pathname ?? "/news"}
             homeHref={primarySiteHref}
             forumHref="/forum"
-            className="forum-brand mr-auto text-lg sm:mr-2"
+            className="forum-brand text-lg"
           />
-          <Link
-            href={newsletterSiteUrl("/newsletter#newsletter-subscribe")}
-            className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
-          >
-            <Mail aria-hidden="true" className="size-[17px]" />
-            <span>Subscribe</span>
-          </Link>
-          <div className="hidden sm:block">
-            <ThemeToggle />
-          </div>
-          <Link
-            href={signInHref}
-            className="focus-ring hidden min-h-11 items-center px-2 text-sm font-medium sm:inline-flex"
-          >
-            Sign in
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={iconControl}
-                aria-label="News menu"
-              >
-                <Menu aria-hidden="true" className="size-[18px] lg:hidden" />
-                <UserRound
-                  aria-hidden="true"
-                  className="hidden size-[18px] lg:block"
-                />
-                <ChevronDown
-                  aria-hidden="true"
-                  className="hidden size-3 lg:block"
-                />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              className="forum-shell-menu w-72 max-w-[calc(100vw-2rem)] rounded-xl border-0 bg-popover p-2 shadow-lg"
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <Link
+              href={newsletterSiteUrl("/newsletter#newsletter-subscribe")}
+              className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
             >
-              <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                News index
-              </DropdownMenuLabel>
-              <NewsMenuLink href="/news#top-stories" icon={Newspaper}>
-                Top stories
-              </NewsMenuLink>
-              <NewsMenuLink href="/news#how-to-read" icon={Radio}>
-                About the index
-              </NewsMenuLink>
-              <NewsMenuLink href={newsletterArchiveHref} icon={Mail}>
-                Newsletter archive
-              </NewsMenuLink>
-              <NewsMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
-                Forum
-              </NewsMenuLink>
-              <DropdownMenuItem asChild className="min-h-11 rounded-lg px-3">
-                <a href={primarySiteHref}>SYMBaiEX home</a>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <Mail aria-hidden="true" className="size-[17px]" />
+              <span>Subscribe</span>
+            </Link>
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
+            <Link
+              href={signInHref}
+              className="focus-ring hidden min-h-11 items-center px-2 text-sm font-medium sm:inline-flex"
+            >
+              Sign in
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={iconControl}
+                  aria-label="News menu"
+                >
+                  <Menu aria-hidden="true" className="size-[18px] lg:hidden" />
+                  <UserRound
+                    aria-hidden="true"
+                    className="hidden size-[18px] lg:block"
+                  />
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="hidden size-3 lg:block"
+                  />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="forum-shell-menu w-72 max-w-[calc(100vw-2rem)] rounded-xl border-0 bg-popover p-2 shadow-lg"
+              >
+                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                  News index
+                </DropdownMenuLabel>
+                <NewsMenuLink href="/news#top-stories" icon={Newspaper}>
+                  Top stories
+                </NewsMenuLink>
+                <NewsMenuLink href="/news#how-to-read" icon={Radio}>
+                  About the index
+                </NewsMenuLink>
+                <NewsMenuLink href={newsletterArchiveHref} icon={Mail}>
+                  Newsletter archive
+                </NewsMenuLink>
+                <NewsMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
+                  Forum
+                </NewsMenuLink>
+                <DropdownMenuItem asChild className="min-h-11 rounded-lg px-3">
+                  <a href={primarySiteHref}>SYMBaiEX home</a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
