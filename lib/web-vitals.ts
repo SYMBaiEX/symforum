@@ -5,6 +5,9 @@ export const WEB_VITAL_NAVIGATION_TYPES = [
   "reload",
   "back-forward",
   "prerender",
+  "back-forward-cache",
+  "restore",
+  "soft-navigation",
 ] as const;
 
 export type WebVitalMetricName = (typeof WEB_VITAL_METRICS)[number];
