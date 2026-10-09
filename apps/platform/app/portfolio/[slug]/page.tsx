@@ -1,6 +1,11 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
+import { PrimaryPageSurface } from "@/components/primary-page-surface";
 import { StructuredData } from "@/components/structured-data";
+import {
+  ForumBodyGrid,
+  ForumSectionHeader,
+} from "@/components/forum/forum-layout-primitives";
 import { safeExternalUrl } from "@/lib/safe-url";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -86,136 +91,181 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
     Boolean(process.env.NEXT_PUBLIC_CONVEX_URL) && Boolean(project._id);
 
   return (
-    <article className="page-frame page-frame-dense">
-      <StructuredData
-        data={[
-          {
-            "@type": "CreativeWork",
-            "@id": `${primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`)}#work`,
-            name: project.name,
-            description: project.summary,
-            url: primarySiteUrl(
-              `/portfolio/${encodeURIComponent(project.slug)}`,
-            ),
-            author: { "@id": `${primarySiteUrl("/about")}#austin-hamilton` },
-            mainEntityOfPage: {
-              "@id": primarySiteUrl(
-                `/portfolio/${encodeURIComponent(project.slug)}`,
-              ),
-            },
-            genre: project.type,
-            keywords: project.tags,
-            sameAs: [
-              project.homepageUrl,
-              project.repoUrl,
-              project.writeupUrl,
-            ].filter(Boolean),
-          },
-          breadcrumbStructuredData([
-            { name: "Home", url: primarySiteUrl("/") },
-            { name: "Portfolio", url: primarySiteUrl("/portfolio") },
+    <PrimaryPageSurface>
+      <article className="page-frame page-frame-dense">
+        <StructuredData
+          data={[
             {
+              "@type": "CreativeWork",
+              "@id": `${primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`)}#work`,
               name: project.name,
+              description: project.summary,
               url: primarySiteUrl(
                 `/portfolio/${encodeURIComponent(project.slug)}`,
               ),
+              author: { "@id": `${primarySiteUrl("/about")}#austin-hamilton` },
+              mainEntityOfPage: {
+                "@id": primarySiteUrl(
+                  `/portfolio/${encodeURIComponent(project.slug)}`,
+                ),
+              },
+              genre: project.type,
+              keywords: project.tags,
+              sameAs: [
+                project.homepageUrl,
+                project.repoUrl,
+                project.writeupUrl,
+              ].filter(Boolean),
             },
-          ]),
-        ]}
-      />
-      <nav
-        aria-label="Portfolio breadcrumb"
-        className="mb-4 flex items-center justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground"
-      >
-        <Link
-          href="/portfolio"
-          prefetch
-          className="focus-ring inline-flex items-center gap-2 hover:text-foreground"
+            breadcrumbStructuredData([
+              { name: "Home", url: primarySiteUrl("/") },
+              { name: "Portfolio", url: primarySiteUrl("/portfolio") },
+              {
+                name: project.name,
+                url: primarySiteUrl(
+                  `/portfolio/${encodeURIComponent(project.slug)}`,
+                ),
+              },
+            ]),
+          ]}
+        />
+        <nav
+          aria-label="Portfolio breadcrumb"
+          className="flex items-center justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground"
         >
-          <ArrowLeft aria-hidden="true" className="size-3.5" />
-          Portfolio
-        </Link>
-        <span>
-          {String(projectIndex + 1).padStart(2, "0")} /{" "}
-          {String(projects.length).padStart(2, "0")}
-        </span>
-      </nav>
+          <Link
+            href="/portfolio"
+            prefetch
+            className="forum-action-pill focus-ring inline-flex items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground"
+          >
+            <ArrowLeft aria-hidden="true" className="size-3.5" />
+            Portfolio
+          </Link>
+          <span>
+            {String(projectIndex + 1).padStart(2, "0")} /{" "}
+            {String(projects.length).padStart(2, "0")}
+          </span>
+        </nav>
 
-      <header className="grid border-y border-row-border md:grid-cols-12">
-        <div className="py-7 md:col-span-8 md:py-9 md:pr-8">
-          <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            <span className="size-2 bg-[var(--accent-magenta)]" />
-            {project.type}
-          </p>
-          <h1 className="mt-5 max-w-4xl break-words text-5xl font-bold leading-none tracking-[-0.055em] sm:text-6xl">
-            {project.name}
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-            {project.summary}
-          </p>
-          <ProjectLinks className="mt-6" project={project} />
-        </div>
-
-        <aside className="border-t border-row-border py-7 md:col-span-4 md:border-l md:border-t-0 md:py-9 md:pl-8">
-          <PortfolioProjectMark
-            name={project.name}
-            imageUrl={project.imageUrl}
-            imageAlt={project.imageAlt}
-            order={project.order}
-          />
-          <dl className="mt-6 grid grid-cols-2 gap-x-5 gap-y-5 border-t border-row-border pt-5">
-            <ProjectFact label="Role" value={project.role} />
-            <ProjectFact label="Scope" value={project.timeframe} />
-            {repoPath ? (
-              <div className="col-span-2 min-w-0">
-                <dt className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-                  Source
-                </dt>
-                <dd className="mt-1.5 truncate font-mono text-[10px] uppercase">
-                  {repoPath}
-                </dd>
+        <ForumBodyGrid
+          mobileSidebarLabel="Project details"
+          sidebar={
+            <section
+              className="forum-panel p-4"
+              aria-labelledby="project-record-heading"
+            >
+              <ForumSectionHeader
+                title="Project record"
+                id="project-record-heading"
+              />
+              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-row-border pt-4">
+                <ProjectFact label="Role" value={project.role} />
+                <ProjectFact label="Scope" value={project.timeframe} />
+                {repoPath ? (
+                  <ProjectFact
+                    className="col-span-2 min-w-0"
+                    label="Source"
+                    value={repoPath}
+                  />
+                ) : null}
+              </dl>
+              {project.tags.length > 0 ? (
+                <div className="mt-4 border-t border-row-border pt-4">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Topics
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+                    {project.tags.map((tag) => (
+                      <li
+                        key={tag}
+                        className="font-mono text-[9px] uppercase tracking-[0.08em]"
+                      >
+                        #{tag}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          }
+        >
+          <header
+            className="forum-panel overflow-hidden !p-0"
+            aria-labelledby="project-heading"
+          >
+            <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-row-border px-3 py-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {project.type}
+              </p>
+              <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
+                {String(project.order).padStart(2, "0")} /{" "}
+                {String(projects.length).padStart(2, "0")}
+              </span>
+            </div>
+            <div className="px-4 py-5 sm:px-5">
+              <div className="flex items-start gap-4">
+                <div className="min-w-0 flex-1">
+                  <h1
+                    id="project-heading"
+                    className="break-words text-4xl font-bold leading-tight tracking-[-0.045em] text-balance sm:text-5xl"
+                  >
+                    {project.name}
+                  </h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
+                    {project.summary}
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <PortfolioProjectMark
+                    name={project.name}
+                    imageUrl={project.imageUrl}
+                    imageAlt={project.imageAlt}
+                    order={project.order}
+                  />
+                </div>
               </div>
-            ) : null}
-          </dl>
-        </aside>
-      </header>
+              <ProjectLinks className="mt-4" project={project} />
+            </div>
+          </header>
 
-      {project.tags.length > 0 ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-2 border-b border-row-border py-3 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
-          {project.tags.map((tag) => (
-            <span key={tag}>#{tag}</span>
-          ))}
-        </div>
-      ) : null}
-
-      <section className="pt-9 md:pt-12">
-        <h2 className="mb-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          Project overview
-        </h2>
-        <div className="grid border-l border-t border-row-border md:grid-cols-3">
-          <ProjectDetail label="Problem" value={project.problem} />
-          <ProjectDetail label="Approach" value={project.approach} />
-          <ProjectDetail label="Outcome" value={project.outcome} />
-        </div>
-      </section>
-
-      <ProjectPager previous={previousProject} next={nextProject} />
-
-      {commentsEnabled ? (
-        <section className="mt-10 border-t border-row-border pt-6">
-          <h2 className="mb-5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Comments
-          </h2>
-          <div className="max-w-3xl">
-            <CommentsPanel
-              entityType="portfolioProject"
-              entityId={project.slug}
-              enabled
+          <section
+            className="forum-panel overflow-hidden !p-0"
+            aria-labelledby="project-overview-heading"
+          >
+            <ForumSectionHeader
+              title="Project overview"
+              id="project-overview-heading"
             />
-          </div>
-        </section>
-      ) : null}
-    </article>
+            <div className="divide-y divide-row-border border-t border-row-border">
+              <ProjectDetail label="Problem" value={project.problem} />
+              <ProjectDetail label="Approach" value={project.approach} />
+              <ProjectDetail label="Outcome" value={project.outcome} />
+            </div>
+          </section>
+
+          <ProjectPager previous={previousProject} next={nextProject} />
+
+          {commentsEnabled ? (
+            <section
+              className="forum-panel overflow-hidden !p-0"
+              aria-labelledby="project-comments-heading"
+            >
+              <ForumSectionHeader
+                title="Comments"
+                id="project-comments-heading"
+              />
+              <div className="border-t border-row-border p-4 sm:p-5">
+                <CommentsPanel
+                  entityType="portfolioProject"
+                  entityId={project.slug}
+                  enabled
+                />
+              </div>
+            </section>
+          ) : null}
+        </ForumBodyGrid>
+      </article>
+    </PrimaryPageSurface>
   );
 }
 
@@ -233,13 +283,14 @@ function ProjectPager({
   return (
     <nav
       aria-label="Project navigation"
-      className="mt-10 grid border-l border-t border-row-border md:grid-cols-2"
+      className="forum-panel grid overflow-hidden !p-0 md:grid-cols-2"
     >
       {previous ? (
         <ProjectPagerLink
           direction="previous"
           href={`/portfolio/${previous.slug}`}
           label={previous.name}
+          className="border-b border-row-border md:border-b-0 md:border-r"
         />
       ) : null}
       {next ? (
@@ -257,10 +308,12 @@ function ProjectPagerLink({
   direction,
   href,
   label,
+  className,
 }: {
   direction: "previous" | "next";
   href: string;
   label: string;
+  className?: string;
 }) {
   const isPrevious = direction === "previous";
 
@@ -268,8 +321,8 @@ function ProjectPagerLink({
     <Link
       href={asRoute(href)}
       prefetch
-      className={`focus-ring group flex items-center gap-3 border-b border-r border-row-border p-4 transition-colors hover:bg-muted/35 ${
-        isPrevious ? "justify-start" : "justify-end text-right"
+      className={`focus-ring forum-list-row group flex min-w-0 items-center gap-3 p-4 ${className ?? ""} ${
+        isPrevious ? "justify-start" : "justify-between text-right"
       }`}
     >
       {isPrevious ? (
@@ -298,20 +351,26 @@ function ProjectPagerLink({
 
 function ProjectDetail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-b border-r border-row-border p-5">
+    <div className="grid gap-2 px-4 py-4 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
       <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </h3>
-      <p className="mt-3 text-sm leading-6 md:text-base md:leading-7">
-        {value}
-      </p>
+      <p className="text-sm leading-6 md:text-base md:leading-7">{value}</p>
     </div>
   );
 }
 
-function ProjectFact({ label, value }: { label: string; value: string }) {
+function ProjectFact({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
   return (
-    <div>
+    <div className={className}>
       <dt className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </dt>
@@ -360,7 +419,7 @@ function ProjectLinks({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="focus-ring inline-flex h-8 items-center gap-1.5 border border-row-border px-2.5 font-mono text-[10px] uppercase transition-colors hover:bg-muted/40 hover:text-primary"
+          className="forum-action-pill focus-ring inline-flex items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground"
         >
           <Icon aria-hidden="true" className="size-3.5" />
           {label}
