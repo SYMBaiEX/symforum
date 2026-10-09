@@ -71,15 +71,6 @@ export function BlogNavigation() {
             brandImageSrc={primarySiteUrl("/images/brand/signal-moth.png")}
             className="forum-brand mr-auto text-lg sm:mr-2"
           />
-          <div className="hidden min-w-0 flex-1 items-center gap-3 text-sm text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-accent-magenta" />
-            <span className="truncate font-medium text-foreground">
-              Field notes
-            </span>
-            <span className="truncate">
-              Software · AI systems · engineering practice
-            </span>
-          </div>
           <Link
             href={newsletterHref}
             className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
