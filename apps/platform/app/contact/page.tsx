@@ -9,7 +9,6 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { PrimaryPageSurface } from "@/components/primary-page-surface";
 import {
   ForumBodyGrid,
-  ForumPageHeader,
   ForumSectionHeader,
 } from "@/components/forum/forum-layout-primitives";
 
@@ -76,31 +75,6 @@ export default function ContactPage() {
             { name: "Home", url: primarySiteUrl("/") },
             { name: "Contact", url: primarySiteUrl("/contact") },
           ])}
-        />
-        <ForumPageHeader
-          title="Contact"
-          breadcrumbs={<p className="page-kicker">SYMBiEX / Contact</p>}
-          description={
-            <p>
-              For software, AI systems, open-source, research, privacy, or
-              security questions, use the form or email{" "}
-              <a
-                className="underline underline-offset-4"
-                href="mailto:austin@symbaiex.com"
-              >
-                austin@symbaiex.com
-              </a>
-              .
-            </p>
-          }
-          actions={
-            <Button asChild size="sm" variant="outline">
-              <a href="mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact">
-                <Mail aria-hidden="true" />
-                Email directly
-              </a>
-            </Button>
-          }
         />
         <ForumBodyGrid
           mobileSidebarLabel="Contact details"

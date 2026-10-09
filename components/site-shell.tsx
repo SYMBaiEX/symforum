@@ -210,9 +210,8 @@ function SiteFooter({
       ref={footerRef}
       className="fixed inset-x-0 bottom-0 z-50 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:px-3"
     >
-      <div className="forum-panel mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-2 p-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-2 p-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
         <div className="min-w-0">
-          <p className="page-kicker mb-1">Newsletter</p>
           <NewsletterSignup source="footer" variant="footer" />
         </div>
         <nav

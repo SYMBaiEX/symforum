@@ -180,26 +180,26 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     repoUrl: "https://github.com/SYMBaiEX/OpenController",
   },
   {
-    slug: "gitshipt",
-    name: "GitShipt",
-    type: "Open-source rewards infrastructure",
+    slug: "usagemax",
+    name: "UsageMax",
+    type: "AI usage observability platform",
     role: "Creator / product engineer",
-    timeframe: "Public project",
+    timeframe: "Public app and npm CLI",
     summary:
-      "Repo-native rewards layer for open source on Solana, powered by GitHub activity and Bags fee sharing.",
+      "A private-by-default usage ledger that brings supported AI coding histories into one view of tokens, models, tracked cost, sessions, and activity.",
     problem:
-      "Open-source contribution has public proof but weak native reward rails, especially for teams that want contribution-aware incentives.",
+      "AI usage is spread across tools, machines, and providers, making it hard to compare activity and tracked cost in one place.",
     approach:
-      "Connect GitHub activity with Solana-native reward logic so contribution records can become actionable product state.",
+      "Build a local-first CLI that reconciles supported histories and sends aggregate snapshots while keeping prompts, completions, code, and credentials on the computer.",
     outcome:
-      "A focused public experiment in turning repository work into a programmable incentive surface.",
+      "A public app, versioned collector API, and agent interfaces for reviewing aggregate usage across computers and teams.",
     status: "published",
     order: 5,
-    tags: ["solana", "open-source", "rewards", "github"],
+    tags: ["ai", "privacy", "observability", "typescript"],
     imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
     imageAlt: "SYMBaiEX GitHub avatar",
-    homepageUrl: "https://gitshipt.com",
-    repoUrl: "https://github.com/SYMBaiEX/GitShipt",
+    homepageUrl: "https://usagemax.com",
+    repoUrl: "https://github.com/SYMBaiEX/usagemax",
   },
   {
     slug: "symindx",
@@ -223,25 +223,26 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     repoUrl: "https://github.com/SYMBaiEX/SYMindX",
   },
   {
-    slug: "arklib",
-    name: "ArkLib",
-    type: "Formal verification and proof engineering",
-    role: "Open-source proof contributor",
-    timeframe: "Lean / proof repair PRs",
+    slug: "symclick",
+    name: "SymClick",
+    type: "Native macOS utility",
+    role: "Creator / maintainer",
+    timeframe: "v1.2.0 public release",
     summary:
-      "Contribution work on formally verified arguments of knowledge in Lean, including proof repair, soundness adapters, and integration drift fixes.",
+      "A native menu-bar autoclicker with a global start/stop shortcut, configurable click patterns, and optional count or duration limits.",
     problem:
-      "Proof libraries can fail from small API drift and incomplete transport surfaces even when the underlying mathematics is sound.",
+      "A useful autoclicker needs precise controls and a reliable way to stop a run without sending users through a complex setup.",
     approach:
-      "Repair targeted Lean modules, remove proof placeholders, and preserve canonical proof paths through current-main changes.",
+      "Use AppKit, Carbon, and a dedicated Core Graphics click engine with configurable speed, target location, start delay, and run limits.",
     outcome:
-      "A deeper public footprint in formal verification, cryptographic proof systems, and mechanically checked math.",
+      "A self-contained macOS app with a clear global stop path, resettable preferences, diagnostics, and a documented release workflow.",
     status: "published",
     order: 7,
-    tags: ["lean", "formal verification", "zk", "proofs"],
-    imageUrl: "https://avatars.githubusercontent.com/u/18633264?v=4",
-    imageAlt: "Lalalune GitHub organization avatar",
-    repoUrl: "https://github.com/lalalune/ArkLib",
+    tags: ["macos", "native", "automation", "utilities"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    homepageUrl: "https://github.com/SYMBaiEX/symclick/releases/latest",
+    repoUrl: "https://github.com/SYMBaiEX/symclick",
   },
   {
     slug: "doolittle",
@@ -284,28 +285,6 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
     imageAlt: "SYMBaiEX GitHub avatar",
     repoUrl: "https://github.com/SYMBaiEX/SYMLog",
-  },
-  {
-    slug: "pod-protocol",
-    name: "PoD Protocol",
-    type: "AI agent communication protocol",
-    role: "Creator / protocol engineer",
-    timeframe: "2025",
-    summary:
-      "Prompt or Die, a Solana-based communication protocol for AI agents with channels, messaging, escrow, and reputation.",
-    problem:
-      "Autonomous agents need verifiable coordination rails when money, reputation, and delegated work enter the system.",
-    approach:
-      "Prototype protocol primitives around messaging, escrow, and reputation so agents can coordinate through durable state.",
-    outcome:
-      "An early public protocol experiment for agent-to-agent communication on Solana.",
-    status: "published",
-    order: 10,
-    tags: ["solana", "protocol", "ai agents"],
-    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
-    imageAlt: "SYMBaiEX GitHub avatar",
-    homepageUrl: "https://dexploarer.github.io/PoD-Protocol/",
-    repoUrl: "https://github.com/SYMBaiEX/PoD-Protocol",
   },
 ];
 
