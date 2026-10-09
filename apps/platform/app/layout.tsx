@@ -29,6 +29,7 @@ import { headers } from "next/headers";
 
 const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
 const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
+const BLOG_PRODUCTION_HOSTNAME = new URL(blogSiteUrl("/")).hostname;
 const NEWSLETTER_PRODUCTION_HOSTNAME = new URL(newsletterSiteUrl("/")).hostname;
 const NEWS_PRODUCTION_HOSTNAME = new URL(newsSiteUrl("/")).hostname;
 
@@ -134,10 +135,12 @@ export default async function RootLayout({
   const initialForumHost = isForumSubdomainHost(host);
   const initialNewsletterHost =
     host?.split(":")[0]?.toLowerCase() === NEWSLETTER_PRODUCTION_HOSTNAME;
+  const initialBlogHost =
+    host?.split(":")[0]?.toLowerCase() === BLOG_PRODUCTION_HOSTNAME;
   const initialNewsHost =
     host?.split(":")[0]?.toLowerCase() === NEWS_PRODUCTION_HOSTNAME;
   const initialPrimarySiteHref =
-    initialNewsletterHost || initialNewsHost
+    initialNewsletterHost || initialNewsHost || initialBlogHost
       ? primarySiteUrl("/")
       : primarySiteHrefFromForumHost({
           host,
