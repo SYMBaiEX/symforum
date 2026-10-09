@@ -262,9 +262,9 @@ function NavRow({
           {authPending ? (
             <span
               aria-hidden="true"
-              className="inline-flex h-7 w-full items-center justify-center border border-transparent px-2.5"
+              className="inline-flex h-9 w-full items-center justify-center px-2.5"
             >
-              <span className="h-3.5 w-12 animate-pulse rounded-none bg-muted" />
+              <span className="h-3.5 w-12 animate-pulse rounded-md bg-muted" />
             </span>
           ) : authHref && authLabel ? (
             <DesktopNavLink
@@ -324,9 +324,9 @@ function DesktopNavLink({
     <Button
       asChild
       className={cn(
-        "h-7 rounded-none border border-transparent px-2.5 text-xs text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground",
+        "forum-action-pill focus-ring h-9 rounded-lg border border-transparent px-3 text-xs text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
         active &&
-          "border-foreground bg-foreground text-background hover:border-foreground hover:bg-foreground hover:text-background",
+          "border-primary/20 bg-primary/10 font-semibold text-primary hover:border-primary/20 hover:bg-primary/10 hover:text-primary",
       )}
       size="sm"
       variant="ghost"
@@ -364,16 +364,16 @@ function MobileNavMenu({
       <DropdownMenuTrigger asChild>
         <Button
           aria-label="Open navigation menu"
-          className="rounded-none border border-row-border bg-background/70 hover:border-foreground"
+          className="focus-ring h-10 w-10 rounded-lg border border-border bg-card text-foreground hover:border-muted-foreground hover:bg-muted"
           size="icon"
-          variant="ghost"
+          variant="outline"
         >
           <Menu aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="max-h-[calc(100vh-5rem)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-none border-row-border bg-background p-1.5 text-foreground shadow-[0_18px_70px_rgba(0,0,0,0.55)] dark:bg-[#030303] lg:hidden"
+        className="max-h-[calc(100vh-5rem)] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-foreground shadow-lg lg:hidden"
       >
         <DropdownMenuLabel className="px-2 pb-1.5 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
           Menu
@@ -419,10 +419,10 @@ function MobileNavMenu({
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {authPending ? (
-            <DropdownMenuItem className="h-10 rounded-none px-3" disabled>
+            <DropdownMenuItem className="h-10 rounded-lg px-3" disabled>
               <span
                 aria-hidden="true"
-                className="h-3 w-16 animate-pulse rounded-none bg-muted"
+                className="h-3 w-16 animate-pulse rounded-md bg-muted"
               />
             </DropdownMenuItem>
           ) : authHref && authLabel ? (
@@ -453,9 +453,9 @@ function DesktopOwnerMenu({
         <Button
           aria-label="Open owner console navigation"
           className={cn(
-            "h-7 rounded-none border border-transparent px-2.5 text-xs text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground",
+            "forum-action-pill focus-ring h-9 rounded-lg border border-transparent px-3 text-xs text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
             active &&
-              "border-foreground bg-foreground text-background hover:border-foreground hover:bg-foreground hover:text-background",
+              "border-primary/20 bg-primary/10 font-semibold text-primary hover:border-primary/20 hover:bg-primary/10 hover:text-primary",
           )}
           size="sm"
           variant="ghost"
@@ -466,7 +466,7 @@ function DesktopOwnerMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-64 rounded-none border-row-border bg-background p-1.5 shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+        className="w-64 rounded-xl border border-border bg-popover p-1.5 shadow-lg"
       >
         <DropdownMenuLabel className="px-2 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           Owner routes
@@ -478,7 +478,7 @@ function DesktopOwnerMenu({
               return (
                 <DropdownMenuItem
                   asChild
-                  className="rounded-none p-0 focus:bg-muted"
+                  className="rounded-lg p-0 focus:bg-muted"
                   key={item.href}
                 >
                   <Link
@@ -532,9 +532,9 @@ function MobileNavItem({
     <DropdownMenuItem
       asChild
       className={cn(
-        "h-10 rounded-none px-3 text-base font-semibold text-foreground focus:bg-muted focus:text-foreground",
+        "h-10 rounded-lg px-3 text-base font-semibold text-foreground focus:bg-muted focus:text-foreground",
         active &&
-          "bg-foreground text-background focus:bg-foreground focus:text-background",
+          "bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary",
       )}
     >
       {documentNavigation ? (

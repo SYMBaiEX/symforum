@@ -43,12 +43,12 @@ export function ThemeToggle() {
   return (
     <Button
       aria-label={`Theme: ${themeLabels[currentTheme]}. Switch to ${themeLabels[nextTheme]}.`}
-      className="border border-row-border bg-background/70 hover:border-foreground"
+      className="focus-ring border border-border bg-card text-foreground hover:border-muted-foreground hover:bg-muted"
       onClick={() => setTheme(nextTheme)}
       size="icon"
       title={`Theme: ${themeLabels[currentTheme]}`}
       type="button"
-      variant="ghost"
+      variant="outline"
     >
       <Icon aria-hidden="true" />
     </Button>

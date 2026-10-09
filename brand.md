@@ -32,6 +32,8 @@ Tone: precise, direct, technically curious, and authored. The site should feel l
 - Keep long-form reading content direct and comfortable; reserve side panels for context, links, and actions.
 - On narrow screens, stack the content and let secondary context collapse behind a clearly labeled control.
 - Keep the shared site navigation and footer consistent across primary pages.
+- Use the shared pill-shaped top bar, surface switcher, and active-route cues for site navigation. Keep the fixed footer compact, with the newsletter form, agent access, and social links inside one rounded panel.
+- Give the About page a portrait-led editorial introduction, readable story chapters, in-page chapter links, and clear paths to the portfolio and contact page.
 
 The home, About, and Contact pages use the shared Forum typography, controls, panels, and responsive content layout. The Forum, News, Newsletter, and Blog keep their surface-specific navigation and content while sharing the same compact system.
 
