@@ -6,7 +6,6 @@ import { HomeFaq } from "@/components/home-faq";
 import { PrimaryPageSurface } from "@/components/primary-page-surface";
 import {
   ForumBodyGrid,
-  ForumPageHeader,
   ForumSectionHeader,
 } from "@/components/forum/forum-layout-primitives";
 import { Button } from "@/components/ui/button";
@@ -26,32 +25,6 @@ export default function HomePage() {
     <PrimaryPageSurface>
       <AgentWebMcpDiscovery />
       <section className="page-frame page-frame-dense">
-        <ForumPageHeader
-          title="Austin Hamilton"
-          breadcrumbs={<p className="page-kicker">SYMBiEX / Personal site</p>}
-          description={
-            <p>
-              I build public software, AI systems, and research infrastructure
-              with a bias toward inspectable sources and useful tools.
-            </p>
-          }
-          actions={
-            <>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/about">About</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href="/contact">Contact</Link>
-              </Button>
-            </>
-          }
-        />
-
-        <div className="mb-3 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase text-muted-foreground">
-          <span>SYMBiEX</span>
-          <span aria-hidden="true">≡</span>
-          <span>Symbiosis + AI + Experiment</span>
-        </div>
         <HomeBanner />
         <HomeContent />
       </section>

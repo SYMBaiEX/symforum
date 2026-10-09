@@ -103,17 +103,15 @@ export function NewsletterSignup({
         onChange={(event) => setEmail(event.target.value)}
         placeholder="Sign up for Newsletter"
         autoComplete="email"
-        className="h-9 w-full rounded-none border-row-border bg-background/50 font-mono text-xs"
+        className="h-9 w-full rounded-lg border-border bg-background/70 font-mono text-xs"
         required
       />
       <Button
         type="submit"
         size="sm"
         className={cn(
-          "h-9 rounded-none bg-pink-700 text-white hover:bg-pink-800",
-          variant === "footer"
-            ? "w-9 px-0 sm:w-auto sm:px-2.5"
-            : "w-full dark:!text-white",
+          "forum-primary-action h-9 rounded-lg",
+          variant === "footer" ? "sm:px-2.5" : "w-full dark:!text-white",
         )}
         disabled={pending}
         aria-label={pending ? "Sending subscription" : "Subscribe"}

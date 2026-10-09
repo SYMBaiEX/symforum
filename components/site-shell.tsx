@@ -159,7 +159,8 @@ export function SiteShell({
 
   return (
     <div
-      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:calc(4rem+env(safe-area-inset-top)+1px)] md:[--site-header-offset:calc(3.75rem+env(safe-area-inset-top)+1px)]"
+      data-surface="primary"
+      className="forum-app-shell primary-site-shell relative z-10 min-h-dvh overflow-hidden bg-background text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:calc(3.5rem+env(safe-area-inset-top)+1px)]"
       style={
         footerOffset
           ? ({
@@ -207,16 +208,20 @@ function SiteFooter({
   return (
     <footer
       ref={footerRef}
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-row-border/70 bg-background/92 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-50 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:px-3"
     >
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
+      <div className="forum-panel mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-2 p-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
         <div className="min-w-0">
+          <p className="page-kicker mb-1">Newsletter</p>
           <NewsletterSignup source="footer" variant="footer" />
         </div>
-        <div className="flex flex-wrap items-center justify-start sm:shrink-0 sm:justify-end">
+        <nav
+          aria-label="Footer links and social profiles"
+          className="flex flex-wrap items-center justify-start gap-1 sm:shrink-0 sm:justify-end"
+        >
           <Button
             asChild
-            className="h-9 rounded-none px-2.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground sm:px-3"
+            className="forum-action-pill focus-ring h-9 px-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground sm:px-3"
             size="sm"
             variant="ghost"
           >
@@ -226,7 +231,7 @@ function SiteFooter({
             <Button
               key={href}
               asChild
-              className="h-9 w-9 px-0 font-mono uppercase text-muted-foreground sm:w-auto sm:px-2.5"
+              className="forum-action-pill focus-ring h-9 font-mono uppercase text-muted-foreground"
               size="sm"
               variant="ghost"
             >
@@ -243,7 +248,7 @@ function SiteFooter({
               </a>
             </Button>
           ))}
-        </div>
+        </nav>
       </div>
     </footer>
   );
@@ -261,15 +266,15 @@ function SiteHeader({
   initialPrimarySiteHref: string;
 }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 md:min-h-[3.75rem] md:px-8">
+    <header className="forum-topbar fixed inset-x-0 top-0 z-50 border-b border-border pt-[env(safe-area-inset-top)]">
+      <div className="forum-topbar-inner mx-auto flex min-h-14 w-full max-w-7xl items-center justify-between gap-3 px-3 py-1.5 sm:px-4 md:px-8">
         <div className="flex min-w-0 items-center">
           <SiteSurfaceSwitcher
             activeSurface="blog"
             currentPathname={currentPathname}
             homeHref={homeHref}
             forumHref={initialForumHost ? "/" : "/forum"}
-            className="font-mono text-sm"
+            className="forum-brand text-sm"
           />
         </div>
         <HeaderNav
