@@ -262,6 +262,7 @@
  --site-header-offset: calc(56px + env(safe-area-inset-top));
 }
 .forum-app-shell .forum-topbar { background: hsl(var(--card)/.97); }
+.forum-app-shell .forum-topbar-surface { background: hsl(var(--card)/.97); }
 .forum-app-shell .forum-topbar-inner { min-height: 56px; padding-inline: 12px; }
 .forum-app-shell .forum-topbar .forum-brand { min-width: 0; flex-shrink: 0; }
 .forum-app-shell .forum-global-search { max-width: 560px; border-radius: 8px; gap: 8px; padding-inline: 12px; }
