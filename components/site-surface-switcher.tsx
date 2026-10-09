@@ -15,6 +15,7 @@ import {
   FORUM_SITE_URL,
   NEWS_SITE_URL,
   NEWSLETTER_SITE_URL,
+  primarySiteUrl,
 } from "@/lib/site-urls";
 import { primarySiteHrefForForumHost } from "@/components/forum/forum-host-url";
 import {
@@ -39,6 +40,7 @@ export function SiteSurfaceSwitcher({
   currentPathname,
   homeHref,
   forumHref,
+  brandImageSrc = "/images/brand/signal-moth.png",
   className,
   showForumMark = false,
 }: {
@@ -46,11 +48,13 @@ export function SiteSurfaceSwitcher({
   currentPathname: string;
   homeHref: string;
   forumHref: string;
+  brandImageSrc?: string;
   className?: string;
   showForumMark?: boolean;
 }) {
   const pathname = currentPathname;
   const [resolvedForumHref, setResolvedForumHref] = useState(forumHref);
+  const [resolvedHomeHref, setResolvedHomeHref] = useState(homeHref);
   const [resolvedPrimaryHrefs, setResolvedPrimaryHrefs] = useState({
     blog: "/blog",
     news: "/news",
@@ -59,6 +63,7 @@ export function SiteSurfaceSwitcher({
   useEffect(() => {
     const hostname = window.location.hostname;
     const productionHost = isProductionSiteHostname(hostname);
+    setResolvedHomeHref(productionHost ? primarySiteUrl("/") : homeHref);
     setResolvedForumHref(
       productionHost && !hostname.startsWith("forum.")
         ? canonicalForumSurfaceHref(forumHref)
@@ -80,7 +85,7 @@ export function SiteSurfaceSwitcher({
             ),
           },
     );
-  }, [forumHref]);
+  }, [forumHref, homeHref]);
   const isPath = (route: string) =>
     pathname === route || pathname.startsWith(`${route}/`);
   const currentRoute = isPath("/news")
@@ -97,7 +102,7 @@ export function SiteSurfaceSwitcher({
       value: "home",
       label: "Home",
       description: "The SYMBaiEX home page",
-      href: homeHref,
+      href: resolvedHomeHref,
       Icon: Home,
     },
     {
@@ -142,7 +147,7 @@ export function SiteSurfaceSwitcher({
           )}
         >
           <Image
-            src="/images/brand/signal-moth.png"
+            src={brandImageSrc}
             width={40}
             height={40}
             alt=""

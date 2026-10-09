@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthKitConvexProvider } from "@symbaiex/auth/client";
 import { AuthServerBoundary } from "@symbaiex/auth/server";
-import { blogSiteUrl } from "@/lib/site-urls";
+import { SiteSurfaceSwitcher } from "@/components/site-surface-switcher";
+import { blogSiteUrl, primarySiteUrl } from "@/lib/site-urls";
 import "./globals.css";
 
 const description =
@@ -68,15 +69,21 @@ export default function BlogRootLayout({
                 aria-label="Main navigation"
                 className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 md:px-8"
               >
-                <Link
-                  href="/blog"
-                  className="font-mono text-sm font-bold tracking-[0.12em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  SYMB<span className="text-primary">ai</span>EX
-                  <span className="ml-3 hidden border-l border-row-border pl-3 text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SiteSurfaceSwitcher
+                    activeSurface="blog"
+                    currentPathname="/blog"
+                    homeHref={primarySiteUrl("/")}
+                    forumHref="/forum"
+                    brandImageSrc={primarySiteUrl(
+                      "/images/brand/signal-moth.png",
+                    )}
+                    className="font-mono text-sm"
+                  />
+                  <span className="hidden border-l border-row-border pl-3 text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground sm:inline">
                     Field notes
                   </span>
-                </Link>
+                </div>
                 <Link
                   href="/feed/blog.xml"
                   className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

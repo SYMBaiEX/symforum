@@ -34,7 +34,7 @@ export function BlogPostFilter({
   }
 
   return (
-    <div className="mb-6 flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+    <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
       <span id="blog-tag-filter-label">Tag</span>
       <Select onValueChange={handleTagChange} value={selectedValue}>
         <SelectTrigger

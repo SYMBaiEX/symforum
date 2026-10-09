@@ -43,9 +43,7 @@ import { useEffect, useState } from "react";
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About" },
-  { href: "/blog", label: "Blog" },
   { href: "/agent", label: "Agents" },
-  { href: "/forum", label: "Forum" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/contact", label: "Contact" },
 ];
@@ -234,23 +232,25 @@ function NavRow({
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
       <div className="hidden min-w-0 items-center gap-1 lg:flex">
-        {(compact ? navItems.filter((item) => item.href === "/" || item.href === "/blog") : navItems).map((item) => {
-          const href = resolveHref(item.href);
-          return (
-            <DesktopNavLink
-              active={resolveActive(item.href)}
-              documentNavigation={shouldUseHeaderDocumentNavigation({
-                forumHost,
-                href: item.href,
-                resolvedHref: href,
-              })}
-              href={href}
-              key={item.href}
-            >
-              {item.label}
-            </DesktopNavLink>
-          );
-        })}
+        {(compact ? navItems.filter((item) => item.href === "/") : navItems).map(
+          (item) => {
+            const href = resolveHref(item.href);
+            return (
+              <DesktopNavLink
+                active={resolveActive(item.href)}
+                documentNavigation={shouldUseHeaderDocumentNavigation({
+                  forumHost,
+                  href: item.href,
+                  resolvedHref: href,
+                })}
+                href={href}
+                key={item.href}
+              >
+                {item.label}
+              </DesktopNavLink>
+            );
+          },
+        )}
         {adminAccess ? (
           <DesktopOwnerMenu
             active={isHeaderRouteActive(pathname, "/admin")}
