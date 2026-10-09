@@ -4836,11 +4836,7 @@ const createThreadOperation = defineForumMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await countForumExperience(
-      ctx,
-      user,
-      initialStatus === "active" ? "thread_published" : "thread_pending",
-    );
+    await countForumExperience(ctx, user, "thread_published");
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
 
@@ -4874,59 +4870,40 @@ const createThreadOperation = defineForumMutation({
       threadId,
       now,
     });
-    if (initialStatus === "active") {
-      await ensureThreadParticipantSubscription(ctx, {
-        userId: user._id,
-        threadId,
-        categoryId: category._id,
-        now,
-      });
+    await ensureThreadParticipantSubscription(ctx, {
+      userId: user._id,
+      threadId,
+      categoryId: category._id,
+      now,
+    });
 
-      await ctx.db.patch("forumCategories", category._id, {
-        threadCount: category.threadCount + 1,
-        postCount: category.postCount + 1,
-        lastThreadId: threadId,
-        lastPostId: undefined,
-        lastPostAt: now,
-        updatedAt: now,
-      });
-      await bumpForumUserProfileStats(ctx, user._id, {
-        threadDelta: 1,
-        postDelta: 1,
-        now,
-      });
-      await createNewThreadNotifications(ctx, {
-        actorUserId: user._id,
-        categoryId: category._id,
-        threadId,
-        now,
-      });
-      await scheduleForumAgentReview(ctx, {
-        sourceKind: "thread",
-        threadId,
-        categoryId: category._id,
-        authorId: user._id,
-        now,
-      });
-      await enqueueForumAgentMemoryIndex(ctx.scheduler, threadId);
-    } else {
-      await recordModerationLog(ctx, {
-        actorUserId: user._id,
-        entityType: "forumThread",
-        entityId: threadId,
-        eventType: "forum_thread_submitted",
-        message: "Forum thread submitted for approval",
-        categoryId: category._id,
-        threadId,
-        metadata: {
-          categoryId: category._id,
-          categorySlug: category.slug,
-          title,
-          status: initialStatus,
-          actorWasModerator: false,
-        },
-      });
-    }
+    await ctx.db.patch("forumCategories", category._id, {
+      threadCount: category.threadCount + 1,
+      postCount: category.postCount + 1,
+      lastThreadId: threadId,
+      lastPostId: undefined,
+      lastPostAt: now,
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, user._id, {
+      threadDelta: 1,
+      postDelta: 1,
+      now,
+    });
+    await createNewThreadNotifications(ctx, {
+      actorUserId: user._id,
+      categoryId: category._id,
+      threadId,
+      now,
+    });
+    await scheduleForumAgentReview(ctx, {
+      sourceKind: "thread",
+      threadId,
+      categoryId: category._id,
+      authorId: user._id,
+      now,
+    });
+    await enqueueForumAgentMemoryIndex(ctx.scheduler, threadId);
 
     return {
       threadId,
@@ -5324,11 +5301,7 @@ const createReplyOperation = defineForumMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await countForumExperience(
-      ctx,
-      user,
-      initialStatus === "active" ? "reply_published" : "reply_pending",
-    );
+    await countForumExperience(ctx, user, "reply_published");
     await syncForumPostSearchProjection(ctx, postId);
     await insertForumAttachments(ctx, {
       attachments,
@@ -5338,45 +5311,6 @@ const createReplyOperation = defineForumMutation({
       threadId: thread._id,
       now,
     });
-
-    if (initialStatus === "pending") {
-      await ctx.db.patch("forumThreads", thread._id, {
-        lastAssignedPostNumber: postNumber,
-        updatedAt: now,
-      });
-      await upsertForumThreadEditorialDigest(ctx, {
-        ...thread,
-        lastAssignedPostNumber: postNumber,
-        updatedAt: now,
-      });
-      await syncForumThreadSearchProjection(ctx, thread._id);
-      await recordModerationLog(ctx, {
-        actorUserId: user._id,
-        entityType: "forumPost",
-        entityId: postId,
-        eventType: "forum_post_submitted",
-        message: "Forum reply submitted for approval",
-        categoryId: category._id,
-        threadId: thread._id,
-        postId,
-        metadata: {
-          categoryId: category._id,
-          threadId: thread._id,
-          postNumber,
-          status: initialStatus,
-          actorWasModerator: false,
-        },
-      });
-
-      return {
-        postId,
-        threadId: thread._id,
-        postNumber,
-        postPage: pageForPostNumber(postNumber, POST_PAGE_SIZE),
-        status: initialStatus,
-        createdAt: now,
-      };
-    }
 
     await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
