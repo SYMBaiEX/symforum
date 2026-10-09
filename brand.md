@@ -35,7 +35,7 @@ Tone: precise, direct, technically curious, and authored. The site should feel l
 - Use the shared pill-shaped top bar, surface switcher, and active-route cues for site navigation. Keep the fixed footer compact, with the newsletter form, agent access, and social links inside one rounded panel.
 - Give the About page a portrait-led editorial introduction, readable story chapters, in-page chapter links, and clear paths to the portfolio and contact page.
 
-The home, About, and Contact pages use the shared Forum typography, controls, panels, and responsive content layout. The Forum, News, Newsletter, and Blog keep their surface-specific navigation and content while sharing the same compact system.
+The home, About, Contact, and Portfolio pages use the shared Forum typography, controls, panels, and responsive content layout. The portfolio is an ordered project index with source-aware rows; project detail pages keep facts and topics in a responsive context panel and present the project narrative as readable rows. The Forum, News, Newsletter, and Blog keep their surface-specific navigation and content while sharing the same compact system.
 
 ## Use
 
