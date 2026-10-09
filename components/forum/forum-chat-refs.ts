@@ -30,18 +30,15 @@ export type ForumChatPage = ForumChatPendingPage & {
     canRead: boolean;
     canSend: boolean;
     canModerate: boolean;
-    postingTrust: "trusted" | "moderated";
     actingAs: { userId: string; username: string; isAgent: boolean } | null;
   };
 };
 export type ForumChatSendReceipt = {
   messageId: Id<"forumChatMessages">;
-  status: "active" | "pending";
-  publicationStatus: "published" | "pending_moderation";
+  status: "active";
+  publicationStatus: "published";
   url: string;
   message: ForumChatMessage;
-  pendingContentUrl?: string;
-  moderationUrl?: string;
 };
 export const forumChatRefs = {
   markChatRead: makeFunctionReference<

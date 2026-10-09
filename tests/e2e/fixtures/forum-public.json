@@ -3696,7 +3696,7 @@
           "canModerate": false,
           "canRead": true,
           "canSend": false,
-          "postingTrust": "moderated"
+          "postingTrust": "standard"
         }
       },
       "status": "completed"

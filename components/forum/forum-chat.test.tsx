@@ -55,7 +55,6 @@ function page(): ForumChatPage {
       canRead: true,
       canSend: false,
       canModerate: false,
-      postingTrust: "trusted",
       actingAs: null,
     },
   };
@@ -97,7 +96,6 @@ test("descending server data displays chronologically and private pending conten
     canRead: true,
     canSend: true,
     canModerate: false,
-    postingTrust: "moderated",
     actingAs: { userId: "actor", username: "austin", isAgent: false },
   };
   mocks.data = data;
@@ -112,7 +110,7 @@ test("descending server data displays chronologically and private pending conten
     html.indexOf("Awaiting staff moderation"),
   );
   expect(html).toContain('maxLength="2000"');
-  expect(html).toContain('aria-describedby="forum-chat-trust"');
+  expect(html).not.toContain("Your messages need moderator approval");
 });
 
 test("room access loss suppresses logs and composer instead of claiming an empty chat", () => {

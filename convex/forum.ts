@@ -4804,11 +4804,9 @@ const createThreadOperation = defineForumMutation({
       (part): part is string => typeof part === "string" && part.length > 0,
     );
     const searchBody = searchBodyParts.join("\n");
-    const initialStatus: ForumThreadStatus =
-      shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
-    if (initialStatus === "pending") {
-      await enforcePendingForumSubmissionLimits(ctx, user);
-    }
+    // Accepted public discussion is published immediately after the existing
+    // access, participation, rate-limit, and duplicate checks pass.
+    const initialStatus: ForumThreadStatus = "active";
     if (!forumPluginPrincipal(ctx))
       await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const threadId = await ctx.db.insert("forumThreads", {
@@ -5309,11 +5307,9 @@ const createReplyOperation = defineForumMutation({
     }
 
     const postNumber = await nextPostNumberForThread(ctx, thread);
-    const initialStatus: ForumPostDoc["status"] =
-      shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
-    if (initialStatus === "pending") {
-      await enforcePendingForumSubmissionLimits(ctx, user);
-    }
+    // Accepted public replies are published immediately after the existing
+    // access, participation, rate-limit, and duplicate checks pass.
+    const initialStatus: ForumPostDoc["status"] = "active";
     if (!forumPluginPrincipal(ctx))
       await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const postId = await ctx.db.insert("forumPosts", {
@@ -15242,12 +15238,6 @@ function isTrustedForumUser(user: UserDoc | null | undefined): boolean {
   );
 }
 
-function shouldHoldForumSubmissionForApproval(
-  user: UserDoc | null | undefined,
-) {
-  return !isTrustedForumUser(user);
-}
-
 function categoryViewAccess(
   category: ForumCategoryDoc,
 ): ForumCategoryViewAccess {
@@ -23380,7 +23370,6 @@ export const forumChatOperations = createForumChatOperations({
   canReplyInCategory,
   assertForumParticipationAllowed,
   isTrustedForumUser,
-  enforcePendingForumSubmissionLimits,
 });
 export const listChatMessages = query(
   forumChatOperations.listChatMessages.definition,

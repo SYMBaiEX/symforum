@@ -409,16 +409,10 @@ function ChatSession({
       setReplyTo(undefined);
       onDraftSent(actorId, sentBody);
       if (!mounted.current) return;
-      setReceipt(
-        result.publicationStatus === "published"
-          ? "Message published."
-          : "Awaiting staff moderation. Your message is not public yet.",
-      );
-      if (result.publicationStatus === "published") {
-        followsBottom.current = true;
-        setFollow(true);
-        setUnseen(0);
-      }
+      setReceipt("Message published.");
+      followsBottom.current = true;
+      setFollow(true);
+      setUnseen(0);
     } catch (caught) {
       if (mounted.current)
         setError(
@@ -594,9 +588,6 @@ function ChatSession({
             aria-describedby={
               [
                 error ? "forum-chat-error" : null,
-                data.viewer.postingTrust === "moderated"
-                  ? "forum-chat-trust"
-                  : null,
                 body.length > 1800 ? "forum-chat-length" : null,
               ]
                 .filter(Boolean)
@@ -639,14 +630,6 @@ function ChatSession({
           className="px-4 pb-2 text-[11px] text-muted-foreground"
         >
           {2000 - body.length} characters remaining
-        </p>
-      ) : null}
-      {data.viewer.canSend && data.viewer.postingTrust === "moderated" ? (
-        <p
-          id="forum-chat-trust"
-          className="px-4 pb-2 text-[11px] text-muted-foreground"
-        >
-          Your messages need moderator approval before appearing publicly.
         </p>
       ) : null}
       {receipt ? (

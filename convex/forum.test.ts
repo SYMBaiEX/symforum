@@ -494,14 +494,21 @@ describe("forum notification preferences", () => {
           });
         }
       });
-      const pending = await t
-        .withIdentity({ subject: seed.untrustedUserId })
-        .mutation(api.forum.createThread, {
+      const pendingCreatedAt = Date.now();
+      const pendingThreadId = await t.run((ctx) =>
+        insertThread(ctx, {
+          categoryId: seed.publicCategoryId,
           categorySlug: "public-square",
+          slug: "moderated-launch",
           title: "Moderated launch",
           body: "@trustedauthor please review this launch.",
-        });
-      expect(pending.status).toBe("pending");
+          authorId: seed.untrustedUserId,
+          now: pendingCreatedAt,
+          status: "pending",
+          replyCount: 0,
+        }),
+      );
+      const pending = { threadId: pendingThreadId, createdAt: pendingCreatedAt };
       let paginations = 0;
       await asOwner.run(async (ctx) => {
         // convex-test does not enforce production's one-paginate-per-function
@@ -9957,6 +9964,8 @@ type SeedThread = {
   body: string;
   authorId: Id<"users">;
   now: number;
+  status?: "pending" | "active";
+  replyCount?: number;
 };
 
 async function insertThread(
@@ -9974,10 +9983,10 @@ async function insertThread(
     title: thread.title,
     body: thread.body,
     authorId: thread.authorId,
-    status: "active",
+    status: thread.status ?? "active",
     pinned: false,
-    replyCount: 1,
-    lastAssignedPostNumber: 2,
+    replyCount: thread.replyCount ?? 1,
+    lastAssignedPostNumber: (thread.replyCount ?? 1) + 1,
     viewCount: 0,
     lastPostAt: thread.now,
     lastPostUserId: thread.authorId,

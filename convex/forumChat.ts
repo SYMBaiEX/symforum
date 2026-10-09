@@ -21,7 +21,6 @@ type Access = {
   canReplyInCategory(user: User | null, category: Category, moderator: boolean): boolean;
   assertForumParticipationAllowed(ctx: Context, user: User, action: string): Promise<void>;
   isTrustedForumUser(user: User | null): boolean;
-  enforcePendingForumSubmissionLimits(ctx: MutationCtx, user: User): Promise<void>;
 };
 const CHAT_URL = "https://forum.symbaiex.com/#forum-chat";
 const chatRateLimiter = new RateLimiter(components.rateLimiter, {
@@ -96,7 +95,6 @@ export function createForumChatOperations(access: Access) {
     }
     return {
       canRead: true, canSend, canModerate: info.canModerate,
-      postingTrust: access.isTrustedForumUser(info.owner) ? "trusted" as const : "moderated" as const,
       actingAs: actor ? { userId: actor._id, username: actor.username ?? actor.name ?? "member", isAgent: actor.isAgent === true } : null,
     };
   }
@@ -175,7 +173,6 @@ export function createForumChatOperations(access: Access) {
             canRead: false,
             canSend: false,
             canModerate: false,
-            postingTrust: "moderated" as const,
             actingAs: actor
               ? {
                   userId: actor._id,
@@ -277,8 +274,7 @@ export function createForumChatOperations(access: Access) {
         chatRateLimiter.limit(ctx, "forumChatActor", { key: actor._id }),
       ]);
       if (capacities.some(result => !result.ok)) fail("CHAT_RATE_LIMITED", "Chat is moving too quickly. Please try again shortly.");
-      const status = access.isTrustedForumUser(owner) ? "active" as const : "pending" as const;
-      if (status === "pending") await access.enforcePendingForumSubmissionLimits(ctx, owner);
+      const status = "active" as const;
       await admitNative(ctx, actor);
       const now = Date.now();
       const principal = forumPluginPrincipal(ctx);
@@ -288,9 +284,12 @@ export function createForumChatOperations(access: Access) {
         ...(principal ? { connectionId: principal.connection._id, agentAssisted: true } : {}),
       });
       const row = (await ctx.db.get("forumChatMessages", messageId))!;
-      return { messageId, status, publicationStatus: status === "active" ? "published" as const : "pending_moderation" as const,
-        url: CHAT_URL, message: (await messages(ctx, [row], actor, info.canModerate))[0],
-        ...(status === "pending" ? { pendingContentUrl: CHAT_URL, moderationUrl: CHAT_URL } : {}),
+      return {
+        messageId,
+        status,
+        publicationStatus: "published" as const,
+        url: CHAT_URL,
+        message: (await messages(ctx, [row], actor, info.canModerate))[0],
       };
     },
   });
