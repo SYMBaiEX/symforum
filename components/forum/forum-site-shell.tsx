@@ -5,6 +5,7 @@ import {
   useForumShellContext,
 } from "./forum-shell-context";
 import { ForumNavigation } from "./forum-navigation";
+import { BlogNavigation } from "@/components/blog-navigation";
 import { NewsletterNavigation } from "@/components/newsletter-navigation";
 import { NewsNavigation } from "@/components/news-navigation";
 import { ForumLink } from "./forum-link";
@@ -12,6 +13,7 @@ import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { SurfaceScope } from "@/components/ui/surface-scope";
+import { newsletterSiteUrl } from "@/lib/site-urls";
 const socialItems = [
   { href: "https://github.com/symbaiex", label: "GitHub" },
   { href: "https://linkedin.com/in/austinhamiltonal", label: "LinkedIn" },
@@ -25,10 +27,10 @@ export function ForumSiteShell({
   surface = "forum",
 }: {
   children: ReactNode;
-  footerRef: RefObject<HTMLElement | null>;
+  footerRef?: RefObject<HTMLElement | null>;
   forumHost: boolean;
   primarySiteHref: string;
-  surface?: "forum" | "newsletter" | "news";
+  surface?: "blog" | "forum" | "newsletter" | "news";
 }) {
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
@@ -41,7 +43,9 @@ export function ForumSiteShell({
           >
             Skip to content
           </a>
-          {surface === "newsletter" ? (
+          {surface === "blog" ? (
+            <BlogNavigation />
+          ) : surface === "newsletter" ? (
             <NewsletterNavigation />
           ) : surface === "news" ? (
             <NewsNavigation />
@@ -53,9 +57,17 @@ export function ForumSiteShell({
             tabIndex={-1}
             className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
           >
-            {surface === "newsletter" || surface === "news" ? (
+            {surface === "blog" ||
+            surface === "newsletter" ||
+            surface === "news" ? (
               <div
-                className={`forum-surface ${surface === "news" ? "news-surface" : "newsletter-surface"}`}
+                className={`forum-surface ${
+                  surface === "news"
+                    ? "news-surface"
+                    : surface === "newsletter"
+                      ? "newsletter-surface"
+                      : "blog-surface"
+                }`}
               >
                 {children}
               </div>
@@ -73,16 +85,39 @@ export function ForumSiteShell({
           >
             <a
               className="focus-ring py-2 hover:text-foreground"
-              href={surface === "newsletter" ? "/newsletter" : primarySiteHref}
+              href={
+                surface === "newsletter"
+                  ? "/newsletter"
+                  : surface === "blog"
+                    ? "/blog"
+                    : primarySiteHref
+              }
             >
               {surface === "newsletter"
                 ? "SYMBaiEX Newsletter"
                 : surface === "news"
                   ? "SYMBaiEX News"
-                  : "SYMBaiEX"}
+                  : surface === "blog"
+                    ? "SYMBaiEX Blog"
+                    : "SYMBaiEX"}
             </a>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              {surface === "newsletter" ? (
+              {surface === "blog" ? (
+                <>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href="/feed/blog.xml"
+                  >
+                    RSS feed
+                  </a>
+                  <a
+                    className="focus-ring py-2 hover:text-foreground"
+                    href={newsletterSiteUrl("/newsletter")}
+                  >
+                    Newsletter
+                  </a>
+                </>
+              ) : surface === "newsletter" ? (
                 <>
                   <a
                     className="focus-ring py-2 hover:text-foreground"
@@ -148,7 +183,7 @@ function ForumShellFrame({
   surface,
 }: {
   children: ReactNode;
-  surface: "forum" | "newsletter" | "news";
+  surface: "blog" | "forum" | "newsletter" | "news";
 }) {
   const { compactNavigation } = useForumShellContext();
   return (

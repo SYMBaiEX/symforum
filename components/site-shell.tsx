@@ -83,6 +83,11 @@ export function SiteShell({
     !forumShell &&
     !newsletterShell &&
     (initialNewsHost || pathname === "/news" || pathname?.startsWith("/news/"));
+  const blogShell =
+    !forumShell &&
+    !newsletterShell &&
+    !newsShell &&
+    (pathname === "/blog" || pathname?.startsWith("/blog/"));
 
   useEffect(() => {
     if (isForumHostname(window.location.hostname)) {
@@ -94,6 +99,10 @@ export function SiteShell({
       setNewsletterHost(true);
       setPrimarySiteHref(primarySiteUrl("/"));
     } else if (window.location.hostname === "news.symbaiex.com") {
+      setForumHost(false);
+      setNewsletterHost(false);
+      setPrimarySiteHref(primarySiteUrl("/"));
+    } else if (window.location.hostname === "blog.symbaiex.com") {
       setForumHost(false);
       setNewsletterHost(false);
       setPrimarySiteHref(primarySiteUrl("/"));
@@ -127,13 +136,21 @@ export function SiteShell({
     };
   }, []);
 
-  if (forumShell || newsletterShell || newsShell) {
+  if (forumShell || newsletterShell || newsShell || blogShell) {
     return (
       <ForumSiteShell
         footerRef={footerRef}
         forumHost={forumHost}
         primarySiteHref={primarySiteHref}
-        surface={newsletterShell ? "newsletter" : newsShell ? "news" : "forum"}
+        surface={
+          blogShell
+            ? "blog"
+            : newsletterShell
+              ? "newsletter"
+              : newsShell
+                ? "news"
+                : "forum"
+        }
       >
         {children}
       </ForumSiteShell>
