@@ -4,14 +4,11 @@ import Link from "next/link";
 
 export function HomeFaq() {
   return (
-    <section
-      className="page-frame page-frame-bottom"
-      aria-labelledby="symbaiex-faq"
-    >
-      <h2 id="symbaiex-faq" className="text-2xl font-semibold tracking-tight">
+    <section className="forum-panel p-4" aria-labelledby="symbaiex-faq">
+      <h2 id="symbaiex-faq" className="text-sm font-semibold tracking-tight">
         SYMBaiEX FAQ
       </h2>
-      <div className="mt-6 border-y border-row-border">
+      <div className="mt-3 border-y border-row-border">
         {HOME_FAQS.map((faq) => (
           <details
             key={faq.question}

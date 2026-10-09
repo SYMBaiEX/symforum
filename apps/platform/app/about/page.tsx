@@ -6,6 +6,14 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
+import { PrimaryPageSurface } from "@/components/primary-page-surface";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+} from "@/components/forum/forum-layout-primitives";
+import { Button } from "@/components/ui/button";
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getSitePage("about");
@@ -57,7 +65,7 @@ export default async function AboutPage() {
   const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
-    <>
+    <PrimaryPageSurface>
       <article className="page-frame page-frame-dense">
         <StructuredData
           data={[
@@ -82,69 +90,113 @@ export default async function AboutPage() {
             ]),
           ]}
         />
-        <section className="page-content-wide mx-auto">
-          {imageUrl ? (
-            <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
-              <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
-                {lightImageUrl ? (
-                  <Image
-                    src={lightImageUrl}
-                    alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
-                    fill
-                    sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
-                    className={
-                      darkImageUrl
-                        ? "h-full w-full object-cover object-[center_10%] dark:hidden md:object-center"
-                        : "h-full w-full object-cover object-[center_10%] md:object-center"
-                    }
-                    decoding="async"
-                  />
-                ) : null}
-                {darkImageUrl ? (
-                  <Image
-                    src={darkImageUrl}
-                    alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
-                    fill
-                    fetchPriority="high"
-                    loading="eager"
-                    sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
-                    className={
-                      lightImageUrl
-                        ? "hidden h-full w-full object-cover object-[center_10%] dark:block md:object-center"
-                        : "h-full w-full object-cover object-[center_10%] md:object-center"
-                    }
-                    decoding="async"
-                  />
-                ) : null}
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"
-                />
+        <ForumPageHeader
+          title={page?.heroHeading ?? "About"}
+          description={page?.heroBody}
+          breadcrumbs={<p className="page-kicker">SYMBiEX / About</p>}
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/contact">Contact</Link>
+            </Button>
+          }
+        />
+        <ForumBodyGrid
+          mobileSidebarLabel="Explore"
+          sidebar={
+            <section className="forum-panel p-4" aria-labelledby="about-links">
+              <ForumSectionHeader title="Explore" id="about-links" />
+              <nav aria-label="More about Austin" className="mt-2 grid gap-1">
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/portfolio"
+                >
+                  <span>Portfolio</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/blog"
+                >
+                  <span>Writing</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/contact"
+                >
+                  <span>Contact</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+              </nav>
+            </section>
+          }
+        >
+          <article className="forum-panel p-4 md:p-5">
+            {imageUrl ? (
+              <div className="grid gap-4 border-b border-row-border pb-4 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-start">
+                <figure className="min-w-0">
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-muted sm:aspect-[4/5]">
+                    {lightImageUrl ? (
+                      <Image
+                        src={lightImageUrl}
+                        alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
+                        fill
+                        sizes="(max-width: 640px) calc(100vw - 4rem), 12rem"
+                        className={
+                          darkImageUrl
+                            ? "h-full w-full object-cover object-[center_10%] dark:hidden sm:object-center"
+                            : "h-full w-full object-cover object-[center_10%] sm:object-center"
+                        }
+                        decoding="async"
+                      />
+                    ) : null}
+                    {darkImageUrl ? (
+                      <Image
+                        src={darkImageUrl}
+                        alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
+                        fill
+                        fetchPriority="high"
+                        loading="eager"
+                        sizes="(max-width: 640px) calc(100vw - 4rem), 12rem"
+                        className={
+                          lightImageUrl
+                            ? "hidden h-full w-full object-cover object-[center_10%] dark:block sm:object-center"
+                            : "h-full w-full object-cover object-[center_10%] sm:object-center"
+                        }
+                        decoding="async"
+                      />
+                    ) : null}
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"
+                    />
+                  </div>
+                  {page?.imageCredit ? (
+                    <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
+                      {page.imageCredit}
+                    </figcaption>
+                  ) : null}
+                </figure>
+                <p className="text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
+                  The path runs from early game-hacking curiosity into
+                  open-source systems, AI agents, protocol work, and the
+                  long-term lens of fatherhood.
+                </p>
               </div>
-              {page?.imageCredit ? (
-                <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
-                  {page.imageCredit}
-                </figcaption>
-              ) : null}
-            </figure>
-          ) : null}
+            ) : (
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
+                The path runs from early game-hacking curiosity into open-source
+                systems, AI agents, protocol work, and the long-term lens of
+                fatherhood.
+              </p>
+            )}
 
-          <div className="page-content-readable">
-            <h1 className="page-title">{page?.heroHeading ?? "About"}</h1>
-            <p className="page-lede mt-5 md:mt-6">{page?.heroBody}</p>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              The path runs from early game-hacking curiosity into open-source
-              systems, AI agents, protocol work, and the long-term lens of
-              fatherhood.
-            </p>
-          </div>
-
-          <div className="mt-7 page-content md:mt-8">
             {storySections.length > 0 ? (
-              <div className="space-y-7 md:space-y-8">
+              <div className="mt-5 space-y-7 md:mt-6 md:space-y-8">
                 {storySections.map((section, index) => (
-                  <article
+                  <section
                     key={`${section.title}-${index}`}
+                    className="border-t border-row-border pt-4"
                     data-about-story-row
                   >
                     <div data-about-story-content>
@@ -159,21 +211,20 @@ export default async function AboutPage() {
                         />
                       </div>
                     </div>
-                  </article>
+                  </section>
                 ))}
               </div>
             ) : (
               <MarkdownContent
-                className="markdown-compact about-story-copy"
+                className="markdown-compact about-story-copy mt-5"
                 content={page?.body ?? ""}
                 headingLevelOffset={1}
               />
             )}
-            <div className="clear-both" />
-          </div>
-        </section>
+          </article>
+        </ForumBodyGrid>
       </article>
-    </>
+    </PrimaryPageSurface>
   );
 }
 
