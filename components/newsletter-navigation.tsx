@@ -77,82 +77,84 @@ export function NewsletterNavigation() {
   return (
     <>
       <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card pt-[env(safe-area-inset-top)]">
-        <div className="forum-topbar-inner flex items-center gap-2 px-3 sm:gap-3">
+        <div className="forum-topbar-inner flex items-center justify-between gap-2 px-3 sm:gap-3">
           <SiteSurfaceSwitcher
             activeSurface="newsletter"
             currentPathname={pathname ?? "/newsletter"}
             homeHref={primarySiteHref}
             forumHref="/forum"
-            className="forum-brand mr-auto text-lg sm:mr-2"
+            className="forum-brand text-lg"
           />
-          <Link
-            href="/newsletter#newsletter-subscribe"
-            className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
-          >
-            <Mail aria-hidden="true" className="size-[17px]" />
-            <span>Subscribe</span>
-          </Link>
-          <div className="hidden sm:block">
-            <ThemeToggle />
-          </div>
-          <Link
-            href={signInHref}
-            className="focus-ring hidden min-h-11 items-center px-2 text-sm font-medium sm:inline-flex"
-          >
-            Sign in
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={iconControl}
-                aria-label="Newsletter menu"
-              >
-                <Menu aria-hidden="true" className="size-[18px] lg:hidden" />
-                <UserRound
-                  aria-hidden="true"
-                  className="hidden size-[18px] lg:block"
-                />
-                <ChevronDown
-                  aria-hidden="true"
-                  className="hidden size-3 lg:block"
-                />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              className="forum-shell-menu w-72 max-w-[calc(100vw-2rem)] rounded-xl border-0 bg-popover p-2 shadow-lg"
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <Link
+              href="/newsletter#newsletter-subscribe"
+              className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
             >
-              <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
-                Newsletter
-              </DropdownMenuLabel>
-              <NewsletterMenuLink href="/newsletter" icon={BookOpen}>
-                Latest edition
-              </NewsletterMenuLink>
-              <NewsletterMenuLink
-                href="/newsletter/preferences"
-                icon={Settings2}
-              >
-                Subscription preferences
-              </NewsletterMenuLink>
-              <NewsletterMenuLink href={newsSiteUrl("/news")} icon={Newspaper}>
-                News index
-              </NewsletterMenuLink>
-              <NewsletterMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
-                Forum
-              </NewsletterMenuLink>
-              <div className="mt-2 flex items-center justify-between gap-2 px-3 py-1">
-                <a
-                  href={primarySiteHref}
-                  className="focus-ring inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground"
+              <Mail aria-hidden="true" className="size-[17px]" />
+              <span>Subscribe</span>
+            </Link>
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
+            <Link
+              href={signInHref}
+              className="focus-ring hidden min-h-11 items-center px-2 text-sm font-medium sm:inline-flex"
+            >
+              Sign in
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={iconControl}
+                  aria-label="Newsletter menu"
                 >
-                  SYMBaiEX home
-                </a>
-                <ThemeToggle />
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Menu aria-hidden="true" className="size-[18px] lg:hidden" />
+                  <UserRound
+                    aria-hidden="true"
+                    className="hidden size-[18px] lg:block"
+                  />
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="hidden size-3 lg:block"
+                  />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="forum-shell-menu w-72 max-w-[calc(100vw-2rem)] rounded-xl border-0 bg-popover p-2 shadow-lg"
+              >
+                <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                  Newsletter
+                </DropdownMenuLabel>
+                <NewsletterMenuLink href="/newsletter" icon={BookOpen}>
+                  Latest edition
+                </NewsletterMenuLink>
+                <NewsletterMenuLink
+                  href="/newsletter/preferences"
+                  icon={Settings2}
+                >
+                  Subscription preferences
+                </NewsletterMenuLink>
+                <NewsletterMenuLink href={newsSiteUrl("/news")} icon={Newspaper}>
+                  News index
+                </NewsletterMenuLink>
+                <NewsletterMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
+                  Forum
+                </NewsletterMenuLink>
+                <div className="mt-2 flex items-center justify-between gap-2 px-3 py-1">
+                  <a
+                    href={primarySiteHref}
+                    className="focus-ring inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    SYMBaiEX home
+                  </a>
+                  <ThemeToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
