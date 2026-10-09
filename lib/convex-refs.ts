@@ -2524,7 +2524,14 @@ export const convexRefs = {
         name: "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
         value: number;
         rating: "good" | "needs-improvement" | "poor";
-        navigationType: "navigate" | "reload" | "back-forward" | "prerender";
+        navigationType:
+          | "navigate"
+          | "reload"
+          | "back-forward"
+          | "prerender"
+          | "back-forward-cache"
+          | "restore"
+          | "soft-navigation";
         timestamp: number;
       },
       { recorded: boolean; deduped: boolean }
