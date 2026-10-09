@@ -1,6 +1,4 @@
-import { BlogPostFilter } from "@/components/blog-post-filter";
-import { EntryRow } from "@/components/entry-row";
-import { SectionHeader } from "@/components/section-header";
+import { BlogArchive } from "@/components/blog-archive";
 import { getPublishedPostSummaries } from "@/lib/blog-data";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
@@ -69,43 +67,11 @@ export default async function BlogPage({
     : posts;
 
   return (
-    <>
-      <section className="page-frame page-frame-spacious">
-        <SectionHeader title="All posts" headingLevel="h1" divided={false} />
-        <div className="mt-8">
-          {posts.length === 0 ? (
-            <div className="py-6 font-mono text-xs uppercase text-muted-foreground">
-              No published posts yet.
-            </div>
-          ) : (
-            <>
-              <BlogPostFilter
-                tags={tags}
-                selectedTag={selectedTag}
-                totalPosts={posts.length}
-              />
-              <div>
-                {visiblePosts.map((post, index) => (
-                  <EntryRow
-                    key={post.slug}
-                    post={post}
-                    divided={false}
-                    compact
-                    priority={index === 0}
-                    headingLevel="h2"
-                  />
-                ))}
-              </div>
-              {/* 50 mirrors the .take(50) cap in convex/posts.ts listPublished */}
-              {posts.length >= 50 && (
-                <div className="mt-6 font-mono text-[10px] uppercase text-muted-foreground">
-                  Showing the latest 50 posts
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
-    </>
+    <BlogArchive
+      posts={posts}
+      tags={tags}
+      selectedTag={selectedTag}
+      visiblePosts={visiblePosts}
+    />
   );
 }
