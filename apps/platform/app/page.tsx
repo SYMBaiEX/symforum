@@ -1,9 +1,14 @@
 import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
 import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
-import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
-import { SectionHeader } from "@/components/section-header";
+import { HomeFaq } from "@/components/home-faq";
+import { PrimaryPageSurface } from "@/components/primary-page-surface";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+} from "@/components/forum/forum-layout-primitives";
 import { Button } from "@/components/ui/button";
 import { PublicResourceSearchForm } from "@/components/public-resource-search-form";
 import {
@@ -11,43 +16,46 @@ import {
   GLAMA_EVIDENCE_LISTING_URL,
   MCP_SERVER_CARD,
 } from "@/lib/agent-discovery";
-import { primarySiteUrl } from "@/lib/site-urls";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
+import { primarySiteUrl } from "@/lib/site-urls";
 import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <>
+    <PrimaryPageSurface>
       <AgentWebMcpDiscovery />
-      <HomeIntro />
-      <HomeBanner />
-      <HomeContent />
-    </>
-  );
-}
+      <section className="page-frame page-frame-dense">
+        <ForumPageHeader
+          title="Austin Hamilton"
+          breadcrumbs={<p className="page-kicker">SYMBiEX / Personal site</p>}
+          description={
+            <p>
+              I build public software, AI systems, and research infrastructure
+              with a bias toward inspectable sources and useful tools.
+            </p>
+          }
+          actions={
+            <>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/about">About</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/contact">Contact</Link>
+              </Button>
+            </>
+          }
+        />
 
-function HomeIntro() {
-  return (
-    <section>
-      <div className="page-frame page-frame-dense">
-        <h1 className="grid gap-4 break-words md:grid-cols-12 md:items-start">
-          <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-12 md:text-6xl lg:text-7xl">
-            Hi, I&apos;m
-          </span>
-          <span className="max-w-5xl text-5xl font-bold leading-[0.9] text-balance md:col-span-10 md:col-start-2 md:text-7xl lg:text-8xl">
-            <span className="block">Austin</span>
-            <span className="block pl-8 md:pl-20">Hamilton</span>
-          </span>
-        </h1>
-
-        <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
-          <p className="overflow-x-auto whitespace-nowrap font-mono text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl">
-            SYMBiEX ≡ Symbiosis + AI + Experiment
-          </p>
+        <div className="mb-3 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase text-muted-foreground">
+          <span>SYMBiEX</span>
+          <span aria-hidden="true">≡</span>
+          <span>Symbiosis + AI + Experiment</span>
         </div>
-      </div>
-    </section>
+        <HomeBanner />
+        <HomeContent />
+      </section>
+    </PrimaryPageSurface>
   );
 }
 
@@ -59,61 +67,105 @@ async function HomeContent() {
 
   return (
     <>
-      <section className="page-frame page-frame-spacious">
-        <SectionHeader title="Latest Blogs" divided={false} />
-        <div className="mt-8">
-          {latestPosts.length > 0 ? (
-            latestPosts.map((post, index) => (
-              <EntryRow
-                key={post.slug}
-                post={post}
-                divided={index > 0}
-                compact
-              />
-            ))
-          ) : (
-            <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
-              No published posts yet.
-            </div>
-          )}
-        </div>
-        <div className="mt-5">
-          <Button asChild variant="outline">
-            <Link href="/blog" prefetch>
-              All posts
-            </Link>
-          </Button>
-        </div>
-      </section>
-
-      <section className="page-frame page-frame-bottom">
-        <SectionHeader title="Daily news" divided={false} />
-        <div className="mt-6">
-          <DailyNewsList stories={dailyNews} />
-        </div>
-        <div className="mt-5">
-          <Button asChild variant="outline">
-            <Link href="/news" prefetch>
-              Open today&apos;s index
-            </Link>
-          </Button>
-        </div>
-      </section>
-
-      <section
-        className="page-frame page-frame-bottom"
-        aria-labelledby="how-to-use-symbaiex"
-      >
-        <div className="grid gap-8 md:grid-cols-12">
-          <div className="md:col-span-4">
-            <h2
-              id="how-to-use-symbaiex"
-              className="text-2xl font-semibold tracking-tight"
-            >
-              A site people and agents can inspect
-            </h2>
+      <ForumBodyGrid
+        mobileSidebarLabel="Explore"
+        sidebar={
+          <div className="space-y-3">
+            <section className="forum-panel p-4" aria-labelledby="home-about">
+              <ForumSectionHeader title="About this work" id="home-about" />
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Public software, AI systems, and research notes built to stay
+                readable and inspectable.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/portfolio">Portfolio</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/contact">Contact</Link>
+                </Button>
+              </div>
+            </section>
+            <section className="forum-panel p-4" aria-labelledby="home-links">
+              <ForumSectionHeader title="Explore" id="home-links" />
+              <nav aria-label="Explore SYMBaiEX" className="mt-2 grid gap-1">
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/blog"
+                >
+                  <span>Writing</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/news"
+                >
+                  <span>Daily news</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+                <Link
+                  className="forum-action-pill focus-ring flex w-full justify-between"
+                  href="/developers"
+                >
+                  <span>Developer guide</span>
+                  <span aria-hidden="true">↗</span>
+                </Link>
+              </nav>
+            </section>
           </div>
-          <div className="grid gap-5 text-sm leading-7 text-muted-foreground md:col-span-8 md:grid-cols-2">
+        }
+      >
+        <section
+          className="forum-panel overflow-hidden p-0"
+          aria-labelledby="latest-blogs"
+        >
+          <ForumSectionHeader title="Latest blogs" id="latest-blogs">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/blog" prefetch>
+                All posts
+              </Link>
+            </Button>
+          </ForumSectionHeader>
+          <div className="px-2 pb-2">
+            {latestPosts.length > 0 ? (
+              latestPosts.map((post, index) => (
+                <EntryRow
+                  key={post.slug}
+                  post={post}
+                  divided={index > 0}
+                  compact
+                />
+              ))
+            ) : (
+              <div className="border-y border-row-border px-2 py-6 font-mono text-xs uppercase text-muted-foreground">
+                No published posts yet.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section
+          className="forum-panel overflow-hidden p-0"
+          aria-labelledby="daily-news"
+        >
+          <ForumSectionHeader title="Daily news" id="daily-news">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/news" prefetch>
+                Open today&apos;s index
+              </Link>
+            </Button>
+          </ForumSectionHeader>
+          <div className="px-2 pb-2">
+            <DailyNewsList stories={dailyNews} />
+          </div>
+        </section>
+
+        <section className="forum-panel p-4" aria-labelledby="inspectable-site">
+          <ForumSectionHeader
+            title="A site people and agents can inspect"
+            id="inspectable-site"
+          />
+          <div className="mt-3 grid gap-4 text-sm leading-6 text-muted-foreground md:grid-cols-2">
             <p>
               The public site is the authority: essays, projects, news links,
               forum discussions, and research notes remain readable as ordinary
@@ -195,11 +247,11 @@ async function HomeContent() {
               scope, quota, quality, and moderation checks.
             </p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <PublicResourceSearchForm className="page-frame page-frame-bottom" />
-      <HomeFaq />
+        <PublicResourceSearchForm className="forum-panel p-4" />
+        <HomeFaq />
+      </ForumBodyGrid>
     </>
   );
 }

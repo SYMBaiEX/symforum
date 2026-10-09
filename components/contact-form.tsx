@@ -87,12 +87,12 @@ export function ContactForm() {
   }
 
   return (
-    <form className="mt-8 max-w-3xl" onSubmit={submit}>
+    <form className="mt-4 max-w-none" onSubmit={submit}>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Name">
           <Input
             autoComplete="name"
-            className="h-11 rounded-none"
+            className="h-11"
             maxLength={90}
             minLength={2}
             onChange={(event) =>
@@ -105,7 +105,7 @@ export function ContactForm() {
         <Field label="Email">
           <Input
             autoComplete="email"
-            className="h-11 rounded-none"
+            className="h-11"
             maxLength={180}
             onChange={(event) =>
               setForm((current) => ({ ...current, email: event.target.value }))
@@ -119,7 +119,7 @@ export function ContactForm() {
       <div className="mt-4">
         <Field label="Subject">
           <Input
-            className="h-11 rounded-none"
+            className="h-11"
             maxLength={140}
             minLength={3}
             onChange={(event) =>
@@ -136,7 +136,7 @@ export function ContactForm() {
       <div className="mt-4">
         <Field label="Description">
           <Textarea
-            className="min-h-40 rounded-none"
+            className="min-h-40"
             maxLength={5000}
             minLength={12}
             onChange={(event) =>
@@ -157,7 +157,11 @@ export function ContactForm() {
         >
           {sentAt ? "Sent. I read every note and reply by email." : ""}
         </p>
-        <Button className="rounded-none" disabled={isSubmitting} type="submit">
+        <Button
+          className="forum-primary-action"
+          disabled={isSubmitting}
+          type="submit"
+        >
           <Send aria-hidden="true" />
           {isSubmitting ? "Sending" : "Send"}
         </Button>
@@ -166,13 +170,7 @@ export function ContactForm() {
   );
 }
 
-function Field({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) {
+function Field({ children, label }: { children: ReactNode; label: string }) {
   return (
     <label className="block">
       <span className="mb-2 block font-mono text-[11px] uppercase text-muted-foreground">

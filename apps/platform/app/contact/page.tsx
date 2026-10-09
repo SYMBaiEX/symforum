@@ -6,6 +6,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
+import { PrimaryPageSurface } from "@/components/primary-page-surface";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+} from "@/components/forum/forum-layout-primitives";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -63,51 +69,109 @@ const socials = [
 
 export default function ContactPage() {
   return (
-    <section className="page-frame page-frame-spacious">
-      <StructuredData
-        data={breadcrumbStructuredData([
-          { name: "Home", url: primarySiteUrl("/") },
-          { name: "Contact", url: primarySiteUrl("/contact") },
-        ])}
-      />
-      <div className="page-content">
-        <h1 className="page-title">Contact</h1>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-          Austin Hamilton is based in Birmingham, Alabama. For software, AI
-          systems, open-source, research, privacy, or security questions, use
-          the form below or email{" "}
-          <a className="underline" href="mailto:austin@symbaiex.com">
-            austin@symbaiex.com
-          </a>
-          .
-        </p>
-        <ContactForm />
-        <nav
-          aria-label="Social links"
-          className="mt-8 flex flex-wrap items-center gap-2"
-        >
-          {socials.map(({ Icon, href, label }) => (
-            <Button
-              asChild
-              className="h-10 w-10 rounded-none"
-              key={label}
-              size="icon"
-              variant="outline"
-            >
+    <PrimaryPageSurface>
+      <section className="page-frame page-frame-dense">
+        <StructuredData
+          data={breadcrumbStructuredData([
+            { name: "Home", url: primarySiteUrl("/") },
+            { name: "Contact", url: primarySiteUrl("/contact") },
+          ])}
+        />
+        <ForumPageHeader
+          title="Contact"
+          breadcrumbs={<p className="page-kicker">SYMBiEX / Contact</p>}
+          description={
+            <p>
+              For software, AI systems, open-source, research, privacy, or
+              security questions, use the form or email{" "}
               <a
-                aria-label={label}
-                href={href}
-                rel={
-                  href.startsWith("http") ? "noopener noreferrer" : undefined
-                }
-                target={href.startsWith("http") ? "_blank" : undefined}
+                className="underline underline-offset-4"
+                href="mailto:austin@symbaiex.com"
               >
-                <Icon aria-hidden="true" />
+                austin@symbaiex.com
+              </a>
+              .
+            </p>
+          }
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <a href="mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact">
+                <Mail aria-hidden="true" />
+                Email directly
               </a>
             </Button>
-          ))}
-        </nav>
-      </div>
-    </section>
+          }
+        />
+        <ForumBodyGrid
+          mobileSidebarLabel="Contact details"
+          sidebar={
+            <div className="space-y-3">
+              <section
+                className="forum-panel p-4"
+                aria-labelledby="contact-details"
+              >
+                <ForumSectionHeader
+                  title="Direct contact"
+                  id="contact-details"
+                />
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Austin Hamilton is based in Birmingham, Alabama.
+                </p>
+                <a
+                  className="forum-action-pill focus-ring mt-3 flex w-full justify-start"
+                  href="mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact"
+                >
+                  <Mail aria-hidden="true" className="size-4" />
+                  austin@symbaiex.com
+                </a>
+              </section>
+              <nav
+                aria-label="Social links"
+                className="forum-panel grid gap-2 p-4"
+              >
+                <ForumSectionHeader title="Elsewhere" />
+                {socials.map(({ Icon, href, label }) => (
+                  <Button
+                    asChild
+                    className="w-full justify-start"
+                    key={label}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <a
+                      href={href}
+                      rel={
+                        href.startsWith("http")
+                          ? "noopener noreferrer"
+                          : undefined
+                      }
+                      target={href.startsWith("http") ? "_blank" : undefined}
+                    >
+                      <Icon aria-hidden="true" />
+                      {label}
+                    </a>
+                  </Button>
+                ))}
+              </nav>
+            </div>
+          }
+        >
+          <section
+            className="forum-panel p-4 md:p-5"
+            aria-labelledby="contact-form-heading"
+          >
+            <ForumSectionHeader
+              title="Send a message"
+              id="contact-form-heading"
+            />
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Share a little context so I can route your note to the right
+              place.
+            </p>
+            <ContactForm />
+          </section>
+        </ForumBodyGrid>
+      </section>
+    </PrimaryPageSurface>
   );
 }

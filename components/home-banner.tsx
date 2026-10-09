@@ -6,11 +6,11 @@ const BANNER_SIZES =
 
 export function HomeBanner() {
   return (
-    <section className="page-frame py-4 md:py-5">
+    <figure className="forum-panel my-4 p-1">
       <div className="relative">
         <div
           data-home-banner
-          className="relative h-[4.5rem] w-full overflow-hidden border border-row-border bg-secondary sm:h-[5.5rem] md:h-28 lg:h-36"
+          className="relative h-[4.5rem] w-full overflow-hidden rounded-lg bg-secondary sm:h-[5.5rem] md:h-28 lg:h-36"
         >
           <img
             src="/images/home-banner-light-1280.webp"
@@ -38,6 +38,6 @@ export function HomeBanner() {
         </div>
         <SignalMothPet />
       </div>
-    </section>
+    </figure>
   );
 }

@@ -1,13 +1,14 @@
-# SYMBiEX Brand
+# SYMBiEX Brand and Surface Design
 
 Status: applied
 
-Project: Austin Hamilton ("SYMBiEX") personal blog
-Description: A high-contrast personal publishing system for software engineering, AI systems, ASCII identity, and daily Hacker News notes.
+Project: Austin Hamilton's personal site and public software surfaces
+
+Description: A high-contrast publishing and community system for software engineering, AI systems, open-source work, and research.
+
+## Foundation
 
 Palette: Swiss Terminal Signal
-
-Seeds:
 
 - Background: white and near-black
 - Foreground: near-black and near-white
@@ -17,29 +18,34 @@ Seeds:
 
 Typography:
 
-- Geist Sans via `next/font/google`
-- Geist Mono via `next/font/google`
-- Display: heavy, tight, editorial
-- Metadata, dates, counters, ASCII: Geist Mono with tabular numerals
+- Geist Sans for interface text and reading
+- Geist Mono for metadata, dates, counters, and ASCII identity
+- Display text is heavy, tight, and editorial
 
-Geometry:
+Tone: precise, direct, technically curious, and authored. The site should feel like a personal operating surface, not a marketing template.
 
-- Global radius: `2px`
-- Layout: 12-column Swiss editorial grid on desktop, collapsing to single-column reading on mobile
-- Surfaces: thin borders and rows instead of soft cards
+## Shared layout language
 
-Tone:
-Precise, direct, technically curious, and authored. The site should feel like a personal operating surface, not a marketing template.
+- Keep black and white dominant; use one accent per local component.
+- Use compact page headers, thin separators, and clear alignment.
+- Use 10px panels for grouped interface content and 9px controls, following the shared Forum surface styles.
+- Keep long-form reading content direct and comfortable; reserve side panels for context, links, and actions.
+- On narrow screens, stack the content and let secondary context collapse behind a clearly labeled control.
+- Keep the shared site navigation and footer consistent across primary pages.
 
-Use:
+The home, About, and Contact pages use the shared Forum typography, controls, panels, and responsive content layout. The Forum, News, Newsletter, and Blog keep their surface-specific navigation and content while sharing the same compact system.
 
-- Keep black/white as the dominant color system.
-- Use one accent per local component.
-- Let ASCII be the signature expressive layer.
-- Prefer rows, rules, and alignment over card grids.
+## Use
 
-Avoid:
+- Let ASCII remain the signature expressive layer.
+- Prefer rows and rules for lists, timelines, and editorial content.
+- Use panels to group forms, contact details, and supporting context.
+- Keep controls quiet and readable, with visible focus states and comfortable touch targets.
+- Use photographs and banner imagery as focused accents with purposeful crops.
 
-- Heavy shadows, glass effects, and soft oversized radii.
-- Centered generic hero copy.
+## Avoid
+
+- Heavy shadows, glass effects, and oversized radii.
+- Centered generic hero copy or oversized marketing sections.
+- Decorative card grids when a compact panel or row is clearer.
 - Sprinkling all three accent colors into the same control.

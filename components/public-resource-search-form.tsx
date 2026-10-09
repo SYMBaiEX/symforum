@@ -18,12 +18,15 @@ export function PublicResourceSearchForm({
 }) {
   return (
     <section className={className} aria-labelledby="browser-resource-search">
-      <h2 id="browser-resource-search" className="text-2xl font-semibold">
+      <h2
+        id="browser-resource-search"
+        className="text-sm font-semibold tracking-tight"
+      >
         Search public resources with a browser agent
       </h2>
       <p
         id="browser-resource-search-description"
-        className="mt-3 text-sm leading-7 text-muted-foreground"
+        className="mt-2 text-sm leading-6 text-muted-foreground"
       >
         This read-only lookup returns up to five curated resource links. It does
         not access accounts, call a language model, or change data. A browser
@@ -35,7 +38,7 @@ export function PublicResourceSearchForm({
         action={primarySiteUrl("/ask")}
         method="get"
         aria-describedby="browser-resource-search-description"
-        className="mt-4 flex max-w-2xl flex-col gap-3 sm:flex-row"
+        className="mt-3 flex max-w-2xl flex-col gap-2 sm:flex-row"
       >
         <label className="sr-only" htmlFor="public-resource-query">
           Search public SYMBaiEX developer resources
@@ -52,7 +55,7 @@ export function PublicResourceSearchForm({
         />
         <button
           type="submit"
-          className="min-h-11 border border-row-border px-4 text-sm font-medium transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="forum-action-pill focus-ring min-h-11 border border-row-border px-4 text-sm font-medium transition-colors hover:border-primary/60 hover:bg-primary/5"
         >
           Search resources
         </button>
