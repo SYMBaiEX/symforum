@@ -25,6 +25,8 @@ describe("agent-readable fallback route", () => {
 
     expect(response.status).toBe(404);
     expect(response.headers.get("content-type")).toContain("text/markdown");
+    expect(response.headers.get("vary")).toContain("Accept");
+    expect(response.headers.get("vary")).toContain("Host");
     expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     const body = await response.text();
     expect(body).toContain("# Not found");

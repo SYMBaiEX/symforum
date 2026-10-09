@@ -459,6 +459,7 @@ describe("proxy forum routing", () => {
       }),
     );
     expect(markdownResponse.headers.get(requestHeader)).toBe("1");
+    expect(markdownResponse.headers.get("x-middleware-rewrite")).toBeNull();
 
     const refusedResponse = await proxy(
       requestFor("http://localhost:3000/__ora-404-probe-test", {

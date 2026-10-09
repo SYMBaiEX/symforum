@@ -3,6 +3,7 @@ import {
   normalizePathname,
   renderAiReadablePage,
 } from "@/lib/ai-readable";
+import { markdownNotFound } from "@/lib/markdown-not-found";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function GET(
   const { path } = await params;
   const pathname = normalizePathname(`/${(path ?? []).join("/")}`);
   if (isPrivateAiReadablePath(pathname)) {
-    return markdownNotFound();
+    return markdownNotFound(request);
   }
 
   const url = new URL(request.url);
@@ -23,7 +24,7 @@ export async function GET(
     host: request.headers.get("host"),
   });
   if (!rendered) {
-    return markdownNotFound();
+    return markdownNotFound(request);
   }
 
   const headers = new Headers({
@@ -39,27 +40,4 @@ export async function GET(
     headers.set("Last-Modified", new Date(rendered.modified).toUTCString());
   }
   return new Response(rendered.markdown, { headers });
-}
-
-function markdownNotFound() {
-  return new Response(
-    `# Not found
-
-The requested public page does not exist or has no public Markdown representation.
-
-- [Site index](https://www.symbaiex.com/llms.txt)
-- [Developer guide](https://www.symbaiex.com/developers)
-- [Agent API manifest](https://www.symbaiex.com/api/agent)
-- [XML sitemap](https://www.symbaiex.com/sitemap.xml)
-`,
-    {
-      status: 404,
-      headers: {
-        "Content-Type": "text/markdown; charset=utf-8",
-        "Cache-Control": "public, s-maxage=300",
-        "X-Content-Type-Options": "nosniff",
-        "X-Robots-Tag": "noindex, nofollow",
-      },
-    },
-  );
 }
