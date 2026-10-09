@@ -1,3 +1,5 @@
+@import "../../../styles/forum-shared.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1006,4 +1008,24 @@
     animation: none !important;
     background-position: 0 0;
   }
+}
+
+/* Newsletter shares the editorial shell and keeps its sage signal palette. */
+.forum-app-shell[data-surface="newsletter"] {
+  --primary: 91 28% 54%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 88 22% 66%;
+  --accent-foreground: 84 20% 8%;
+  --ring: 88 26% 54%;
+  --accent-magenta: #a3b18a;
+  --accent-cyan: #b8c79a;
+  --accent-canary: #d9ef73;
+  --scrollbar-thumb-hover: 91 28% 54%;
+}
+
+.dark .forum-app-shell[data-surface="newsletter"] {
+  --primary: 91 28% 62%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 88 24% 66%;
+  --scrollbar-thumb-hover: 91 28% 62%;
 }

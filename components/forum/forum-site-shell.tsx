@@ -13,7 +13,7 @@ import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { SurfaceScope } from "@/components/ui/surface-scope";
-import { newsletterSiteUrl } from "@/lib/site-urls";
+import { forumSiteUrl, newsletterSiteUrl } from "@/lib/site-urls";
 const socialItems = [
   { href: "https://github.com/symbaiex", label: "GitHub" },
   { href: "https://linkedin.com/in/austinhamiltonal", label: "LinkedIn" },
@@ -127,7 +127,7 @@ export function ForumSiteShell({
                   </a>
                   <a
                     className="focus-ring py-2 hover:text-foreground"
-                    href="/forum"
+                    href={forumSiteUrl("/")}
                   >
                     Forum
                   </a>
@@ -136,13 +136,13 @@ export function ForumSiteShell({
                 <>
                   <a
                     className="focus-ring py-2 hover:text-foreground"
-                    href="/newsletter"
+                    href={newsletterSiteUrl("/newsletter")}
                   >
                     Newsletter
                   </a>
                   <a
                     className="focus-ring py-2 hover:text-foreground"
-                    href="/forum"
+                    href={forumSiteUrl("/")}
                   >
                     Forum
                   </a>

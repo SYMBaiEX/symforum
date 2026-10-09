@@ -22,18 +22,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useForumShellContext } from "@/components/forum/forum-shell-context";
+import { forumSiteUrl, newsletterSiteUrl } from "@/lib/site-urls";
 import { cn } from "@/lib/utils";
 
 const mobileLinks = [
   { href: "/news", label: "Index", icon: Newspaper, id: "index" },
   { href: "/news#top-stories", label: "Stories", icon: Archive, id: "stories" },
   {
-    href: "/newsletter",
+    href: newsletterSiteUrl("/newsletter"),
     label: "Newsletter",
     icon: Mail,
     id: "newsletter",
   },
-  { href: "/forum", label: "Forum", icon: MessageSquare, id: "forum" },
+  {
+    href: forumSiteUrl("/"),
+    label: "Forum",
+    icon: MessageSquare,
+    id: "forum",
+  },
 ] as const;
 
 const iconControl =
@@ -44,6 +50,7 @@ export function NewsNavigation() {
   const { primarySiteHref } = useForumShellContext();
   const signInHref = `/signin?${new URLSearchParams({ redirectTo: pathname ?? "/news" })}`;
   const onNews = pathname === "/news" || pathname?.startsWith("/news/");
+  const newsletterArchiveHref = newsletterSiteUrl("/newsletter");
 
   return (
     <>
@@ -56,15 +63,8 @@ export function NewsNavigation() {
             forumHref="/forum"
             className="forum-brand mr-auto text-lg sm:mr-2"
           />
-          <div className="hidden min-w-0 flex-1 items-center gap-3 text-sm text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-primary" />
-            <span className="truncate font-medium text-foreground">
-              Daily index
-            </span>
-            <span className="truncate">Hacker News stories · source first</span>
-          </div>
           <Link
-            href="/newsletter#newsletter-subscribe"
+            href={newsletterSiteUrl("/newsletter#newsletter-subscribe")}
             className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
           >
             <Mail aria-hidden="true" className="size-[17px]" />
@@ -111,10 +111,10 @@ export function NewsNavigation() {
               <NewsMenuLink href="/news#how-to-read" icon={Radio}>
                 About the index
               </NewsMenuLink>
-              <NewsMenuLink href="/newsletter" icon={Mail}>
+              <NewsMenuLink href={newsletterArchiveHref} icon={Mail}>
                 Newsletter archive
               </NewsMenuLink>
-              <NewsMenuLink href="/forum" icon={MessageSquare}>
+              <NewsMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
                 Forum
               </NewsMenuLink>
               <DropdownMenuItem asChild className="min-h-11 rounded-lg px-3">

@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useForumShellContext } from "@/components/forum/forum-shell-context";
+import { forumSiteUrl, newsSiteUrl } from "@/lib/site-urls";
 import { cn } from "@/lib/utils";
 
 const newsletterNavigation = [
@@ -40,7 +41,7 @@ const newsletterNavigation = [
     id: "archive",
   },
   {
-    href: "/newsletter#live-desk",
+    href: newsSiteUrl("/news"),
     label: "Live desk",
     icon: Radio,
     id: "live-desk",
@@ -84,13 +85,6 @@ export function NewsletterNavigation() {
             forumHref="/forum"
             className="forum-brand mr-auto text-lg sm:mr-2"
           />
-          <div className="hidden min-w-0 flex-1 items-center gap-3 text-sm text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-accent-magenta" />
-            <span className="truncate font-medium text-foreground">
-              Dispatches
-            </span>
-            <span className="truncate">Daily signals · Weekly field notes</span>
-          </div>
           <Link
             href="/newsletter#newsletter-subscribe"
             className="forum-primary-action focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
@@ -142,10 +136,10 @@ export function NewsletterNavigation() {
               >
                 Subscription preferences
               </NewsletterMenuLink>
-              <NewsletterMenuLink href="/news" icon={Newspaper}>
+              <NewsletterMenuLink href={newsSiteUrl("/news")} icon={Newspaper}>
                 News index
               </NewsletterMenuLink>
-              <NewsletterMenuLink href="/forum" icon={MessageSquare}>
+              <NewsletterMenuLink href={forumSiteUrl("/")} icon={MessageSquare}>
                 Forum
               </NewsletterMenuLink>
               <div className="mt-2 flex items-center justify-between gap-2 px-3 py-1">

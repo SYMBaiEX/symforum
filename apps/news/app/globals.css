@@ -1,3 +1,5 @@
+@import "../../../styles/forum-shared.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -998,8 +1000,10 @@
   }
 }
 
-/* News keeps the shared editorial layout, with a dedicated ember signal palette. */
-body.news-app {
+/* News shares the editorial shell and keeps its ember signal palette. */
+.forum-app-shell[data-surface="news"] {
+  --primary: 23 100% 59%;
+  --primary-foreground: 0 0% 3%;
   --accent: 23 100% 59%;
   --accent-foreground: 0 0% 3%;
   --ring: 23 100% 59%;
@@ -1008,74 +1012,4 @@ body.news-app {
   --accent-magenta: #ff5f38;
   --chart-2: 23 100% 59%;
   --row-border: 24 18% 24%;
-}
-
-.news-site-frame {
-  position: relative;
-  z-index: 1;
-}
-
-.news-masthead {
-  display: flex;
-  min-height: 3.75rem;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid hsl(var(--row-border));
-  padding: 0.75rem clamp(1rem, 4vw, 3.5rem);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.news-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  color: hsl(var(--foreground));
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.news-signal {
-  width: 0.55rem;
-  height: 0.55rem;
-  background: var(--accent-cyan);
-  box-shadow: 0 0 0.9rem color-mix(in srgb, var(--accent-cyan) 72%, transparent);
-}
-
-.news-wordmark-muted { color: hsl(var(--muted-foreground)); }
-
-.news-live-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--accent-cyan);
-}
-
-.news-live-dot {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 50%;
-  background: var(--accent-cyan);
-  animation: news-live-pulse 1.8s ease-out infinite;
-}
-
-.news-rss-link {
-  margin-left: auto;
-  color: hsl(var(--muted-foreground));
-  text-decoration: underline;
-  text-decoration-color: var(--accent-canary);
-  text-underline-offset: 0.25rem;
-}
-
-.news-rss-link:hover { color: hsl(var(--foreground)); }
-
-@keyframes news-live-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-cyan) 45%, transparent); }
-  50% { box-shadow: 0 0 0 0.35rem transparent; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .news-live-dot { animation: none; }
 }

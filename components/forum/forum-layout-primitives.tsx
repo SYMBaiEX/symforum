@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import type { ForumFeedSort, ForumHomeView } from "./forum-home-model";
 
@@ -58,6 +58,31 @@ export function ForumBodyGrid({
 }) {
   const [contextOpen, setContextOpen] = useState(false);
   const contextId = useId();
+
+  useEffect(() => {
+    if (mobileSidebarAlwaysOpen) return;
+
+    const openLinkedContext = () => {
+      const target = document.getElementById(window.location.hash.slice(1));
+      const context = document.getElementById(contextId);
+      if (!target || !context?.contains(target)) return;
+
+      setContextOpen(true);
+      if (
+        typeof window.requestAnimationFrame === "function" &&
+        typeof target.scrollIntoView === "function"
+      ) {
+        window.requestAnimationFrame(() =>
+          target.scrollIntoView({ block: "start" }),
+        );
+      }
+    };
+
+    openLinkedContext();
+    window.addEventListener("hashchange", openLinkedContext);
+    return () => window.removeEventListener("hashchange", openLinkedContext);
+  }, [contextId, mobileSidebarAlwaysOpen]);
+
   return (
     <div
       className={`forum-body-grid grid items-start ${sidebar ? "forum-has-context" : ""}`}
