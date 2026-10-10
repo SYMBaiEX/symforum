@@ -1,6 +1,6 @@
 import { acceptsMediaType } from "@/lib/accepts-media-type";
+import { htmlNotFound } from "@/lib/html-not-found";
 import { markdownNotFound } from "@/lib/markdown-not-found";
-import { notFound } from "next/navigation";
 
 function handleUnmatchedRoute(request: Request) {
   if (
@@ -10,7 +10,7 @@ function handleUnmatchedRoute(request: Request) {
     return markdownNotFound(request);
   }
 
-  notFound();
+  return htmlNotFound(request);
 }
 
 export function GET(request: Request) {
