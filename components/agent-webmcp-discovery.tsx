@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { SYMBAIEX_WEBMCP_DISCOVERY_RESULT } from "@/lib/agent-webmcp-inline";
 
 type WebMcpTool = {
   name: string;
@@ -54,30 +55,7 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
     if (Object.keys(_input).length !== 0)
       throw new Error("This discovery tool takes no arguments.");
 
-    return {
-      service: "SYMBaiEX",
-      useWhen:
-        "The user needs public source-linked evidence, claim verification, revision history, cited research jobs, JSONL exports, or signed change events.",
-      doNotUseFor: [
-        "general web search",
-        "private data",
-        "payments",
-        "autonomous public posting",
-      ],
-      humanSetup: "https://www.symbaiex.com/agent/signup",
-      forumAccount:
-        "https://www.symbaiex.com/signin?mode=signUp&redirectTo=/forum",
-      instructions: "https://www.symbaiex.com/agent/instructions",
-      developerGuide: "https://www.symbaiex.com/developers",
-      apiManifest: "https://www.symbaiex.com/api/agent",
-      openapi: "https://www.symbaiex.com/api/agent/openapi.json",
-      mcpCard: "https://www.symbaiex.com/.well-known/mcp/server-card.json",
-      documentationMcp: "https://www.symbaiex.com/api/docs/mcp",
-      evidenceMcp: "https://www.symbaiex.com/api/agent/mcp",
-      authenticationGuide: "https://www.symbaiex.com/auth.md",
-      requiredApproval:
-        "The human owner must approve enrollment and the smallest required scopes before authenticated use.",
-    };
+    return SYMBAIEX_WEBMCP_DISCOVERY_RESULT;
   },
 };
 
@@ -243,11 +221,31 @@ export const SYMBAIEX_WEBMCP_TOOLS = [
   SYMBAIEX_WEBMCP_DOCS_READ_TOOL,
 ] as const;
 
+export const SYMBAIEX_WEBMCP_DOCS_TOOLS = [
+  SYMBAIEX_WEBMCP_DOCS_SEARCH_TOOL,
+  SYMBAIEX_WEBMCP_DOCS_READ_TOOL,
+] as const;
+
 export function registerSymbaiexBrowserTools(
   modelContext: WebMcpModelContext,
   signal: AbortSignal,
 ) {
-  for (const tool of SYMBAIEX_WEBMCP_TOOLS) {
+  registerTools(modelContext, SYMBAIEX_WEBMCP_TOOLS, signal);
+}
+
+export function registerSymbaiexBrowserDocsTools(
+  modelContext: WebMcpModelContext,
+  signal: AbortSignal,
+) {
+  registerTools(modelContext, SYMBAIEX_WEBMCP_DOCS_TOOLS, signal);
+}
+
+function registerTools(
+  modelContext: WebMcpModelContext,
+  tools: readonly WebMcpTool[],
+  signal: AbortSignal,
+) {
+  for (const tool of tools) {
     if (signal.aborted) return;
     try {
       // Feature detection must tolerate both synchronous failures and promise rejection.
@@ -282,7 +280,7 @@ export function AgentWebMcpDiscovery() {
     if (modelContext === null) return;
 
     const controller = new AbortController();
-    registerSymbaiexBrowserTools(modelContext, controller.signal);
+    registerSymbaiexBrowserDocsTools(modelContext, controller.signal);
 
     return () => controller.abort();
   }, []);

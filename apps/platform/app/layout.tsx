@@ -8,6 +8,7 @@ import { AuthServerBoundary } from "@symbaiex/auth/server";
 import { SiteShell } from "@/components/site-shell";
 import { VercelAnalytics } from "@/components/vercel-analytics";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
+import { SYMBAIEX_WEBMCP_INLINE_SCRIPT } from "@/lib/agent-webmcp-inline";
 import {
   blogSiteUrl,
   FORUM_SITE_URL,
@@ -26,6 +27,7 @@ import {
   serializeJsonLd,
 } from "@/lib/seo";
 import { headers } from "next/headers";
+import Script from "next/script";
 
 const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
 const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
@@ -194,6 +196,17 @@ export default async function RootLayout({
           title="SYMBaiEX Newsletter"
           href={newsletterSiteUrl("/feed/newsletter.xml")}
         />
+        {host?.split(":")[0]?.toLowerCase() ===
+        PRIMARY_PRODUCTION_HOSTNAME ? (
+          <Script
+            id="symbaiex-webmcp-discovery"
+            strategy="beforeInteractive"
+            nonce={nonce}
+            dangerouslySetInnerHTML={{
+              __html: SYMBAIEX_WEBMCP_INLINE_SCRIPT,
+            }}
+          />
+        ) : null}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
