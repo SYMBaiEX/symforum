@@ -260,14 +260,26 @@ export function registerSymbaiexBrowserTools(
   }
 }
 
+export function resolveWebMcpModelContext(
+  documentModelContext: unknown,
+  navigatorModelContext: unknown,
+): WebMcpModelContext | null {
+  if (isWebMcpModelContext(documentModelContext)) return documentModelContext;
+  if (isWebMcpModelContext(navigatorModelContext)) return navigatorModelContext;
+  return null;
+}
+
+function isWebMcpModelContext(value: unknown): value is WebMcpModelContext {
+  return isRecord(value) && typeof value.registerTool === "function";
+}
+
 export function AgentWebMcpDiscovery() {
   useEffect(() => {
-    const modelContext =
-      (document as WebMcpDocument).modelContext ??
-      (navigator as WebMcpNavigator).modelContext;
-    if (typeof modelContext?.registerTool !== "function") {
-      return;
-    }
+    const modelContext = resolveWebMcpModelContext(
+      (document as WebMcpDocument).modelContext,
+      (navigator as WebMcpNavigator).modelContext,
+    );
+    if (modelContext === null) return;
 
     const controller = new AbortController();
     registerSymbaiexBrowserTools(modelContext, controller.signal);

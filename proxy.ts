@@ -12,6 +12,7 @@ import {
   isPrivateAiReadablePath,
   normalizePathname,
 } from "@/lib/ai-readable-path";
+import { acceptsMediaType } from "@/lib/accepts-media-type";
 import { DISCOVERY_LINK_HEADER } from "@/lib/agent-discovery";
 import { contentSubdomainRootPath } from "@/lib/content-subdomain-routing";
 import { resolveForumSubdomainRoute } from "@/lib/forum-subdomain-routing";
@@ -302,20 +303,6 @@ function isAgentUserAgent(value: string | null) {
   return /(?:GPTBot|ClaudeBot|ChatGPT-User|PerplexityBot|Google-Extended|Applebot-Extended|ora-agent|DeepSeekBot)/i.test(
     value ?? "",
   );
-}
-
-function acceptsMediaType(value: string | null, mediaType: string) {
-  if (!value) return false;
-  return value.split(",").some((part) => {
-    const [type, ...parameters] = part.trim().toLowerCase().split(";");
-    if (type !== mediaType && type !== "text/*") {
-      return false;
-    }
-    const quality = parameters.find((parameter) =>
-      parameter.trim().startsWith("q="),
-    );
-    return quality === undefined || Number(quality.split("=")[1]) > 0;
-  });
 }
 
 function logAiReadableRequest(

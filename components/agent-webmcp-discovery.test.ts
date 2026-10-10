@@ -5,6 +5,7 @@ import {
   SYMBAIEX_WEBMCP_DOCS_SEARCH_TOOL as search,
   SYMBAIEX_WEBMCP_DOCS_READ_TOOL as read,
   SYMBAIEX_WEBMCP_TOOLS,
+  resolveWebMcpModelContext,
   registerSymbaiexBrowserTools,
 } from "./agent-webmcp-discovery";
 
@@ -210,6 +211,19 @@ describe("SYMBaiEX WebMCP discovery tool", () => {
     registerSymbaiexBrowserTools({ registerTool }, controller.signal);
     expect(registerTool).toHaveBeenCalledTimes(3);
     await Promise.resolve();
+  });
+
+  test("prefers document.modelContext and uses navigator.modelContext only as fallback", () => {
+    const documentContext = { registerTool: vi.fn() };
+    const navigatorContext = { registerTool: vi.fn() };
+
+    expect(resolveWebMcpModelContext(documentContext, navigatorContext)).toBe(
+      documentContext,
+    );
+    expect(resolveWebMcpModelContext({}, navigatorContext)).toBe(
+      navigatorContext,
+    );
+    expect(resolveWebMcpModelContext({}, {})).toBeNull();
   });
 });
 
