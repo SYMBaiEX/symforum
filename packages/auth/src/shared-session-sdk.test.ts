@@ -40,7 +40,12 @@ function jwt(expiresIn = 3_600) {
 }
 const original = { token: jwt(), refreshToken: "original-server-only-refresh" };
 
-async function callSdk(path: string, session: typeof original, body?: unknown) {
+async function callSdk(
+  path: string,
+  session: typeof original | null,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {},
+) {
   const envelope = await sealSharedSession(session, environment);
   const request = new NextRequest(`https://forum.symbaiex.com${path}`, {
     method: body ? "POST" : "GET",
@@ -48,6 +53,7 @@ async function callSdk(path: string, session: typeof original, body?: unknown) {
       host: "forum.symbaiex.com",
       cookie: `${SHARED_SESSION_COOKIE}=${envelope}`,
       ...(body ? { origin: "https://forum.symbaiex.com" } : {}),
+      ...extraHeaders,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -61,9 +67,9 @@ async function callSdk(path: string, session: typeof original, body?: unknown) {
   );
   const middleware = convexAuthNextjsMiddleware(
     async (req) => {
-      expect((await headers()).get("cookie")).toContain(tokenName);
+      if (session) expect((await headers()).get("cookie")).toContain(tokenName);
       expect((await cookies()).get(refreshName)?.value).toBe(
-        session.refreshToken,
+        session?.refreshToken,
       );
       return NextResponse.next({ request: { headers: req.headers } });
     },
@@ -103,6 +109,61 @@ test("installed SDK sees restored cookies through real Next headers and cookies 
   );
 });
 
+test.each([
+  { label: "signed-out marker", previous: null },
+  { label: "previous account", previous: original },
+])(
+  "cross-site OAuth callback replaces the shared $label with the verified session",
+  async ({ previous }) => {
+    const signedIn = { token: jwt(), refreshToken: "new-oauth-refresh" };
+    backend.fetchAction.mockResolvedValueOnce({ tokens: signedIn });
+    const response = await callSdk(
+      "/?code=verified-oauth-code",
+      previous,
+      undefined,
+      {
+        accept: "text/html",
+        "sec-fetch-site": "cross-site",
+      },
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://forum.symbaiex.com/",
+    );
+    expect(backend.fetchAction.mock.calls.at(-1)?.[1]).toMatchObject({
+      params: { code: "verified-oauth-code" },
+    });
+    expect(sharedValue(response)).toBeDefined();
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("vary")).toBe("Cookie");
+    expect(
+      await unsealSharedSession(sharedValue(response)!, environment),
+    ).toMatchObject({ session: signedIn });
+  },
+);
+
+test("failed cross-site OAuth callback does not overwrite a shared session", async () => {
+  backend.fetchAction.mockResolvedValueOnce({ tokens: null });
+  const response = await callSdk(
+    "/?code=rejected-oauth-code",
+    original,
+    undefined,
+    {
+      accept: "text/html",
+      "sec-fetch-site": "cross-site",
+    },
+  );
+
+  expect(response.status).toBe(307);
+  expect(sharedValue(response)).toBeUndefined();
+  expect(
+    response.headers
+      .getSetCookie()
+      .some((cookie) => cookie.startsWith(`${tokenName}=`)),
+  ).toBe(true);
+});
+
 test.each(["/api/plugin/mcp", "/agent-auth/token", "/api/agent/auth/register"])(
   "stateless %s skips the installed SDK even with expired ambient cookies",
   async (path) => {
@@ -125,13 +186,16 @@ test.each(["/api/plugin/mcp", "/agent-auth/token", "/api/agent/auth/register"])(
     });
     const stateless = vi.fn((forwarded: NextRequest) => {
       expect(forwarded.headers.get("cookie")).toBe(cookie);
-      expect(forwarded.headers.get("authorization")).toBe("Bearer remote-resource-token");
+      expect(forwarded.headers.get("authorization")).toBe(
+        "Bearer remote-resource-token",
+      );
       return NextResponse.next();
     });
-    const response = await withSharedLegacySession(middleware, environment, stateless)(
-      request,
-      {} as NextFetchEvent,
-    ) as Response;
+    const response = (await withSharedLegacySession(
+      middleware,
+      environment,
+      stateless,
+    )(request, {} as NextFetchEvent)) as Response;
     expect(response.status).toBe(200);
     expect(response.headers.getSetCookie()).toEqual([]);
     expect(stateless).toHaveBeenCalledOnce();
