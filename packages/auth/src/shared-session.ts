@@ -219,6 +219,29 @@ function responseSession(response: Response, original: Session | null) {
   };
 }
 
+function preventSessionCaching(response: Response) {
+  response.headers.set("Cache-Control", "private, no-store");
+  const vary = response.headers.get("Vary");
+  if (
+    !vary?.split(",").some((value) => value.trim().toLowerCase() === "cookie")
+  ) {
+    response.headers.set("Vary", vary ? `${vary}, Cookie` : "Cookie");
+  }
+}
+
+async function publishSharedSession(
+  response: Response,
+  session: Session | null,
+  environment: Environment,
+) {
+  const value = await sealSharedSession(session, environment);
+  preventSessionCaching(response);
+  response.headers.append(
+    "Set-Cookie",
+    `${SHARED_SESSION_COOKIE}=${value}; Path=/; Domain=${COOKIE_DOMAIN}; Max-Age=${SHARED_SESSION_MAX_AGE}; Secure; HttpOnly; SameSite=Lax`,
+  );
+}
+
 export function withSharedLegacySession(
   middleware: NextMiddleware,
   environment: Environment = process.env,
@@ -237,7 +260,23 @@ export function withSharedLegacySession(
       ) {
         return new NextResponse("Invalid origin", { status: 403 });
       }
-      return middleware(request, event);
+      // OAuth returns arrive from another site. Do not restore ambient shared
+      // credentials, but publish a new session after the SDK verifies the code.
+      // Otherwise a previous shared sign-out marker erases the new host session
+      // on the callback's following same-origin navigation.
+      const response = await middleware(request, event);
+      if (
+        response instanceof Response &&
+        request.method === "GET" &&
+        request.nextUrl.searchParams.get("code") &&
+        request.headers.get("accept")?.includes("text/html")
+      ) {
+        const updated = responseSession(response, null);
+        if (updated.changed && updated.session !== null) {
+          await publishSharedSession(response, updated.session, environment);
+        }
+      }
+      return response;
     }
 
     const cookie = request.cookies.get(SHARED_SESSION_COOKIE)?.value;
@@ -250,24 +289,12 @@ export function withSharedLegacySession(
     if (!(response instanceof Response)) return response;
     const updated = responseSession(response, original);
     if (original !== null || updated.changed) {
-      response.headers.set("Cache-Control", "private, no-store");
-      const vary = response.headers.get("Vary");
-      if (
-        !vary
-          ?.split(",")
-          .some((value) => value.trim().toLowerCase() === "cookie")
-      ) {
-        response.headers.set("Vary", vary ? `${vary}, Cookie` : "Cookie");
-      }
+      preventSessionCaching(response);
     }
     if (updated.changed || (!shared && original !== null)) {
       // An encrypted signed-out marker clears stale sibling host cookies too,
       // so another host cannot republish a session after global sign-out.
-      const value = await sealSharedSession(updated.session, environment);
-      response.headers.append(
-        "Set-Cookie",
-        `${SHARED_SESSION_COOKIE}=${value}; Path=/; Domain=${COOKIE_DOMAIN}; Max-Age=${SHARED_SESSION_MAX_AGE}; Secure; HttpOnly; SameSite=Lax`,
-      );
+      await publishSharedSession(response, updated.session, environment);
     }
     return response;
   };

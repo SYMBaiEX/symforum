@@ -29,7 +29,11 @@ const refreshName = "__Host-__convexAuthRefreshToken";
 function request(
   host = "forum.symbaiex.com",
   cookie = "",
-  init: { method?: string; headers?: Record<string, string>; path?: string } = {},
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    path?: string;
+  } = {},
 ) {
   return new NextRequest(`https://${host}${init.path ?? "/"}`, {
     method: init.method,
@@ -66,7 +70,10 @@ describe("encrypted legacy shared sessions", () => {
     const req = request("forum.symbaiex.com", cookie, {
       path,
       method: "POST",
-      headers: { origin: "https://chatgpt.com", authorization: "Bearer remote" },
+      headers: {
+        origin: "https://chatgpt.com",
+        authorization: "Bearer remote",
+      },
     });
     const middleware = vi.fn(() => NextResponse.next());
     const stateless = vi.fn((forwarded: NextRequest) => {
@@ -95,29 +102,38 @@ describe("encrypted legacy shared sessions", () => {
     "/api/admin/ai",
     "/api/admin/telemetry/model",
     "/api/plugin/forum/attachments",
-  ])("preserves human session restoration and origin checks for %s", async (path) => {
-    const cookie = `${SHARED_SESSION_COOKIE}=${await sealSharedSession(session, environment)}`;
-    const middleware = vi.fn((req: NextRequest) => {
-      expect(req.cookies.get(tokenName)?.value).toBe(session.token);
-      expect(req.cookies.get(refreshName)?.value).toBe(session.refreshToken);
-      return NextResponse.next();
-    });
-    const wrapped = withSharedLegacySession(middleware, environment);
-    const response = (await wrapped(request("forum.symbaiex.com", cookie, {
-      path,
-      method: "POST",
-      headers: { origin: "https://forum.symbaiex.com" },
-    }), event)) as Response;
-    expect(response.status).toBe(200);
-    expect(middleware).toHaveBeenCalledOnce();
-    const rejected = (await wrapped(request("forum.symbaiex.com", cookie, {
-      path,
-      method: "POST",
-      headers: { origin: "https://chatgpt.com" },
-    }), event)) as Response;
-    expect(rejected.status).toBe(403);
-    expect(middleware).toHaveBeenCalledOnce();
-  });
+  ])(
+    "preserves human session restoration and origin checks for %s",
+    async (path) => {
+      const cookie = `${SHARED_SESSION_COOKIE}=${await sealSharedSession(session, environment)}`;
+      const middleware = vi.fn((req: NextRequest) => {
+        expect(req.cookies.get(tokenName)?.value).toBe(session.token);
+        expect(req.cookies.get(refreshName)?.value).toBe(session.refreshToken);
+        return NextResponse.next();
+      });
+      const wrapped = withSharedLegacySession(middleware, environment);
+      const response = (await wrapped(
+        request("forum.symbaiex.com", cookie, {
+          path,
+          method: "POST",
+          headers: { origin: "https://forum.symbaiex.com" },
+        }),
+        event,
+      )) as Response;
+      expect(response.status).toBe(200);
+      expect(middleware).toHaveBeenCalledOnce();
+      const rejected = (await wrapped(
+        request("forum.symbaiex.com", cookie, {
+          path,
+          method: "POST",
+          headers: { origin: "https://chatgpt.com" },
+        }),
+        event,
+      )) as Response;
+      expect(rejected.status).toBe(403);
+      expect(middleware).toHaveBeenCalledOnce();
+    },
+  );
 
   test("uses randomized purpose-bound encryption without exposing token values", async () => {
     const sealed = await sealSharedSession(session, environment);
@@ -240,6 +256,27 @@ describe("encrypted legacy shared sessions", () => {
       expect(response.status).toBe(403);
     }
     expect(middleware).not.toHaveBeenCalled();
+  });
+
+  test("ordinary cross-site reads neither restore nor republish stale host sessions", async () => {
+    const marker = await sealSharedSession(null, environment);
+    const cookie = `${SHARED_SESSION_COOKIE}=${marker}; ${tokenName}=${session.token}; ${refreshName}=${session.refreshToken}`;
+    const middleware = vi.fn((req: NextRequest) => {
+      // The existing host cookies remain the SDK's responsibility. A routine
+      // refresh on a cross-site read must not revive a global signed-out state.
+      expect(req.cookies.get(tokenName)?.value).toBe(session.token);
+      const response = NextResponse.next();
+      response.cookies.set(tokenName, "rotated-token");
+      response.cookies.set(refreshName, "rotated-refresh");
+      return response;
+    });
+    const response = (await withSharedLegacySession(middleware, environment)(
+      request("forum.symbaiex.com", cookie, {
+        headers: { "sec-fetch-site": "cross-site", accept: "text/html" },
+      }),
+      event,
+    )) as Response;
+    expect(sharedCookie(response)).toBeUndefined();
   });
 
   test("promotes an existing host session without changing __Host cookie scopes", async () => {
