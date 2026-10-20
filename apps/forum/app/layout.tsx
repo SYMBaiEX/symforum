@@ -11,7 +11,10 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(FORUM_SITE_URL),
@@ -28,10 +31,24 @@ export const metadata: Metadata = {
       "A public discussion board for software, AI systems, open source, and adjacent experiments.",
     type: "website",
     url: FORUM_SITE_URL,
-    images: [{ url: "https://www.symbaiex.com/opengraph-image", width: 1200, height: 630 }],
+    images: [
+      {
+        url: "https://www.symbaiex.com/opengraph-image",
+        width: 1200,
+        height: 630,
+      },
+    ],
   },
   icons: {
-    icon: [{ url: "/favicon.ico", sizes: "any" }, { url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: "/apple-touch-icon.png?v=signal-moth",
+    icon: [
+      { url: "/favicon.ico?v=signal-moth", sizes: "any" },
+      {
+        url: "/images/brand/symforum-icon-64.png",
+        type: "image/png",
+        sizes: "64x64",
+      },
+    ],
   },
 };
 
@@ -44,10 +61,20 @@ export default function ForumRootLayout({
         <meta name="forum-plugin-resource" content={FORUM_PLUGIN_RESOURCE} />
         <style>{FORUM_SHARED_THEME_CSS}</style>
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans text-foreground antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
           <AuthKitConvexProvider>
-            <SiteShell initialForumHost initialPrimarySiteHref="https://www.symbaiex.com/">
+            <SiteShell
+              initialForumHost
+              initialPrimarySiteHref="https://www.symbaiex.com/"
+            >
               <div className="forum-surface relative z-10 min-h-dvh">
                 <ForumWebMcp />
                 {children}
