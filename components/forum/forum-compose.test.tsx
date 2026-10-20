@@ -57,6 +57,57 @@ beforeEach(() => {
 
 vi.mock("./forum-webmcp", () => ({ ForumAgentAttachmentPicker: () => null }));
 import { ForumCompose } from "./forum-compose";
+import { getForumTokenTemplate, TOKEN_POST_TEMPLATE } from "@/lib/forum-token-template";
+
+test.each([
+  [null, TOKEN_POST_TEMPLATE],
+  [JSON.stringify({ version: 1, body: "My saved token draft" }), "My saved token draft"],
+  [JSON.stringify({ version: 1, body: "" }), ""],
+])("token templates seed only new drafts and preserve saved bodies (%s)", (stored, expected) => {
+  const onBodyChange = vi.fn();
+  vi.stubGlobal("window", { localStorage: { getItem: () => stored } });
+  renderToStaticMarkup(
+    <ForumCompose
+      body=""
+      draftKey="token-draft"
+      bodyTemplate={getForumTokenTemplate("crypto-bags")}
+      bodyLabel="First post"
+      bodyPlaceholder="Write"
+      submitLabel="Post"
+      onBodyChange={onBodyChange}
+      onSubmit={() => {}}
+    />,
+  );
+  composeHarness.effects[0]?.();
+  composeHarness.effects[0]?.();
+  expect(onBodyChange).toHaveBeenCalledExactlyOnceWith(expected);
+});
+
+test("token templates are scoped to the Crypto and Bags.App boards", () => {
+  expect(getForumTokenTemplate("crypto")).toBe(TOKEN_POST_TEMPLATE);
+  expect(getForumTokenTemplate("crypto-bags")).toBe(TOKEN_POST_TEMPLATE);
+  expect(getForumTokenTemplate("general")).toBeUndefined();
+  expect(getForumTokenTemplate("research")).toBeUndefined();
+});
+
+test("a token template does not replace a body already being edited", () => {
+  const onBodyChange = vi.fn();
+  vi.stubGlobal("window", { localStorage: { getItem: () => null } });
+  renderToStaticMarkup(
+    <ForumCompose
+      body="My work in progress"
+      draftKey="token-draft"
+      bodyTemplate={TOKEN_POST_TEMPLATE}
+      bodyLabel="First post"
+      bodyPlaceholder="Write"
+      submitLabel="Post"
+      onBodyChange={onBodyChange}
+      onSubmit={() => {}}
+    />,
+  );
+  composeHarness.effects[0]?.();
+  expect(onBodyChange).not.toHaveBeenCalled();
+});
 
 function renderComposer(pending: boolean) {
   return renderToStaticMarkup(

@@ -66,6 +66,7 @@ export function ForumCompose({
   bodyMaxLength,
   bodyTextareaRef,
   bodyPlaceholder,
+  bodyTemplate,
   bodyRows = 7,
   bodyLabel,
   children,
@@ -93,6 +94,7 @@ export function ForumCompose({
   bodyLabel: string;
   bodyMaxLength?: number;
   bodyPlaceholder: string;
+  bodyTemplate?: string;
   bodyTextareaRef?: Ref<HTMLTextAreaElement>;
   bodyRows?: number;
   children?: ReactNode;
@@ -139,6 +141,7 @@ export function ForumCompose({
   useEffect(() => {
     if (!draftKey || loadedDraftKey.current === draftKey) return;
     loadedDraftKey.current = draftKey;
+    let restoredBody = false;
     try {
       const raw = window.localStorage.getItem(draftKey);
       if (raw) {
@@ -160,6 +163,7 @@ export function ForumCompose({
         )
           onDraftDataChange?.(draft.data);
         if (body.trim().length === 0 && typeof draft.body === "string") {
+          restoredBody = true;
           onBodyChange(draft.body);
         }
         if (
@@ -173,10 +177,14 @@ export function ForumCompose({
     } catch {
       // Storage can be unavailable in private or sandboxed browsers.
     } finally {
+      if (!restoredBody && body.trim().length === 0 && bodyTemplate) {
+        onBodyChange(bodyTemplate);
+      }
       setHydratedDraftKey(draftKey);
     }
   }, [
     body,
+    bodyTemplate,
     draftKey,
     onBodyChange,
     onTitleChange,

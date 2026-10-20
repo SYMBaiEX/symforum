@@ -6,6 +6,7 @@ import {
   type ForumPostKind,
 } from "@/lib/forum-experience";
 import { convexRefs } from "@/lib/convex-refs";
+import { getForumTokenTemplate } from "@/lib/forum-token-template";
 
 import { ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
 import {
@@ -847,6 +848,7 @@ function LiveForumThreadList({
                 onTitleChange={setThreadTitle}
                 titlePlaceholder="Short, specific thread title"
                 body={threadBody}
+                bodyTemplate={getForumTokenTemplate(categorySlug)}
                 onBodyChange={setThreadBody}
                 bodyPlaceholder="Open the discussion. Keep the first post concrete."
                 bodyLabel="First post"
