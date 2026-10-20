@@ -1,3 +1,10 @@
+import type { RootContent, PhrasingContent } from "mdast";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
+import { unified } from "unified";
+
+const markdownInlineParser = unified().use(remarkParse).use(remarkGfm);
+
 type ForumBbcodeTextNode = {
   type: "text";
   value: string;
@@ -26,6 +33,7 @@ const SUPPORTED_TAGS = new Set([
   "hr",
   "i",
   "img",
+  "inlinecode",
   "kbd",
   "list",
   "mark",
@@ -57,6 +65,7 @@ const INLINE_TAGS = new Set([
   "b",
   "color",
   "i",
+  "inlinecode",
   "kbd",
   "mark",
   "math",
@@ -277,7 +286,11 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
     const name = (match[2] ?? "").toLowerCase();
     const value = match[3]?.trim();
 
-    if (stack.at(-1)?.name === "code" && !(closing && name === "code")) {
+    const literalTag = stack.at(-1)?.name;
+    if (
+      (literalTag === "code" || literalTag === "inlinecode") &&
+      !(closing && name === literalTag)
+    ) {
       appendText(match[0]);
       continue;
     }
@@ -487,7 +500,7 @@ export function normalizeForumAgentMarkup(input: string) {
   const normalized: string[] = [];
   let protectedBlock: string | null = null;
 
-  for (let index = 0; index < lines.length; ) {
+  for (let index = 0; index < lines.length;) {
     const line = lines[index] ?? "";
     const trimmed = line.trim();
 
@@ -744,7 +757,7 @@ function readMarkdownList(lines: string[], startIndex: number) {
     items.push(normalizeMarkdownLinks(item.body));
     index += 1;
   }
-  if (items.length < 2) {
+  if (items.length < 1) {
     return null;
   }
   return {
@@ -765,10 +778,69 @@ function markdownListItem(line: string) {
 }
 
 function normalizeMarkdownLinks(value: string) {
-  return value.replace(
-    /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/gi,
-    "[url=$2]$1[/url]",
+  // Parse Markdown rather than guessing delimiter pairs with regexes. Keep
+  // block handling and existing BBCode in the established forum pipeline.
+  const markdown = value.replace(
+    /(`+)[\s\S]*?\1|\[(code|inlinecode)(?:=[^\]]*)?\][\s\S]*?\[\/\2\]|(?:\[|<)\/?([a-z0-9*]+)(?:=[^\]>]*)?(?:\]|>)/gi,
+    (
+      match,
+      ticks: string | undefined,
+      literal: string | undefined,
+      name: string | undefined,
+    ) =>
+      ticks
+        ? match
+        : literal || SUPPORTED_TAGS.has(name?.toLowerCase() ?? "")
+          ? "x".repeat(match.length)
+          : match,
   );
+  return markdownInlineParser
+    .parse(markdown)
+    .children.map((node) =>
+      node.type === "paragraph"
+        ? node.children
+            .map((child) => markdownInlineMarkup(child, value))
+            .join("")
+        : markdownSource(node, value),
+    )
+    .join("\n");
+}
+
+function markdownSource(node: RootContent | PhrasingContent, source: string) {
+  return source.slice(node.position?.start.offset, node.position?.end.offset);
+}
+
+function literalInlineCode(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/\[/g, "&#91;")
+    .replace(/\]/g, "&#93;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function markdownInlineMarkup(node: PhrasingContent, source: string): string {
+  if (node.type === "inlineCode") {
+    return `[inlinecode]${literalInlineCode(node.value)}[/inlinecode]`;
+  }
+  if (
+    node.type === "strong" ||
+    node.type === "emphasis" ||
+    node.type === "delete"
+  ) {
+    const tag =
+      node.type === "strong" ? "b" : node.type === "emphasis" ? "i" : "s";
+    return `[${tag}]${node.children.map((child) => markdownInlineMarkup(child, source)).join("")}[/${tag}]`;
+  }
+  if (node.type === "link") {
+    const url = node.url.replace(/[\[\]<>]/g, (character) =>
+      encodeURIComponent(character),
+    );
+    return `[url=${url}]${node.children.map((child) => markdownInlineMarkup(child, source)).join("")}[/url]`;
+  }
+  // Retain source spelling for text/HTML/unknown nodes. In particular, do not
+  // turn escaped BBCode or HTML entities into new executable markup.
+  return markdownSource(node, source);
 }
 
 function splitStructuredRow(line: string, expectedColumns?: number) {

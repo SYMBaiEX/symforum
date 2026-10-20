@@ -869,6 +869,16 @@ function renderInlineNodes(
         </kbd>
       );
     }
+    if (node.name === "inlinecode") {
+      return (
+        <code
+          className="rounded-sm border border-row-border bg-muted/35 px-1.5 py-0.5 font-mono text-[0.85em] [overflow-wrap:anywhere]"
+          key={key}
+        >
+          {decodeForumEntities(forumBbcodeText(node.children))}
+        </code>
+      );
+    }
     if (node.name === "mark") {
       return (
         <mark className="bg-primary/15 px-1 text-foreground" key={key}>

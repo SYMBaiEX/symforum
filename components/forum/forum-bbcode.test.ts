@@ -11,6 +11,63 @@ import {
 } from "./forum-bbcode-model";
 
 describe("forum BBCode parser", () => {
+  test("renders the token post's Markdown labels, linked bold text and mint code", () => {
+    const html = renderToStaticMarkup(
+      ForumBbcodeBody({
+        body:
+          "## Token details\n\n- **Chain:** Solana\n- **Mint address:** `8Ta68iepBAGS`\n\n" +
+          "Uses **Bags domain creator rewards**, with **[symbaiex.com](https://symbaiex.com)** as the recipient.",
+      }),
+    );
+    expect(html).toContain("<strong>Chain:</strong>");
+    expect(html).toContain("<strong>Mint address:</strong>");
+    expect(html).toMatch(/<code[^>]*>8Ta68iepBAGS<\/code>/);
+    expect(html).toContain("<strong>Bags domain creator rewards</strong>");
+    expect(html).toMatch(/<strong><a[^>]*href="https:\/\/symbaiex.com\/"/);
+    expect(html).not.toContain("**");
+    expect(html).not.toContain("`8Ta68iepBAGS`");
+  });
+
+  test("supports nested emphasis, underscore bold, strikethrough and a single list item", () => {
+    const html = renderToStaticMarkup(
+      ForumBbcodeBody({
+        body: "- **Bold and *italic*** plus __also bold__ and ~~old~~.\n\n[quote]**Quoted** text.[/quote]",
+      }),
+    );
+    expect(html).toContain("<strong>Bold and <em>italic</em></strong>");
+    expect(html).toContain("<strong>also bold</strong>");
+    expect(html).toContain("<s>old</s>");
+    expect(html).toContain("<ul");
+    expect(html).toContain("<strong>Quoted</strong>");
+  });
+
+  test("keeps code literal and Markdown normalization idempotent", () => {
+    const body =
+      "`[b]literal[/b] **raw** @nobody` and ``a `tick` here``\n\n" +
+      "[code]**not bold** https://example.com [b]raw[/b][/code]\n\n" +
+      "**[url=https://example.com]Official[/url]**";
+    const normalized = normalizeForumAgentMarkup(body);
+    expect(normalizeForumAgentMarkup(normalized)).toBe(normalized);
+    const html = renderToStaticMarkup(ForumBbcodeBody({ body }));
+    expect(html).toContain("[b]literal[/b] **raw** @nobody</code>");
+    expect(html).toContain("a `tick` here</code>");
+    expect(html).toContain(
+      "**not bold** https://example.com [b]raw[/b]</code>",
+    );
+    expect(html).not.toContain("<strong>raw</strong>");
+  });
+
+  test("sanitizes unsafe Markdown links and never enables raw HTML", () => {
+    const html = renderToStaticMarkup(
+      ForumBbcodeBody({
+        body: "**Safe** [bad](javascript:alert%281%29) <script>alert(1)</script> `&lt;b&gt;`",
+      }),
+    );
+    expect(html).not.toContain('href="javascript:');
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&amp;lt;b&amp;gt;</code>");
+  });
   test("parses a heading followed by a list without requiring a blank line", () => {
     const nodes = parseForumBbcode(
       "[b]Sources and further reading[/b]\n[list]\n[*]Primary source\n[*][b]Field notes[/b]\n[/list]",
