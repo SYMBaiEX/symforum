@@ -117,10 +117,14 @@ export const metadata: Metadata = {
     creator: "@symbiex",
   },
   icons: {
-    apple: "/apple-touch-icon.png",
+    apple: "/apple-touch-icon.png?v=signal-moth",
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=signal-moth", sizes: "any" },
+      {
+        url: "/images/brand/symforum-icon-64.png",
+        type: "image/png",
+        sizes: "64x64",
+      },
     ],
   },
 };
@@ -196,8 +200,7 @@ export default async function RootLayout({
           title="SYMBaiEX Newsletter"
           href={newsletterSiteUrl("/feed/newsletter.xml")}
         />
-        {host?.split(":")[0]?.toLowerCase() ===
-        PRIMARY_PRODUCTION_HOSTNAME ? (
+        {host?.split(":")[0]?.toLowerCase() === PRIMARY_PRODUCTION_HOSTNAME ? (
           <Script
             id="symbaiex-webmcp-discovery"
             strategy="beforeInteractive"
