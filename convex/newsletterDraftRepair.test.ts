@@ -414,7 +414,7 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
   expect(routingConfig).toHaveBeenCalledTimes(1);
 });
 
-test("Belle's Qwen SDK requests use the pinned price ceiling without reasoning output", async () => {
+test("Belle's Mistral SDK requests use the pinned price ceiling without reasoning output", async () => {
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, validDraft);
@@ -429,7 +429,7 @@ test("Belle's Qwen SDK requests use the pinned price ceiling without reasoning o
       ? reviewedDraft(validDraft) : validDraft;
     return new Response(JSON.stringify({
       id: "belle-structured-test", object: "chat.completion", created: 1_760_000_000,
-      model: "qwen/qwen3-235b-a22b-2507",
+      model: "mistralai/mistral-small-3.2-24b-instruct",
       choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(responseContent) },
         finish_reason: "stop" }],
       usage: { prompt_tokens: 100, completion_tokens: 900, total_tokens: 1000 },

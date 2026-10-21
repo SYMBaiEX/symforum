@@ -169,7 +169,7 @@ export const probe = internalAction({
       v.union(
         v.literal("openrouter/free"),
         v.literal("~deepseek/deepseek-v4-flash-latest"),
-        v.literal("qwen/qwen3-235b-a22b-2507"),
+        v.literal("mistralai/mistral-small-3.2-24b-instruct"),
       ),
     ),
   },

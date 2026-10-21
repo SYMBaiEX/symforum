@@ -375,18 +375,18 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
   );
 });
 
-test("Qwen live requests require a Belle or system stage and bounded provider prices", () => {
-  const qwenBody = {
+test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
+  const newsletterBody = {
     ...body,
-    model: "qwen/qwen3-235b-a22b-2507",
+    model: "mistralai/mistral-small-3.2-24b-instruct",
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
       max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
-  delete qwenBody.reasoning;
-  const qwenRequest = (agentSlug, stage, nextBody = qwenBody) =>
+  delete newsletterBody.reasoning;
+  const newsletterRequest = (agentSlug, stage, nextBody = newsletterBody) =>
     request({
       agentSlug,
       stage,
@@ -398,22 +398,33 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     ["system", "health-canary"],
   ]) {
     assert.equal(
-      validateLiveRequest(qwenRequest(agentSlug, stage)).body,
-      qwenBody,
+      validateLiveRequest(newsletterRequest(agentSlug, stage)).body,
+      newsletterBody,
     );
   }
   const cheaperBody = {
-    ...qwenBody,
+    ...newsletterBody,
     provider: {
-      ...qwenBody.provider,
+      ...newsletterBody.provider,
       max_price: { prompt: "0.1", completion: "0.25" },
     },
   };
   assert.equal(
     validateLiveRequest(
-      qwenRequest("belle", "belle:daily-signal:draft", cheaperBody),
+      newsletterRequest("belle", "belle:daily-signal:draft", cheaperBody),
     ).body,
     cheaperBody,
+  );
+  const retiredBody = {
+    ...newsletterBody,
+    model: "qwen/qwen3-235b-a22b-2507",
+  };
+  assert.throws(
+    () =>
+      validateLiveRequest(
+        newsletterRequest("belle", "belle:daily-signal:draft", retiredBody),
+      ),
+    /model_not_allowed/,
   );
   for (const max_price of [
     { prompt: 0.2, completion: "0.5" },
@@ -430,64 +441,64 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     { prompt: "0.2", completion: "0.5", image: "0.1" },
   ]) {
     const invalidBody = {
-      ...qwenBody,
-      provider: { ...qwenBody.provider, max_price },
+      ...newsletterBody,
+      provider: { ...newsletterBody.provider, max_price },
     };
     assert.throws(() =>
       validateLiveRequest(
-        qwenRequest("belle", "belle:daily-signal:draft", invalidBody),
+        newsletterRequest("belle", "belle:daily-signal:draft", invalidBody),
       ),
     );
   }
   for (const invalid of [
-    qwenRequest("suki", "suki:forum-reply"),
-    qwenRequest("mara-venn", "mara-venn:forum-draft"),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
-      provider: { ...qwenBody.provider, require_parameters: false },
+    newsletterRequest("suki", "suki:forum-reply"),
+    newsletterRequest("mara-venn", "mara-venn:forum-draft"),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      provider: { ...newsletterBody.provider, require_parameters: false },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
-      provider: { ...qwenBody.provider, max_price: { prompt: "0.2" } },
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      provider: { ...newsletterBody.provider, max_price: { prompt: "0.2" } },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: {
-        ...qwenBody.provider,
+        ...newsletterBody.provider,
         max_price: { prompt: "0.2", completion: "0" },
       },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: {
-        ...qwenBody.provider,
+        ...newsletterBody.provider,
         max_price: { prompt: "0.21", completion: "0.5" },
       },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: {
-        ...qwenBody.provider,
+        ...newsletterBody.provider,
         max_price: { prompt: "0.2", completion: "0.51" },
       },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: {
-        ...qwenBody.provider,
+        ...newsletterBody.provider,
         max_price: { prompt: "NaN", completion: "0.5" },
       },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       reasoning: { effort: "low" },
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       reasoning_effort: "low",
     }),
-    qwenRequest("belle", "belle:daily-signal:draft", {
-      ...qwenBody,
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       models: ["openrouter/free"],
     }),
   ])

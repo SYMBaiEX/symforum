@@ -148,7 +148,7 @@ function openRouterRequestBody(body: Record<string, unknown>) {
       : [...plugins, { id: "response-healing" }];
   }
   if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
-    // Qwen 2507 is non-thinking. Unsupported reasoning hints can eliminate
+    // This instruct route is non-thinking. Unsupported reasoning hints can eliminate
     // otherwise valid structured-output endpoints under require_parameters.
     delete request.reasoning;
     delete request.reasoning_effort;

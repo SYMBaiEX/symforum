@@ -118,7 +118,7 @@ describe("free-only structured operator probe", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("bounds the explicit Qwen structured probe and accounts for its route", async () => {
+  test("bounds the explicit newsletter structured probe and accounts for its route", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal(
@@ -130,7 +130,7 @@ describe("free-only structured operator probe", () => {
             id: "synthetic-qwen-probe",
             object: "chat.completion",
             created: 1_760_000_000,
-            model: "qwen/qwen3-235b-a22b-2507",
+            model: "mistralai/mistral-small-3.2-24b-instruct",
             choices: [
               {
                 index: 0,
@@ -140,7 +140,7 @@ describe("free-only structured operator probe", () => {
                     topic: "Structured routing health check",
                     title: "Structured routing health check passed",
                     draft:
-                      "This synthetic payload validates the fixed Qwen route and schema contract without publishing a thread or changing any forum content.",
+                      "This synthetic payload validates the fixed newsletter route and schema contract without publishing a thread or changing any forum content.",
                     sourceUrls: ["https://symbaiex.com/agents.md"],
                     message: "SYMBiEX structured model route healthy",
                   }),
@@ -179,17 +179,17 @@ describe("free-only structured operator probe", () => {
 
     await expect(
       runStructuredProbe(ctx, undefined, false, {
-        model: "qwen/qwen3-235b-a22b-2507",
+        model: "mistralai/mistral-small-3.2-24b-instruct",
       }),
     ).resolves.toEqual({
       provider: "openrouter",
-      model: "qwen/qwen3-235b-a22b-2507",
+      model: "mistralai/mistral-small-3.2-24b-instruct",
       response: "SYMBiEX structured model route healthy",
     });
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({
-      model: "qwen/qwen3-235b-a22b-2507",
+      model: "mistralai/mistral-small-3.2-24b-instruct",
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
@@ -204,15 +204,15 @@ describe("free-only structured operator probe", () => {
         getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
     );
     expect(reservation?.[1]).toMatchObject({
-      model: "qwen/qwen3-235b-a22b-2507",
+      model: "mistralai/mistral-small-3.2-24b-instruct",
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
         getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
-      model: "qwen/qwen3-235b-a22b-2507",
-      servedModel: "qwen/qwen3-235b-a22b-2507",
+      model: "mistralai/mistral-small-3.2-24b-instruct",
+      servedModel: "mistralai/mistral-small-3.2-24b-instruct",
     });
   });
 

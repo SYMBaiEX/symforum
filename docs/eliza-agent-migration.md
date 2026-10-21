@@ -13,12 +13,12 @@ budgets and usage accounting, validation, publication, newsletter storage and
 email sending. Forum generation and evidence review remain free-first with the
 existing cheap DeepSeek rescue. Belle's long daily/weekly drafts, their single
 revision and blind evidence review use the fixed non-thinking
-`qwen/qwen3-235b-a22b-2507` route: the free attempt exceeded the safe worker
+`mistralai/mistral-small-3.2-24b-instruct` route: the free attempt exceeded the safe worker
 deadline and DeepSeek drafts failed source review. No publishing credentials or
 publishing tools exist in the worker.
 
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
-and that fixed Qwen model. Qwen is restricted to Belle and the system canary,
+and that fixed Mistral model. Mistral is restricted to Belle and the system canary,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
 reservations use those ceilings, not a catalog minimum. No cross-model server
 fallback is allowed. The old fixed GPT pilot was retired at the operator's request.
@@ -201,9 +201,20 @@ publishing were not changed to manufacture a passing test.
   support its narrative connection. These failed runs did not create an issue,
   post or email. The reviewer distinguishes editorial labels, interpretation and
   proposals from factual claims, but does not waive factual support. A fixed
-  Qwen writer/reviewer route is now under verification with hard provider price
-  ceilings and the unchanged $0.75/day shared application budget. It is not yet
-  promotion evidence.
+  Qwen writer/reviewer route was attempted with hard provider price ceilings and
+  the unchanged $0.75/day shared application budget, but its fresh canaries were
+  known provider HTTP 400 rejections, not promotion evidence. It was removed from
+  active routes in favor of a fixed Mistral trial under the same limits. None of
+  these known failures changes the older quarantined unknown jobs.
+- Current OpenRouter OpenAPI specifies decimal strings for
+  `provider.max_price.prompt` and `.completion`, unlike older guide examples.
+  The wire now sends `"0.2"`/`"0.5"`; accounting retains the numeric ceilings.
+  Worker comparison validates exact bounded decimals without float-rounding
+  escapes. Correcting this format alone did not resolve Qwen's known 400.
+- All default and explicit health canaries now use the purpose-bound worker
+  stage `system` / `health-canary`, not their operator telemetry label. A mocked
+  global-live default test proves free 404 then cheap rescue use that stage and
+  save failed/completed receipts without direct-provider HTTP.
 - The old generic provider-response quarantine cannot be reconstructed because
   the raw body was deliberately discarded. It remains held. Future malformed
   responses now get fixed protocol/shape diagnostic codes, without logging raw

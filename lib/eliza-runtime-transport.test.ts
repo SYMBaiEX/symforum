@@ -41,7 +41,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("Eliza live compatible transport", () => {
   test.each(["belle", "system"])(
-    "carries the price-capped Qwen SDK request and receipt for %s",
+    "carries the price-capped newsletter SDK request and receipt for %s",
     async (agentSlug) => {
       const onRequest = vi.fn();
       const onReceipt = vi.fn();
@@ -110,7 +110,7 @@ describe("Eliza live compatible transport", () => {
     },
   );
 
-  test("does not admit a Qwen request for other personas", async () => {
+  test("does not admit a bounded newsletter model request for other personas", async () => {
     const workerFetch = vi.fn();
     const onRequest = vi.fn();
     vi.stubGlobal("fetch", workerFetch);

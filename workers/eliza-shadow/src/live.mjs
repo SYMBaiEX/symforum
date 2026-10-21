@@ -14,10 +14,10 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
-  "qwen/qwen3-235b-a22b-2507",
+  "mistralai/mistral-small-3.2-24b-instruct",
 ]);
-const QWEN_MODEL = "qwen/qwen3-235b-a22b-2507";
-function withinQwenPriceCap(value, ceilingDigit) {
+const BOUNDED_NEWSLETTER_MODEL = "mistralai/mistral-small-3.2-24b-instruct";
+function withinNewsletterPriceCap(value, ceilingDigit) {
   if (
     typeof value !== "string" ||
     value.length > 32 ||
@@ -308,7 +308,7 @@ export function validateLiveRequest(input) {
         ? "model_not_allowed"
         : "invalid_request",
     );
-  if (body.model === QWEN_MODEL) {
+  if (body.model === BOUNDED_NEWSLETTER_MODEL) {
     const price = body.provider?.max_price;
     if (
       !["belle", "system"].includes(input.agentSlug) ||
@@ -319,8 +319,8 @@ export function validateLiveRequest(input) {
       !Object.keys(price).every((key) =>
         ["prompt", "completion"].includes(key),
       ) ||
-      !withinQwenPriceCap(price.prompt, "2") ||
-      !withinQwenPriceCap(price.completion, "5")
+      !withinNewsletterPriceCap(price.prompt, "2") ||
+      !withinNewsletterPriceCap(price.completion, "5")
     )
       throw new WorkerError("invalid_request");
   }
@@ -390,7 +390,7 @@ export function validateLiveRequest(input) {
             "data_collection",
             "quantizations",
             "sort",
-            ...(body.model === QWEN_MODEL ? ["max_price"] : []),
+            ...(body.model === BOUNDED_NEWSLETTER_MODEL ? ["max_price"] : []),
           ].includes(key),
       ))
   )

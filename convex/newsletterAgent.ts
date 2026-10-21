@@ -48,7 +48,7 @@ import {
 // Keep both Belle's writer and independent evidence reviewer on the same
 // bounded, non-thinking newsletter route for this trial.
 export const NEWSLETTER_MODEL_IDS = [OPENROUTER_NEWSLETTER_MODEL] as const;
-const PROMPT_VERSION = "belle-newsletter-v16-qwen-evidence-review";
+const PROMPT_VERSION = "belle-newsletter-v17-mistral-evidence-review";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
