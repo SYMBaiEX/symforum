@@ -403,13 +403,15 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(result.shadowEnqueue?.status).toBe("queued");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
-  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v33-focused-lead-revision");
+  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v34-event-bound-durations");
   const system = JSON.parse(shadow[0]!.inputJson).system as string;
   expect(system).toContain(
     "Do not turn a report that only documents hidden instructions into a categorical claim of no assistant exposure",
   );
   expect(system).toContain("keep digits, units, ranges, and qualifiers");
   expect(system).toContain("Keep began-building, launch, observation, and report-publication events separate");
+  expect(system).toContain("Omit nonessential build, generation, and launch durations from takeaways");
+  expect(system).toContain("Do not share a time modifier across conjoined event verbs");
   expect(system).toContain("a property of a noteworthy subset must not be assigned to every item in the larger count");
   expect(system).toContain("If a lead needs more than four quotes, remove clauses");
   expect(system).toContain("add a new numeric or temporal fact there only when essential and literally supported by the source");
@@ -1006,6 +1008,11 @@ test("Belle's fixed-model SDK requests use low private reasoning within the pinn
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("editorial label; factual assertions still need evidence");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Do not demand one source support a compound claim about multiple sources");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A proposal to check something is not a claim that it was already observed");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Check every event verb and its time modifier separately, including conjoined verbs");
+  const reviewMessages = requestBodies[2]?.messages as Array<{ role: string; content: string }>;
+  const reviewPacket = JSON.parse(reviewMessages.find(message => message.role === "user")!.content) as { task: string };
+  expect(reviewPacket.task).toContain('"Generated pages in a single day" does not support "launched pages in one day"');
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A matching duration or date in an exact selected quote is insufficient when it describes a different event");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("unrelated topics are not automatically a coherent synthesis");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("production-grade inference is now open source");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Hidden instructions found in pages establish their presence, not that a model obeyed them");
