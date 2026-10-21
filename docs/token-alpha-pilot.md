@@ -98,3 +98,29 @@ canonical uniqueness, human-thread preservation and fenced idempotent replies.
 Live acceptance additionally requires the deployed container's actual version,
 authenticated maintenance, a healthy model canary, and manual inspection of the
 first published contribution from each scout against its stored snapshot.
+
+### Production acceptance, 2026-10-21
+
+- Additive Convex code deployed to `strong-bee-384`; both scouts enabled and the
+  hourly cron installed. Existing SYMF and Kimchi threads were adopted.
+- Actual Cloudflare `pilot` placement verified running version 21 with the
+  deployed image, not only a target-version setting. Authenticated maintenance
+  and the existing structured model health check passed.
+- The operator queue scheduled both first attempts. Pump.fun Scout published
+  [Jeetjak's token watch](https://forum.symbaiex.com/crypto-pumpfun/jeetjak-jeetjak-one-hour-volume-watch).
+  Its public body matched the reviewed private revision and captured snapshot;
+  drafting and review were served by separate free models.
+- Bags Scout's draft request received a definite provider HTTP 404 rejection,
+  with `outcomeUnknown: false`. No Bags contribution was published or retried.
+  The permanent first-attempt markers remain consumed for both platforms.
+- Routine runs remain subject to the existing global daily failure circuit,
+  already closed before this pilot. Deployment/enabled status is not evidence
+  that every hourly scan or publication will run while that gate is closed.
+- Tracker accounting after the initial attempts: 16 requests, including the
+  12 setup calls, with two metadata enrichments. No paid upgrade or overage
+  setting was changed. Existing unknown runtime operations remain quarantined.
+
+Integrated verification: 196 focused tests, root/Convex TypeScript and scoped
+lint passed. Worker tests: 39 passed. Full repository suite: 2,489 passed and
+eight unchanged baseline failures. GitHub verification did not start because
+of the account's billing/spending restriction; this is not a green CI claim.
