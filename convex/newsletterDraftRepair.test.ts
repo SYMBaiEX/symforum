@@ -62,7 +62,7 @@ const validDraft = dailyDraftSchema.parse({
   headline: "Keep the boundary beside the reported outcome",
   dek: "Three source records show why a technical comparison needs its original settings, execution limits, and sample selection beside the final interpretation.",
   thesis: "A comparison becomes inspectable only when another reader can recover the prompt and evaluator settings, the permission boundary around execution, and the origins of the observations being compared.",
-  lead: "A neat score can hide several different questions. A manifest can omit a field that changes what was asked; an execution failure can be confused with model behavior; a selected sample can quietly narrow the conclusion. The three source records in this edition describe those boundaries from different angles. Together, they suggest a practical habit: keep the source record at the point where a decision is made, not just in an archive discovered after a dispute. That habit does not prove any model or process is superior. It makes the argument easier for someone else to inspect, challenge, and improve. Before relying on a summary, ask which missing field would make you rerun the comparison from its recorded inputs.",
+  lead: "A neat score can hide several different questions. A manifest can omit a field that changes what was asked; an execution failure can be confused with model behavior; a selected sample can quietly narrow the conclusion. The three source records in this edition describe those boundaries from different angles. Together, they suggest a practical habit: keep the source record at the point where a decision is made, not just in an archive discovered after a dispute. It proves no model superior. It also makes the argument easier for someone else to inspect, challenge, and improve. Before relying on any summary, ask which missing field would make you rerun the comparison from its recorded inputs.",
   heroHnItemId: 1,
   chart: {
     title: "Editorial relevance of source records",
@@ -72,7 +72,7 @@ const validDraft = dailyDraftSchema.parse({
     })),
   },
   practicalMoves: [
-    "Capture prompt and evaluator settings before the run, so a later review cannot silently replace the question that produced the result.",
+    "Capture original prompt and evaluator settings before the run, so a later review cannot silently replace the question that produced the result.",
     "Record tool permission failures separately from model output, because those two failure modes call for different corrective actions.",
     "Keep sample selection rules near the conclusion, then ask whether the observations reflect the population relevant to the decision.",
     "Leave unknown fields marked as unknown and require a fresh run when a high-impact conclusion depends on reconstructing them.",
@@ -210,6 +210,9 @@ test("daily writer counts only publication prose and keeps the same target on re
     expect(prompt).toContain("excludes subject, headline, all chart text and notes, JSON keys, IDs, and URLs");
     expect(prompt).toContain("not padding or repeated claims");
     expect(prompt).toContain("summary at or below 320 characters in two focused factual sentences");
+    expect(prompt).toContain("70-100 word lead");
+    expect(prompt).toContain("why-it-matters at 220–320 characters");
+    expect(prompt).toContain("three or four distinct 20-25 word takeaways per story");
   }
 });
 
@@ -400,7 +403,7 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(result.shadowEnqueue?.status).toBe("queued");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
-  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v32-focused-implication");
+  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v33-focused-lead-revision");
   const system = JSON.parse(shadow[0]!.inputJson).system as string;
   expect(system).toContain(
     "Do not turn a report that only documents hidden instructions into a categorical claim of no assistant exposure",
@@ -408,9 +411,12 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(system).toContain("keep digits, units, ranges, and qualifiers");
   expect(system).toContain("Keep began-building, launch, observation, and report-publication events separate");
   expect(system).toContain("a property of a noteworthy subset must not be assigned to every item in the larger count");
-  expect(system).toContain("if its facts would need more than four quotes in total, remove clauses");
+  expect(system).toContain("If a lead needs more than four quotes, remove clauses");
   expect(system).toContain("add a new numeric or temporal fact there only when essential and literally supported by the source");
   expect(system).toContain("each whyItMatters at 220–320 characters and never above its generated 400-character ceiling");
+  expect(system).toContain("lead at 350–550 characters and never above its generated 700-character ceiling");
+  expect(system).toContain("one concise attributed factual premise from one selected source");
+  expect(system).toContain("put other stories' facts and caveats in their own story fields");
   expect(system).toContain("Make whyItMatters one focused conditional implication or decision and a useful next check");
   expect(system).toContain("Do not inventory features, versions, benchmark conditions, or scope there");
   expect(system).toContain("preserve material caveats in the appropriate story field instead of dropping them");
@@ -925,6 +931,11 @@ test("Belle's fixed-model SDK requests use low private reasoning within the pinn
   expect(writerProperties.stories.items?.properties?.whyItMatters).toMatchObject({
     type: "string", minLength: 90, maxLength: 400,
   });
+  for (const writerSchema of schemas.slice(0, 2)) {
+    expect((writerSchema.properties as Record<string, unknown>).lead).toMatchObject({
+      type: "string", minLength: 180, maxLength: 700,
+    });
+  }
   const reviewSchema = schemas[2]!;
   const reviewProperties = reviewSchema.properties as Record<string, {
     anyOf?: Array<{ type: string }>;
@@ -963,7 +974,7 @@ test("Belle's fixed-model SDK requests use low private reasoning within the pinn
     expect(JSON.stringify(body.messages)).toContain("at most four short original source passages");
     expect(JSON.stringify(body.messages)).toContain("prefer three genuinely connected source anchors");
     expect(JSON.stringify(body.messages)).toContain("remove a factual premise from an unselected source");
-    expect(JSON.stringify(body.messages)).toContain("at most one figure or version overall");
+    expect(JSON.stringify(body.messages)).toContain("one concise attributed factual premise from one selected source");
     expect(JSON.stringify(body.messages)).toContain("at most one figure or version rather than enumerating metrics");
     expect(JSON.stringify(body.messages)).toContain('Name the exact supported model from a source list instead of inferring a count such as \\"one model\\"');
     expect(JSON.stringify(body.messages)).toContain("Do not force unrelated reports into a shared observed failure");

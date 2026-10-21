@@ -596,6 +596,28 @@ describe("Belle editorial scoring", () => {
     expect(weeklyDraftSchema.safeParse(weekly).success).toBe(true);
   });
 
+  test("generated leads stop at 700 while historical drafts retain 1200", () => {
+    const draft = dailyDraft();
+    const { items: _items, ...chart } = draft.chart;
+    const withLead = (length: number) => ({ ...draft, lead: "A".repeat(length) });
+    expect(generatedDailyDraftSchema.safeParse({ ...withLead(700), chart }).success).toBe(true);
+    expect(generatedDailyDraftSchema.safeParse({ ...withLead(701), chart }).success).toBe(false);
+    expect(dailyDraftSchema.safeParse(withLead(1_200)).success).toBe(true);
+    expect(dailyDraftSchema.safeParse(withLead(1_201)).success).toBe(false);
+    const weekly = {
+      ...draft,
+      stories: [...draft.stories, story(4, "another report"), story(5, "fifth report")],
+      sections: Array.from({ length: 4 }, (_, index) => ({
+        heading: `Section ${index + 1}`,
+        body: long("The section develops a source-specific consequence.", 300),
+      })),
+    };
+    expect(generatedWeeklyDraftSchema.safeParse({ ...weekly, chart, lead: "A".repeat(700) }).success).toBe(true);
+    expect(generatedWeeklyDraftSchema.safeParse({ ...weekly, chart, lead: "A".repeat(701) }).success).toBe(false);
+    expect(weeklyDraftSchema.safeParse({ ...weekly, lead: "A".repeat(1_200) }).success).toBe(true);
+    expect(weeklyDraftSchema.safeParse({ ...weekly, lead: "A".repeat(1_201) }).success).toBe(false);
+  });
+
   test("binds a complete editorial-priority chart caption before review", () => {
     const generated = dailyDraft();
     generated.chart.title = "How independently checkable is each claim?";
@@ -689,6 +711,20 @@ describe("Belle editorial scoring", () => {
         imageCredit: "one.example",
       },
       {
+        id: "newsletter-2-1",
+        sourceKey: "newsletter-hn-2",
+        sourceName: "two.example",
+        sourceFeedUrl: "https://news.ycombinator.com/",
+        title: "Migration boundary",
+        url: "https://two.example/migration",
+        summary: "Second selected source retains its full summary. ".repeat(24),
+        boardSlugs: ["news-hacker-news"],
+        articleTitle: "Migration boundary in versioned jobs",
+        articleDescription: "Second selected description. ".repeat(40),
+        articleText: `${"Second selected article evidence. ".repeat(110)}The migration excludes older jobs.`,
+        imageCredit: "two.example",
+      },
+      {
         id: "newsletter-99-1",
         sourceKey: "newsletter-hn-99",
         sourceName: "ninety-nine.example",
@@ -722,6 +758,7 @@ describe("Belle editorial scoring", () => {
       sourceSummary?: string;
     }>;
     const selectedSource = packet.find((source) => source.hnItemId === 1)!;
+    const secondSelectedSource = packet.find((source) => source.hnItemId === 2)!;
     const alternativeSource = packet.find((source) => source.hnItemId === 99)!;
 
     expect(selectedArticleText.length).toBeGreaterThan(2_800);
@@ -733,26 +770,35 @@ describe("Belle editorial scoring", () => {
     expect(selectedSource.description).toBe(selectedDescription);
     expect(selectedSource.sourceSummary).toBe(selectedSummary);
     expect(selectedSource.articleText).toContain("not included in this release");
+    expect(secondSelectedSource.sourceSummary).toBe(snapshots[1]!.summary);
+    expect(secondSelectedSource.description).toBe(snapshots[1]!.articleDescription);
+    expect(secondSelectedSource.articleText).toBe(snapshots[1]!.articleText);
+    expect(secondSelectedSource.articleText).toContain("migration excludes older jobs");
     expect(alternativeSource.articleText.length).toBeLessThanOrEqual(450);
     expect(alternativeSource.sourceSummary).toBeUndefined();
     expect(prompt).toContain("Selected sources below include their full original summary, description, and article text");
   });
 
-  test("writer prompts retain recent source IDs but withhold verbatim editorial frames", () => {
+  test("writer withholds recent frames but revision retains its own opening for focused repair", () => {
     const copied = "When claims outpace proof, the burden shifts to the builder";
     const previousDraft = {
       ...dailyDraft(), subject: copied, headline: copied,
       dek: copied, thesis: copied, lead: copied,
     };
-    const prompt = editorialPrompt(
-      { edition: "daily-signal", runDate: "2026-10-20", snapshotDate: "2026-10-20" },
-      [], { headlines: [copied], theses: [copied], storyIds: [42] },
-      { feedback: ["subject, headline repeats a recent editorial frame"], previousDraft },
-    );
-    expect(prompt).not.toContain(copied);
+    const args = { edition: "daily-signal" as const, runDate: "2026-10-20", snapshotDate: "2026-10-20" };
+    const recent = { headlines: [copied], theses: [copied], storyIds: [42] };
+    const initialPrompt = editorialPrompt(args, [], recent);
+    const prompt = editorialPrompt(args, [], recent,
+      { feedback: ["subject, headline repeats a recent editorial frame"], previousDraft });
+    expect(initialPrompt).not.toContain(copied);
+    expect(prompt).toContain(JSON.stringify(previousDraft));
     expect(prompt).toContain('"recentlyUsedStoryIds":[42]');
     expect(prompt).toContain("recentHeadlineCount");
     expect(prompt).toContain("practicalMoves");
+    expect(prompt).toContain("Fix the specifically reported fields and any connected consistency issues");
+    expect(prompt).toContain("preserve already-supported, unaffected fields and source choices");
+    expect(prompt).toContain("Return a complete package and review all fields for consistency");
+    expect(prompt).not.toContain("rewrite the subject, headline, dek, thesis, and lead from scratch");
   });
 
   test("blocks a number that is absent from its story's own source", () => {
