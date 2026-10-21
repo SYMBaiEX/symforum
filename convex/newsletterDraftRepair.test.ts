@@ -454,7 +454,7 @@ test("Belle's Qwen SDK requests use the pinned price ceiling without reasoning o
     expect(body).toMatchObject({
       model: NEWSLETTER_MODEL_IDS[0],
       max_tokens: 8000,
-      provider: { max_price: { prompt: 0.2, completion: 0.5 } },
+      provider: { max_price: { prompt: "0.2", completion: "0.5" } },
     });
     expect(body.reasoning).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
@@ -466,7 +466,7 @@ test("Belle's Qwen SDK requests use the pinned price ceiling without reasoning o
   }
   expect(requestBodies[2]).toMatchObject({
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
-    provider: { max_price: { prompt: 0.2, completion: 0.5 } },
+    provider: { max_price: { prompt: "0.2", completion: "0.5" } },
   });
   expect(requestBodies[2]?.reasoning).toBeUndefined();
   expect(requestBodies[2]?.reasoning_effort).toBeUndefined();

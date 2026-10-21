@@ -382,7 +382,7 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
-      max_price: { prompt: 0.2, completion: 0.5 },
+      max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
   delete qwenBody.reasoning;
@@ -406,7 +406,7 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     ...qwenBody,
     provider: {
       ...qwenBody.provider,
-      max_price: { prompt: 0.1, completion: 0.25 },
+      max_price: { prompt: "0.1", completion: "0.25" },
     },
   };
   assert.equal(
@@ -415,6 +415,30 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     ).body,
     cheaperBody,
   );
+  for (const max_price of [
+    { prompt: 0.2, completion: "0.5" },
+    { prompt: "0.2", completion: 0.5 },
+    { prompt: "2e-1", completion: "0.5" },
+    { prompt: "0.2", completion: "5e-1" },
+    { prompt: " 0.2", completion: "0.5" },
+    { prompt: "0.2", completion: "Infinity" },
+    { prompt: "-0.1", completion: "0.5" },
+    { prompt: "0.2", completion: "0" },
+    { prompt: "0.2000000000000001", completion: "0.5" },
+    { prompt: "0.2", completion: "0.5000000000000001" },
+    { prompt: "0.20", completion: "0.5" },
+    { prompt: "0.2", completion: "0.5", image: "0.1" },
+  ]) {
+    const invalidBody = {
+      ...qwenBody,
+      provider: { ...qwenBody.provider, max_price },
+    };
+    assert.throws(() =>
+      validateLiveRequest(
+        qwenRequest("belle", "belle:daily-signal:draft", invalidBody),
+      ),
+    );
+  }
   for (const invalid of [
     qwenRequest("suki", "suki:forum-reply"),
     qwenRequest("mara-venn", "mara-venn:forum-draft"),
@@ -424,34 +448,34 @@ test("Qwen live requests require a Belle or system stage and bounded provider pr
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {
       ...qwenBody,
-      provider: { ...qwenBody.provider, max_price: { prompt: 0.2 } },
+      provider: { ...qwenBody.provider, max_price: { prompt: "0.2" } },
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {
       ...qwenBody,
       provider: {
         ...qwenBody.provider,
-        max_price: { prompt: 0.2, completion: 0 },
+        max_price: { prompt: "0.2", completion: "0" },
       },
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {
       ...qwenBody,
       provider: {
         ...qwenBody.provider,
-        max_price: { prompt: 0.21, completion: 0.5 },
+        max_price: { prompt: "0.21", completion: "0.5" },
       },
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {
       ...qwenBody,
       provider: {
         ...qwenBody.provider,
-        max_price: { prompt: 0.2, completion: 0.51 },
+        max_price: { prompt: "0.2", completion: "0.51" },
       },
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {
       ...qwenBody,
       provider: {
         ...qwenBody.provider,
-        max_price: { prompt: NaN, completion: 0.5 },
+        max_price: { prompt: "NaN", completion: "0.5" },
       },
     }),
     qwenRequest("belle", "belle:daily-signal:draft", {

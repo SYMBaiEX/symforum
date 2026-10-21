@@ -155,7 +155,13 @@ function openRouterRequestBody(body: Record<string, unknown>) {
     request.provider = {
       ...(request.provider as Record<string, unknown> | undefined),
       require_parameters: true,
-      max_price: { ...OPENROUTER_NEWSLETTER_PRICE_CEILING },
+      // The current ProviderPreferences OpenAPI contract uses decimal strings,
+      // unlike older guide examples. Numeric policy values stay in accounting.
+      // https://openrouter.ai/openapi.json (verified 2026-10-20)
+      max_price: {
+        prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
+        completion: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.completion),
+      },
     };
     return request;
   }

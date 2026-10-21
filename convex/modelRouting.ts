@@ -15,7 +15,6 @@ import {
   ModelSpendBudgetExceededError,
   routedModelCandidates,
   runRoutedCandidates,
-  runWithModelFallback,
   type ModelRoutingConfig,
   type RoutedModel,
 } from "../lib/ai-model-routing";
@@ -299,36 +298,29 @@ export async function runStructuredProbe(
       };
     },
   };
-  const generation =
-    provider === undefined && !freeOnly && !options?.model
-      ? await runWithModelFallback<{
-          response: string;
-          modelId: string;
-          inputTokens?: number;
-          outputTokens?: number;
-          usage: { raw?: unknown };
-        }>(config, routeArgs)
-      : await runRoutedCandidates(
-          (
-            await routedModelCandidates(
-              config,
-              options?.model
-                ? [options.model]
-                : freeOnly
-                  ? ["openrouter/free"]
-                  : undefined,
-              { agentSlug: "system", stage: "health-canary", correlationId },
-            )
-          ).filter(
-            (candidate) =>
-              provider === undefined || candidate.provider === provider,
-          ),
-          {
-            ...routeArgs,
-            beforeAttempt: config.beforeAttempt,
-            afterAttempt: config.afterAttempt,
-          },
-        );
+  // Every canary path, including the hourly default, must use the worker's
+  // purpose-bound system stage. The operator telemetry label is not a runtime
+  // stage and must never be sent as one when global live mode is enabled.
+  const generation = await runRoutedCandidates(
+    (
+      await routedModelCandidates(
+        config,
+        options?.model
+          ? [options.model]
+          : freeOnly
+            ? ["openrouter/free"]
+            : undefined,
+        { agentSlug: "system", stage: "health-canary", correlationId },
+      )
+    ).filter(
+      (candidate) => provider === undefined || candidate.provider === provider,
+    ),
+    {
+      ...routeArgs,
+      beforeAttempt: config.beforeAttempt,
+      afterAttempt: config.afterAttempt,
+    },
+  );
   await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
     runKey: correlationId,
     reservationKey: generation.route.reservationKey,

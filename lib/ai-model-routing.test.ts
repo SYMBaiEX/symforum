@@ -185,7 +185,10 @@ describe("OpenRouter-only model routing", () => {
         max_tokens: 4_000,
         provider: {
           require_parameters: true,
-          max_price: OPENROUTER_NEWSLETTER_PRICE_CEILING,
+          max_price: {
+            prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
+            completion: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.completion),
+          },
         },
       });
       expect(bodies[0].reasoning).toBeUndefined();

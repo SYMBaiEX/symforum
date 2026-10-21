@@ -164,8 +164,7 @@ describe("free-only structured operator probe", () => {
         args: unknown,
       ) => {
         if (
-          getFunctionName(reference) ===
-          "aiRoutingControlData:reserveModelCall"
+          getFunctionName(reference) === "aiRoutingControlData:reserveModelCall"
         ) {
           return { accepted: true, reservationKey: "qwen-probe-reservation" };
         }
@@ -194,7 +193,7 @@ describe("free-only structured operator probe", () => {
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
-        max_price: { prompt: 0.2, completion: 0.5 },
+        max_price: { prompt: "0.2", completion: "0.5" },
       },
     });
     expect(bodies[0].reasoning).toBeUndefined();
@@ -209,12 +208,182 @@ describe("free-only structured operator probe", () => {
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
-        getFunctionName(reference) ===
-        "forumAgentEditorialData:recordUsage",
+        getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
       model: "qwen/qwen3-235b-a22b-2507",
       servedModel: "qwen/qwen3-235b-a22b-2507",
     });
+  });
+
+  test("default live canary stays on the health-canary worker route through a model fallback", async () => {
+    const workerUrl = "https://eliza-worker.example";
+    const workerSecret = "synthetic-worker-secret-that-is-long-enough";
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+    vi.stubEnv("ELIZA_RUNTIME_MODE", "live");
+    vi.stubEnv("ELIZA_RUNTIME_WORKER_URL", workerUrl);
+    vi.stubEnv("ELIZA_RUNTIME_WORKER_SECRET", workerSecret);
+
+    const requests: Array<Record<string, unknown>> = [];
+    const responses: Array<Record<string, unknown>> = [];
+    const workerFetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe(`${workerUrl}/complete`);
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          `Bearer ${workerSecret}`,
+        );
+        const envelope = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
+        requests.push(envelope);
+        expect(envelope).toMatchObject({
+          version: 2,
+          agentSlug: "system",
+          stage: "health-canary",
+          body: {
+            provider: { require_parameters: true },
+            response_format: { type: "json_schema" },
+          },
+        });
+
+        if (requests.length === 1) {
+          expect(envelope.body).toMatchObject({ model: "openrouter/free" });
+          return Response.json(
+            {
+              error: "provider_rejected_model",
+              providerStatus: 404,
+              outcomeUnknown: false,
+            },
+            { status: 404 },
+          );
+        }
+
+        expect(envelope.body).toMatchObject({
+          model: "~deepseek/deepseek-v4-flash-latest",
+        });
+        const completion = {
+          id: "synthetic-live-canary",
+          object: "chat.completion",
+          created: 1_760_000_000,
+          model: "deepseek/deepseek-v4-flash-latest",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  topic: "Structured routing health check",
+                  title: "Structured routing health check passed",
+                  draft:
+                    "This synthetic payload validates a live worker fallback and schema-valid tool submission without publishing a thread or changing forum content.",
+                  sourceUrls: ["https://symbaiex.com/agents.md"],
+                  message: "SYMBiEX structured model route healthy",
+                }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 100,
+            total_tokens: 200,
+          },
+        };
+        return Response.json({
+          ...envelope,
+          runtimeVersion: "1.7.2",
+          completion,
+        });
+      },
+    );
+    vi.stubGlobal("fetch", workerFetch);
+
+    const runQuery = vi.fn(
+      async (
+        reference: Parameters<typeof getFunctionName>[0],
+        _args: unknown,
+      ) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === "elizaRuntimeData:assertOperationReady")
+          return null;
+        if (functionName === "aiRoutingControlData:readRoutingControl")
+          return { disabledModelIds: [] };
+        throw new Error(`Unexpected query ${functionName}`);
+      },
+    );
+    const runMutation = vi.fn(
+      async (
+        reference: Parameters<typeof getFunctionName>[0],
+        args: unknown,
+      ) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === "aiRoutingControlData:reserveModelCall")
+          return {
+            accepted: true,
+            reservationKey: "synthetic-paid-route-reservation",
+          };
+        if (functionName === "elizaRuntimeData:recordReceipt") {
+          responses.push(args as Record<string, unknown>);
+          return null;
+        }
+        return null;
+      },
+    );
+    const ctx = { runQuery, runMutation } as unknown as ActionCtx;
+
+    await expect(runStructuredProbe(ctx)).resolves.toEqual({
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash-latest",
+      response: "SYMBiEX structured model route healthy",
+    });
+
+    expect(workerFetch).toHaveBeenCalledTimes(2);
+    expect(
+      requests.map(
+        (request) => (request.body as Record<string, unknown>).model,
+      ),
+    ).toEqual(["openrouter/free", "~deepseek/deepseek-v4-flash-latest"]);
+    expect(responses).toHaveLength(2);
+    expect(responses[0]).toMatchObject({
+      agentSlug: "system",
+      stage: "health-canary",
+      model: "openrouter/free",
+      status: "failed",
+      providerStatus: 404,
+      outcomeUnknown: false,
+    });
+    expect(responses[1]).toMatchObject({
+      agentSlug: "system",
+      stage: "health-canary",
+      model: "~deepseek/deepseek-v4-flash-latest",
+      servedModel: "deepseek/deepseek-v4-flash-latest",
+      status: "completed",
+      runtimeVersion: "1.7.2",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    const recordUsage = runMutation.mock.calls.find(
+      ([reference]) =>
+        getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
+    );
+    expect(recordUsage?.[1]).toMatchObject({
+      model: "~deepseek/deepseek-v4-flash-latest",
+      servedModel: "deepseek/deepseek-v4-flash-latest",
+    });
+    expect(
+      runMutation.mock.calls.filter(
+        ([reference]) =>
+          getFunctionName(reference) === "elizaRuntimeData:reserveCall",
+      ),
+    ).toHaveLength(2);
+    expect(
+      runQuery.mock.calls.map(([reference]) => getFunctionName(reference)),
+    ).toEqual(
+      expect.arrayContaining([
+        "elizaRuntimeData:assertOperationReady",
+        "aiRoutingControlData:readRoutingControl",
+      ]),
+    );
   });
 });

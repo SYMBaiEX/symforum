@@ -55,7 +55,7 @@ describe("Eliza live compatible transport", () => {
               model: OPENROUTER_NEWSLETTER_MODEL,
               provider: {
                 require_parameters: true,
-                max_price: { prompt: 0.2, completion: 0.5 },
+                max_price: { prompt: "0.2", completion: "0.5" },
               },
             },
           });
