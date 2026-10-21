@@ -5,6 +5,7 @@ import { getFunctionName } from "convex/server";
 import * as modelRouting from "../lib/ai-model-routing";
 import * as convexRouting from "./modelRouting";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { MAX_FORUM_AGENT_CLAIMS } from "../lib/forum-agent-claim-limits";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
@@ -60,9 +61,9 @@ describe("Suki forum research helpers", () => {
     );
   });
 
-  test("writer and rewrite schema binds evidence IDs and allows a complete long-body ledger", () => {
+  test("writer and rewrite schema binds evidence IDs and enforces the stored claim limit", () => {
     const schema = forumDraftSchemaForSources(["source-a", "source-b"]);
-    const claims = Array.from({ length: 48 }, (_, index) => ({
+    const claims = Array.from({ length: MAX_FORUM_AGENT_CLAIMS }, (_, index) => ({
       claim: `Source-supported body statement ${index + 1}.`,
       sourceCandidateId: index % 2 ? "source-a" : "source-b",
       confidence: "high" as const,
@@ -77,10 +78,7 @@ describe("Suki forum research helpers", () => {
       originalValue: [claims[0].claim],
       discussionQuestion: "",
     };
-    expect(
-      schema.parse({ ...draft, claims: claims.slice(0, 13) }).claims,
-    ).toHaveLength(13);
-    expect(schema.parse(draft).claims).toHaveLength(48);
+    expect(schema.parse(draft).claims).toHaveLength(MAX_FORUM_AGENT_CLAIMS);
     expect(
       schema.safeParse({ ...draft, claims: [...claims, claims[0]] }).success,
     ).toBe(false);
@@ -1535,7 +1533,9 @@ What would you verify first?`,
     ]) {
       expect(prompt).toContain(FORUM_EDITORIAL_CONTRACT);
       expect(prompt).toContain("20-120 plain words");
-      expect(prompt).toContain("claim ledger permits 1-48 entries");
+      expect(prompt).toContain("claim ledger permits 1-12 entries");
+      expect(prompt).toContain("rewrite and consolidate the body into at most 12");
+      expect(prompt).not.toContain("1-48");
       expect(prompt).toContain(
         "complete body sentences verbatim into originalValue",
       );

@@ -18,6 +18,7 @@ import {
 } from "../lib/forum-generation-budget";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import { isElizaRuntimeTransportError } from "../lib/eliza-runtime-transport";
+import { MAX_FORUM_AGENT_CLAIMS } from "../lib/forum-agent-claim-limits";
 import {
   runWithModelFallback,
   type RoutedModel,
@@ -280,7 +281,7 @@ export function forumDraftSchemaForSources(sourceIds: readonly string[]) {
         }),
       )
       .min(1)
-      .max(48),
+      .max(MAX_FORUM_AGENT_CLAIMS),
   });
 }
 
@@ -1902,7 +1903,7 @@ export function forumDraftPrompt(args: {
   followUp?: boolean;
 }) {
   const structuredFieldInstructions =
-    "Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The claim ledger permits 1-48 entries; include every factual body claim and label source-bound interpretation as analysis. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).";
+    `Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The complete claim ledger permits 1-${MAX_FORUM_AGENT_CLAIMS} entries and must cover every factual body claim and source-bound analysis. Preserve evidence coverage: if needed, rewrite and consolidate the body into at most ${MAX_FORUM_AGENT_CLAIMS} clear, source-supported statements without omitting facts, caveats, or reasoning; never exceed ${MAX_FORUM_AGENT_CLAIMS} entries or leave a body claim unledgered. Label source-bound interpretation as analysis. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).`;
   if (args.revisionFeedback !== undefined && args.previousDraft !== undefined) {
     const claimsBySource = new Map<string, string[]>();
     for (const claim of args.previousDraft.claims) {

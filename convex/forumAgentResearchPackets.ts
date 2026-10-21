@@ -2,10 +2,10 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { MAX_FORUM_AGENT_CLAIMS } from "../lib/forum-agent-claim-limits";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 
 const MAX_RESEARCH_SOURCES = 12;
-const MAX_CLAIMS = 12;
 const MAX_DECISION_REASON_LENGTH = 240;
 const FORUM_THREAD_TITLE_MAX_LENGTH = 160;
 
@@ -67,7 +67,7 @@ function validateClaimHashes(
   requirePublishable: boolean,
 ) {
   if (
-    claimHashes.length > MAX_CLAIMS ||
+    claimHashes.length > MAX_FORUM_AGENT_CLAIMS ||
     (requirePublishable && claimHashes.length < 1)
   ) {
     throw new Error("Private research claim ledger is outside its bound");
