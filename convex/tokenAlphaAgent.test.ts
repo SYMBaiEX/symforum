@@ -267,6 +267,10 @@ describe("token pilot orchestration", () => {
       calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0]
         .publishable,
     ).toBe(true);
+    expect(
+      calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0]
+        .reason,
+    ).toBe("token-snapshot-and-independent-review-passed");
     expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(1);
     for (const [, args, fallback] of mocks.route.mock.calls) {
       expect(fallback).toEqual([OPENROUTER_TOKEN_SCOUT_MODEL]);
@@ -277,6 +281,30 @@ describe("token pilot orchestration", () => {
         ([, options]) => options.elizaRuntime === "force",
       ),
     ).toBe(true);
+  });
+  test("draft prompt rejects unbenchmarked magnitude claims and repeated promotional text", async () => {
+    const ctx = context();
+    await runTokenPilot(ctx.ctx, { platform: "bags" });
+    const prompt = mocks.generate.mock.calls[0][0].prompt;
+    expect(prompt).toContain(
+      "for this named project and snapshot, never market-wide claims",
+    );
+    expect(prompt).toContain(
+      "Do not add numerals, spelled-out numbers or counts",
+    );
+    expect(prompt).toContain(
+      "modest, high, low, strong, weak, deep, thin or healthy",
+    );
+    expect(prompt).toContain(
+      "explicitly name its benchmark from the supplied within-snapshot metrics",
+    );
+    expect(prompt).toContain(
+      "brief conditional interpretation and uncertainty",
+    );
+    expect(prompt).toContain(
+      "Do not repeat promotional claims from the project description",
+    );
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
   });
   test("an explicit retry preserves the source key and still uses only the forced Eliza bounded scout route", async () => {
     const ctx = context();
@@ -316,14 +344,91 @@ describe("token pilot orchestration", () => {
         usage: {},
       });
     const ctx = context();
-    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
-      "held",
-    );
+    expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+      status: "held",
+      reason: "independent-review-rejected",
+    });
     expect(
-      calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0]
-        .publishable,
-    ).toBe(false);
+      calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0],
+    ).toMatchObject({
+      publishable: false,
+      reason: "token-independent-review-held:Unsupported implication.",
+    });
+    expect(calls(ctx, "tokenAlphaData:finishRun")[0]).toMatchObject({
+      status: "held",
+      reason: "independent-review-rejected",
+    });
+    expect(calls(ctx, "tokenAlphaData:saveDraft")).toHaveLength(0);
     expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test("rejected review details are bounded to the private decision only", async () => {
+    const privateReason = `Private source quotation: ${"x".repeat(300)}`;
+    mocks.generate
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: { analysis: ANALYSIS },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      })
+      .mockResolvedValueOnce({
+        output: { approved: false, reason: privateReason },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      });
+    const ctx = context();
+    const result = await runTokenPilot(ctx.ctx, { platform: "bags" });
+    const [decision] = calls(
+      ctx,
+      "forumAgentResearchPackets:recordPublicationDecision",
+    );
+    expect(decision.reason).toBe(
+      `token-independent-review-held:${privateReason}`.slice(0, 240),
+    );
+    expect((decision.reason as string).length).toBe(240);
+    expect(result).toEqual({
+      status: "held",
+      reason: "independent-review-rejected",
+    });
+    for (const name of [
+      "tokenAlphaData:finishRun",
+      "forumAgentEditorialData:recordUsage",
+    ])
+      expect(JSON.stringify(calls(ctx, name))).not.toContain(
+        "Private source quotation",
+      );
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test("promotional source text stays in the private snapshot but not the reviewed draft", async () => {
+    const description =
+      "The official meme coin with real utility. Hop in early and ribbit your way to the top!";
+    mocks.enrich.mockResolvedValue({ ...snapshot, description });
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "published",
+    );
+    expect(calls(ctx, "tokenAlphaData:saveSnapshot")[0].snapshot).toMatchObject(
+      { description },
+    );
+    const [revision] = calls(
+      ctx,
+      "forumAgentResearchPackets:recordDraftRevision",
+    );
+    const [decision] = calls(
+      ctx,
+      "forumAgentResearchPackets:recordPublicationDecision",
+    );
+    const [draft] = calls(ctx, "tokenAlphaData:saveDraft");
+    expect(revision.body).toContain(
+      "Project description (unverified): Withheld:",
+    );
+    expect(revision.body).not.toContain(description);
+    expect(decision.body).toBe(revision.body);
+    expect(draft.body).toBe(revision.body);
+    const reviewed = JSON.parse(
+      mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+    );
+    expect(reviewed.snapshot.description).toBe(description);
+    expect(reviewed.body).toBe(revision.body);
   });
   test("ambiguous generation failure is not retried or replaced by a fallback", async () => {
     mocks.route.mockRejectedValueOnce(new Error("unknown upstream outcome"));

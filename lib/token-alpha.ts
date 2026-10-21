@@ -65,6 +65,8 @@ const SOURCE_HOSTS = new Set([
   "www.dexscreener.com",
   "api.dexscreener.com",
 ]);
+const PROMOTIONAL_DESCRIPTION =
+  /\b(?:buy\s+now|sell\s+now|ape\s+in|(?:hop|jump|get)\s+in\s+early|(?:to\s+the\s+moon)|(?:your\s+way\s+to\s+the\s+top)|real\s+utility|guaranteed\s+(?:returns?|profits?|safety)|risk[- ]free|verified\s+team|(?:fully\s+)?audited|official\s+(?:meme\s+)?(?:coin|token))\b/i;
 
 /** Never normalize case: Solana mint addresses are case-sensitive. */
 export function selectTokenCandidate(
@@ -231,6 +233,14 @@ function readableParagraphs(value: string): string {
   return paragraphs.join("\n\n");
 }
 
+/** Keep the private snapshot intact; never republish unverified promotional claims. */
+function projectDescription(value: string | null): string {
+  const text = plainText(value, 1_000);
+  return PROMOTIONAL_DESCRIPTION.test(text)
+    ? "Withheld: the source description contains promotional or unverified safety/ownership claims."
+    : readableParagraphs(text || "Unknown");
+}
+
 export function renderTokenPost({
   snapshot,
   previous,
@@ -274,7 +284,7 @@ export function renderTokenPost({
   lines.push(
     "\n[b]Token details[/b]",
     `Chain: Solana. Mint: ${snapshot.mint}`,
-    `\nProject description (unverified): ${readableParagraphs(plainText(snapshot.description, 1_000) || "Unknown")}`,
+    `\nProject description (unverified): ${projectDescription(snapshot.description)}`,
     `\nWebsite: ${safeHttpsUrl(snapshot.website) ?? "Unknown"}`,
     `X: ${safeHttpsUrl(snapshot.twitter) ?? "Unknown"}`,
     `Telegram: ${safeHttpsUrl(snapshot.telegram) ?? "Unknown"}`,

@@ -292,6 +292,49 @@ describe("deterministic token post rendering", () => {
   });
 
   test.each([
+    "The official meme coin with real utility. Hop in early and ribbit your way to the top!",
+    "BUY NOW for guaranteed returns.",
+    "A risk-free token with a verified team.",
+    "An audited official token.",
+    "Hop\u200bin early and join us!",
+  ])(
+    "withholds promotional descriptions without mutating source metadata: %s",
+    (description) => {
+      const source = snapshot({ description });
+      const before = structuredClone(source);
+      for (const isFollowUp of [false, true]) {
+        const { body } = renderTokenPost({
+          snapshot: source,
+          analysis: "",
+          isFollowUp,
+        });
+        expect(body).toContain(
+          "Project description (unverified): Withheld: the source description contains promotional or unverified safety/ownership claims.",
+        );
+        expect(body).not.toContain(description);
+        expect(body).toContain("Website: https://example.com/");
+        expect(body).toContain("X: https://x.com/example");
+        expect(body).toContain("Price: $0.001 | Market cap: $1,000,000.00");
+      }
+      expect(source).toEqual(before);
+    },
+  );
+
+  test.each([
+    "A community-run meme token featuring a frog character.",
+    "An unofficial community project. Its tooling is unaudited.",
+    "A token supporting forum costs.",
+  ])("preserves neutral unverified descriptions: %s", (description) => {
+    const { body } = renderTokenPost({
+      snapshot: snapshot({ description }),
+      analysis: "",
+      isFollowUp: false,
+    });
+    expect(body).toContain(`Project description (unverified): ${description}`);
+    expect(body).not.toContain("Withheld:");
+  });
+
+  test.each([
     "https://data.solanatracker.io.evil.com/search",
     "https://evil.com/search",
     "https://user:pass@data.solanatracker.io/search",
