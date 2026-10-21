@@ -12,6 +12,7 @@ import {
   openRouterReportedCostMicroUsd,
   openRouterReservationModel,
 } from "./ai-model-costs";
+import { formatAISchemaDiagnostics } from "./ai-schema-diagnostics";
 export {
   openRouterBillingModel,
   openRouterReservationModel,
@@ -148,8 +149,8 @@ function openRouterRequestBody(body: Record<string, unknown>) {
       : [...plugins, { id: "response-healing" }];
   }
   if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
-    // This Qwen endpoint supports native reasoning control. Keep its output
-    // budget for the structured answer rather than a hidden thinking phase.
+    // Keep the pinned newsletter endpoint's output budget for the structured
+    // answer rather than a hidden thinking phase.
     request.reasoning = { enabled: false };
     delete request.reasoning_effort;
     request.provider = {
@@ -383,14 +384,35 @@ function safeError(error: unknown) {
     return "Eliza runtime transport failed";
   const message = error instanceof Error ? error.message : String(error);
   if (NoObjectGeneratedError.isInstance(error)) {
-    // Record enough to distinguish malformed JSON from exhausted output,
-    // without logging prompts, generated private content, or reasoning text.
+    const schemaDiagnostics = formatAISchemaDiagnostics(error.cause);
+    const classification = schemaDiagnostics
+      ? "structured output schema validation failed"
+      : error.finishReason === "length" && !error.text
+        ? "empty structured output"
+        : "structured output unavailable";
+    const finishReasons = [
+      "stop",
+      "length",
+      "content-filter",
+      "tool-calls",
+      "error",
+      "other",
+      "unknown",
+    ];
+    const safeFinishReason = finishReasons.includes(error.finishReason ?? "")
+      ? error.finishReason
+      : "unknown";
+    const safeMetric = (value: number | undefined) =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? Math.min(value, 1_000_000_000)
+        : 0;
     const diagnostic =
-      `finish=${error.finishReason ?? "unknown"}, ` +
-      `outputTokens=${error.usage?.outputTokens ?? 0}, ` +
-      `reasoningTokens=${error.usage?.outputTokenDetails.reasoningTokens ?? 0}, ` +
-      `textChars=${error.text?.length ?? 0}`;
-    return `${message.replace(/\s+/g, " ").slice(0, 120)} (${diagnostic})`;
+      `finish=${safeFinishReason}, ` +
+      `outputTokens=${safeMetric(error.usage?.outputTokens)}, ` +
+      `reasoningTokens=${safeMetric(error.usage?.outputTokenDetails.reasoningTokens)}, ` +
+      `textChars=${safeMetric(error.text?.length)}`;
+    const schemaDetails = schemaDiagnostics ? `, ${schemaDiagnostics}` : "";
+    return `${classification} (${diagnostic}${schemaDetails})`.slice(0, 440);
   }
   if (APICallError.isInstance(error)) {
     const category = isMandatoryThinkingRejection(error)

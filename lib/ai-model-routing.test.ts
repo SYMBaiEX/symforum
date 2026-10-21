@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { LanguageModel } from "ai";
 import { z } from "zod";
+import { formatAISchemaDiagnostics } from "./ai-schema-diagnostics";
 import {
   openRouterModelForStage,
   openRouterModelsForStage,
@@ -35,6 +36,62 @@ function candidate(persistedModel: string): RoutedModel {
     model: {} as LanguageModel,
   };
 }
+
+describe("AI schema diagnostics", () => {
+  test("formats only known issue metadata and redacts unknown path keys", () => {
+    const diagnostics = formatAISchemaDiagnostics({
+      issues: [
+        {
+          code: "invalid_value",
+          values: ["private-enum-value"],
+          path: ["claims", 0, "kind"],
+          message: "private generated value",
+        },
+        {
+          code: "too_big",
+          maximum: 12,
+          path: ["claims"],
+          message: "private generated value",
+        },
+        {
+          code: "invalid_type",
+          expected: "string",
+          path: ["private-prompt-field"],
+          message: "private generated value",
+        },
+      ],
+    });
+
+    expect(diagnostics).toBe(
+      "schemaIssues=enum@claims[0].kind, too_big@claims(max=12), invalid_type@[field](expected=string)",
+    );
+    expect(diagnostics).not.toContain("private");
+  });
+
+  test("bounds issue count and output length across cyclic or malformed cause chains", () => {
+    const nested: { issues?: unknown[]; cause?: unknown } = {
+      issues: Array.from({ length: 12 }, () => ({
+        code: "invalid_value",
+        path: ["status"],
+        values: ["private"],
+      })),
+    };
+    nested.cause = nested;
+
+    const diagnostics = formatAISchemaDiagnostics({ cause: nested });
+    expect(diagnostics?.match(/enum@status/g)).toHaveLength(4);
+    expect(diagnostics?.length).toBeLessThanOrEqual(300);
+    expect(diagnostics).not.toContain("private");
+    expect(formatAISchemaDiagnostics(new Error("private cause message"))).toBe(
+      undefined,
+    );
+    expect(
+      formatAISchemaDiagnostics(
+        new Proxy({}, { getOwnPropertyDescriptor: () => { throw new Error("bad descriptor"); } }),
+      ),
+    ).toBeUndefined();
+  });
+});
 
 describe("OpenRouter-only model routing", () => {
   test("settles only explicitly resolved free variants at zero-cost", () => {
@@ -790,22 +847,21 @@ describe("OpenRouter transport safeguards", () => {
     {
       content: null,
       finish: "length",
-      message:
-        "empty structured output (finish=length, outputTokens=1500, reasoningTokens=1499)",
+      diagnostic: "empty structured output",
     },
     {
       content: '{"status":',
       finish: "length",
-      message: "could not parse the response",
+      diagnostic: "structured output unavailable",
     },
     {
       content: '{"status":"wrong"}',
       finish: "stop",
-      message: "did not match schema",
+      diagnostic: "structured output schema validation failed",
     },
   ])(
     "rejects $content and reports $finish without leaking generated content",
-    async ({ content, finish, message }) => {
+    async ({ content, finish, diagnostic }) => {
       await withResponse(
         content,
         async () => {
@@ -831,12 +887,17 @@ describe("OpenRouter transport safeguards", () => {
                 return result.output;
               },
             }),
-          ).rejects.toThrow(message);
+          ).rejects.toThrow("AI generation failed for synthetic");
           const event = onAttempt.mock.calls[0][0];
           expect(event.outcome).toBe("failed");
           expect(event.errorMessage).toContain(`finish=${finish}`);
+          expect(event.errorMessage).toContain(diagnostic);
           expect(event.errorMessage).toContain("reasoningTokens=1499");
           expect(event.errorMessage).not.toContain('"wrong"');
+          if (diagnostic === "structured output schema validation failed") {
+            expect(event.errorMessage).toContain("schemaIssues=enum@status");
+            expect(event.errorMessage).not.toContain("Synthetic probe");
+          }
         },
         finish,
       );
