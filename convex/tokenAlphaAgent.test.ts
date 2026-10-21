@@ -1,0 +1,276 @@
+// @vitest-environment node
+import { getFunctionName } from "convex/server";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { ActionCtx } from "./_generated/server";
+import type { TokenSnapshot } from "../lib/token-alpha";
+
+const mocks = vi.hoisted(() => ({
+  rankings: vi.fn(),
+  enrich: vi.fn(),
+  verify: vi.fn(),
+  generate: vi.fn(),
+  route: vi.fn(),
+  config: vi.fn(),
+}));
+vi.mock("../lib/solana-tracker", () => ({
+  fetchTokenRankings: mocks.rankings,
+  enrichTokenSnapshot: mocks.enrich,
+}));
+vi.mock("../lib/solana-mint-validation", () => ({
+  verifySolanaMints: mocks.verify,
+}));
+vi.mock("./modelRouting", () => ({ convexModelRoutingConfig: mocks.config }));
+vi.mock("ai", async (original) => ({
+  ...(await original<typeof import("ai")>()),
+  generateText: mocks.generate,
+}));
+vi.mock("../lib/ai-model-routing", async (original) => ({
+  ...(await original<typeof import("../lib/ai-model-routing")>()),
+  runWithModelFallback: mocks.route,
+}));
+
+import {
+  runTokenPilot,
+  tokenAnalysisIsSafe,
+  withCachedTokenMetadata,
+} from "./tokenAlphaAgent";
+
+const NOW = Date.UTC(2026, 9, 21, 20);
+const MINT = "8Ta68iepck46U9PQzQvNPceN2f3mxJQN7dWe6CMYBAGS";
+const ANALYSIS =
+  "Trading activity is visible in this sample, but volume alone cannot establish lasting demand. I would watch whether liquidity and participation remain consistent over successive observations.";
+const snapshot: TokenSnapshot = {
+  platform: "bags",
+  mint: MINT,
+  name: "SYMBaiEX Forum",
+  symbol: "SYMF",
+  observedAt: NOW,
+  metricsAsOf: NOW,
+  priceUsd: 0.001,
+  marketCapUsd: 1_000,
+  holders: 50,
+  volume1hUsd: 2_000,
+  liquidityUsd: 10_000,
+  priceChange1hPercent: 2,
+  imageUrl: null,
+  website: null,
+  twitter: null,
+  telegram: null,
+  description: "A token supporting forum costs.",
+  sourceUrl: `https://www.solanatracker.io/token/${MINT}`,
+  sourceRank: 1,
+};
+
+function context(options: { claimed?: boolean; existing?: boolean } = {}) {
+  const state: {
+    snapshot?: TokenSnapshot;
+    previous?: TokenSnapshot;
+    threadId?: string;
+  } = {};
+  if (options.existing) state.threadId = "existing-thread";
+  const runMutation = vi.fn(
+    async (
+      ref: Parameters<typeof getFunctionName>[0],
+      args: Record<string, unknown>,
+    ) => {
+      const name = getFunctionName(ref);
+      if (name === "tokenAlphaData:claimRun")
+        return options.claimed === false
+          ? null
+          : { runKey: "bags:2026-10-21T20" };
+      if (name === "tokenAlphaData:reserveApiRequest") return true;
+      if (name === "tokenAlphaData:saveSnapshot")
+        state.snapshot = args.snapshot as TokenSnapshot;
+      if (name === "forum:publishTokenForumContribution")
+        return {
+          status: "published",
+          threadId: "published-thread",
+          ...(options.existing ? { postId: "published-post" } : {}),
+          categorySlug: "crypto-bags",
+          title: "display-only",
+        };
+      return null;
+    },
+  );
+  const runQuery = vi.fn(async (ref: Parameters<typeof getFunctionName>[0]) => {
+    if (getFunctionName(ref) === "tokenAlphaData:getContext")
+      return { tracked: [], metadata: [] };
+    return state;
+  });
+  return {
+    ctx: { runMutation, runQuery } as unknown as ActionCtx,
+    runMutation,
+    runQuery,
+  };
+}
+
+function calls(ctx: ReturnType<typeof context>, name: string) {
+  return ctx.runMutation.mock.calls
+    .filter(([ref]) => getFunctionName(ref) === name)
+    .map(([, args]) => args);
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+  vi.resetAllMocks();
+  vi.stubEnv("ELIZA_RUNTIME_MODE", "live");
+  vi.stubEnv("SOLANA_TRACKER_API_KEY", "synthetic-private-key");
+  mocks.rankings.mockResolvedValue([snapshot]);
+  mocks.enrich.mockResolvedValue(snapshot);
+  mocks.verify.mockResolvedValue(new Set([MINT]));
+  mocks.config.mockResolvedValue({});
+  mocks.generate
+    .mockResolvedValueOnce({
+      output: { analysis: ANALYSIS },
+      response: { modelId: "vendor/free" },
+      usage: { inputTokens: 100, outputTokens: 60 },
+    })
+    .mockResolvedValueOnce({
+      output: { approved: true, reason: "Source faithful." },
+      response: { modelId: "vendor/free" },
+      usage: { inputTokens: 180, outputTokens: 30 },
+    });
+  mocks.route.mockImplementation(async (_config, args) => ({
+    value: await args.run(
+      {
+        provider: "openrouter",
+        modelId: "openrouter/free",
+        persistedModel: "openrouter/free",
+      },
+      new AbortController().signal,
+    ),
+    route: {
+      persistedModel: "openrouter/free",
+      reservationKey: `reserve-${args.stage}`,
+      reservationModel: "openrouter/free",
+    },
+  }));
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
+
+describe("token pilot orchestration", () => {
+  test("disabled or duplicate run makes no external or model request", async () => {
+    const ctx = context({ claimed: false });
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "skipped",
+    );
+    expect(mocks.rankings).not.toHaveBeenCalled();
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
+  test("invalid on-chain accounts are removed before generation", async () => {
+    mocks.verify.mockResolvedValue(new Set());
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "skipped",
+    );
+    expect(mocks.generate).not.toHaveBeenCalled();
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test("RPC failure is fail-closed, without model work or publication", async () => {
+    mocks.verify.mockRejectedValue(new Error("synthetic RPC failure"));
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "failed",
+    );
+    expect(mocks.generate).not.toHaveBeenCalled();
+    expect(calls(ctx, "tokenAlphaData:finishRun")[0].status).toBe("failed");
+  });
+  test("successful path records usage, private proof and review before publishing once", async () => {
+    const ctx = context();
+    expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+      status: "published",
+      threadId: "published-thread",
+    });
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+    expect(calls(ctx, "forumAgentEditorialData:recordUsage")).toHaveLength(2);
+    expect(
+      calls(ctx, "forumAgentEditorialData:recordUsage").every(
+        (args) => args.reservationKey,
+      ),
+    ).toBe(true);
+    expect(
+      calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0]
+        .publishable,
+    ).toBe(true);
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(1);
+    for (const [, args, fallback] of mocks.route.mock.calls) {
+      expect(fallback).toEqual(["openrouter/free"]);
+      expect(args.agent).toBe("bags-scout");
+    }
+    expect(
+      mocks.config.mock.calls.every(
+        ([, options]) => options.elizaRuntime === "force",
+      ),
+    ).toBe(true);
+  });
+  test("review rejection preserves private draft and does not publish", async () => {
+    mocks.generate
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: { analysis: ANALYSIS },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      })
+      .mockResolvedValueOnce({
+        output: { approved: false, reason: "Unsupported implication." },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      });
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "held",
+    );
+    expect(
+      calls(ctx, "forumAgentResearchPackets:recordPublicationDecision")[0]
+        .publishable,
+    ).toBe(false);
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test("ambiguous generation failure is not retried or replaced by a fallback", async () => {
+    mocks.route.mockRejectedValueOnce(new Error("unknown upstream outcome"));
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "failed",
+    );
+    expect(mocks.route).toHaveBeenCalledTimes(1);
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+});
+
+describe("opinion and metadata boundaries", () => {
+  test("rejects new numerical, actionable or markup-bearing model claims", () => {
+    expect(tokenAnalysisIsSafe(ANALYSIS)).toBe(true);
+    for (const text of [
+      ANALYSIS + " Buy now.",
+      ANALYSIS + " 100%",
+      ANALYSIS + " [img]",
+      ANALYSIS + " https://evil.com",
+    ])
+      expect(tokenAnalysisIsSafe(text)).toBe(false);
+  });
+  test("cache preserves metadata age while numeric data stays fresh", () => {
+    const cached = {
+      ...snapshot,
+      priceUsd: 999,
+      observedAt: NOW - 1_000,
+      metadataAsOf: NOW - 3_600_000,
+    };
+    const result = withCachedTokenMetadata(snapshot, cached, NOW);
+    expect(result?.priceUsd).toBe(snapshot.priceUsd);
+    expect(result?.metadataAsOf).toBe(cached.metadataAsOf);
+    expect(
+      withCachedTokenMetadata(
+        snapshot,
+        { ...cached, metadataAsOf: NOW - 25 * 3_600_000 },
+        NOW,
+      ),
+    ).toBeNull();
+    expect(
+      withCachedTokenMetadata(snapshot, { ...cached, mint: "other-mint" }, NOW),
+    ).toBeNull();
+  });
+});

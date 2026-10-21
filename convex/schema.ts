@@ -7,6 +7,7 @@ import { forumPluginTables } from "./forumPluginSchema";
 import { elizaShadowTables } from "./elizaShadowSchema";
 import { elizaRuntimeTables } from "./elizaRuntimeSchema";
 import { elizaPilotTables } from "./elizaPilotSchema";
+import { tokenAlphaTables } from "./tokenAlphaSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -29,6 +30,7 @@ export default defineSchema({
   ...elizaShadowTables,
   ...elizaRuntimeTables,
   ...elizaPilotTables,
+  ...tokenAlphaTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),

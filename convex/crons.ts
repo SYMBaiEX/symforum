@@ -3,6 +3,12 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+crons.cron(
+  "hourly limited-coverage token scouts",
+  "12 * * * *",
+  internal.tokenAlphaData.queueHourly,
+  {},
+);
 crons.interval("expire ElizaOS shadow comparisons", { hours: 6 }, internal.elizaShadowData.cleanup, {});
 crons.interval("purge ElizaOS worker candidate copies", { hours: 6 }, internal.elizaShadow.maintain, {});
 crons.interval("expire ElizaOS runtime metadata receipts", { hours: 6 }, internal.elizaRuntimeData.cleanup, {});

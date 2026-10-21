@@ -244,7 +244,7 @@ test("HTTP classified rejection exposes only fixed code, provider status and kno
   }
 });
 
-test("allowlist covers exactly roster 30 plus Suki, Belle and Nyx", async () => {
+test("allowlist covers exactly roster 30 plus Suki, Belle, Nyx and the two token scouts", async () => {
   const roster = await readFile(
     new URL("../../../convex/forumAgentRoster.ts", import.meta.url),
     "utf8",
@@ -256,10 +256,49 @@ test("allowlist covers exactly roster 30 plus Suki, Belle and Nyx", async () => 
   ].map((match) => match[1]);
   assert.equal(slugs.length, 30);
   assert.deepEqual(
-    new Set([...slugs, "suki", "belle", "nyx", "system"]),
+    new Set([
+      ...slugs,
+      "suki",
+      "belle",
+      "nyx",
+      "bags-scout",
+      "pumpfun-scout",
+      "system",
+    ]),
     LIVE_AGENTS,
   );
 });
+
+for (const agentSlug of ["bags-scout", "pumpfun-scout"]) {
+  test(`${agentSlug} uses existing forum draft and review stages without accepting foreign or unknown stages`, () => {
+    for (const suffix of ["draft", "evidence-review"]) {
+      const stage = `${agentSlug}:forum-${suffix}`;
+      const validated = validateLiveRequest(request({ agentSlug, stage }));
+      assert.equal(validated.agentSlug, agentSlug);
+      assert.equal(validated.stage, stage);
+      assert.equal(validated.body, body);
+    }
+    for (const stage of [
+      `${agentSlug}:forum-publish`,
+      `${agentSlug}:forum-evidence-review-extra`,
+      `${agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout"}:forum-draft`,
+      "belle:daily-signal:draft",
+      "health-canary",
+    ])
+      assert.throws(
+        () => validateLiveRequest(request({ agentSlug, stage })),
+        /invalid_request/,
+      );
+    const unknownSlug = `${agentSlug}-extra`;
+    assert.throws(
+      () =>
+        validateLiveRequest(
+          request({ agentSlug: unknownSlug, stage: `${unknownSlug}:forum-draft` }),
+        ),
+      /invalid_request/,
+    );
+  });
+}
 
 test("live request preserves SDK body, bounds fields, and verifies canonical input hash", () => {
   assert.equal(validateLiveRequest(request()).body, body);

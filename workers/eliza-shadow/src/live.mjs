@@ -66,6 +66,8 @@ export const LIVE_AGENTS = new Set([
   "suki",
   "belle",
   "nyx",
+  "bags-scout",
+  "pumpfun-scout",
   "system",
 ]);
 const BODY_KEYS = new Set([
