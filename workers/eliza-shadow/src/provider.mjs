@@ -69,7 +69,7 @@ export function createProvider({
           model: MODEL,
           stream: false,
           temperature: 0.4,
-          reasoning: { effort: "low" },
+          reasoning: { enabled: false },
           max_tokens: request.maxOutputTokens,
           provider: { allow_fallbacks: false, require_parameters: true },
           messages: [

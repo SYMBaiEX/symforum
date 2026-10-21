@@ -270,7 +270,7 @@ test("provider is one bounded HTTP call with persona, exact model, wrapper schem
   const sent = JSON.parse(calls[0].options.body);
   assert.equal(sent.model, MODEL);
   assert.equal(sent.max_tokens, 100);
-  assert.deepEqual(sent.reasoning, { effort: "low" });
+  assert.deepEqual(sent.reasoning, { enabled: false });
   assert.equal(sent.provider.allow_fallbacks, false);
   assert.equal(sent.provider.require_parameters, true);
   assert.equal(sent.messages[0].role, "system");
@@ -353,6 +353,40 @@ test("timeout is unknown, one request only, and idempotent redelivery cannot spe
   await assert.rejects(service.generate(request()), /job_outcome_unknown/);
   assert.equal(calls, 1);
   await service.close();
+});
+
+test("graceful shadow drain finishes active work and blocks new admission", async () => {
+  let release;
+  let started;
+  let closeCalls = 0;
+  const providerStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const backend = memoryBackend(async () => {
+    started();
+    return new Promise((resolve) => {
+      release = () => resolve(generated());
+    });
+  });
+  backend.close = async () => {
+    closeCalls++;
+  };
+  const service = new ShadowService(backend);
+  const pending = service.generate(request());
+  await providerStarted;
+  service.stopAccepting();
+  const draining = service.drain();
+  await assert.rejects(
+    service.generate(request({ jobId: "new-during-drain" })),
+    /worker_stopping/,
+  );
+  release();
+  assert.deepEqual((await pending).output, { text: "A harmless draft." });
+  await draining;
+  assert.equal(backend.jobs.get("test-job").state, "succeeded");
+  assert.equal(closeCalls, 0);
+  await service.close();
+  assert.equal(closeCalls, 1);
 });
 
 test("single-flight busy, successful replay, changed-input conflict, and output-schema rejection", async () => {

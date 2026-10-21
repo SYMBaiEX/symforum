@@ -215,7 +215,9 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
   );
   for (const stage of [
     "belle:daily-signal:draft",
+    "belle:daily-signal:evidence-review",
     "belle:weekly-field-note:revision",
+    "belle:weekly-field-note:evidence-review",
     "belle:hacker-news-digest",
     "belle:hacker-news-digest-revision",
     "belle:forum-evidence-review",
@@ -255,6 +257,23 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
     request({ agentSlug: "system" }),
     request({ agentSlug: "belle" }),
     request({ stage: "belle:forum-draft" }),
+    request({ stage: "belle:daily-signal:evidence-review" }),
+    request({
+      agentSlug: "mara-venn",
+      stage: "belle:weekly-field-note:evidence-review",
+    }),
+    request({
+      agentSlug: "belle",
+      stage: "belle:daily-signal:reply-evidence-review",
+    }),
+    request({
+      agentSlug: "belle",
+      stage: "belle:weekly-field-note:evidence-review-extra",
+    }),
+    request({
+      agentSlug: "belle",
+      stage: "belle:hacker-news-digest:evidence-review",
+    }),
     request({ stage: "suki:arbitrary-signed-stage" }),
     request({ inputHash: "a".repeat(64) }),
     request({ body: { ...body, stream: true } }),
@@ -370,6 +389,252 @@ test("provider performs one exact-body request and classifies known versus unkno
   );
 });
 
+test("non-streaming provider failures have fixed diagnostics without leaking content", async () => {
+  for (const [response, code] of [
+    [
+      new Response(": keepalive\n\ndata: private content\n\n", {
+        headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+      }),
+      "provider_unexpected_stream",
+    ],
+    [new Response("private malformed JSON"), "provider_invalid_json"],
+    [new Response(null), "provider_empty_response"],
+    [
+      new Response("private", {
+        headers: { "Content-Length": String(240 * 1024 + 1) },
+      }),
+      "provider_response_too_large",
+    ],
+    [Response.json({ ...completion, usage: null }), "provider_invalid_usage"],
+    [Response.json(null), "provider_invalid_envelope"],
+    [Response.json({ ...completion, id: null }), "provider_invalid_id"],
+    [Response.json({ ...completion, choices: [] }), "provider_invalid_choices"],
+    [
+      Response.json({ ...completion, choices: [{ message: null }] }),
+      "provider_invalid_message",
+    ],
+    [Response.json({ ...completion, model: null }), "provider_invalid_model"],
+  ]) {
+    let calls = 0;
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () => {
+        calls++;
+        return response;
+      },
+    });
+    await assert.rejects(
+      provider(request()),
+      (error) =>
+        error.code === code &&
+        error.outcomeUnknown === true &&
+        !error.message.includes("private"),
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("timeout while reading a 200 body stays an unknown timeout", async () => {
+  let calls = 0;
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    timeoutMs: 20,
+    fetchImpl: async (_url, { signal }) => {
+      calls++;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            signal.addEventListener(
+              "abort",
+              () => controller.error(new Error("private body read failure")),
+              { once: true },
+            );
+          },
+        }),
+      );
+    },
+  });
+  await assert.rejects(
+    provider(request()),
+    (error) =>
+      error.code === "provider_timeout" &&
+      error.status === 504 &&
+      error.outcomeUnknown === true &&
+      !error.message.includes("private"),
+  );
+  assert.equal(calls, 1);
+});
+
+test("service shutdown distinguishes provider abort from deadline and tombstones once", async () => {
+  let calls = 0;
+  let started;
+  const providerStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    timeoutMs: 120_000,
+    fetchImpl: async (_url, { signal }) => {
+      calls++;
+      started();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => reject(new Error("private provider abort detail")),
+          { once: true },
+        );
+      });
+    },
+  });
+  let state;
+  const store = {
+    async claim(input, hash) {
+      if (state) return { claimed: false, ...state };
+      state = {
+        input_hash: input.inputHash,
+        request_hash: hash,
+        state: "running",
+      };
+      return { claimed: true };
+    },
+    async complete() {
+      throw new Error("unexpected completion");
+    },
+    async fail(_id, code, unknown) {
+      state.state = unknown ? "unknown" : "failed";
+      state.error_code = code;
+    },
+  };
+  const service = new LiveService({ live: { run: provider }, store });
+  const pending = service.complete(request());
+  await providerStarted;
+  const closing = service.close();
+  await assert.rejects(
+    pending,
+    (error) =>
+      error.code === "provider_shutdown" &&
+      error.status === 503 &&
+      error.outcomeUnknown === true &&
+      !error.message.includes("private"),
+  );
+  await closing;
+  const restarted = new LiveService({ live: { run: provider }, store });
+  await assert.rejects(restarted.complete(request()), /job_outcome_unknown/);
+  assert.deepEqual(
+    [state.state, state.error_code, calls],
+    ["unknown", "provider_shutdown", 1],
+  );
+});
+
+test("graceful live drain finishes active work and blocks new admission", async () => {
+  let release;
+  let started;
+  let calls = 0;
+  const providerStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    fetchImpl: async () => {
+      calls++;
+      started();
+      return new Promise((resolve) => {
+        release = () => resolve(Response.json(completion));
+      });
+    },
+  });
+  let state;
+  const service = new LiveService({
+    live: { run: provider },
+    store: {
+      async claim(input, hash) {
+        if (state) return { claimed: false, ...state };
+        state = {
+          input_hash: input.inputHash,
+          request_hash: hash,
+          state: "running",
+        };
+        return { claimed: true };
+      },
+      async complete(_id, result) {
+        state.state = "succeeded";
+        state.result = result;
+      },
+      async fail() {
+        throw new Error("unexpected failure");
+      },
+    },
+  });
+  const pending = service.complete(request());
+  await providerStarted;
+  service.stopAccepting();
+  const draining = service.drain();
+  await assert.rejects(
+    service.complete(request({ jobId: "new-during-drain" })),
+    /worker_stopping/,
+  );
+  release();
+  assert.deepEqual((await pending).completion, completion);
+  await draining;
+  assert.deepEqual([state.state, calls], ["succeeded", 1]);
+});
+
+test("graceful live drain preserves the provider deadline and unknown tombstone", async () => {
+  let started;
+  let calls = 0;
+  const providerStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    timeoutMs: 20,
+    fetchImpl: async (_url, { signal }) => {
+      calls++;
+      started();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("private")), {
+          once: true,
+        });
+      });
+    },
+  });
+  let state;
+  const store = {
+    async claim(input, hash) {
+      if (state) return { claimed: false, ...state };
+      state = {
+        input_hash: input.inputHash,
+        request_hash: hash,
+        state: "running",
+      };
+      return { claimed: true };
+    },
+    async complete() {
+      throw new Error("unexpected completion");
+    },
+    async fail(_id, code, unknown) {
+      state.state = unknown ? "unknown" : "failed";
+      state.error_code = code;
+    },
+  };
+  const service = new LiveService({ live: { run: provider }, store });
+  const pending = service.complete(request());
+  await providerStarted;
+  service.stopAccepting();
+  const draining = service.drain();
+  await assert.rejects(
+    pending,
+    (error) => error.code === "provider_timeout" && error.outcomeUnknown,
+  );
+  await draining;
+  const restarted = new LiveService({ live: { run: provider }, store });
+  await assert.rejects(restarted.complete(request()), /job_outcome_unknown/);
+  assert.deepEqual(
+    [state.state, state.error_code, calls],
+    ["unknown", "provider_timeout", 1],
+  );
+});
+
 test("ambiguous HTTP 408/409 tombstones the job and cannot issue another provider call", async () => {
   for (const status of [408, 409]) {
     let calls = 0;
@@ -412,6 +677,57 @@ test("ambiguous HTTP 408/409 tombstones the job and cannot issue another provide
     );
     assert.equal(state.state, "unknown");
     assert.equal(calls, 1);
+  }
+});
+
+test("malformed HTTP 200 tombstones the job without replaying inference", async () => {
+  for (const [response, code] of [
+    [new Response("private malformed JSON"), "provider_invalid_json"],
+    [
+      Response.json({ ...completion, usage: undefined }),
+      "provider_invalid_usage",
+    ],
+    [Response.json({ ...completion, choices: [] }), "provider_invalid_choices"],
+  ]) {
+    let calls = 0;
+    let state;
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () => {
+        calls++;
+        return response;
+      },
+    });
+    const service = new LiveService({
+      live: { run: provider },
+      store: {
+        async claim(input, hash) {
+          if (state) return { claimed: false, ...state };
+          state = {
+            input_hash: input.inputHash,
+            request_hash: hash,
+            state: "running",
+          };
+          return { claimed: true };
+        },
+        async complete() {
+          throw new Error("unexpected completion");
+        },
+        async fail(_id, errorCode, unknown) {
+          state.state = unknown ? "unknown" : "failed";
+          state.error_code = errorCode;
+        },
+      },
+    });
+    await assert.rejects(
+      service.complete(request()),
+      (error) => error.code === code && error.outcomeUnknown,
+    );
+    await assert.rejects(service.complete(request()), /job_outcome_unknown/);
+    assert.deepEqual(
+      [state.state, state.error_code, calls],
+      ["unknown", code, 1],
+    );
   }
 });
 

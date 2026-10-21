@@ -96,7 +96,7 @@ function validStage(agentSlug, stage) {
   )
     return true;
   if (agentSlug !== "belle") return false;
-  return /^(?:belle:(?:daily-signal|weekly-field-note):(?:draft|revision)|belle:hacker-news-digest(?:-revision)?)$/.test(
+  return /^(?:belle:(?:daily-signal|weekly-field-note):(?:draft|revision|evidence-review)|belle:hacker-news-digest(?:-revision)?)$/.test(
     stage,
   );
 }
@@ -323,10 +323,20 @@ export function createLiveProvider({
     throw new WorkerError("invalid_provider_configuration", 500);
   return async (request, shutdownSignal) => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const abort = () => controller.abort();
+    let abortCause;
+    const abortFor = (cause) => {
+      if (controller.signal.aborted) return;
+      abortCause = cause;
+      controller.abort();
+    };
+    const timeout = setTimeout(() => abortFor("deadline"), timeoutMs);
+    const abort = () => abortFor("shutdown");
+    const abortedError = () =>
+      abortCause === "shutdown"
+        ? new WorkerError("provider_shutdown", 503, true)
+        : new WorkerError("provider_timeout", 504, true);
     shutdownSignal?.addEventListener("abort", abort, { once: true });
-    if (shutdownSignal?.aborted) controller.abort();
+    if (shutdownSignal?.aborted) abort();
     try {
       const response = await fetchImpl(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -348,43 +358,65 @@ export function createLiveProvider({
           throw new WorkerError("provider_rejected", response.status);
         throw new WorkerError("provider_unavailable", 502, true);
       }
+      // A non-streaming chat completion is a JSON document. Never interpret
+      // event frames as a completion: a partial stream could look successful.
+      if (
+        response.headers
+          .get("content-type")
+          ?.split(";", 1)[0]
+          .trim()
+          .toLowerCase() === "text/event-stream"
+      ) {
+        await response.body?.cancel();
+        throw new WorkerError("provider_unexpected_stream", 502, true);
+      }
       let completion;
       try {
-        completion = JSON.parse(
-          await readBoundedResponse(response, MAX_LIVE_COMPLETION_BYTES),
+        const body = await readBoundedResponse(
+          response,
+          MAX_LIVE_COMPLETION_BYTES,
         );
-      } catch {
-        throw new WorkerError("provider_invalid_response", 502, true);
+        try {
+          completion = JSON.parse(body);
+        } catch {
+          throw new WorkerError("provider_invalid_json", 502, true);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) throw abortedError();
+        if (error instanceof WorkerError)
+          throw new WorkerError(error.code, error.status, true);
+        throw new WorkerError("provider_network_error", 502, true);
       }
       if (record(completion) && Object.hasOwn(completion, "error"))
         throw new WorkerError("provider_embedded_error", 502, true);
+      if (!record(completion))
+        throw new WorkerError("provider_invalid_envelope", 502, true);
+      if (typeof completion.id !== "string")
+        throw new WorkerError("provider_invalid_id", 502, true);
       if (
-        !record(completion) ||
-        typeof completion.id !== "string" ||
         !Array.isArray(completion.choices) ||
         completion.choices.length < 1 ||
         completion.choices.length > 4 ||
-        !record(completion.choices[0]) ||
-        !record(completion.choices[0].message) ||
-        typeof completion.model !== "string" ||
-        completion.model.length > 200 ||
+        !record(completion.choices[0])
+      )
+        throw new WorkerError("provider_invalid_choices", 502, true);
+      if (!record(completion.choices[0].message))
+        throw new WorkerError("provider_invalid_message", 502, true);
+      if (typeof completion.model !== "string" || completion.model.length > 200)
+        throw new WorkerError("provider_invalid_model", 502, true);
+      if (
         !record(completion.usage) ||
         !Number.isSafeInteger(completion.usage.prompt_tokens) ||
         completion.usage.prompt_tokens < 0 ||
         !Number.isSafeInteger(completion.usage.completion_tokens) ||
         completion.usage.completion_tokens < 0
       )
-        throw new WorkerError("provider_invalid_response", 502, true);
+        throw new WorkerError("provider_invalid_usage", 502, true);
       return completion;
     } catch (error) {
       if (error instanceof WorkerError) throw error;
-      throw new WorkerError(
-        controller.signal.aborted
-          ? "provider_timeout"
-          : "provider_network_error",
-        controller.signal.aborted ? 504 : 502,
-        true,
-      );
+      if (controller.signal.aborted) throw abortedError();
+      throw new WorkerError("provider_network_error", 502, true);
     } finally {
       clearTimeout(timeout);
       shutdownSignal?.removeEventListener("abort", abort);
@@ -491,6 +523,9 @@ export class LiveService {
   stopped = false;
   constructor(backend) {
     this.backend = backend;
+  }
+  stopAccepting() {
+    this.stopped = true;
   }
   async status(input) {
     if (
@@ -604,8 +639,14 @@ export class LiveService {
     }
   }
   async close() {
-    this.stopped = true;
+    this.stopAccepting();
     for (const entry of this.active.values()) entry.controller.abort();
+    await Promise.allSettled(
+      [...this.active.values()].map((entry) => entry.pending),
+    );
+  }
+  async drain() {
+    this.stopAccepting();
     await Promise.allSettled(
       [...this.active.values()].map((entry) => entry.pending),
     );

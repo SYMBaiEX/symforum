@@ -65,10 +65,12 @@ async function main() {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    server.close();
+    const serverClosed = new Promise((resolve) => server.close(resolve));
     server.closeIdleConnections();
-    await liveService?.close();
-    await service.close();
+    liveService?.stopAccepting();
+    service.stopAccepting();
+    await Promise.all([serverClosed, liveService?.drain(), service.drain()]);
+    await backend.close();
   };
   process.once("SIGTERM", () => {
     void stop();

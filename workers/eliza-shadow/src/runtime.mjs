@@ -166,6 +166,10 @@ export class ShadowService {
     this.backend = backend;
   }
 
+  stopAccepting() {
+    this.stopped = true;
+  }
+
   async generate(input) {
     const { request, validateOutput } = validateRequest(input);
     if (this.stopped) throw new WorkerError("worker_stopping", 503);
@@ -248,9 +252,14 @@ export class ShadowService {
   }
 
   async close() {
-    this.stopped = true;
+    this.stopAccepting();
     this.controller?.abort();
     await this.active?.catch(quiet);
     await this.backend.close();
+  }
+
+  async drain() {
+    this.stopAccepting();
+    await this.active?.catch(quiet);
   }
 }
