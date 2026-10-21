@@ -189,6 +189,49 @@ function classifyRejection(body) {
     metadata.message,
     metadata.raw,
   ].filter((value) => typeof value === "string" && value.length <= 16_384);
+  // Rate hints come only from bounded upstream message/raw fields; emit enums,
+  // never provider text. Specific limits take precedence over generic quota.
+  const rateDetails = [error.message, metadata.raw].filter(
+    (value) => typeof value === "string" && value.length <= 16_384,
+  );
+  const rateMatches = (pattern) =>
+    rateDetails.some((detail) => pattern.test(detail));
+  if (
+    rateMatches(
+      /\b(?:tokens?[_ -]*per[_ -]*minute|tokens?[_ -]*quota|tokens?[_ -]*rate[_ -]*limit|tpm)\b/i,
+    )
+  )
+    return "provider_rejected_rate_tokens";
+  if (
+    rateMatches(
+      /\b(?:requests?[_ -]*per[_ -]*minute|requests?[_ -]*quota|requests?[_ -]*rate[_ -]*limit|rpm)\b/i,
+    )
+  )
+    return "provider_rejected_rate_requests";
+  if (
+    rateMatches(
+      /\b(?:concurrency|concurrent[_ -]*(?:request|limit)|too[_ -]*many[_ -]*concurrent[_ -]*requests|server[_ -]*(?:busy|overloaded))\b/i,
+    )
+  )
+    return "provider_rejected_rate_concurrency";
+  if (
+    rateMatches(
+      /\b(?:upstream|provider|endpoint)\b.{0,80}\b(?:temporar(?:y|ily)|rate[_ -]*limit|throttl\w*|busy)\b|\b(?:rate[_ -]*limit|throttl\w*)\b.{0,80}\b(?:upstream|provider|endpoint)\b/i,
+    )
+  )
+    return "provider_rejected_rate_upstream";
+  if (
+    rateMatches(
+      /\b(?:account|api[_ -]*key|key)\b.{0,80}\b(?:rate[_ -]*limit|rate[_ -]*quota|throttl\w*)\b|\b(?:rate[_ -]*limit|throttl\w*)\b.{0,80}\b(?:account|api[_ -]*key)\b/i,
+    )
+  )
+    return "provider_rejected_rate_account";
+  if (
+    rateMatches(
+      /\b(?:rate[_ -]*limit|too[_ -]*many[_ -]*requests|throttl\w*)\b/i,
+    )
+  )
+    return "provider_rejected_rate_generic";
   for (const detail of details) {
     if (
       /(?:json[_ -]?schema|response_format|structured output)/i.test(detail) &&

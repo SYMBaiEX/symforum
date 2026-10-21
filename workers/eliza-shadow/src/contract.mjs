@@ -16,6 +16,12 @@ export const PREINFERENCE_REJECTION_CODES = new Set([
   "provider_rejected_price",
   "provider_rejected_account",
   "provider_rejected_model",
+  "provider_rejected_rate_tokens",
+  "provider_rejected_rate_requests",
+  "provider_rejected_rate_concurrency",
+  "provider_rejected_rate_upstream",
+  "provider_rejected_rate_account",
+  "provider_rejected_rate_generic",
 ]);
 
 export class WorkerError extends Error {

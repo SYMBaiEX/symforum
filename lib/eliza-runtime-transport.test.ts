@@ -311,6 +311,12 @@ describe("Eliza live compatible transport", () => {
     "provider_rejected_price",
     "provider_rejected_account",
     "provider_rejected_model",
+    "provider_rejected_rate_tokens",
+    "provider_rejected_rate_requests",
+    "provider_rejected_rate_concurrency",
+    "provider_rejected_rate_upstream",
+    "provider_rejected_rate_account",
+    "provider_rejected_rate_generic",
   ])(
     "only explicit fixed provider rejection %s permits budgeted candidate fallback",
     async (errorCode) => {
@@ -318,14 +324,17 @@ describe("Eliza live compatible transport", () => {
       const workerFetch = vi.fn(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
           const envelope = JSON.parse(String(init?.body));
+          const providerStatus = errorCode.startsWith("provider_rejected_rate_")
+            ? 429
+            : 404;
           return envelope.body.model === "openrouter/free"
             ? Response.json(
                 {
                   error: errorCode,
-                  providerStatus: 404,
+                  providerStatus,
                   outcomeUnknown: false,
                 },
-                { status: 404 },
+                { status: providerStatus },
               )
             : Response.json({
                 ...envelope,
@@ -357,7 +366,9 @@ describe("Eliza live compatible transport", () => {
         1,
         expect.objectContaining({
           status: "failed",
-          providerStatus: 404,
+          providerStatus: errorCode.startsWith("provider_rejected_rate_")
+            ? 429
+            : 404,
           outcomeUnknown: false,
         }),
       );

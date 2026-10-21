@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { PREINFERENCE_REJECTION_CODES } from "../src/contract.mjs";
 import { createRuntimeBackend } from "../src/runtime.mjs";
 import { createHttpServer } from "../src/server.mjs";
 import { SqlJobStore } from "../src/store.mjs";
@@ -860,6 +861,85 @@ test("known provider rejections emit only bounded fixed diagnostics and remain f
       error.outcomeUnknown === false,
   );
   assert.equal(cancelled, true);
+});
+
+test("known 429 rate rejections expose finite categories without provider text", async () => {
+  const privateText = "private prompt and bearer secret";
+  for (const [message, code] of [
+    [
+      "tokens_per_minute quota exceeded; account quota",
+      "provider_rejected_rate_tokens",
+    ],
+    ["tokenquota exceeded; rate limit", "provider_rejected_rate_tokens"],
+    ["requests_per_minute exceeded", "provider_rejected_rate_requests"],
+    ["requestquota exceeded", "provider_rejected_rate_requests"],
+    [
+      "server busy: concurrency limit reached",
+      "provider_rejected_rate_concurrency",
+    ],
+    ["upstream temporarily rate limited", "provider_rejected_rate_upstream"],
+    ["API key rate limit exceeded", "provider_rejected_rate_account"],
+    ["rate limit", "provider_rejected_rate_generic"],
+  ]) {
+    assert.equal(PREINFERENCE_REJECTION_CODES.has(code), true);
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () =>
+        Response.json(
+          { error: { message: `${message}; ${privateText}` } },
+          { status: 429 },
+        ),
+    });
+    await assert.rejects(
+      provider(request()),
+      (error) =>
+        error.code === code &&
+        error.status === 429 &&
+        error.outcomeUnknown === false &&
+        error.message === code &&
+        !JSON.stringify(error).includes(privateText),
+    );
+  }
+  const rawProvider = createLiveProvider({
+    apiKey: "private-key",
+    fetchImpl: async () =>
+      Response.json(
+        {
+          error: {
+            message: "rate limit",
+            metadata: { raw: `tokenquota exceeded; ${privateText}` },
+          },
+        },
+        { status: 429 },
+      ),
+  });
+  await assert.rejects(
+    rawProvider(request()),
+    (error) =>
+      error.code === "provider_rejected_rate_tokens" &&
+      error.message === error.code &&
+      !JSON.stringify(error).includes(privateText),
+  );
+  for (const status of [408, 409, 500]) {
+    const ambiguous = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () =>
+        Response.json(
+          {
+            error: { message: `tokens_per_minute rate limit; ${privateText}` },
+          },
+          { status },
+        ),
+    });
+    await assert.rejects(
+      ambiguous(request()),
+      (error) =>
+        error.code === "provider_unavailable" &&
+        error.status === 502 &&
+        error.outcomeUnknown === true &&
+        !JSON.stringify(error).includes(privateText),
+    );
+  }
 });
 
 test("non-known status and unexpected stream do not wait for provider body cancellation", async () => {
