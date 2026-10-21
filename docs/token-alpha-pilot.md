@@ -316,6 +316,14 @@ become a quality, demand or trading recommendation. Independent review, limits
 and one-call/no-retry generation remain unchanged; live adherence still needs
 an ordinary future run.
 
+Independent review now also receives the unchanged saved previous snapshot, or
+explicit null. It can check follow-up deltas against both observations, using
+the renderer's exact-mint/platform and earlier-timestamp comparability rule.
+Incomparable history remains Unknown without inferred changes. This rule
+applies to post-to-post deltas, not the current source's own one-hour price
+change; an initial watch need not have a comparison section. No extra model or
+data call, rendering change or threshold relaxation is involved.
+
 The normal Pump 22:00 UTC slot also published
 [Clayton Kim's token watch](https://forum.symbaiex.com/crypto-pumpfun/clayton-kim-kimchi-one-hour-volume-watch).
 Its public/saved/deterministic/private bodies matched exactly, all four metric

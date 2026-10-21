@@ -70,13 +70,20 @@ const snapshot: TokenSnapshot = {
   sourceRank: 1,
 };
 
-function context(options: { claimed?: boolean; existing?: boolean } = {}) {
+function context(
+  options: {
+    claimed?: boolean;
+    existing?: boolean;
+    previous?: TokenSnapshot;
+  } = {},
+) {
   const state: {
     snapshot?: TokenSnapshot;
     previous?: TokenSnapshot;
     threadId?: string;
   } = {};
   if (options.existing) state.threadId = "existing-thread";
+  if (options.previous) state.previous = options.previous;
   const runMutation = vi.fn(
     async (
       ref: Parameters<typeof getFunctionName>[0],
@@ -285,6 +292,102 @@ describe("token pilot orchestration", () => {
       ),
     ).toBe(true);
   });
+  test("initial review receives explicit null history and strict comparison instructions", async () => {
+    const ctx = context();
+    await runTokenPilot(ctx.ctx, { platform: "bags" });
+    const prompt = mocks.generate.mock.calls[1][0].prompt;
+    const reviewed = JSON.parse(prompt.split("\n").at(-1));
+    expect(reviewed.snapshot).toEqual(snapshot);
+    expect(reviewed.previous).toBeNull();
+    expect(reviewed.body).toContain("1h price change: +2%");
+    expect(reviewed.body).not.toContain("Change from the previous snapshot");
+    expect(prompt).toContain(
+      "Both snapshot formats refer only to the Solana chain",
+    );
+    expect(prompt).toContain("exact same case-sensitive mint and platform");
+    expect(prompt).toContain(
+      "finite metricsAsOf strictly earlier than snapshot.metricsAsOf",
+    );
+    expect(prompt).toContain(
+      "For post-to-post deltas in the Change from the previous snapshot section only",
+    );
+    expect(prompt).toContain(
+      "Unknown with no change inferred; never manufacture missing history",
+    );
+    expect(prompt).toContain(
+      "An initial token watch may omit the post-to-post change section entirely",
+    );
+    expect(prompt).toContain(
+      "snapshot.priceChange1hPercent and does not require previous",
+    );
+    expect(prompt).toContain(
+      "check it directly against the current snapshot, not as a post-to-post delta",
+    );
+    expect(prompt).toContain("it is not volume traded since the previous post");
+    expect(mocks.generate.mock.calls[1][0]).toMatchObject({
+      maxOutputTokens: 3_000,
+      maxRetries: 0,
+    });
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+  });
+  test("follow-up review receives the exact prior snapshot underlying deterministic deltas", async () => {
+    const previous = {
+      ...snapshot,
+      observedAt: NOW - 3_600_000,
+      metricsAsOf: NOW - 3_600_000,
+      priceUsd: 0.0005,
+      marketCapUsd: 500,
+      holders: 25,
+      volume1hUsd: 1_000,
+      warnings: ["Prior observation retained unchanged."],
+    };
+    const before = structuredClone(previous);
+    const ctx = context({ existing: true, previous });
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "published",
+    );
+    const reviewed = JSON.parse(
+      mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+    );
+    expect(reviewed.previous).toEqual(previous);
+    expect(reviewed.body).toContain("Price: +$0.0005 (+100%)");
+    expect(reviewed.body).toContain(
+      "Rolling 1h volume window difference: +$1,000.00 (+100%)",
+    );
+    expect(previous).toEqual(before);
+    const generated = JSON.parse(
+      mocks.generate.mock.calls[0][0].prompt.split("\n").at(-1),
+    );
+    expect(generated).toEqual(snapshot);
+    expect(generated).not.toHaveProperty("previous");
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+  });
+  test.each([
+    { ...snapshot, mint: MINT.replace("T", "t"), metricsAsOf: NOW - 1 },
+    { ...snapshot, platform: "pumpfun" as const, metricsAsOf: NOW - 1 },
+    { ...snapshot, metricsAsOf: NOW },
+    { ...snapshot, metricsAsOf: NOW + 1 },
+    { ...snapshot, metricsAsOf: Number.NaN },
+  ])(
+    "incomparable history stays auditable but produces no reviewable deltas: %j",
+    async (previous) => {
+      const before = structuredClone(previous);
+      const ctx = context({ existing: true, previous });
+      await runTokenPilot(ctx.ctx, { platform: "bags" });
+      const reviewed = JSON.parse(
+        mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+      );
+      expect(reviewed.previous).toEqual(JSON.parse(JSON.stringify(previous)));
+      expect(reviewed.body).toContain(
+        "Unknown: no earlier comparable snapshot is available. No change is inferred.",
+      );
+      expect(reviewed.body).not.toContain(
+        "Rolling 1h volume window difference:",
+      );
+      expect(previous).toEqual(before);
+      expect(mocks.generate).toHaveBeenCalledTimes(2);
+    },
+  );
   test("draft prompt rejects unbenchmarked magnitude claims and repeated promotional text", async () => {
     const ctx = context();
     await runTokenPilot(ctx.ctx, { platform: "bags" });
