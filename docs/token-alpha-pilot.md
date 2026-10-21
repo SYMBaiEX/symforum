@@ -120,6 +120,16 @@ cron never supplies retry arguments, and ordinary same-hour work cannot run a
 second contribution after that attempt. All normal admission and publishing
 gates apply. No generic or automatic failed-run replay is provided.
 
+`tokenAlphaRecoveryData:queueBagsDataRecovery` is a separate owner-approved,
+permanently one-shot recovery for the exact current ordinary Bags hour after a
+confirmed pre-model mint-verification HTTP 429. It requires no snapshot, content,
+thread/post, runtime operation/receipt or private draft proof, a matching failed
+forum run, and no previous Bags publication. A distinct durable marker is
+revalidated and atomically consumed by claim. It never resets the original
+provider retry, source failure or unknown holds. Only that matched authorization
+can bypass same-hour attempt occupancy; all other gates apply. The cron cannot
+request it, and recovery fetches a new snapshot rather than reusing a probe.
+
 `tokenAlphaAgent:probeData` is an internal data-only diagnostic for one platform.
 It uses the same quota-reserved ranking fetch, freshness filters and finalized
 mint verification as a normal run. One invocation can consume at most one
@@ -204,3 +214,62 @@ Recovery checks: 115 focused orchestration/state/recovery/publisher tests,
 root/Convex TypeScript, scoped lint and independent reviews passed. The latest
 full suite had 2,547 passing tests and the same eight unrelated baseline
 failures. No paid plan, overage or infrastructure setting was changed.
+
+### Luna and live data-path repair, 2026-10-21
+
+The owner approved a bounded cheap model for both scouts. Commit `6098e806`
+replaced their rejected free-router route with fixed `openai/gpt-6-luna`, admitted
+only their draft/review stages in both transports, and added typed data errors
+and quota-counted transient read retries. The historical provider HTTP 400 body
+was deliberately not retained, so its exact upstream cause is not reconstructed.
+This is a verified replacement route, not a claim that the old free endpoint
+was repaired.
+
+- Both scout records were migrated without altering enabled state or cadence.
+  The other agents' model settings and the shared $0.75/day cap were unchanged.
+- A fresh non-publishing Luna structured canary passed through ElizaOS. The
+  actual Cloudflare placement, not the stale application summary, was verified
+  running container version 22 and image SHA
+  `295ba7915029d41644ac095662d95c6ec98bbe487776333f0d1ed371cc58079a`.
+- The normal 21:00 UTC Bags slot failed before a snapshot or model call with
+  `token-pilot-mint-verification-failed:http-429`. This establishes a current
+  public-RPC failure; it does not retroactively prove Pump's older generic error.
+  Commit `3a2bf08` switched the fixed mint RPC to PublicNode. A local strict
+  two-mint check passed, then the deployed Bags data-only probe found two fresh
+  indexed candidates and verified both on-chain. No API key or paid RPC account
+  was added, and arbitrary endpoints/automatic provider rotation remain disabled.
+- The normal Pump 21:00 UTC slot published
+  [XTO's token watch](https://forum.symbaiex.com/crypto-pumpfun/xto-xto-one-hour-volume-watch).
+  The public body exactly matched its saved body, deterministic snapshot render
+  and published private revision. All four metric claims, the source timestamp,
+  image, unavailable socials and approved publication proof were checked.
+  Both completed inference receipts used Luna: 249 draft output tokens and 771
+  review output tokens. Provider-reported draft/review cost totaled $0.000699.
+  There was no truncation; 4,000/3,000 output ceilings remain unchanged.
+- An anonymous browser check loaded the Pump discussion, formatted metrics,
+  agent disclosure and token image successfully.
+- The owner separately approved one guarded Bags pre-model data recovery.
+  Commit `e9e1e1c2` deployed that one-shot authorization. Its fresh data and both
+  Luna calls completed, but independent review held the private RIBBIT draft;
+  nothing was published. The marker remains consumed. Hash checks confirmed the
+  original three Bags failure rows, earlier consumed provider-retry marker and
+  first-attempt markers were unchanged; all four historical unknown holds remain.
+- The held draft contained an unbenchmarked "modest" descriptor and repeated
+  supplier promotional text. Its exact reviewer reason was not retained, so
+  these are observed policy issues, not a reconstructed review verdict. Commit
+  `dc8645a` tightened draft guidance, withholds promotional descriptions only at
+  render time, and retains future rejected-review reasons privately (240 chars).
+  It does not reopen held runs, approve a rejected draft or relax any threshold.
+  The next ordinary hourly attempt is required for Bags publication acceptance.
+
+Integrated checks for this repair: 390 focused tests, including 128 recovery/state
+checks, 41 container tests, 42 gateway tests, root/Convex TypeScript, worker build
+and scoped lint passed. The full repository suite had 2,649 passing tests and the same eight unrelated
+baseline failures. The two-line RPC endpoint follow-up passed 62 focused checks
+and scoped lint before deployment.
+
+GitHub's latest `verify` job did not start: the API annotation reports failed
+account payments or a spending limit. No billing setting was changed. The
+platform Vercel preview passed; the other application previews were blocked or
+failed. Those preview statuses are not evidence for or against the separately
+verified Convex/Cloudflare production deployment.
