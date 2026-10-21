@@ -14,9 +14,9 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
-  "mistralai/mistral-small-3.2-24b-instruct",
+  "qwen/qwen3.5-flash-02-23",
 ]);
-const BOUNDED_NEWSLETTER_MODEL = "mistralai/mistral-small-3.2-24b-instruct";
+const BOUNDED_NEWSLETTER_MODEL = "qwen/qwen3.5-flash-02-23";
 function withinNewsletterPriceCap(value, ceilingDigit) {
   if (
     typeof value !== "string" ||
@@ -312,7 +312,9 @@ export function validateLiveRequest(input) {
     const price = body.provider?.max_price;
     if (
       !["belle", "system"].includes(input.agentSlug) ||
-      body.reasoning !== undefined ||
+      !record(body.reasoning) ||
+      Object.keys(body.reasoning).length !== 1 ||
+      body.reasoning.enabled !== false ||
       body.provider?.require_parameters !== true ||
       !record(price) ||
       Object.keys(price).length !== 2 ||

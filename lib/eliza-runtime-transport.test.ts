@@ -59,7 +59,7 @@ describe("Eliza live compatible transport", () => {
               },
             },
           });
-          expect(envelope.body.reasoning).toBeUndefined();
+          expect(envelope.body.reasoning).toEqual({ enabled: false });
           expect(envelope.body.reasoning_effort).toBeUndefined();
           expect(onRequest).toHaveBeenCalledTimes(1);
           return Response.json({

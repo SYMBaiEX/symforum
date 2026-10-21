@@ -3,6 +3,7 @@
 
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
+import { NoObjectGeneratedError, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { routedModelCandidates } from "../lib/ai-model-routing";
@@ -321,6 +322,51 @@ test("unknown reviewer transport fails closed without revision or publication", 
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
+test("completed reviewer failure followed by budget or unknown transport preserves the final fatal error", async () => {
+  const [candidate] = await routedModelCandidates(
+    { openRouterApiKey: "test-only-key" }, NEWSLETTER_MODEL_IDS,
+  );
+  for (const failure of [
+    new Error("review budget preflight denied"),
+    new Error("Eliza runtime transport unknown outcome"),
+  ]) {
+    const t = setup();
+    await seedSnapshot(t);
+    route.mockReset();
+    const noObject = new NoObjectGeneratedError({
+      message: "No object generated", text: "not json",
+      response: {} as ConstructorParameters<typeof NoObjectGeneratedError>[0]["response"],
+      usage: {} as ConstructorParameters<typeof NoObjectGeneratedError>[0]["usage"],
+      finishReason: "length",
+    });
+    const reviewerGenerate = vi.spyOn(ToolLoopAgent.prototype, "generate")
+      .mockRejectedValueOnce(noObject);
+    if (failure.message.includes("transport")) reviewerGenerate.mockRejectedValueOnce(failure);
+    route.mockImplementation(async (_config, options) => {
+      if (!options.stage.endsWith(":evidence-review")) {
+        return {
+          route: { persistedModel: "openrouter/free" },
+          value: { draft: validDraft, usage: { inputTokens: 700, outputTokens: 900 }, modelId: "openrouter/free" },
+        };
+      }
+      await expect(options.run(candidate, new AbortController().signal)).rejects.toBe(noObject);
+      if (failure.message.includes("transport")) {
+        await expect(options.run(candidate, new AbortController().signal)).rejects.toBe(failure);
+      }
+      throw failure;
+    });
+    await expect(t.action(generateDailySignal, {
+      ...args, shadowSourceRunKey: `pilot:belle:review-fail-then-${failure.message.includes("transport") ? "transport" : "budget"}`,
+    })).rejects.toBe(failure);
+    expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+      "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+    ]);
+    expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+    expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
+    reviewerGenerate.mockRestore();
+  }
+});
+
 test("oversize original selected evidence fails before any review route call", async () => {
   const t = setup();
   await seedSnapshot(t);
@@ -466,7 +512,7 @@ test("normal legacy generation keeps DeepSeek for both writer and reviewer", asy
   ]);
 });
 
-test("Belle's Mistral SDK requests use the pinned price ceiling without reasoning output", async () => {
+test("Belle's fixed-model SDK requests use the pinned price ceiling without reasoning output", async () => {
   const t = setup();
   await seedSnapshot(t);
   const wire = compactReview(validDraft);
@@ -477,7 +523,7 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
   mockDrafts(invalidStoryDraft, validDraft);
   await t.action(generateDailySignal, {
     ...args, forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
-    shadowSourceRunKey: "pilot:belle:mistral-serialization-test",
+    shadowSourceRunKey: "pilot:belle:fixed-model-serialization-test",
   });
   const requestBodies: Record<string, unknown>[] = [];
   vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -487,7 +533,7 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
       ? compactReview(validDraft) : validDraft;
     return new Response(JSON.stringify({
       id: "belle-structured-test", object: "chat.completion", created: 1_760_000_000,
-      model: "mistralai/mistral-small-3.2-24b-instruct",
+      model: NEWSLETTER_MODEL_IDS[0],
       choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(responseContent) },
         finish_reason: "stop" }],
       usage: { prompt_tokens: 100, completion_tokens: 900, total_tokens: 1000 },
@@ -517,7 +563,7 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
       max_tokens: 8000,
       provider: { max_price: { prompt: "0.2", completion: "0.5" } },
     });
-    expect(body.reasoning).toBeUndefined();
+    expect(body.reasoning).toEqual({ enabled: false });
     expect(body.reasoning_effort).toBeUndefined();
     expect(JSON.stringify(body.messages)).toContain("Reasoning strength: none");
     expect(JSON.stringify(body.messages)).toContain("standalone email subject of at most 64 characters");
@@ -529,7 +575,7 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
     provider: { max_price: { prompt: "0.2", completion: "0.5" } },
   });
-  expect(requestBodies[2]?.reasoning).toBeUndefined();
+  expect(requestBodies[2]?.reasoning).toEqual({ enabled: false });
   expect(requestBodies[2]?.reasoning_effort).toBeUndefined();
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("10,000 AI sessions is NOT 10,000 ChatGPT citations");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("editorial label; factual assertions still need evidence");

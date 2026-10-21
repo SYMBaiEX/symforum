@@ -231,11 +231,12 @@ export const validateBelle = internalAction({
         const data = error instanceof ConvexError ? error.data : null;
         if (
           data !== null && typeof data === "object" &&
-          "code" in data && data.code === "baseline_quality_rejected" &&
+          "code" in data &&
+          (data.code === "baseline_quality_rejected" || data.code === "baseline_review_failed") &&
           "shadowJobId" in data && typeof data.shadowJobId === "string"
         ) {
           const run = await ctx.runMutation(finishRef, {
-            nonce: args.nonce, status: "failed", errorCode: "baseline_quality_rejected",
+            nonce: args.nonce, status: "failed", errorCode: data.code,
             sourceHash, sourceCount: indexed.stories.length,
             shadowJobId: data.shadowJobId as Id<"elizaShadowJobs">,
             shadowStatus: "queued",

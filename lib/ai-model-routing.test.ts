@@ -136,7 +136,7 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("enforces the fixed newsletter price ceilings and removes thinking hints on the wire", async () => {
+  test("enforces the fixed newsletter price ceilings and disables reasoning on the wire", async () => {
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal(
       "fetch",
@@ -191,7 +191,7 @@ describe("OpenRouter-only model routing", () => {
           },
         },
       });
-      expect(bodies[0].reasoning).toBeUndefined();
+      expect(bodies[0].reasoning).toEqual({ enabled: false });
       expect(bodies[0].reasoning_effort).toBeUndefined();
     } finally {
       vi.unstubAllGlobals();

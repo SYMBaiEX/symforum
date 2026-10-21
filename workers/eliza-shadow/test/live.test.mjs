@@ -378,14 +378,14 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
 test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
   const newsletterBody = {
     ...body,
-    model: "mistralai/mistral-small-3.2-24b-instruct",
+    model: "qwen/qwen3.5-flash-02-23",
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
       max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
-  delete newsletterBody.reasoning;
+  newsletterBody.reasoning = { enabled: false };
   const newsletterRequest = (agentSlug, stage, nextBody = newsletterBody) =>
     request({
       agentSlug,
@@ -423,6 +423,16 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     () =>
       validateLiveRequest(
         newsletterRequest("belle", "belle:daily-signal:draft", retiredBody),
+      ),
+    /model_not_allowed/,
+  );
+  assert.throws(
+    () =>
+      validateLiveRequest(
+        newsletterRequest("belle", "belle:daily-signal:draft", {
+          ...newsletterBody,
+          model: "mistralai/mistral-small-3.2-24b-instruct",
+        }),
       ),
     /model_not_allowed/,
   );
@@ -492,6 +502,18 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
       reasoning: { effort: "low" },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: { enabled: true },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: { enabled: false, exclude: true },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: undefined,
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,

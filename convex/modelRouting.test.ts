@@ -130,7 +130,7 @@ describe("free-only structured operator probe", () => {
             id: "synthetic-qwen-probe",
             object: "chat.completion",
             created: 1_760_000_000,
-            model: "mistralai/mistral-small-3.2-24b-instruct",
+            model: "qwen/qwen3.5-flash-02-23",
             choices: [
               {
                 index: 0,
@@ -179,24 +179,24 @@ describe("free-only structured operator probe", () => {
 
     await expect(
       runStructuredProbe(ctx, undefined, false, {
-        model: "mistralai/mistral-small-3.2-24b-instruct",
+        model: "qwen/qwen3.5-flash-02-23",
       }),
     ).resolves.toEqual({
       provider: "openrouter",
-      model: "mistralai/mistral-small-3.2-24b-instruct",
+      model: "qwen/qwen3.5-flash-02-23",
       response: "SYMBiEX structured model route healthy",
     });
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({
-      model: "mistralai/mistral-small-3.2-24b-instruct",
+      model: "qwen/qwen3.5-flash-02-23",
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
         max_price: { prompt: "0.2", completion: "0.5" },
       },
     });
-    expect(bodies[0].reasoning).toBeUndefined();
+    expect(bodies[0].reasoning).toEqual({ enabled: false });
     expect(bodies[0].reasoning_effort).toBeUndefined();
 
     const reservation = runMutation.mock.calls.find(
@@ -204,15 +204,15 @@ describe("free-only structured operator probe", () => {
         getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
     );
     expect(reservation?.[1]).toMatchObject({
-      model: "mistralai/mistral-small-3.2-24b-instruct",
+      model: "qwen/qwen3.5-flash-02-23",
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
         getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
-      model: "mistralai/mistral-small-3.2-24b-instruct",
-      servedModel: "mistralai/mistral-small-3.2-24b-instruct",
+      model: "qwen/qwen3.5-flash-02-23",
+      servedModel: "qwen/qwen3.5-flash-02-23",
     });
   });
 

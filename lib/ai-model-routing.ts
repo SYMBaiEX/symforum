@@ -148,9 +148,9 @@ function openRouterRequestBody(body: Record<string, unknown>) {
       : [...plugins, { id: "response-healing" }];
   }
   if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
-    // This instruct route is non-thinking. Unsupported reasoning hints can eliminate
-    // otherwise valid structured-output endpoints under require_parameters.
-    delete request.reasoning;
+    // This Qwen endpoint supports native reasoning control. Keep its output
+    // budget for the structured answer rather than a hidden thinking phase.
+    request.reasoning = { enabled: false };
     delete request.reasoning_effort;
     request.provider = {
       ...(request.provider as Record<string, unknown> | undefined),

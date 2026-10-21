@@ -15,16 +15,18 @@ free router only; replies and independent reviews retain their existing
 free-first routing with cheap DeepSeek rescue where that stage permits it.
 Belle's long daily/weekly drafts, their single
 revision and blind evidence review use the fixed non-thinking
-`mistralai/mistral-small-3.2-24b-instruct` route: the free attempt exceeded the safe worker
-deadline and DeepSeek drafts failed source review. No publishing credentials or
+`qwen/qwen3.5-flash-02-23` route with native thinking disabled: the free attempt
+exceeded the safe worker deadline, DeepSeek drafts failed source review, and the
+Mistral trial still exhausted the bounded review output. This is not the older
+Qwen235B route that failed pre-inference checks. No publishing credentials or
 publishing tools exist in the worker.
 
 Until live mode is enabled, normal legacy Belle calls retain the existing
 DeepSeek route with separate reasoning disabled. Only an explicitly forced Eliza
-pilot or actual live Eliza configuration selects the bounded Mistral route.
+pilot or actual live Eliza configuration selects the bounded Qwen3.5 route.
 
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
-and that fixed Mistral model. Mistral is restricted to Belle and the system canary,
+and that fixed Qwen3.5 model. The fixed model is restricted to Belle and the system canary,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
 reservations use those ceilings, not a catalog minimum. No cross-model server
 fallback is allowed. The old fixed GPT pilot was retired at the operator's request.
@@ -184,6 +186,12 @@ publishing were not changed to manufacture a passing test.
   loss/forgetting and rerun anecdotes. The blind reviewer explicitly checks them
   too. Manual review remains required: a model reviewer approved one such draft,
   which was rejected by the operator before any publication.
+- A separate pre-existing forum claim-ledger mismatch was found during the repair:
+  the writer allowed 48 entries while persistence/publication allowed only 12.
+  New generation and revision schemas/prompts now share the existing 12-claim
+  bound with storage. Body claims must be consolidated with complete evidence
+  coverage; nothing is truncated, discarded or admitted past the storage gate.
+  Historical draft parsing remains compatible with older larger ledgers.
 - Full-context Suki validation `cutover-suki-gpu-20261020-v1` used the existing
   unanswered public AI-opening GPU-scheduling question, with its retrieved original
   Hugging Face/Ai2 article. Free writer receipt
@@ -244,6 +252,17 @@ publishing were not changed to manufacture a passing test.
   thresholds. Practical moves are explicitly short imperative actions, not recap
   paragraphs; all prose must leave field-limit headroom and complete its thought.
   Failed pilot artifacts remain failed even when available for private inspection.
+- Mistral v4 completed all four inference receipts, but its final review again
+  exhausted 4,000 output tokens and failed schema validation. This is a known
+  completed inference, not a new unknown job or a quality pass. The short parsed
+  text relative to reported output tokens remains unexplained; no local worker
+  or SDK clipping was found. Upstream response healing can change malformed JSON,
+  but its involvement in this response is not established.
+- The replacement Qwen3.5-Flash endpoint was catalog-checked for native
+  thinking-off and structured-output support. Its public $0.065/M input and
+  $0.26/M output listing is below the unchanged hard $0.20/M and $0.50/M ceilings;
+  catalog eligibility is not a successful runtime or editorial verification.
+  [OpenRouter model endpoint metadata](https://openrouter.ai/api/v1/models/qwen/qwen3.5-flash-02-23/endpoints)
 - Explicit operator Belle pilots may also capture a rejected baseline through
   the same capped, private, seven-day shadow store. The run remains `failed`
   with `baseline_quality_rejected` and a nonce-linked inspection ID; this is

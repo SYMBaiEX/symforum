@@ -7,7 +7,7 @@ import { makeFunctionReference } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import schema from "./schema";
 import type { Id } from "./_generated/dataModel";
-import { editorialEvidenceFields } from "./newsletterAgent";
+import { CompletedEditorialReviewError, editorialEvidenceFields } from "./newsletterAgent";
 
 const route = vi.hoisted(() => vi.fn());
 vi.mock("../lib/ai-model-routing", async importOriginal => ({
@@ -246,5 +246,81 @@ test("rejected Belle pilot stays failed with a private inspectable draft and no 
     siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
     shadowSourceRunKey: "pilot:belle:disabled_direct_capture_001",
   })).rejects.toThrow("failed editorial gates");
+  expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
+});
+
+test("completed but unusable Belle review captures a private diagnostic without publishing or retrying", async () => {
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  await t.run(async ctx => {
+    await ctx.db.insert("newsSnapshots", {
+      snapshotDate: "2026-10-20", status: "complete", startedAt: 1,
+      completedAt: 2, storyCount: 8,
+    });
+    for (let rank = 1; rank <= 8; rank++) {
+      await ctx.db.insert("hnStories", {
+        hnItemId: rank, snapshotDate: "2026-10-20", rank,
+        title: `Public HN story ${rank}`, host: `publisher${rank}.example`,
+        url: `https://publisher${rank}.example/report`,
+        text: sourceText, fetchedAt: 2,
+      });
+    }
+  });
+  const reviewFailure = new Error("AI generation failed for belle:daily-signal:evidence-review after 1 attempt: No object generated.");
+  route.mockImplementation(async (_config, options) => {
+    if (options.stage.endsWith(":evidence-review")) throw new CompletedEditorialReviewError(reviewFailure);
+    return {
+      route: { persistedModel: "openrouter/free" },
+      value: { draft, usage: { inputTokens: 800, outputTokens: 1_200 }, modelId: "openrouter/free" },
+    };
+  });
+  const nonce = "pilot_review_unavailable_belle_001";
+  const result = await t.action(belleAction, {
+    nonce, runDate: "2026-10-20", snapshotDate: "2026-10-20",
+  });
+  expect(result).toMatchObject({ duplicate: false, run: {
+    status: "failed", errorCode: "baseline_review_failed", sourceCount: 8,
+  } });
+  expect(result.run.shadowJobId).toBeDefined();
+  expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+    "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+  ]);
+  const inspected = await t.query(inspectPilot, { nonce, jobId: result.run.shadowJobId! });
+  expect(inspected?.run).toMatchObject({ status: "failed", errorCode: "baseline_review_failed" });
+  expect(JSON.parse(inspected!.baselineJson)).toMatchObject({
+    draft: { subject: draft.subject },
+    evaluation: {
+      reviewStatus: "unavailable", needsRevision: true,
+      quality: { blockingIssues: expect.arrayContaining([expect.stringContaining("no verdict was accepted")]) },
+      evidenceReview: { reviewedFields: 0, coherence: "unknown", verdicts: [] },
+    },
+  });
+  expect(JSON.parse(inspected!.evaluationJson)).toMatchObject({ edition: "daily-signal" });
+  const replay = await t.action(belleAction, {
+    nonce, runDate: "2026-10-20", snapshotDate: "2026-10-20",
+  });
+  expect(replay).toMatchObject({ duplicate: true, run: { status: "failed", shadowJobId: result.run.shadowJobId } });
+  expect(route).toHaveBeenCalledTimes(2);
+  const state = await t.run(async ctx => ({
+    issues: await ctx.db.query("newsletterIssues").take(10),
+    runs: await ctx.db.query("dailyNewsletterRuns").take(10),
+    sends: await ctx.db.query("newsletterSendLogs").take(10),
+    shadow: await ctx.db.query("elizaShadowJobs").take(10),
+  }));
+  expect(state.issues).toEqual([]);
+  expect(state.runs).toEqual([]);
+  expect(state.sends).toEqual([]);
+  expect(state.shadow).toHaveLength(1);
+  await expect(t.action(organicBelleAction, {
+    runDate: "2026-10-20", snapshotDate: "2026-10-20",
+    siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
+  })).rejects.toBe(reviewFailure);
+  expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
+  vi.stubEnv("ELIZA_SHADOW_MODE", "off");
+  await expect(t.action(organicBelleAction, {
+    runDate: "2026-10-20", snapshotDate: "2026-10-20",
+    siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
+    shadowSourceRunKey: "pilot:belle:disabled_review_capture_001",
+  })).rejects.toBe(reviewFailure);
   expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
 });
