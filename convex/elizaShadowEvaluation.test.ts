@@ -312,7 +312,7 @@ describe("shadow hooks", () => {
         /UNPUBLISHED_PRIVATE_|BASELINE_MODEL_ONLY|INITIAL_MODEL_ONLY|PRIVATE_IMAGE_URL/,
       );
       expect(input.prompt).toContain(
-        '"headlines":[],"theses":[],"storyIds":[]',
+        '"recentlyUsedStoryIds":[],"recentHeadlineCount":0,"recentThesisCount":0',
       );
       expect(input.prompt).toContain("publisher-1.example/report");
       const schema = input.schema as { properties?: { chart?: { properties?: Record<string, unknown> } } };

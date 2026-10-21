@@ -10,8 +10,10 @@ jobs are separate and are not migrated by this switch.
 
 Convex still owns source selection, prompts and private reply history, schedules,
 budgets and usage accounting, validation, publication, newsletter storage and
-email sending. Forum generation and evidence review remain free-first with the
-existing cheap DeepSeek rescue. Belle's long daily/weekly drafts, their single
+email sending. Shared forum research topic selection and article drafts use the
+free router only; replies and independent reviews retain their existing
+free-first routing with cheap DeepSeek rescue where that stage permits it.
+Belle's long daily/weekly drafts, their single
 revision and blind evidence review use the fixed non-thinking
 `mistralai/mistral-small-3.2-24b-instruct` route: the free attempt exceeded the safe worker
 deadline and DeepSeek drafts failed source review. No publishing credentials or
@@ -227,10 +229,21 @@ publishing were not changed to manufacture a passing test.
   4,000-token cap (`finish=length`, zero reasoning tokens) before completing its
   verdict. Both receipts completed; this is not an unknown outcome or a quality
   approval. Review wire output is now a strict compact union: analysis has only
-  path/verdict; facts require source ID/quote; unsupported/unknown require a
-  short reason. Received records are hydrated into the unchanged full validator.
-  Missing records are never synthesized. Full path/source/quote/coherence gates,
-  original source context, the 4k cap and single revision remain unchanged.
+  path/verdict; facts select one to four exact source-segment IDs;
+  unsupported/unknown require a short reason. The catalog preserves every
+  original source character in order, without normalization or truncation.
+  Received IDs hydrate to exact source IDs/quotes for the unchanged full
+  validator; invalid/duplicate references fail closed. Missing review paths are
+  never synthesized. Full path/source/quote/coherence gates, the original source
+  context, the 4k cap and single revision remain unchanged. Exact quote membership
+  is not proof of semantic support; the independent reviewer and first-pilot
+  manual inspection must still reject unsupported scope, causality or units.
+- The rejected Mistral v3 pilot exposed copied recent framing and clipped
+  practical-move prose. Writer prompts no longer expose recent headline/thesis
+  wording as a copy target, while Convex retains the same novelty comparison and
+  thresholds. Practical moves are explicitly short imperative actions, not recap
+  paragraphs; all prose must leave field-limit headroom and complete its thought.
+  Failed pilot artifacts remain failed even when available for private inspection.
 - Explicit operator Belle pilots may also capture a rejected baseline through
   the same capped, private, seven-day shadow store. The run remains `failed`
   with `baseline_quality_rejected` and a nonce-linked inspection ID; this is

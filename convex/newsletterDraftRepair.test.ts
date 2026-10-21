@@ -167,8 +167,7 @@ function compactReview(draft: typeof validDraft) {
   return {
     fields: review.fields.map(field => field.verdict === "fact"
       ? {
-          path: field.path, verdict: "fact", sourceId: field.sourceId,
-          quote: field.quote,
+          path: field.path, verdict: "fact", quoteIds: [`${field.sourceId}:q0`],
         }
       : { path: field.path, verdict: "analysis" }),
     coherence: "clear",

@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, test } from "vitest";
+import { z } from "zod";
 
 import {
   OPENROUTER_FORUM_MODEL,
@@ -8,8 +9,10 @@ import {
   OPENROUTER_PAID_FALLBACK_MODEL,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
+import { buildEditorialEvidenceCatalog } from "../lib/newsletter-evidence-catalog";
 import {
   articleSnapshotsForForumDigest,
+  editorialEvidenceReviewPrompt,
   editorialPrompt,
   editorialEvidenceFields,
   evidenceReviewSchema,
@@ -128,17 +131,59 @@ function completeReview(draft = dailyDraft()): Parameters<typeof validateEditori
 }
 
 describe("Belle blind evidence review validation", () => {
+  const catalog = buildEditorialEvidenceCatalog(sources);
+  test("reviewer sees original selected source text once as ordered labeled segments", () => {
+    const reviewSources = sources.map((source, index) => ({
+      ...source, title: `Original title ${index + 1}`, rank: index + 1,
+      url: `https://source${index + 1}.example/report`,
+    }));
+    const { prompt, catalog } = editorialEvidenceReviewPrompt(dailyDraft(), reviewSources);
+    const parsed = JSON.parse(prompt) as {
+      sources: Array<{ hnItemId: number; title: string; url: string; sourceText?: string;
+        segments: Array<{ id: string; text: string }> }>;
+    };
+    expect(parsed.sources).toHaveLength(reviewSources.length);
+    for (const [index, source] of parsed.sources.entries()) {
+      expect(source.title).toBe(reviewSources[index].title);
+      expect(source.url).toBe(reviewSources[index].url);
+      expect(source).not.toHaveProperty("sourceText");
+      expect(source.segments.map(segment => segment.text).join(""))
+        .toBe(reviewSources[index].sourceText);
+      expect(source.segments[0]?.id).toBe(`${source.hnItemId}:q0`);
+    }
+    expect(catalog.byId.get("1:q0")?.quote).toBe(parsed.sources[0]?.segments[0]?.text);
+  });
+  test("large original evidence keeps every segment without a growing model enum", () => {
+    const original = "Supported source evidence. ".repeat(2_600);
+    const { catalog, prompt } = editorialEvidenceReviewPrompt(dailyDraft(), [
+      { hnItemId: 1, title: "Long source", rank: 1, sourceText: original },
+      ...sources.slice(1).map((source, index) => ({
+        ...source, title: `Source ${index + 2}`, rank: index + 2,
+      })),
+    ]);
+    expect(catalog.byId.size).toBeGreaterThan(256);
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(120 * 1024);
+    const parsed = JSON.parse(prompt) as { sources: Array<{ segments: Array<{ text: string }> }> };
+    expect(parsed.sources[0]!.segments.map(segment => segment.text).join("")).toBe(original);
+    const modelSchema = JSON.stringify(z.toJSONSchema(evidenceReviewWireSchema));
+    expect(modelSchema).not.toContain("1:q256");
+    expect(modelSchema.length).toBeLessThan(5_000);
+    expect(() => hydrateEditorialEvidenceReview({
+      fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q99999"] }],
+      coherence: "clear",
+    }, catalog)).toThrow("unknown quote ID");
+  });
   test("hydrates compact verdict variants without inventing field coverage", () => {
     const wire = {
       fields: [
-        { path: "stories.0.summary", verdict: "fact", sourceId: 1, quote: sources[0]!.sourceText.slice(0, 25) },
+        { path: "stories.0.summary", verdict: "fact", quoteIds: ["1:q0"] },
         { path: "thesis", verdict: "analysis" },
         { path: "lead", verdict: "unsupported", reason: "Claim has no source" },
         { path: "dek", verdict: "unknown", reason: "Attribution unclear" },
       ],
       coherence: "clear",
     };
-    const review = hydrateEditorialEvidenceReview(wire);
+    const review = hydrateEditorialEvidenceReview(wire, catalog);
     expect(review.fields).toHaveLength(4);
     expect(review.fields[0]).toMatchObject({
       verdict: "fact", sourceId: 1, additionalSupports: [], reason: null,
@@ -159,7 +204,7 @@ describe("Belle blind evidence review validation", () => {
   test("compact wire rejects missing fact evidence and empty issue reasons", () => {
     const base = { coherence: "clear" };
     expect(evidenceReviewWireSchema.safeParse({
-      ...base, fields: [{ path: "stories.0.summary", verdict: "fact", sourceId: 1 }],
+      ...base, fields: [{ path: "stories.0.summary", verdict: "fact", quoteIds: [] }],
     }).success).toBe(false);
     expect(evidenceReviewWireSchema.safeParse({
       ...base, fields: [{ path: "lead", verdict: "unsupported", reason: "" }],
@@ -172,23 +217,49 @@ describe("Belle blind evidence review validation", () => {
     }).success).toBe(false);
     expect(() => hydrateEditorialEvidenceReview({
       fields: [], coherence: "unsupported",
-    })).toThrow("omitted a coherence reason");
+    }, catalog)).toThrow("omitted a coherence reason");
+    expect(() => hydrateEditorialEvidenceReview({
+      fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q999"] }], coherence: "clear",
+    }, catalog)).toThrow("unknown quote ID");
+    expect(() => hydrateEditorialEvidenceReview({
+      fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q0", "1:q0"] }], coherence: "clear",
+    }, catalog)).toThrow("duplicated a quote ID");
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q0"], quote: "injected" }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q999"] }],
+    }).success).toBe(true);
   });
 
   test("compact review retains duplicate and wrong-source blockers", () => {
     const wire = {
       fields: [
-        { path: "stories.0.summary", verdict: "fact", sourceId: 2, quote: sources[1]!.sourceText.slice(0, 25) },
+        { path: "stories.0.summary", verdict: "fact", quoteIds: ["2:q0"] },
         { path: "stories.0.summary", verdict: "analysis" },
       ],
       coherence: "clear",
     };
     const issues = validateEditorialEvidenceReview(
-      dailyDraft(), sources, hydrateEditorialEvidenceReview(wire),
+      dailyDraft(), sources, hydrateEditorialEvidenceReview(wire, catalog),
     ).join(" ");
     expect(issues).toContain("correct selected source for stories.0.summary");
     expect(issues).toContain("duplicate or unexpected field stories.0.summary");
     expect(issues).toContain("Evidence review omitted");
+  });
+
+  test("hydrates multiple catalog IDs verbatim without weakening source ownership", () => {
+    const wire = { fields: [
+      { path: "thesis", verdict: "fact", quoteIds: ["1:q0", "2:q0"] },
+      { path: "stories.0.summary", verdict: "fact", quoteIds: ["2:q0"] },
+    ], coherence: "clear" };
+    const review = hydrateEditorialEvidenceReview(wire, catalog);
+    expect(review.fields[0]).toMatchObject({
+      sourceId: 1, quote: catalog.byId.get("1:q0")!.quote,
+      additionalSupports: [{ sourceId: 2, quote: catalog.byId.get("2:q0")!.quote }],
+    });
+    expect(validateEditorialEvidenceReview(dailyDraft(), sources, review).join(" "))
+      .toContain("correct selected source for stories.0.summary");
   });
 
   test("requires every prose path exactly once and blocks extra or duplicate verdicts", () => {
@@ -398,6 +469,23 @@ describe("Belle editorial scoring", () => {
     expect(alternativeSource.articleText.length).toBeLessThanOrEqual(450);
   });
 
+  test("writer prompts retain recent source IDs but withhold verbatim editorial frames", () => {
+    const copied = "When claims outpace proof, the burden shifts to the builder";
+    const previousDraft = {
+      ...dailyDraft(), subject: copied, headline: copied,
+      dek: copied, thesis: copied, lead: copied,
+    };
+    const prompt = editorialPrompt(
+      { edition: "daily-signal", runDate: "2026-10-20", snapshotDate: "2026-10-20" },
+      [], { headlines: [copied], theses: [copied], storyIds: [42] },
+      { feedback: ["subject, headline repeats a recent editorial frame"], previousDraft },
+    );
+    expect(prompt).not.toContain(copied);
+    expect(prompt).toContain('"recentlyUsedStoryIds":[42]');
+    expect(prompt).toContain("recentHeadlineCount");
+    expect(prompt).toContain("practicalMoves");
+  });
+
   test("blocks a number that is absent from its story's own source", () => {
     const draft = dailyDraft();
     draft.stories[0].summary = long("40 models is the reported change.", 180);
@@ -429,6 +517,20 @@ describe("Belle editorial scoring", () => {
       "repeats a recent editorial frame",
     );
     expect(quality.originality).toBeLessThan(100);
+  });
+
+  test("novelty feedback names the copied fields without repeating the prior wording", () => {
+    const draft = dailyDraft();
+    const copied = "When claims outpace proof, the burden shifts to the builder";
+    draft.subject = copied;
+    draft.headline = copied;
+    const quality = scoreEditorialPackage({
+      draft, edition: "daily-signal",
+      recent: { headlines: [copied], theses: [], storyIds: [] }, sources,
+    });
+    const issue = quality.blockingIssues.find((item) => item.includes("recent editorial frame"))!;
+    expect(issue).toContain("subject, headline repeats");
+    expect(issue).not.toContain(copied);
   });
 
   test("blocks clipped or dangling subjects without rejecting a complete short one", () => {
