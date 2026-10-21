@@ -36,6 +36,8 @@
     "socials:test": "bun run --cwd workers/socials test",
     "socials:typecheck": "bun run --cwd workers/socials typecheck",
     "socials:deploy": "bun run --cwd workers/socials deploy",
+    "eliza:test": "bun run --cwd workers/eliza-shadow test && bun run --cwd workers/eliza-shadow-gateway test",
+    "eliza:check": "bun run --cwd workers/eliza-shadow build && bun run --cwd workers/eliza-shadow-gateway typecheck",
     "verify": "bun run ui:check && bun run deps:audit && bun run typecheck && bun run typecheck:convex && bun run lint && bun run test && bun run --cwd packages/agent-sdk build && bun run --cwd packages/agent-sdk test && bun run --cwd packages/agent-cli build && bun run --cwd packages/agent-cli test && bun run socials:typecheck && bun run socials:test && bun run --cwd workers/socials deploy:dry && bun run build:apps",
     "ui:sync": "bun scripts/sync-forum-ui.mjs && bun scripts/build-native-forum-app.mjs",
     "ui:check": "bun scripts/sync-forum-ui.mjs --check && bun scripts/build-native-forum-app.mjs --check",

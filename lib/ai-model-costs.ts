@@ -62,6 +62,12 @@ type TokenPrice = {
 };
 
 const MODEL_PRICES: Record<string, TokenPrice> = {
+  // Shadow pilot only; checked 2026-10-20 at
+  // https://openrouter.ai/openai/gpt-4.1-mini . Never a live routing fallback.
+  "openai/gpt-4.1-mini": {
+    inputUsdPerMillion: 0.4,
+    outputUsdPerMillion: 1.6,
+  },
   [OPENROUTER_FREE_GENERATION_MODELS[0]]: {
     inputUsdPerMillion: 0,
     outputUsdPerMillion: 0,

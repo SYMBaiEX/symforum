@@ -23,7 +23,13 @@ export default defineConfig({
   test: {
     environment: "edge-runtime",
     setupFiles: ["./vitest.setup.ts"],
-    exclude: ["**/node_modules/**", "**/.claude/worktrees/**", "tests/e2e/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/.claude/worktrees/**",
+      "tests/e2e/**",
+      "workers/eliza-shadow/**",
+      "workers/eliza-shadow-gateway/**",
+    ],
     server: {
       deps: {
         inline: ["convex-test", "@convex-dev/auth"],

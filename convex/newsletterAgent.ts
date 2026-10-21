@@ -40,6 +40,10 @@ import {
 } from "./sukiForumAgent";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
+import {
+  ELIZA_SHADOW_INPUT_MAX_BYTES,
+  ELIZA_SHADOW_PRIVATE_MAX_BYTES,
+} from "../lib/eliza-shadow-contract";
 
 export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
 const PROMPT_VERSION = "belle-newsletter-v12-structured-route-rescue-budget";
@@ -160,12 +164,12 @@ const baseDraftShape = {
   discussionQuestion: z.string().min(50).max(320),
 };
 
-const dailyDraftSchema = z.object({
+export const dailyDraftSchema = z.object({
   ...baseDraftShape,
   stories: z.array(storyDraftSchema).min(3).max(5),
 });
 
-const weeklyDraftSchema = z.object({
+export const weeklyDraftSchema = z.object({
   ...baseDraftShape,
   stories: z.array(storyDraftSchema).min(5).max(8),
   sections: z
@@ -270,6 +274,7 @@ async function generateEditorialPackage(
     stories: Doc<"hnStories">[];
   },
 ) {
+  const shadowGenerationStartedAt = Date.now();
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
   const [routingConfig, recent, snapshots] = await Promise.all([
     convexModelRoutingConfig(ctx, {
@@ -294,18 +299,15 @@ async function generateEditorialPackage(
   let draft = generation.draft;
   let totalInputTokens = generation.usage.inputTokens;
   let totalOutputTokens = generation.usage.outputTokens;
+  let shadowSelectedModel = generation.modelId;
+  let shadowRevisionAccepted: boolean | undefined;
   const storiesById = new Map(
     args.stories.map((story) => [story.hnItemId, story]),
   );
   const snapshotsById = new Map(
     snapshots.map((snapshot) => [candidateStoryId(snapshot), snapshot]),
   );
-  const threshold =
-    args.edition === "daily-signal"
-      ? DAILY_QUALITY_THRESHOLD
-      : WEEKLY_QUALITY_THRESHOLD;
-  const minimumWords = args.edition === "daily-signal" ? 650 : 1_200;
-  const maximumWords = args.edition === "daily-signal" ? 1_600 : 3_000;
+  const { threshold, minimumWords, maximumWords } = editorialDraftLimits(args.edition);
   const evaluateDraft = () => {
     validateEditorialDraft(draft, storiesById);
     const quality = scoreEditorialPackage({
@@ -374,9 +376,12 @@ async function generateEditorialPackage(
       )
     ) {
       evaluation = revisionEvaluation;
+      shadowSelectedModel = revision.modelId;
+      shadowRevisionAccepted = true;
     } else {
       draft = originalDraft;
       evaluation = originalEvaluation;
+      shadowRevisionAccepted = false;
     }
     totalInputTokens = addOptionalNumbers(
       totalInputTokens,
@@ -499,6 +504,32 @@ async function generateEditorialPackage(
     quality,
   };
 
+  await enqueueBelleNewsletterShadowComparison(ctx, {
+    edition: args.edition,
+    runDate: args.runDate,
+    snapshotDate: args.snapshotDate,
+    snapshots,
+    recent,
+    sources: [...storiesById.values()].map((story) => ({
+      hnItemId: story.hnItemId,
+      host: story.host,
+      sourceText: snapshotSourceText(snapshotsById.get(story.hnItemId), story),
+    })),
+    baseline: {
+      draft,
+      evaluation,
+      generation: {
+        model: shadowSelectedModel,
+        initialModel: generation.modelId,
+        revisionAttempted: shadowRevisionAccepted !== undefined,
+        revisionAccepted: shadowRevisionAccepted ?? false,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        durationMs: Date.now() - shadowGenerationStartedAt,
+      },
+    },
+  });
+
   return {
     subject: draft.subject,
     previewText: draft.dek,
@@ -522,6 +553,96 @@ async function generateEditorialPackage(
         }
       : {}),
   };
+}
+
+/** Preserve the successful live draft and enqueue only a public-source experiment. */
+export async function enqueueBelleNewsletterShadowComparison(
+  ctx: Pick<ActionCtx, "runMutation">,
+  args: {
+    edition: "daily-signal" | "weekly-field-note";
+    runDate: string;
+    snapshotDate: string;
+    snapshots: ArticleSnapshot[];
+    recent: { headlines: string[]; theses: string[]; storyIds: number[] };
+    sources: Array<{ hnItemId: number; host?: string; sourceText: string }>;
+    baseline: {
+      draft: z.infer<typeof dailyDraftSchema> | z.infer<typeof weeklyDraftSchema>;
+      evaluation: {
+        quality: ReturnType<typeof scoreEditorialPackage>;
+        wordCount: number;
+        feedback: string[];
+        needsRevision: boolean;
+      };
+      generation: {
+        model: string;
+        initialModel: string;
+        revisionAttempted: boolean;
+        revisionAccepted: boolean;
+        inputTokens?: number;
+        outputTokens?: number;
+        durationMs: number;
+      };
+    };
+  },
+) {
+  try {
+    const schema =
+      args.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
+    const sourceLimit =
+      args.edition === "daily-signal" ? DAILY_SOURCE_LIMIT : WEEKLY_SOURCE_LIMIT;
+    // Recent editorial frames may belong to unpublished issues. They and the
+    // live draft remain private; the worker receives only bounded public sources.
+    const snapshots = args.snapshots.slice(0, sourceLimit).map((snapshot) => ({
+      ...snapshot,
+      title: compact(snapshot.title, 300),
+      sourceName: compact(snapshot.sourceName, 160),
+      url: snapshot.url.slice(0, 2_048),
+      articleTitle: compact(snapshot.articleTitle, 300),
+      articleDescription: compact(snapshot.articleDescription, 450),
+      articleText: compact(snapshot.articleText, 1_500),
+    }));
+    const inputJson = JSON.stringify({
+      version: 1,
+      kind: "belle-newsletter",
+      system: modelInstructions(
+        "openrouter",
+        args.edition === "daily-signal" ? "newsletter-daily" : "newsletter-weekly",
+        EDITORIAL_INSTRUCTIONS,
+      ),
+      prompt: editorialPrompt(args, snapshots, {
+        headlines: [],
+        theses: [],
+        storyIds: [],
+      }),
+      schema: z.toJSONSchema(schema, { target: "draft-7" }),
+    });
+    const baselineJson = JSON.stringify(args.baseline);
+    // Keep the exact live scoring evidence, not the shorter worker excerpts.
+    const evaluationJson = JSON.stringify({
+      edition: args.edition,
+      stories: args.sources.slice(0, sourceLimit),
+      recent: args.recent,
+    });
+    if (
+      Buffer.byteLength(inputJson, "utf8") > ELIZA_SHADOW_INPUT_MAX_BYTES ||
+      Buffer.byteLength(baselineJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES ||
+      Buffer.byteLength(evaluationJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES
+    ) {
+      throw new Error("shadow-packet-limit");
+    }
+    const sourceRunKey = `newsletter:${args.edition}:${args.runDate}`;
+    await ctx.runMutation(internal.elizaShadowData.enqueue, {
+      jobKey: `eliza-shadow:v1:${sourceRunKey}`,
+      kind: "belle-newsletter",
+      sourceRunKey,
+      promptVersion: PROMPT_VERSION,
+      inputJson,
+      baselineJson,
+      evaluationJson,
+    });
+  } catch {
+    console.warn("Eliza shadow Belle observation skipped; live newsletter unchanged.");
+  }
 }
 
 async function generateDraftWithFallback({
@@ -759,7 +880,7 @@ function uniqueStories(stories: Doc<"hnStories">[]) {
 
 function assertValidSelections(
   selectedIds: number[],
-  storiesById: Map<number, Doc<"hnStories">>,
+  storiesById: ReadonlyMap<number, unknown>,
 ) {
   if (new Set(selectedIds).size !== selectedIds.length) {
     throw new Error("Belle selected a duplicate source");
@@ -769,9 +890,9 @@ function assertValidSelections(
   }
 }
 
-function validateEditorialDraft(
+export function validateEditorialDraft(
   draft: z.infer<typeof dailyDraftSchema> | z.infer<typeof weeklyDraftSchema>,
-  storiesById: Map<number, Doc<"hnStories">>,
+  storiesById: ReadonlyMap<number, unknown>,
 ) {
   const selectedIds = draft.stories.map((story) => story.hnItemId);
   assertValidSelections(selectedIds, storiesById);
@@ -1019,7 +1140,7 @@ function snapshotSourceText(
     : `${snapshot.title} ${snapshot.summary} ${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`;
 }
 
-function editorialDraftWordCount(
+export function editorialDraftWordCount(
   draft: z.infer<typeof dailyDraftSchema> | z.infer<typeof weeklyDraftSchema>,
 ) {
   const text = [
@@ -1039,6 +1160,15 @@ function editorialDraftWordCount(
     draft.discussionQuestion,
   ].join(" ");
   return text.match(/\b[\p{L}\p{N}][\p{L}\p{N}'’-]*\b/gu)?.length ?? 0;
+}
+
+export function editorialDraftLimits(edition: "daily-signal" | "weekly-field-note") {
+  return {
+    threshold:
+      edition === "daily-signal" ? DAILY_QUALITY_THRESHOLD : WEEKLY_QUALITY_THRESHOLD,
+    minimumWords: edition === "daily-signal" ? 650 : 1_200,
+    maximumWords: edition === "daily-signal" ? 1_600 : 3_000,
+  };
 }
 
 function addOptionalNumbers(left?: number, right?: number) {

@@ -14,6 +14,7 @@ const eslintConfig = [
       ".claude/**",
       "node_modules/**",
       "convex/_generated/**",
+      "workers/eliza-shadow-gateway/worker-configuration.d.ts",
       "next-env.d.ts",
     ],
   },

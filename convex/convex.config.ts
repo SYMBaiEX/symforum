@@ -23,6 +23,11 @@ const app = defineApp({
     WORKOS_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.optional(v.string()),
     OPENROUTER_DAILY_BUDGET_USD: v.optional(v.string()),
+    // ElizaOS can only generate shadow candidates; there is no live mode.
+    ELIZA_SHADOW_MODE: v.optional(v.string()),
+    ELIZA_SHADOW_WORKER_URL: v.optional(v.string()),
+    ELIZA_SHADOW_WORKER_SECRET: v.optional(v.string()),
+    ELIZA_SHADOW_DAILY_BUDGET_USD: v.optional(v.string()),
     // Semantic retrieval is intentionally opt-in. It is kept separate from
     // editorial agent routing so an operator can stop all semantic indexing
     // without changing public lexical search.

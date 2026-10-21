@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+crons.interval("expire ElizaOS shadow comparisons", { hours: 6 }, internal.elizaShadowData.cleanup, {});
+crons.interval("purge ElizaOS worker candidate copies", { hours: 6 }, internal.elizaShadow.maintain, {});
 crons.interval(
   "cleanup service-auth registrations and credentials",
   { hours: 1 },

@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { agentScopeValidator } from "./authz";
 import { serviceAuthTables } from "./agentServiceAuthSchema";
 import { forumPluginTables } from "./forumPluginSchema";
+import { elizaShadowTables } from "./elizaShadowSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -23,6 +24,7 @@ export default defineSchema({
   ...authTables,
   ...serviceAuthTables,
   ...forumPluginTables,
+  ...elizaShadowTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),

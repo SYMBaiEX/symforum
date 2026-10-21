@@ -1,0 +1,24 @@
+{
+  "name": "@symbaiex/eliza-shadow-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "build": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@elizaos/core": "1.7.2",
+    "@elizaos/plugin-sql": "1.7.2",
+    "ajv": "8.20.0"
+  },
+  "overrides": {
+    "pdfjs-dist": "6.2.108",
+    "esbuild": "0.28.2"
+  }
+}

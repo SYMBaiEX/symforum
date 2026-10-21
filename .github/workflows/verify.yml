@@ -22,6 +22,9 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun ci
+      - run: bun install --cwd workers/eliza-shadow --frozen-lockfile --ignore-scripts
+      - run: bun install --cwd workers/eliza-shadow-gateway --frozen-lockfile --ignore-scripts
+      - run: bun run eliza:check && bun run eliza:test
       - run: bunx playwright install --with-deps chromium
       - run: bun run verify
       - run: bun run ui:check

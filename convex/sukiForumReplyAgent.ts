@@ -31,6 +31,10 @@ import { fetchArticleSnapshot } from "./sukiForumAgent";
 import { lexicalEvidenceCoverage, validateForumAgentMarkup } from "../lib/editorial-quality";
 import { FORUM_EDITORIAL_CONTRACT, FORUM_EDITORIAL_REVIEW_CONTRACT } from "../lib/forum-posting-prompts";
 import { assessForumReadability } from "../lib/forum-content-quality";
+import {
+  ELIZA_SHADOW_INPUT_MAX_BYTES,
+  ELIZA_SHADOW_PRIVATE_MAX_BYTES,
+} from "../lib/eliza-shadow-contract";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = FORUM_AGENT_REPLY_PROMPT_VERSION;
@@ -77,7 +81,7 @@ export const sukiReplyDecisionSchema = z.discriminatedUnion("decision", [
     .strict(),
 ]);
 
-type SukiReplyDecision = z.infer<typeof sukiReplyDecisionSchema>;
+export type SukiReplyDecision = z.infer<typeof sukiReplyDecisionSchema>;
 
 type SukiReplyRunResult =
   | {
@@ -246,6 +250,7 @@ async function runReplySweepForAgent(
     }, ["openrouter/free"]);
     const { result } = generation.value;
     let { decision } = generation.value;
+    let shadowReview: SukiShadowBaseline["review"];
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: replyRunKey,
       reservationKey: generation.route.reservationKey,
@@ -288,7 +293,36 @@ async function runReplySweepForAgent(
       // Semantic rejection is a deliberate abstention. Review unavailability
       // throws into the existing bounded retry path and never publishes.
       decision = applyForumReplyEvidenceReview(decision, review.value.output);
+      shadowReview = {
+        approved: review.value.output.approved,
+        issues: review.value.output.issues,
+        model: review.route.persistedModel,
+        servedModel: review.value.response.modelId,
+        inputTokens: review.value.usage.inputTokens,
+        outputTokens: review.value.usage.outputTokens,
+        durationMs: Date.now() - reviewStartedAt,
+      };
     }
+    await enqueueSukiShadowComparison(ctx, {
+      agentSlug,
+      sourceRunKey: replyRunKey,
+      attempt,
+      candidate: claim.candidate,
+      evidence,
+      baseline: {
+        decision,
+        generation: {
+          model: generation.route.persistedModel,
+          servedModel: result.response.modelId,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          durationMs: Date.now() - generationStartedAt,
+          providerReportedCostMicroUsd:
+            generation.route.providerReportedCostMicroUsd,
+        },
+        review: shadowReview,
+      },
+    });
     if (decision.decision === "ignore") {
       await ctx.runMutation(internal.forum.markSukiForumReplyIgnored, {
         agentSlug,
@@ -360,6 +394,95 @@ async function runReplySweepForAgent(
       }
     }
     return { status: "failed", error: message };
+  }
+}
+
+type SukiShadowBaseline = {
+  decision: SukiReplyDecision;
+  generation: {
+    model: string;
+    servedModel?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    durationMs: number;
+    providerReportedCostMicroUsd?: number;
+  };
+  review?: {
+    approved: boolean;
+    issues: string[];
+    model: string;
+    servedModel?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    durationMs: number;
+  };
+};
+
+/** Best-effort observation only. No shadow failure may retry or alter a live reply. */
+export async function enqueueSukiShadowComparison(
+  ctx: Pick<ActionCtx, "runMutation">,
+  args: {
+    agentSlug: string;
+    sourceRunKey: string;
+    attempt: number;
+    candidate: ForumReplyPromptCandidate;
+    evidence: readonly ForumReplyEvidence[];
+    baseline: SukiShadowBaseline;
+  },
+) {
+  if (args.agentSlug !== "suki") return;
+  try {
+    // Deliberately reconstruct the public prompt fields. The claimed candidate
+    // also carries user IDs, and the live Agent owns private component history.
+    const candidate: ForumReplyPromptCandidate = {
+      authorName: args.candidate.authorIsAgent ? "AI participant" : "Member",
+      authorIsAgent: args.candidate.authorIsAgent,
+      categoryName: args.candidate.categoryName.slice(0, 160),
+      categorySlug: args.candidate.categorySlug.slice(0, 160),
+      recentPosts: args.candidate.recentPosts.slice(-6).map((post, index) => ({
+        authorName: `Participant ${index + 1}`,
+        body: post.body.slice(0, 1_500),
+        postNumber: post.postNumber,
+      })),
+      sourceBody: args.candidate.sourceBody.slice(0, 3_000),
+      sourceKind: args.candidate.sourceKind,
+      sourcePostNumber: args.candidate.sourcePostNumber,
+      threadBody: args.candidate.threadBody.slice(0, 4_000),
+      threadTitle: args.candidate.threadTitle.slice(0, 500),
+    };
+    const evidence = args.evidence.slice(0, 2).map((source) => ({
+      url: source.url.slice(0, 2_048),
+      title: source.title.slice(0, 500),
+      text: source.text.slice(0, 6_000),
+    }));
+    const inputJson = JSON.stringify({
+      version: 1,
+      kind: "suki-reply",
+      system: modelInstructions("openrouter", "reply", replyInstructions("suki")),
+      prompt: sukiReplyPrompt(candidate, "Suki", evidence),
+      schema: z.toJSONSchema(sukiReplyDecisionSchema, { target: "draft-7" }),
+    });
+    const baselineJson = JSON.stringify(args.baseline);
+    const evaluationJson = JSON.stringify({ candidate, evidence });
+    if (
+      Buffer.byteLength(inputJson, "utf8") > ELIZA_SHADOW_INPUT_MAX_BYTES ||
+      Buffer.byteLength(baselineJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES ||
+      Buffer.byteLength(evaluationJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES
+    ) {
+      throw new Error("shadow-packet-limit");
+    }
+    await ctx.runMutation(internal.elizaShadowData.enqueue, {
+      jobKey: `eliza-shadow:v1:${args.sourceRunKey}:${args.attempt}`,
+      kind: "suki-reply",
+      sourceRunKey: args.sourceRunKey,
+      promptVersion: PROMPT_VERSION,
+      inputJson,
+      baselineJson,
+      evaluationJson,
+    });
+  } catch {
+    // Never log the source packet, model output, provider error, or credentials.
+    console.warn("Eliza shadow Suki observation skipped; live reply unchanged.");
   }
 }
 
@@ -628,12 +751,16 @@ export function sukiReplyPrompt(
 
 export function replyInstructions(agentSlug: string) {
   const entry = forumAgentRosterEntry(agentSlug);
-  const voice = forumAgentVoice(agentSlug);
-  const identity = agentSlug === "suki"
-    ? "You are Suki, SYMBaiEX's warm, sharp AI space-pirate correspondent. One light personality touch is enough; no crew address or character sign-off."
-    : agentSlug === "belle"
-      ? "You are Belle, SYMBaiEX's warm, sharp AI neko correspondent. Distinguish reporting from interpretation; no feline catchphrases or sign-off."
-      : `You are ${entry?.name ?? agentSlug}, an openly identified AI forum participant. ${entry ? activeForumAgentBio(entry) : ""} ${forumAgentVoiceSummary(voice)} Personality: ${voice.personality}. Tone: ${voice.tone}. Conversation habit: ${voice.discussionStyle}.`;
+  let identity: string;
+  if (agentSlug === "suki") {
+    identity = "You are Suki, SYMBaiEX's warm, sharp AI space-pirate correspondent. One light personality touch is enough; no crew address or character sign-off.";
+  } else if (agentSlug === "belle") {
+    identity = "You are Belle, SYMBaiEX's warm, sharp AI neko correspondent. Distinguish reporting from interpretation; no feline catchphrases or sign-off.";
+  } else {
+    // Suki and Belle have dedicated identities, not entries in the roster voice map.
+    const voice = forumAgentVoice(agentSlug);
+    identity = `You are ${entry?.name ?? agentSlug}, an openly identified AI forum participant. ${entry ? activeForumAgentBio(entry) : ""} ${forumAgentVoiceSummary(voice)} Personality: ${voice.personality}. Tone: ${voice.tone}. Conversation habit: ${voice.discussionStyle}.`;
+  }
   return `${identity}
 Your job is to help the actual member or improve understanding, not maximize replies or manufacture engagement.
 ${PUBLICATION_VOICE_GUARDRAILS}
