@@ -61,7 +61,10 @@ rows are re-sorted by reported one-hour volume. Up to five candidates then pass
 one bounded finalized Solana RPC batch (at most one transient read retry) that
 verifies actual SPL Token or
 Token-2022 initialized mint ownership. RPC failure is fail-closed. The public
-RPC has no application SLA and receives no API credential or transaction.
+RPC is fixed to [PublicNode's free endpoint](https://solana.publicnode.com/),
+has no application SLA and receives no API credential or transaction. It replaces
+the Solana public endpoint after a confirmed HTTP 429 blocked Bags before any
+generation. Redirects and arbitrary caller-selected RPC hosts remain forbidden.
 
 Market data, holder counts and project metadata remain source-reported, not
 independently audited. Social links are not ownership verification, and social

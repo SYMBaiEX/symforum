@@ -1,4 +1,6 @@
-const RPC_URL = "https://api.mainnet-beta.solana.com";
+// Fixed free pilot endpoint. No credentials, arbitrary URLs or provider rotation.
+// https://solana.publicnode.com/
+const RPC_URL = "https://solana-rpc.publicnode.com";
 const RPC_ID = "symbaiex-token-mint-validation";
 const MAX_RESPONSE_BYTES = 256 * 1_024;
 const FAILURE = "Solana mint verification failed.";

@@ -69,7 +69,7 @@ describe("finalized on-chain Solana mint verification", () => {
     expect(await verifySolanaMints([FIRST])).toEqual(new Set([FIRST]));
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.mainnet-beta.solana.com",
+      "https://solana-rpc.publicnode.com",
       expect.objectContaining({
         method: "POST",
         redirect: "manual",
