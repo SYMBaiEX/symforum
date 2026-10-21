@@ -36,6 +36,77 @@ const reviewSchema = z.object({
   reason: z.string().min(1).max(240),
 });
 const HOUR = 60 * 60 * 1_000;
+type DataStage = "configuration" | "rankings" | "mint-verification";
+type TokenStage =
+  | DataStage
+  | "canonical-context"
+  | "metadata"
+  | "snapshot"
+  | "model-draft"
+  | "private-proof"
+  | "model-review"
+  | "review-proof"
+  | "publication";
+
+async function loadTokenCandidates(
+  ctx: ActionCtx,
+  platform: TokenPlatform,
+  stage: (value: DataStage) => void,
+) {
+  stage("configuration");
+  if (!env.SOLANA_TRACKER_API_KEY || env.ELIZA_RUNTIME_MODE !== "live")
+    throw new Error("token_pilot_configuration_unavailable");
+  stage("rankings");
+  const indexed = await fetchTokenRankings({
+    apiKey: env.SOLANA_TRACKER_API_KEY,
+    platform,
+    now: Date.now(),
+    reserveRequest: async () =>
+      await ctx.runMutation(internal.tokenAlphaData.reserveApiRequest, {
+        kind: "ranking",
+      }),
+  });
+  stage("mint-verification");
+  const verified = await verifySolanaMints(indexed.map((item) => item.mint));
+  const candidates = indexed
+    .filter((item) => verified.has(item.mint))
+    .map((item, index) => ({ ...item, sourceRank: index + 1 }));
+  return { indexed: indexed.length, candidates };
+}
+
+/** Operator-only bounded data diagnostic: no generation, draft or publication. */
+export async function probeTokenData(ctx: ActionCtx, platform: TokenPlatform) {
+  let stage: DataStage = "configuration";
+  try {
+    const data = await loadTokenCandidates(ctx, platform, (value) => {
+      stage = value;
+    });
+    return {
+      status: data.candidates.length ? ("ok" as const) : ("empty" as const),
+      stage: "complete" as const,
+      indexed: data.indexed,
+      verified: data.candidates.length,
+    };
+  } catch {
+    return { status: "failed" as const, stage, indexed: null, verified: null };
+  }
+}
+
+export const probeData = internalAction({
+  args: { platform: tokenPlatformValidator },
+  returns: v.object({
+    status: v.union(v.literal("ok"), v.literal("empty"), v.literal("failed")),
+    stage: v.union(
+      v.literal("complete"),
+      v.literal("configuration"),
+      v.literal("rankings"),
+      v.literal("mint-verification"),
+    ),
+    indexed: v.union(v.number(), v.null()),
+    verified: v.union(v.number(), v.null()),
+  }),
+  handler: (ctx, args) => probeTokenData(ctx, args.platform),
+});
 
 export function tokenAnalysisIsSafe(analysis: string) {
   return (
@@ -273,25 +344,14 @@ export async function runTokenPilot(
     return { status: "skipped", reason: "disabled-gated-or-already-claimed" };
   const { runKey } = claim;
   const agentSlug = TOKEN_ALPHA_AGENTS[platform].slug;
+  let phase: TokenStage = "configuration";
   try {
-    if (!env.SOLANA_TRACKER_API_KEY || env.ELIZA_RUNTIME_MODE !== "live")
-      throw new Error("token_pilot_configuration_unavailable");
-    const reserveRequest = async (): Promise<boolean> =>
-      await ctx.runMutation(internal.tokenAlphaData.reserveApiRequest, {
-        kind: "ranking",
-      });
-    const indexed = await fetchTokenRankings({
-      apiKey: env.SOLANA_TRACKER_API_KEY,
-      platform,
-      now: Date.now(),
-      reserveRequest,
+    const apiKey = env.SOLANA_TRACKER_API_KEY;
+    if (!apiKey) throw new Error("token_pilot_configuration_unavailable");
+    const { candidates } = await loadTokenCandidates(ctx, platform, (value) => {
+      phase = value;
     });
-    const verifiedMints = await verifySolanaMints(
-      indexed.map((item) => item.mint),
-    );
-    const candidates = indexed
-      .filter((item) => verifiedMints.has(item.mint))
-      .map((item, index) => ({ ...item, sourceRank: index + 1 }));
+    phase = "canonical-context";
     const context = await ctx.runQuery(internal.tokenAlphaData.getContext, {
       platform,
       mints: candidates.map((item) => item.mint),
@@ -307,10 +367,11 @@ export async function runTokenPilot(
       return { status: "skipped", reason: "no-eligible-data" };
     }
     const cached = context.metadata.find((item) => item.mint === selected.mint);
+    phase = "metadata";
     const snapshot =
       withCachedTokenMetadata(selected, cached, Date.now()) ??
       (await enrichTokenSnapshot({
-        apiKey: env.SOLANA_TRACKER_API_KEY,
+        apiKey,
         snapshot: selected,
         now: Date.now(),
         reserveRequest: async () =>
@@ -318,6 +379,7 @@ export async function runTokenPilot(
             kind: "enrichment",
           }),
       }));
+    phase = "snapshot";
     await ctx.runMutation(internal.tokenAlphaData.saveSnapshot, {
       runKey,
       claimToken,
@@ -327,11 +389,13 @@ export async function runTokenPilot(
       runKey,
     });
     if (!stored?.snapshot) throw new Error("token_snapshot_unavailable");
+    phase = "model-draft";
     const generated = await generateAnalysis(ctx, {
       runKey,
       agentSlug,
       snapshot,
     });
+    phase = "private-proof";
     const { title, body } = renderTokenPost({
       snapshot,
       previous: stored.previous,
@@ -398,12 +462,14 @@ export async function runTokenPilot(
         qualityScore: 100,
       },
     );
+    phase = "model-review";
     const reviewed = await reviewAnalysis(ctx, {
       runKey,
       agentSlug,
       snapshot,
       body,
     });
+    phase = "review-proof";
     await ctx.runMutation(
       internal.forumAgentResearchPackets.recordPublicationDecision,
       {
@@ -429,6 +495,7 @@ export async function runTokenPilot(
       });
       return { status: "held", reason: "independent-review-rejected" };
     }
+    phase = "publication";
     await ctx.runMutation(internal.tokenAlphaData.saveDraft, {
       runKey,
       claimToken,
@@ -462,11 +529,11 @@ export async function runTokenPilot(
       runKey,
       claimToken,
       status: "failed",
-      reason: "token-pilot-generation-data-or-publication-failed",
+      reason: `token-pilot-${phase}-failed`,
     });
     return {
       status: "failed",
-      reason: "token-pilot-generation-data-or-publication-failed",
+      reason: `token-pilot-${phase}-failed`,
     };
   }
 }

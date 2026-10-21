@@ -104,6 +104,13 @@ cron never supplies retry arguments, and ordinary same-hour work cannot run a
 second contribution after that attempt. All normal admission and publishing
 gates apply. No generic or automatic failed-run replay is provided.
 
+`tokenAlphaAgent:probeData` is an internal data-only diagnostic for one platform.
+It uses the same quota-reserved ranking fetch, freshness filters and finalized
+mint verification as a normal run. One invocation can consume at most one
+Tracker request, with no metadata, model, draft or publication work. It returns
+only a fixed stage and counts; failed/unknown counts are null. Future run
+failures also record a fixed stage rather than an untrusted upstream message.
+
 Stop both scouts with `tokenAlphaData:setEnabled` and `{"enabled":false}`.
 This leaves history, canonical threads, usage and unknown model receipts intact.
 There is no automatic hold-clearing or failed-run replay operation.

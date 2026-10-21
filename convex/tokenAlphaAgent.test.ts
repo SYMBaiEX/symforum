@@ -31,6 +31,7 @@ vi.mock("../lib/ai-model-routing", async (original) => ({
 
 import {
   runTokenPilot,
+  probeTokenData,
   tokenAnalysisIsSafe,
   withCachedTokenMetadata,
 } from "./tokenAlphaAgent";
@@ -153,6 +154,40 @@ afterEach(() => {
 });
 
 describe("token pilot orchestration", () => {
+  test("data probe verifies candidates without a draft, model call or publication", async () => {
+    const ctx = context();
+    expect(await probeTokenData(ctx.ctx, "bags")).toEqual({
+      status: "ok",
+      stage: "complete",
+      indexed: 1,
+      verified: 1,
+    });
+    const args = mocks.rankings.mock.calls[0][0];
+    expect(await args.reserveRequest()).toBe(true);
+    expect(calls(ctx, "tokenAlphaData:reserveApiRequest")).toEqual([
+      { kind: "ranking" },
+    ]);
+    expect(mocks.route).not.toHaveBeenCalled();
+    expect(mocks.generate).not.toHaveBeenCalled();
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test.each(["rankings", "mint-verification"] as const)(
+    "data probe reports only the safe %s stage on failure",
+    async (stage) => {
+      const failure = new Error("untrusted upstream body with private values");
+      if (stage === "rankings") mocks.rankings.mockRejectedValue(failure);
+      else mocks.verify.mockRejectedValue(failure);
+      const ctx = context();
+      expect(await probeTokenData(ctx.ctx, "pumpfun")).toEqual({
+        status: "failed",
+        stage,
+        indexed: null,
+        verified: null,
+      });
+      expect(mocks.generate).not.toHaveBeenCalled();
+      expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+    },
+  );
   test("disabled or duplicate run makes no external or model request", async () => {
     const ctx = context({ claimed: false });
     expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
@@ -178,6 +213,9 @@ describe("token pilot orchestration", () => {
     );
     expect(mocks.generate).not.toHaveBeenCalled();
     expect(calls(ctx, "tokenAlphaData:finishRun")[0].status).toBe("failed");
+    expect(calls(ctx, "tokenAlphaData:finishRun")[0].reason).toBe(
+      "token-pilot-mint-verification-failed",
+    );
   });
   test("successful path records usage, private proof and review before publishing once", async () => {
     const ctx = context();
