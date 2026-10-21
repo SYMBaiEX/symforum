@@ -292,14 +292,14 @@ describe("token alpha infrastructure and claims", () => {
     ).toBeNull();
   });
 
-  test("preserves the shared twelve-failure circuit", async () => {
+  test("preserves the pilot twelve-failure circuit, including operator first posts", async () => {
     const t = setup();
     await initialized(t);
     await t.run(async (ctx) => {
       for (let index = 0; index < 12; index += 1) {
         await ctx.db.insert("forumAgentRuns", {
           runKey: `failed:${index}`,
-          agentSlug: "suki",
+          agentSlug: index % 2 === 0 ? "bags-scout" : "pumpfun-scout",
           runDate: "2026-10-21",
           slot: index,
           attempt: 0,
@@ -315,6 +315,7 @@ describe("token alpha infrastructure and claims", () => {
       await t.mutation(internal.tokenAlphaData.claimRun, {
         platform: "bags",
         claimToken: "failure-circuit",
+        operatorFirstPost: true,
       }),
     ).toBeNull();
     expect(
@@ -325,7 +326,7 @@ describe("token alpha infrastructure and claims", () => {
     ).toBeNull();
   });
 
-  test("admits exactly one explicit first-post attempt per lane without clearing the ordinary failure circuit", async () => {
+  test("admits exactly one explicit first-post attempt per lane while preserving unrelated failures", async () => {
     const t = setup();
     await initialized(t);
     await t.run(async (ctx) => {
@@ -344,12 +345,6 @@ describe("token alpha infrastructure and claims", () => {
         });
       }
     });
-    expect(
-      await t.mutation(internal.tokenAlphaData.claimRun, {
-        platform: "bags",
-        claimToken: "ordinary",
-      }),
-    ).toBeNull();
     const first = await t.mutation(internal.tokenAlphaData.claimRun, {
       platform: "bags",
       claimToken: "manual-first",
@@ -378,12 +373,6 @@ describe("token alpha infrastructure and claims", () => {
         platform: "bags",
         claimToken: "next-hour-repeat",
         operatorFirstPost: true,
-      }),
-    ).toBeNull();
-    expect(
-      await t.mutation(internal.tokenAlphaData.claimRun, {
-        platform: "pumpfun",
-        claimToken: "ordinary-other",
       }),
     ).toBeNull();
     const other = await t.mutation(internal.tokenAlphaData.claimRun, {
@@ -426,6 +415,118 @@ describe("token alpha infrastructure and claims", () => {
     expect(
       await t.mutation(internal.tokenAlphaData.queueFirstPosts, {}),
     ).toEqual({ queued: 0 });
+  });
+
+  test("unrelated failures do not block normal hourly scout claims and remain unchanged", async () => {
+    const t = setup();
+    await initialized(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 12; index += 1) {
+        await ctx.db.insert("forumAgentRuns", {
+          runKey: `unrelated:${index}`,
+          agentSlug: "suki",
+          runDate: "2026-10-21",
+          slot: index,
+          attempt: 0,
+          status: "failed",
+          model: "openrouter/free",
+          sourceUrls: [],
+          startedAt: NOW,
+          updatedAt: NOW,
+        });
+      }
+    });
+    const bags = await t.mutation(internal.tokenAlphaData.claimRun, {
+      platform: "bags",
+      claimToken: "bags",
+    });
+    const pump = await t.mutation(internal.tokenAlphaData.claimRun, {
+      platform: "pumpfun",
+      claimToken: "pump",
+    });
+    expect(bags?.status).toBe("running");
+    expect(pump?.status).toBe("running");
+    const failures = await t.run(async (ctx) =>
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
+          q.eq("agentSlug", "suki").eq("status", "failed"),
+        )
+        .take(13),
+    );
+    expect(failures).toHaveLength(12);
+  });
+
+  test.each(["pending", "unknown"] as const)(
+    "durable %s scout operations hold that lane across future hourly keys",
+    async (status) => {
+      const t = setup();
+      await initialized(t);
+      const operationId = await t.run(async (ctx) =>
+        ctx.db.insert("elizaRuntimeOperations", {
+          operationKey: "bags:2026-10-20T12",
+          status,
+          jobId: "unresolved-bags",
+          inputHash: "hash",
+          updatedAt: NOW - DAY,
+        }),
+      );
+      expect(
+        await t.mutation(internal.tokenAlphaData.claimRun, {
+          platform: "bags",
+          claimToken: "held",
+          operatorFirstPost: true,
+        }),
+      ).toBeNull();
+      expect(
+        await t.mutation(internal.tokenAlphaData.claimRun, {
+          platform: "pumpfun",
+          claimToken: "other",
+        }),
+      ).not.toBeNull();
+      vi.mocked(Date.now).mockReturnValue(NOW + HOUR);
+      expect(
+        await t.mutation(internal.tokenAlphaData.claimRun, {
+          platform: "bags",
+          claimToken: "later",
+        }),
+      ).toBeNull();
+      expect(
+        await t.run(
+          async (ctx) =>
+            (await ctx.db.get("elizaRuntimeOperations", operationId))?.status,
+        ),
+      ).toBe(status);
+      await t.run(async (ctx) =>
+        ctx.db.patch("elizaRuntimeOperations", operationId, {
+          status: "ready",
+        }),
+      );
+      expect(
+        await t.mutation(internal.tokenAlphaData.claimRun, {
+          platform: "bags",
+          claimToken: "resolved",
+        }),
+      ).not.toBeNull();
+    },
+  );
+
+  test("active scout runs cannot overlap the next hourly bucket", async () => {
+    const t = setup();
+    await initialized(t);
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "active",
+      }),
+    ).not.toBeNull();
+    vi.mocked(Date.now).mockReturnValue(NOW + HOUR);
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "overlap",
+      }),
+    ).toBeNull();
   });
 
   test("a first-post request cannot bypass unhealthy canaries or the daily publication cap, and denials do not spend the attempt", async () => {

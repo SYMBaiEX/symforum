@@ -255,13 +255,19 @@ export async function runTokenPilot(
   {
     platform,
     operatorFirstPost,
-  }: { platform: TokenPlatform; operatorFirstPost?: boolean },
+    operatorRetryOf,
+  }: {
+    platform: TokenPlatform;
+    operatorFirstPost?: boolean;
+    operatorRetryOf?: string;
+  },
 ): Promise<TokenPilotResult> {
   const claimToken = randomUUID();
   const claim = await ctx.runMutation(internal.tokenAlphaData.claimRun, {
     platform,
     claimToken,
     ...(operatorFirstPost === true ? { operatorFirstPost: true } : {}),
+    ...(operatorRetryOf !== undefined ? { operatorRetryOf } : {}),
   });
   if (!claim)
     return { status: "skipped", reason: "disabled-gated-or-already-claimed" };
@@ -469,6 +475,7 @@ export const run = internalAction({
   args: {
     platform: tokenPlatformValidator,
     operatorFirstPost: v.optional(v.boolean()),
+    operatorRetryOf: v.optional(v.string()),
   },
   returns: v.object({
     status: v.union(

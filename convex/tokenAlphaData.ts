@@ -18,6 +18,7 @@ import {
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import { structuredCanaryBlockReason } from "./forumAgentWorkflow";
 import schema from "./schema";
+import { validateBagsRetry } from "./tokenAlphaRecoveryData";
 import {
   tokenPlatformValidator,
   tokenSnapshotValidator,
@@ -30,6 +31,9 @@ const INITIAL_MANUAL_REQUESTS = 12;
 const RUN_LIFETIME_MS = 30 * 60 * 1_000;
 const MINT_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const PLATFORMS = ["bags", "pumpfun"] as const;
+const SCOUT_SLUGS = new Set<string>(
+  PLATFORMS.map((platform) => TOKEN_ALPHA_AGENTS[platform].slug),
+);
 
 const trackerLimiter = new RateLimiter(components.rateLimiter, {
   tokenAlphaTrackerRequests: {
@@ -88,6 +92,28 @@ function identityUsable(user: Doc<"users">, now: number): boolean {
     user.forumTrustedAt !== undefined &&
     (user.forumSuspendedUntil === undefined || user.forumSuspendedUntil <= now)
   );
+}
+
+async function laneHasUnresolvedOperation(
+  ctx: MutationCtx,
+  platform: TokenPlatform,
+) {
+  // A new hourly run key must never route around an earlier pending or unknown
+  // inference. This reads durable holds, not expiring call receipts.
+  const holds = await Promise.all(
+    (["pending", "unknown"] as const).map((status) =>
+      ctx.db
+        .query("elizaRuntimeOperations")
+        .withIndex("by_status_and_operationKey", (q) =>
+          q
+            .eq("status", status)
+            .gte("operationKey", `${platform}:`)
+            .lt("operationKey", `${platform};`),
+        )
+        .take(1),
+    ),
+  );
+  return holds.some((rows) => rows.length > 0);
 }
 
 async function availableUsername(
@@ -327,6 +353,7 @@ export const claimRun = internalMutation({
     platform: tokenPlatformValidator,
     claimToken: v.string(),
     operatorFirstPost: v.optional(v.boolean()),
+    operatorRetryOf: v.optional(v.string()),
   },
   returns: v.union(schema.doc("tokenAlphaRuns"), v.null()),
   handler: async (ctx, args): Promise<Doc<"tokenAlphaRuns"> | null> => {
@@ -358,7 +385,23 @@ export const claimRun = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
       .unique();
     if (structuredCanaryBlockReason(canary, now) !== null) return null;
-    const runKey = tokenAlphaRunKey(args.platform, now);
+    if (await laneHasUnresolvedOperation(ctx, args.platform)) return null;
+    const retry = control.operatorBagsRetry;
+    if (
+      args.operatorRetryOf !== undefined &&
+      (args.platform !== "bags" ||
+        args.operatorFirstPost === true ||
+        retry === undefined ||
+        retry.sourceRunKey !== args.operatorRetryOf ||
+        retry.claimedAt !== undefined ||
+        retry.runKey !== `${args.operatorRetryOf}:operator-retry-1` ||
+        !(await validateBagsRetry(ctx, retry.sourceRunKey, retry.sourceJobId)))
+    )
+      return null;
+    const runKey =
+      args.operatorRetryOf === undefined
+        ? tokenAlphaRunKey(args.platform, now)
+        : retry!.runKey;
     const existing = await ctx.db
       .query("tokenAlphaRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -403,8 +446,18 @@ export const claimRun = internalMutation({
       globalRuns.filter(
         (run) => run.status === "running" || run.status === "published",
       ).length >= dailyLimit ||
-      (!operatorFirstPost &&
-        globalRuns.filter((run) => run.status === "failed").length >= 12) ||
+      // Isolate this workload's failures, not its publication allowance. Old
+      // unrelated editorial failures must not latch a healthy token pilot shut.
+      globalRuns.filter(
+        (run) => run.status === "failed" && SCOUT_SLUGS.has(run.agentSlug),
+      ).length >= 12 ||
+      globalRuns.some(
+        (run) =>
+          run.agentSlug === entry.slug &&
+          (run.status === "running" ||
+            (run.slot === new Date(now).getUTCHours() &&
+              args.operatorRetryOf === undefined)),
+      ) ||
       globalRuns.filter(
         (run) =>
           run.agentSlug === entry.slug &&
@@ -417,6 +470,7 @@ export const claimRun = internalMutation({
       platform: args.platform,
       claimToken: args.claimToken,
       operatorFirstPost: operatorFirstPost ? true : undefined,
+      operatorRetryOf: args.operatorRetryOf,
       status: "running",
       createdAt: now,
       updatedAt: now,
@@ -438,6 +492,12 @@ export const claimRun = internalMutation({
     if (operatorFirstPost) {
       await ctx.db.patch("tokenAlphaControl", control._id, {
         operatorFirstPostAttempts: [...priorAttempts, args.platform],
+        updatedAt: now,
+      });
+    }
+    if (args.operatorRetryOf !== undefined) {
+      await ctx.db.patch("tokenAlphaControl", control._id, {
+        operatorBagsRetry: { ...retry!, claimedAt: now },
         updatedAt: now,
       });
     }

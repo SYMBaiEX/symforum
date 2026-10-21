@@ -207,6 +207,28 @@ describe("token pilot orchestration", () => {
       ),
     ).toBe(true);
   });
+  test("an explicit retry preserves the source key and still uses only forced Eliza free routes", async () => {
+    const ctx = context();
+    const operatorRetryOf = "bags:2026-10-21T19";
+    expect(
+      (await runTokenPilot(ctx.ctx, { platform: "bags", operatorRetryOf }))
+        .status,
+    ).toBe("published");
+    expect(calls(ctx, "tokenAlphaData:claimRun")[0]).toMatchObject({
+      platform: "bags",
+      operatorRetryOf,
+    });
+    expect(
+      mocks.route.mock.calls.every(
+        ([, , routes]) => JSON.stringify(routes) === '["openrouter/free"]',
+      ),
+    ).toBe(true);
+    expect(
+      mocks.config.mock.calls.every(
+        ([, options]) => options.elizaRuntime === "force",
+      ),
+    ).toBe(true);
+  });
   test("review rejection preserves private draft and does not publish", async () => {
     mocks.generate
       .mockReset()

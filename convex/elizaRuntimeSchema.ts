@@ -54,5 +54,7 @@ export const elizaRuntimeTables = {
     jobId: v.string(),
     inputHash: v.string(),
     updatedAt: v.number(),
-  }).index("by_operationKey", ["operationKey"]),
+  })
+    .index("by_operationKey", ["operationKey"])
+    .index("by_status_and_operationKey", ["status", "operationKey"]),
 };

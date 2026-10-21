@@ -19,6 +19,15 @@ No fresh eligible data, unavailable RPC, closed health/failure gates, exhausted
 budgets or rejected review produces a public post. Existing global publication
 limits can reduce actual posting below the scheduled scan frequency.
 
+The token pilot shares a twelve-failure-per-Chicago-day circuit between its two
+scouts, not the failure counts of unrelated editorial agents. The original
+agents retain their existing global circuit. Global publication occupancy is
+still shared: the current setting is 42, clamped by the existing helper to 37
+daily publications. Hourly scheduling does not guarantee 48 daily posts.
+Healthy fresh canaries remain mandatory. Any durable pending or unknown
+operation for a scout holds that lane across future hourly run keys, and an
+active scout run cannot overlap another hour's work.
+
 ## Data and free-tier limits
 
 - `SOLANA_TRACKER_API_KEY` is a server-side Convex deployment secret only.
@@ -78,13 +87,22 @@ bunx convex run tokenAlphaData:setEnabled '{"enabled":true}' --deployment strong
 bunx convex run tokenAlphaData:queueFirstPosts '{}' --deployment strong-bee-384
 ```
 
-The first-post queue is an explicit operator-only, once-per-platform allowance.
-After a fresh healthy canary it may admit the two requested initial observations
-despite older global failed-run counts. It does not bypass the health, daily
+The first-post queue is explicit, operator-only and once per platform. It does
+not bypass the pilot failure circuit, unresolved-operation hold, health, daily
 publication, identity, model-spend, data, private-proof or publication checks.
 The attempt is durably consumed when claimed, including if generation later
 fails or becomes unknown. Hourly cron calls never request this allowance.
 Existing agents, failures and quarantined receipts are not reset.
+
+`tokenAlphaRecoveryData:queueBagsRetry` accepts an operator-approved failed run
+key and job ID for one additional Bags attempt. It requires an exact failed
+free draft receipt with HTTP 404, explicitly known outcome, matching ready
+operation and no existing draft or Bags publication. Authorization and claim
+markers are permanent, including a later failure or unknown outcome. The new
+run references the old one; no source receipt is reset or overwritten, the
+cron never supplies retry arguments, and ordinary same-hour work cannot run a
+second contribution after that attempt. All normal admission and publishing
+gates apply. No generic or automatic failed-run replay is provided.
 
 Stop both scouts with `tokenAlphaData:setEnabled` and `{"enabled":false}`.
 This leaves history, canonical threads, usage and unknown model receipts intact.
@@ -99,7 +117,7 @@ Live acceptance additionally requires the deployed container's actual version,
 authenticated maintenance, a healthy model canary, and manual inspection of the
 first published contribution from each scout against its stored snapshot.
 
-### Production acceptance, 2026-10-21
+### Initial production acceptance, 2026-10-21
 
 - Additive Convex code deployed to `strong-bee-384`; both scouts enabled and the
   hourly cron installed. Existing SYMF and Kimchi threads were adopted.
@@ -113,9 +131,9 @@ first published contribution from each scout against its stored snapshot.
 - Bags Scout's draft request received a definite provider HTTP 404 rejection,
   with `outcomeUnknown: false`. No Bags contribution was published or retried.
   The permanent first-attempt markers remain consumed for both platforms.
-- Routine runs remain subject to the existing global daily failure circuit,
-  already closed before this pilot. Deployment/enabled status is not evidence
-  that every hourly scan or publication will run while that gate is closed.
+- At initial acceptance, routine runs were held by the existing global daily
+  failure circuit, already closed before this pilot. The scoped correction
+  documented above isolates scout failures without resetting those records.
 - Tracker accounting after the initial attempts: 16 requests, including the
   12 setup calls, with two metadata enrichments. No paid upgrade or overage
   setting was changed. Existing unknown runtime operations remain quarantined.

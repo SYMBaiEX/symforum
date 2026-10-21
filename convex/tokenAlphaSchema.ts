@@ -39,6 +39,15 @@ export const tokenAlphaTables = {
     key: v.literal("pilot"),
     enabled: v.boolean(),
     operatorFirstPostAttempts: v.optional(v.array(tokenPlatformValidator)),
+    operatorBagsRetry: v.optional(
+      v.object({
+        sourceRunKey: v.string(),
+        sourceJobId: v.string(),
+        runKey: v.string(),
+        authorizedAt: v.number(),
+        claimedAt: v.optional(v.number()),
+      }),
+    ),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
   // Durable run keys never become retryable: an ambiguous model outcome must
@@ -48,6 +57,7 @@ export const tokenAlphaTables = {
     platform: tokenPlatformValidator,
     claimToken: v.string(),
     operatorFirstPost: v.optional(v.boolean()),
+    operatorRetryOf: v.optional(v.string()),
     status: v.union(
       v.literal("running"),
       v.literal("drafted"),

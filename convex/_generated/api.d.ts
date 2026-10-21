@@ -147,6 +147,7 @@ import type * as sukiForumReplyAgent from "../sukiForumReplyAgent.js";
 import type * as systemLogs from "../systemLogs.js";
 import type * as tokenAlphaAgent from "../tokenAlphaAgent.js";
 import type * as tokenAlphaData from "../tokenAlphaData.js";
+import type * as tokenAlphaRecoveryData from "../tokenAlphaRecoveryData.js";
 import type * as tokenAlphaSchema from "../tokenAlphaSchema.js";
 import type * as universalSearch from "../universalSearch.js";
 import type * as universalSearchProjection from "../universalSearchProjection.js";
@@ -300,6 +301,7 @@ declare const fullApi: ApiFromModules<{
   systemLogs: typeof systemLogs;
   tokenAlphaAgent: typeof tokenAlphaAgent;
   tokenAlphaData: typeof tokenAlphaData;
+  tokenAlphaRecoveryData: typeof tokenAlphaRecoveryData;
   tokenAlphaSchema: typeof tokenAlphaSchema;
   universalSearch: typeof universalSearch;
   universalSearchProjection: typeof universalSearchProjection;
