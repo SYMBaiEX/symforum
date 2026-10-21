@@ -14,9 +14,9 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
-  "qwen/qwen3.5-flash-02-23",
+  "qwen/qwen3.8-flash",
 ]);
-const BOUNDED_NEWSLETTER_MODEL = "qwen/qwen3.5-flash-02-23";
+const BOUNDED_NEWSLETTER_MODEL = "qwen/qwen3.8-flash";
 function withinNewsletterPriceCap(value, ceilingDigit) {
   if (
     typeof value !== "string" ||

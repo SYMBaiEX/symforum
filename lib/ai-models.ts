@@ -10,7 +10,7 @@ export const OPENROUTER_PAID_FALLBACK_MODEL =
 
 /** Fixed, non-thinking long-form route; never inherit a floating model price. */
 export const OPENROUTER_NEWSLETTER_MODEL =
-  "qwen/qwen3.5-flash-02-23";
+  "qwen/qwen3.8-flash";
 /** USD per million tokens, enforced upstream and used for conservative reserves. */
 export const OPENROUTER_NEWSLETTER_PRICE_CEILING = {
   prompt: 0.2,

@@ -130,7 +130,7 @@ describe("free-only structured operator probe", () => {
             id: "synthetic-qwen-probe",
             object: "chat.completion",
             created: 1_760_000_000,
-            model: "qwen/qwen3.5-flash-02-23",
+            model: "qwen/qwen3.8-flash",
             choices: [
               {
                 index: 0,
@@ -179,17 +179,17 @@ describe("free-only structured operator probe", () => {
 
     await expect(
       runStructuredProbe(ctx, undefined, false, {
-        model: "qwen/qwen3.5-flash-02-23",
+        model: "qwen/qwen3.8-flash",
       }),
     ).resolves.toEqual({
       provider: "openrouter",
-      model: "qwen/qwen3.5-flash-02-23",
+      model: "qwen/qwen3.8-flash",
       response: "SYMBiEX structured model route healthy",
     });
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({
-      model: "qwen/qwen3.5-flash-02-23",
+      model: "qwen/qwen3.8-flash",
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
@@ -204,15 +204,15 @@ describe("free-only structured operator probe", () => {
         getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
     );
     expect(reservation?.[1]).toMatchObject({
-      model: "qwen/qwen3.5-flash-02-23",
+      model: "qwen/qwen3.8-flash",
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
         getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
-      model: "qwen/qwen3.5-flash-02-23",
-      servedModel: "qwen/qwen3.5-flash-02-23",
+      model: "qwen/qwen3.8-flash",
+      servedModel: "qwen/qwen3.8-flash",
     });
   });
 

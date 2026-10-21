@@ -75,7 +75,7 @@ function newsletterProviderOptions(candidate: RoutedModel) {
     : candidate.providerOptions;
 }
 
-const PROMPT_VERSION = "belle-newsletter-v19-qwen35-catalog-review";
+const PROMPT_VERSION = "belle-newsletter-v20-qwen38-catalog-review";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;

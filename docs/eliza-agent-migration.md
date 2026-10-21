@@ -15,18 +15,19 @@ free router only; replies and independent reviews retain their existing
 free-first routing with cheap DeepSeek rescue where that stage permits it.
 Belle's long daily/weekly drafts, their single
 revision and blind evidence review use the fixed non-thinking
-`qwen/qwen3.5-flash-02-23` route with native thinking disabled: the free attempt
+`qwen/qwen3.8-flash` route with native thinking disabled: the free attempt
 exceeded the safe worker deadline, DeepSeek drafts failed source review, and the
 Mistral trial still exhausted the bounded review output. This is not the older
-Qwen235B route that failed pre-inference checks. No publishing credentials or
+Qwen235B route that failed pre-inference checks, or the Qwen3.5 route that lacked
+the required upstream strict-schema mode. No publishing credentials or
 publishing tools exist in the worker.
 
 Until live mode is enabled, normal legacy Belle calls retain the existing
 DeepSeek route with separate reasoning disabled. Only an explicitly forced Eliza
-pilot or actual live Eliza configuration selects the bounded Qwen3.5 route.
+pilot or actual live Eliza configuration selects the bounded Qwen3.8 route.
 
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
-and that fixed Qwen3.5 model. The fixed model is restricted to Belle and the system canary,
+and that fixed Qwen3.8 model. The fixed model is restricted to Belle and the system canary,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
 reservations use those ceilings, not a catalog minimum. No cross-model server
 fallback is allowed. The old fixed GPT pilot was retired at the operator's request.
@@ -258,11 +259,17 @@ publishing were not changed to manufacture a passing test.
   text relative to reported output tokens remains unexplained; no local worker
   or SDK clipping was found. Upstream response healing can change malformed JSON,
   but its involvement in this response is not established.
-- The replacement Qwen3.5-Flash endpoint was catalog-checked for native
-  thinking-off and structured-output support. Its public $0.065/M input and
-  $0.26/M output listing is below the unchanged hard $0.20/M and $0.50/M ceilings;
-  catalog eligibility is not a successful runtime or editorial verification.
-  [OpenRouter model endpoint metadata](https://openrouter.ai/api/v1/models/qwen/qwen3.5-flash-02-23/endpoints)
+- Qwen3.5-Flash canary `eliza-78c208ee-304d-435d-97b4-6fd84c7aead5` was rejected
+  before inference with HTTP 400 and `provider_rejected_schema`; its receipt is
+  failed with `outcomeUnknown:false`. OpenRouter advertised structured-output
+  support, but [Alibaba's actual support matrix](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output)
+  lists Qwen3.5-Flash for JSON Object mode, not JSON Schema. We did not silently
+  downgrade the requested strict schema or strip its validation keywords.
+- Qwen3.8-Flash is listed by Alibaba for JSON Schema and by both OpenRouter
+  endpoints for structured outputs. Their public $0.15/M input and $0.47/M output
+  prices are below the unchanged hard $0.20/M and $0.50/M ceilings; catalog and
+  upstream eligibility are not a successful runtime or editorial verification.
+  [OpenRouter model endpoint metadata](https://openrouter.ai/api/v1/models/qwen/qwen3.8-flash/endpoints)
 - Explicit operator Belle pilots may also capture a rejected baseline through
   the same capped, private, seven-day shadow store. The run remains `failed`
   with `baseline_quality_rejected` and a nonce-linked inspection ID; this is
