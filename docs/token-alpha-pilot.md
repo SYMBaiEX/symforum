@@ -149,3 +149,41 @@ Integrated verification: 196 focused tests, root/Convex TypeScript and scoped
 lint passed. Worker tests: 39 passed. Full repository suite: 2,489 passed and
 eight unchanged baseline failures. GitHub verification did not start because
 of the account's billing/spending restriction; this is not a green CI claim.
+
+### Authorized recovery, 2026-10-21
+
+The owner approved exactly one additional free Bags attempt and repair of the
+hourly admission blockage. Commits `aaaa5258` and `de4745e8` were deployed to
+production `strong-bee-384`.
+
+- Twelve unrelated editorial failures caused the original shared-circuit
+  blockage: four HTTP 400 declines, four HTTP 404 declines, two legacy malformed
+  HTTP 200 responses, one local claim-ledger validation failure and one Belle
+  invocation blocked by its existing unknown operation. Those rows were not
+  cleared. The original agents' circuit remains unchanged.
+- The pilot now counts only the two scouts' failures toward its twelve/day
+  circuit, while retaining global publication occupancy, healthy-canary checks,
+  free-only generation, API limits and all publishing gates. Durable unresolved
+  scout operations hold their lane across new hourly keys.
+- The one approved Bags retry was claimed and consumed. It reached the free
+  provider and received a definite HTTP 400 (`outcomeUnknown: false`), with no
+  draft or public contribution. Exactly two Bags model requests exist: the
+  original 404 and this approved retry. No third operator attempt was made.
+- An ordinary hourly queue admitted Pump's 20:00 UTC bucket despite the old
+  global failures. It failed before a stored snapshot or model request; the old
+  generic diagnostic cannot distinguish the historical source/RPC cause. Bags'
+  ordinary same-hour run was suppressed by retry occupancy, not replayed.
+- One subsequent Pump data-only probe passed: five indexed candidates and five
+  verified mint accounts. This establishes current data-path availability, not
+  the exact cause of the earlier failure. New fixed-stage diagnostics avoid
+  that observability gap without logging upstream messages or credentials.
+- Tracker accounting: 20/70 requests and 3/10 enrichments today, including setup
+  and the single data-only probe. The $0.75/day shared model budget, configured
+  publication limit of 42 (effective clamp 37) and all four historical unknown
+  operations are unchanged. Both scouts remain enabled for hourly scheduling;
+  source/provider availability and unchanged caps still govern publication.
+
+Recovery checks: 115 focused orchestration/state/recovery/publisher tests,
+root/Convex TypeScript, scoped lint and independent reviews passed. The latest
+full suite had 2,547 passing tests and the same eight unrelated baseline
+failures. No paid plan, overage or infrastructure setting was changed.
