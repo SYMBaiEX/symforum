@@ -639,7 +639,7 @@ describe("Belle editorial scoring", () => {
     expect(digestStories[11]).toMatchObject({ rank: 12, score: 89 });
   });
 
-  test("routes Belle drafts and reviews to the bounded non-thinking newsletter alias", () => {
+  test("routes Belle drafts and reviews to the bounded fixed newsletter alias", () => {
     expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_NEWSLETTER_MODEL]);
     expect(NEWSLETTER_MODEL_IDS).not.toContain(OPENROUTER_FORUM_MODEL);
     expect(newsletterModelsForRoutingConfig({ elizaRuntime: undefined })).toEqual([OPENROUTER_PAID_FALLBACK_MODEL]);

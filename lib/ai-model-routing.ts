@@ -149,9 +149,8 @@ function openRouterRequestBody(body: Record<string, unknown>) {
       : [...plugins, { id: "response-healing" }];
   }
   if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
-    // Keep the pinned newsletter endpoint's output budget for the structured
-    // answer rather than a hidden thinking phase.
-    request.reasoning = { enabled: false };
+    // Pin low-effort reasoning and exclude its private tokens from the reply.
+    request.reasoning = { effort: "low", exclude: true };
     delete request.reasoning_effort;
     // The selected OpenAI endpoint does not advertise sampling controls.
     // Omit them so require_parameters can fail closed on the exact endpoint.

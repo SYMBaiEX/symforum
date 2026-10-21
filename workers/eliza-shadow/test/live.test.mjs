@@ -400,7 +400,7 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
       max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
-  newsletterBody.reasoning = { enabled: false };
+  newsletterBody.reasoning = { effort: "low", exclude: true };
   const newsletterRequest = (agentSlug, stage, nextBody = newsletterBody) =>
     request({
       agentSlug,
@@ -417,6 +417,13 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
       newsletterBody,
     );
   }
+  const emptyToolsBody = { ...newsletterBody, tools: [] };
+  assert.equal(
+    validateLiveRequest(
+      newsletterRequest("belle", "belle:daily-signal:draft", emptyToolsBody),
+    ).body,
+    emptyToolsBody,
+  );
   const cheaperBody = {
     ...newsletterBody,
     provider: {
@@ -577,15 +584,57 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      reasoning: { effort: "low" },
+      reasoning: { effort: "none", exclude: true },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      reasoning: { enabled: true },
+      reasoning: { effort: "medium", exclude: true },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      reasoning: { enabled: false, exclude: true },
+      reasoning: { effort: "high", exclude: true },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: { effort: "low", exclude: false },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: { effort: "low", exclude: true, max_tokens: 100 },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      reasoning: { effort: "low", exclude: true, enabled: false },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      tools: [{ type: "function", function: { name: "lookup" } }],
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      tools: "lookup",
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      tool_choice: "none",
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      messages: [
+        ...newsletterBody.messages,
+        { role: "tool", tool_call_id: "call-1", content: "result" },
+      ],
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      messages: [
+        ...newsletterBody.messages,
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call-1", type: "function" }],
+        },
+      ],
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
@@ -701,6 +750,101 @@ test("provider performs one exact-body request and classifies known versus unkno
       error.outcomeUnknown &&
       !error.message.includes("private"),
   );
+});
+
+test("fixed Luna strips raw reasoning before returning or caching while preserving usage", async () => {
+  const reasoningSecret = "private-reasoning-sentinel";
+  const lunaBody = {
+    model: "openai/gpt-6-luna",
+    messages: [
+      { role: "system", content: "draft safely" },
+      { role: "user", content: "write a short note" },
+    ],
+    max_tokens: 4_000,
+    response_format: { type: "json_schema", json_schema: { name: "note" } },
+    provider: {
+      allow_fallbacks: false,
+      require_parameters: true,
+      only: ["openai"],
+      ignore: ["openai/fast", "openai/flex"],
+      max_price: { prompt: "0.2", completion: "0.5" },
+    },
+    reasoning: { effort: "low", exclude: true },
+  };
+  const lunaRequest = {
+    ...request(),
+    jobId: "luna-reasoning-redaction",
+    inputHash: liveInputHash(lunaBody),
+    agentSlug: "belle",
+    stage: "belle:daily-signal:draft",
+    body: lunaBody,
+  };
+  const usage = {
+    prompt_tokens: 12,
+    completion_tokens: 34,
+    total_tokens: 46,
+    cost: 0.0002,
+    completion_tokens_details: { reasoning_tokens: 10 },
+  };
+  const rawCompletion = {
+    id: "luna-private-reasoning",
+    model: "openai/gpt-6-luna",
+    reasoning: reasoningSecret,
+    reasoning_content: reasoningSecret,
+    reasoning_details: [{ text: reasoningSecret }],
+    choices: [
+      {
+        index: 0,
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: '{"status":"ok"}',
+          reasoning: reasoningSecret,
+          reasoning_content: reasoningSecret,
+          reasoning_details: [{ text: reasoningSecret }],
+        },
+      },
+    ],
+    usage,
+  };
+  let cachedResult;
+  const service = new LiveService({
+    live: {
+      run: createLiveProvider({
+        apiKey: "private-key",
+        fetchImpl: async () => Response.json(rawCompletion),
+      }),
+    },
+    store: {
+      async claim(request, hash) {
+        if (cachedResult) {
+          return {
+            claimed: false,
+            input_hash: request.inputHash,
+            request_hash: hash,
+            state: "succeeded",
+            result: cachedResult,
+          };
+        }
+        return { claimed: true };
+      },
+      async complete(_jobId, result) {
+        cachedResult = result;
+      },
+      async fail() {},
+    },
+  });
+
+  const returned = await service.complete(lunaRequest);
+  assert.equal(JSON.stringify(returned).includes(reasoningSecret), false);
+  assert.deepEqual(returned.completion.usage, usage);
+  assert.deepEqual(returned.completion.choices[0].message, {
+    role: "assistant",
+    content: '{"status":"ok"}',
+  });
+  assert.deepEqual(cachedResult, returned);
+  assert.deepEqual(await service.complete(lunaRequest), returned);
+  assert.equal(JSON.stringify(cachedResult).includes(reasoningSecret), false);
 });
 
 test("known provider rejections emit only bounded fixed diagnostics and remain failed", async () => {

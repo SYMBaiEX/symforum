@@ -265,7 +265,7 @@ describe("OpenRouter-only model routing", () => {
           },
         },
       });
-      expect(bodies[0].reasoning).toEqual({ enabled: false });
+      expect(bodies[0].reasoning).toEqual({ effort: "low", exclude: true });
       expect(bodies[0].reasoning_effort).toBeUndefined();
       expect(bodies[0].temperature).toBeUndefined();
       expect(bodies[0].top_p).toBeUndefined();

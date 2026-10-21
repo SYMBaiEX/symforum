@@ -152,6 +152,7 @@ describe("free-only structured operator probe", () => {
               prompt_tokens: 100,
               completion_tokens: 100,
               total_tokens: 200,
+              completion_tokens_details: { reasoning_tokens: 40 },
             },
           }),
           { headers: { "content-type": "application/json" } },
@@ -202,7 +203,7 @@ describe("free-only structured operator probe", () => {
         max_price: { prompt: "0.2", completion: "0.5" },
       },
     });
-    expect(bodies[0].reasoning).toEqual({ enabled: false });
+    expect(bodies[0].reasoning).toEqual({ effort: "low", exclude: true });
     expect(bodies[0].reasoning_effort).toBeUndefined();
     const wireSchema = (
       bodies[0].response_format as {
@@ -233,6 +234,7 @@ describe("free-only structured operator probe", () => {
     expect(usage?.[1]).toMatchObject({
       model: "openai/gpt-6-luna",
       servedModel: "openai/gpt-6-luna",
+      outputTokens: 100,
     });
   });
 

@@ -400,7 +400,7 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(result.shadowEnqueue?.status).toBe("queued");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
-  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v30-source-scope-precision");
+  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v31-luna-low-reasoning");
   const system = JSON.parse(shadow[0]!.inputJson).system as string;
   expect(system).toContain(
     "Do not turn a report that only documents hidden instructions into a categorical claim of no assistant exposure",
@@ -854,7 +854,7 @@ test("normal legacy generation keeps DeepSeek for both writer and reviewer", asy
   ]);
 });
 
-test("Belle's fixed-model SDK requests use the pinned price ceiling without reasoning output", async () => {
+test("Belle's fixed-model SDK requests use low private reasoning within the pinned limits", async () => {
   const t = setup();
   await seedSnapshot(t);
   const wire = compactReview(validDraft);
@@ -946,9 +946,11 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
       max_tokens: 8000,
       provider: { max_price: { prompt: "0.2", completion: "0.5" } },
     });
-    expect(body.reasoning).toEqual({ enabled: false });
+    expect(body.reasoning).toEqual({ effort: "low", exclude: true });
     expect(body.reasoning_effort).toBeUndefined();
-    expect(JSON.stringify(body.messages)).toContain("Reasoning strength: none");
+    expect(JSON.stringify(body.messages)).toContain("Reasoning strength: low");
+    expect(JSON.stringify(body.messages)).toContain("Reason through the task privately");
+    expect(JSON.stringify(body.messages)).not.toContain("Reasoning strength: none");
     expect(JSON.stringify(body.messages)).toContain("standalone email subject of at most 64 characters");
     expect(JSON.stringify(body.messages)).toContain("Citation or retrieval of a web page by ChatGPT is not evidence");
     expect(JSON.stringify(body.messages)).toContain("at most four short original source passages");
@@ -977,8 +979,11 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
     provider: { max_price: { prompt: "0.2", completion: "0.5" } },
   });
-  expect(requestBodies[2]?.reasoning).toEqual({ enabled: false });
+  expect(requestBodies[2]?.reasoning).toEqual({ effort: "low", exclude: true });
   expect(requestBodies[2]?.reasoning_effort).toBeUndefined();
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Reasoning strength: low");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Reason through the task privately");
+  expect(JSON.stringify(requestBodies[2]?.messages)).not.toContain("Reasoning strength: none");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("10,000 AI sessions is NOT 10,000 ChatGPT citations");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("editorial label; factual assertions still need evidence");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Do not demand one source support a compound claim about multiple sources");
@@ -1040,4 +1045,6 @@ test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async (
     expect(body.reasoning_effort).toBeUndefined();
     expect((body.provider as Record<string, unknown>)?.max_price).toBeUndefined();
   }
+  expect(JSON.stringify(requestBodies[0]?.messages)).toContain("Reasoning strength: none");
+  expect(JSON.stringify(requestBodies[1]?.messages)).not.toContain("Reasoning strength:");
 });

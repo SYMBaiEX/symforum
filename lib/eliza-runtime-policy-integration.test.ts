@@ -95,9 +95,11 @@ describe("newsletter SDK to live worker policy boundary", () => {
             completion: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.completion),
           },
         },
-        reasoning: { enabled: false },
+        reasoning: { effort: "low", exclude: true },
       });
       expect(body.reasoning_effort).toBeUndefined();
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
       expect(body.temperature).toBeUndefined();
       expect(body.top_p).toBeUndefined();
       expect(body.top_k).toBeUndefined();

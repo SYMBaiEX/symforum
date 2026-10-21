@@ -356,8 +356,12 @@ export function validateLiveRequest(input) {
     if (
       !["belle", "system"].includes(input.agentSlug) ||
       !record(body.reasoning) ||
-      Object.keys(body.reasoning).length !== 1 ||
-      body.reasoning.enabled !== false ||
+      Object.keys(body.reasoning).length !== 2 ||
+      body.reasoning.effort !== "low" ||
+      body.reasoning.exclude !== true ||
+      (body.tools !== undefined &&
+        (!Array.isArray(body.tools) || body.tools.length !== 0)) ||
+      body.tool_choice !== undefined ||
       body.provider?.allow_fallbacks !== false ||
       body.provider?.require_parameters !== true ||
       !Array.isArray(body.provider?.only) ||
@@ -384,6 +388,16 @@ export function validateLiveRequest(input) {
     !Array.isArray(body.messages) ||
     body.messages.length < 1 ||
     body.messages.length > 64
+  )
+    throw new WorkerError("invalid_request");
+  if (
+    body.model === BOUNDED_NEWSLETTER_MODEL &&
+    body.messages.some(
+      (message) =>
+        record(message) &&
+        (message.role === "tool" ||
+          (message.role === "assistant" && message.tool_calls !== undefined)),
+    )
   )
     throw new WorkerError("invalid_request");
   for (const message of body.messages) {
@@ -600,6 +614,25 @@ export function createLiveProvider({
         completion.usage.completion_tokens < 0
       )
         throw new WorkerError("provider_invalid_usage", 502, true);
+      if (request.body.model === BOUNDED_NEWSLETTER_MODEL) {
+        const {
+          reasoning: _reasoning,
+          reasoning_content: _reasoningContent,
+          reasoning_details: _reasoningDetails,
+          ...safeCompletion
+        } = completion;
+        safeCompletion.choices = completion.choices.map((choice) => {
+          if (!record(choice) || !record(choice.message)) return choice;
+          const {
+            reasoning: _messageReasoning,
+            reasoning_content: _messageReasoningContent,
+            reasoning_details: _messageReasoningDetails,
+            ...message
+          } = choice.message;
+          return { ...choice, message };
+        });
+        completion = safeCompletion;
+      }
       return completion;
     } catch (error) {
       if (error instanceof WorkerError) throw error;
