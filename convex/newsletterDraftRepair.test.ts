@@ -162,6 +162,18 @@ function reviewedDraft(draft: typeof validDraft): Parameters<typeof validateEdit
     coherence: "clear", coherenceReason: null,
   };
 }
+function compactReview(draft: typeof validDraft) {
+  const review = reviewedDraft(draft);
+  return {
+    fields: review.fields.map(field => field.verdict === "fact"
+      ? {
+          path: field.path, verdict: "fact", sourceId: field.sourceId,
+          quote: field.quote,
+        }
+      : { path: field.path, verdict: "analysis" }),
+    coherence: "clear",
+  };
+}
 const args = {
   runDate: "2026-10-20", snapshotDate: "2026-10-20", siteUrl: "https://symbaiex.com",
   shadowSourceRunKey: "pilot:belle:draft-repair-test", forceLegacyGeneration: true,
@@ -438,6 +450,11 @@ test("normal legacy generation keeps DeepSeek for both writer and reviewer", asy
 test("Belle's Mistral SDK requests use the pinned price ceiling without reasoning output", async () => {
   const t = setup();
   await seedSnapshot(t);
+  const wire = compactReview(validDraft);
+  expect(wire.fields.find(field => field.path === "lead")).toEqual({
+    path: "lead", verdict: "analysis",
+  });
+  expect(JSON.stringify(wire).length).toBeLessThan(JSON.stringify(reviewedDraft(validDraft)).length);
   mockDrafts(invalidStoryDraft, validDraft);
   await t.action(generateDailySignal, {
     ...args, forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
@@ -448,7 +465,7 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     requestBodies.push(body);
     const responseContent = body.max_tokens === 4_000
-      ? reviewedDraft(validDraft) : validDraft;
+      ? compactReview(validDraft) : validDraft;
     return new Response(JSON.stringify({
       id: "belle-structured-test", object: "chat.completion", created: 1_760_000_000,
       model: "mistralai/mistral-small-3.2-24b-instruct",
@@ -521,7 +538,7 @@ test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async (
       model: "deepseek/deepseek-v4-flash-latest",
       choices: [{ index: 0, message: {
         role: "assistant",
-        content: JSON.stringify(body.max_tokens === 4_000 ? reviewedDraft(validDraft) : validDraft),
+        content: JSON.stringify(body.max_tokens === 4_000 ? compactReview(validDraft) : validDraft),
       }, finish_reason: "stop" }],
       usage: { prompt_tokens: 100, completion_tokens: 900, total_tokens: 1000 },
     }), { headers: { "content-type": "application/json" } });

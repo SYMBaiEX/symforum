@@ -13,6 +13,8 @@ import {
   editorialPrompt,
   editorialEvidenceFields,
   evidenceReviewSchema,
+  evidenceReviewWireSchema,
+  hydrateEditorialEvidenceReview,
   NEWSLETTER_MODEL_IDS,
   newsletterModelsForRoutingConfig,
   reusableDailyDigestStories,
@@ -126,6 +128,69 @@ function completeReview(draft = dailyDraft()): Parameters<typeof validateEditori
 }
 
 describe("Belle blind evidence review validation", () => {
+  test("hydrates compact verdict variants without inventing field coverage", () => {
+    const wire = {
+      fields: [
+        { path: "stories.0.summary", verdict: "fact", sourceId: 1, quote: sources[0]!.sourceText.slice(0, 25) },
+        { path: "thesis", verdict: "analysis" },
+        { path: "lead", verdict: "unsupported", reason: "Claim has no source" },
+        { path: "dek", verdict: "unknown", reason: "Attribution unclear" },
+      ],
+      coherence: "clear",
+    };
+    const review = hydrateEditorialEvidenceReview(wire);
+    expect(review.fields).toHaveLength(4);
+    expect(review.fields[0]).toMatchObject({
+      verdict: "fact", sourceId: 1, additionalSupports: [], reason: null,
+    });
+    expect(review.fields[1]).toMatchObject({
+      verdict: "analysis", sourceId: null, quote: null,
+      additionalSupports: [], reason: null,
+    });
+    expect(review.fields[2]).toMatchObject({
+      verdict: "unsupported", sourceId: null, quote: null, reason: "Claim has no source",
+    });
+    const issues = validateEditorialEvidenceReview(dailyDraft(), sources, review).join(" ");
+    expect(issues).toContain("Evidence review omitted");
+    expect(issues).toContain("unsupported at lead");
+    expect(issues).toContain("unknown at dek");
+  });
+
+  test("compact wire rejects missing fact evidence and empty issue reasons", () => {
+    const base = { coherence: "clear" };
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "stories.0.summary", verdict: "fact", sourceId: 1 }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "unsupported", reason: "" }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "unknown", reason: "" }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "thesis", verdict: "analysis", sourceId: null, quote: null, reason: null }],
+    }).success).toBe(false);
+    expect(() => hydrateEditorialEvidenceReview({
+      fields: [], coherence: "unsupported",
+    })).toThrow("omitted a coherence reason");
+  });
+
+  test("compact review retains duplicate and wrong-source blockers", () => {
+    const wire = {
+      fields: [
+        { path: "stories.0.summary", verdict: "fact", sourceId: 2, quote: sources[1]!.sourceText.slice(0, 25) },
+        { path: "stories.0.summary", verdict: "analysis" },
+      ],
+      coherence: "clear",
+    };
+    const issues = validateEditorialEvidenceReview(
+      dailyDraft(), sources, hydrateEditorialEvidenceReview(wire),
+    ).join(" ");
+    expect(issues).toContain("correct selected source for stories.0.summary");
+    expect(issues).toContain("duplicate or unexpected field stories.0.summary");
+    expect(issues).toContain("Evidence review omitted");
+  });
+
   test("requires every prose path exactly once and blocks extra or duplicate verdicts", () => {
     const draft = dailyDraft();
     const review = completeReview(draft);

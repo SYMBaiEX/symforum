@@ -219,6 +219,18 @@ publishing were not changed to manufacture a passing test.
   stage `system` / `health-canary`, not their operator telemetry label. A mocked
   global-live default test proves free 404 then cheap rescue use that stage and
   save failed/completed receipts without direct-provider HTTP.
+- Fixed Mistral canary `eliza-31ff591c-2878-482b-9415-1e52d1411a53` completed
+  on runtime 1.7.2 with 121 input / 82 output tokens and an exact served-model
+  match. Its one reservation settled at 66 micro-USD using the conservative
+  application price ceiling, not a claim about the provider invoice.
+- Belle's first Mistral draft completed, but the blind reviewer exhausted its
+  4,000-token cap (`finish=length`, zero reasoning tokens) before completing its
+  verdict. Both receipts completed; this is not an unknown outcome or a quality
+  approval. Review wire output is now a strict compact union: analysis has only
+  path/verdict; facts require source ID/quote; unsupported/unknown require a
+  short reason. Received records are hydrated into the unchanged full validator.
+  Missing records are never synthesized. Full path/source/quote/coherence gates,
+  original source context, the 4k cap and single revision remain unchanged.
 - The old generic provider-response quarantine cannot be reconstructed because
   the raw body was deliberately discarded. It remains held. Future malformed
   responses now get fixed protocol/shape diagnostic codes, without logging raw
