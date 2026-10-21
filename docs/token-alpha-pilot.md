@@ -331,3 +331,20 @@ claims were supported, quality passed without flags, and metrics were 14.438
 seconds old at publication. Both completed Luna calls cost $0.000509 total.
 This token's mint is distinct from the earlier human-authored Kimchi lore
 thread; the post makes no connection or shared-identity claim.
+
+### Ordinary 23:00 UTC run and bounded warning grammar
+
+The ordinary Bags 23:00 UTC slot completed a Luna draft for Alpha Husky, then
+failed the local policy-phrase check on another legitimate caveat: "not
+guaranteed execution or price stability." Hash-matched inspection of that
+known-completed cached result performed no new inference or ledger writes.
+The earlier whole-phrase warning exemption was too specific.
+
+The correction uses anchored, bounded declarative clause grammar, removing
+only the negated keyword in an inspection copy. Descriptors can vary, but
+positive guarantees and other forbidden phrases anywhere in the descriptor or
+remaining text remain visible to the policy check. Questions, embedded denials,
+exceptions, ambiguous tails and mixed promises remain blocked. Both observed
+warnings are covered; original text still reaches independent review unchanged.
+Draft instructions also prefer direct uncertainty wording without that keyword.
+The ordinary failed run is preserved and no retry is implied by this fix.

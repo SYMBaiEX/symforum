@@ -48,6 +48,8 @@ const ANALYSIS =
   "Trading activity is visible in this sample, but volume alone cannot establish lasting demand. I would watch whether liquidity and participation remain consistent over successive observations.";
 const GUARANTEE_WARNING =
   "Liquidity describes funds available in the pool, not guaranteed execution at a quoted price; volume records trading activity, not lasting demand. Further observations are needed before drawing conclusions about participation.";
+const CAPACITY_WARNING =
+  "Liquidity describes reported available trading capacity, not guaranteed execution or price stability; volume reflects activity during the interval, not lasting demand. Further observations are needed before drawing conclusions about participation.";
 const snapshot: TokenSnapshot = {
   platform: "bags",
   mint: MINT,
@@ -426,6 +428,9 @@ describe("token pilot orchestration", () => {
     expect(prompt).toContain(
       "Do not repeat promotional claims from the project description",
     );
+    expect(prompt).toContain(
+      "prefer direct uncertainty wording such as liquidity does not establish execution quality or price stability, rather than using the word guaranteed",
+    );
     expect(mocks.generate).toHaveBeenCalledTimes(2);
     expect(mocks.generate.mock.calls[0][0]).toMatchObject({
       maxOutputTokens: 4_000,
@@ -556,31 +561,34 @@ describe("token pilot orchestration", () => {
     expect(reviewed.snapshot.description).toBe(description);
     expect(reviewed.body).toBe(revision.body);
   });
-  test("an explicit guarantee risk warning reaches independent review unchanged", async () => {
-    mocks.generate
-      .mockReset()
-      .mockResolvedValueOnce({
-        output: { analysis: GUARANTEE_WARNING },
-        response: { modelId: "vendor/free" },
-        usage: {},
-      })
-      .mockResolvedValueOnce({
-        output: { approved: false, reason: "Independent quality hold." },
-        response: { modelId: "vendor/free" },
-        usage: {},
+  test.each([GUARANTEE_WARNING, CAPACITY_WARNING])(
+    "an explicit guarantee risk warning reaches independent review unchanged: %s",
+    async (analysis) => {
+      mocks.generate
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: { analysis },
+          response: { modelId: "vendor/free" },
+          usage: {},
+        })
+        .mockResolvedValueOnce({
+          output: { approved: false, reason: "Independent quality hold." },
+          response: { modelId: "vendor/free" },
+          usage: {},
+        });
+      const ctx = context();
+      expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+        status: "held",
+        reason: "independent-review-rejected",
       });
-    const ctx = context();
-    expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
-      status: "held",
-      reason: "independent-review-rejected",
-    });
-    expect(mocks.generate).toHaveBeenCalledTimes(2);
-    const reviewed = JSON.parse(
-      mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
-    );
-    expect(reviewed.body).toContain(GUARANTEE_WARNING);
-    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
-  });
+      expect(mocks.generate).toHaveBeenCalledTimes(2);
+      const reviewed = JSON.parse(
+        mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+      );
+      expect(reviewed.body).toContain(analysis);
+      expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+    },
+  );
   test.each([
     ["length", "Short private draft."],
     ["characters", `${ANALYSIS} 123 private draft`],
@@ -631,6 +639,9 @@ describe("token pilot orchestration", () => {
 describe("opinion and metadata boundaries", () => {
   test.each([
     GUARANTEE_WARNING,
+    CAPACITY_WARNING,
+    `${ANALYSIS} Liquidity describes available pool funds, not guaranteed execution.`,
+    `${ANALYSIS} Liquidity describes currently reported pool capacity, not guaranteed execution or price stability.`,
     `${ANALYSIS} Returns are not guaranteed.`,
     `${ANALYSIS} Execution is not guaranteed at a quoted price.`,
     `${ANALYSIS} Execution is not guaranteed.`,
@@ -650,6 +661,26 @@ describe("opinion and metadata boundaries", () => {
     "Returns are not guaranteed? Absolutely.",
     "Execution is not guaranteed at a quoted price? Absolutely.",
     "Liquidity describes funds available in the pool, not guaranteed execution at a quoted price? Absolutely.",
+    "Liquidity describes reported available trading capacity, not guaranteed execution or price stability? Absolutely.",
+    "Liquidity describes reported available trading capacity, not guaranteed execution or price stability is a lie.",
+    "Liquidity describes reported available trading capacity, not guaranteed execution or price stability, except for this token.",
+    "Liquidity describes reported available trading capacity, not not guaranteed execution or price stability.",
+    "It is a lie that liquidity describes reported available trading capacity, not guaranteed execution or price stability.",
+    "The idea that liquidity describes reported available trading capacity, not guaranteed execution or price stability is a myth.",
+    "Liquidity describes guaranteed returns, not guaranteed execution or price stability.",
+    "Liquidity describes not guaranteed returns, not guaranteed execution or price stability.",
+    "Liquidity describes buy now trading capacity, not guaranteed execution or price stability.",
+    "Liquidity describes sell now trading capacity, not guaranteed execution or price stability.",
+    "Liquidity describes risk-free trading capacity, not guaranteed execution or price stability.",
+    "Liquidity describes audited trading capacity, not guaranteed execution or price stability.",
+    "Liquidity describes a verified team, not guaranteed execution or price stability.",
+    "Liquidity describes ape in trading capacity, not guaranteed execution or price stability.",
+    "Liquidity describes a price target, not guaranteed execution or price stability.",
+    "Liquidity describes reported capacity, additional detail, not guaranteed execution or price stability.",
+    "Liquidity describes reported capacity: a promise, not guaranteed execution or price stability.",
+    "Liquidity describes https://example.com capacity, not guaranteed execution or price stability.",
+    "Liquidity describes www.example.com capacity, not guaranteed execution or price stability.",
+    "Liquidity describes reported capacity, not guaranteed execution or price stability. Returns are guaranteed.",
     "Not guaranteed returns, only a snapshot of trading activity.",
     "Returns are not guaranteed, unless you use this token.",
     "No returns are not guaranteed.",
@@ -675,6 +706,18 @@ describe("opinion and metadata boundaries", () => {
       expect(tokenAnalysisValidationCode(analysis)).toBe("policy-phrase");
     },
   );
+  test("liquidity-warning descriptors have a bounded grammar, not a whole-phrase exemption", () => {
+    const safe = `${ANALYSIS} Liquidity describes ${"a".repeat(120)}, not guaranteed execution or price stability.`;
+    expect(tokenAnalysisIsSafe(safe)).toBe(true);
+    expect(
+      tokenAnalysisValidationCode(
+        safe.replace("a".repeat(120), "a".repeat(121)),
+      ),
+    ).toBe("policy-phrase");
+    expect(tokenAnalysisValidationCode(safe.replace("a".repeat(120), ""))).toBe(
+      "policy-phrase",
+    );
+  });
   test("diagnostic categories preserve the existing length and character limits", () => {
     expect(tokenAnalysisValidationCode("x".repeat(79))).toBe("length");
     expect(tokenAnalysisValidationCode("x".repeat(80))).toBeNull();

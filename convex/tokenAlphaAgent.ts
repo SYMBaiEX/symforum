@@ -140,16 +140,23 @@ class TokenAnalysisValidationError extends Error {
   }
 }
 
+const GUARANTEE_WARNING_CLAUSES = [
+  /^(\s*returns are not )guaranteed([.;]?\s*)$/i,
+  /^(\s*execution is not )guaranteed((?: at a quoted price)?[.;]?\s*)$/i,
+  /^(\s*liquidity describes [a-z][a-z '-]{0,119}, not )guaranteed( execution(?: at a quoted price| or price stability)?[.;]?\s*)$/i,
+];
+
 /** Inspect only explicit risk warnings; preserve the original draft for review. */
 function guaranteeWarningInspectionCopy(analysis: string): string {
-  return analysis.replace(/[^.!?;]+[.!?;]?/gu, (clause) =>
-    // Match complete declarative clauses, not embedded claims or questions.
-    /^(?:returns are not guaranteed|execution is not guaranteed(?: at a quoted price)?|liquidity describes funds available in the pool, not guaranteed execution at a quoted price)[.;]?$/i.test(
-      clause.trim(),
-    )
-      ? ""
-      : clause,
-  );
+  return analysis.replace(/[^.!?;]+[.!?;]?/gu, (clause) => {
+    for (const shape of GUARANTEE_WARNING_CLAUSES) {
+      const match = shape.exec(clause);
+      // Remove only this negative keyword: policy phrases in the descriptor
+      // and all other text must remain visible to the policy scan.
+      if (match) return `${match[1]}${match[2]}`;
+    }
+    return clause;
+  });
 }
 
 export function tokenAnalysisValidationCode(
@@ -224,6 +231,7 @@ async function generateAnalysis(
     "Prefer a direct comparison of rolling-hour trading volume in USD with reported liquidity in USD, only when both supplied values support it. For example, if volume is below liquidity, say rolling-hour volume is below reported liquidity, not trading volume is small. Reverse the comparison only if the supplied values warrant it; omit it if either value is unavailable.",
     "A volume/liquidity comparison describes this snapshot, not strength, quality, lasting demand or an investment opportunity. Do not turn lower trading volume into a favorable or unfavorable rating or suggest a trade.",
     "Focus on brief conditional interpretation and uncertainty, not a relative performance verdict. Do not repeat promotional claims from the project description.",
+    "For risk caveats, prefer direct uncertainty wording such as liquidity does not establish execution quality or price stability, rather than using the word guaranteed.",
     "No claims of price momentum unless the supplied price change actually supports them.",
     "Return one conversational paragraph of eighty to seven hundred characters. Do not use digits.",
     JSON.stringify(args.snapshot),
