@@ -97,7 +97,10 @@ export async function convexModelRoutingConfig(
     };
   }
   if (ctx === undefined) return base;
-  if (options?.runtimeScope !== undefined || options?.elizaRuntime === "force") {
+  if (
+    options?.runtimeScope !== undefined ||
+    options?.elizaRuntime === "force"
+  ) {
     try {
       if (!options?.correlationId) throw new Error("missing_identity");
       await ctx.runQuery(internal.elizaRuntimeData.assertOperationReady, {
@@ -162,6 +165,7 @@ export const probe = internalAction({
     provider: v.optional(v.literal("openrouter")),
     freeOnly: v.optional(v.boolean()),
     elizaRuntime: v.optional(v.boolean()),
+    validationTag: v.optional(v.string()),
     model: v.optional(
       v.union(
         v.literal("openrouter/free"),
@@ -218,8 +222,14 @@ export async function runStructuredProbe(
   ctx: ActionCtx,
   provider?: "openrouter",
   freeOnly = false,
-  options?: { elizaRuntime?: boolean; model?: string },
+  options?: { elizaRuntime?: boolean; model?: string; validationTag?: string },
 ) {
+  if (
+    options?.validationTag !== undefined &&
+    !/^[A-Za-z0-9_-]{1,64}$/.test(options.validationTag)
+  ) {
+    throw new Error("invalid_canary_validation_tag");
+  }
   const correlationId = `model-canary:${Date.now()}`;
   const generationStartedAt = Date.now();
   const config = await convexModelRoutingConfig(ctx, {
@@ -234,7 +244,10 @@ export async function runStructuredProbe(
     "'Structured routing health check passed', source URL " +
     `'https://symbaiex.com/agents.md', message '${CANARY_MESSAGE}', and ` +
     "an 80-200 character draft explaining that this synthetic payload " +
-    "checks schema-valid tool submission without publishing. Do not write prose.";
+    "checks schema-valid tool submission without publishing. Do not write prose." +
+    (options?.validationTag
+      ? ` This is a new diagnostic batch: ${options.validationTag}.`
+      : "");
   const routeArgs = {
     stage: `operator:model-route-probe:${freeOnly ? "free" : (provider ?? "auto")}`,
     correlationId,

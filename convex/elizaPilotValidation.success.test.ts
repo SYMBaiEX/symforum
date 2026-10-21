@@ -9,13 +9,14 @@ import schema from "./schema";
 import type { Id } from "./_generated/dataModel";
 
 const routed = vi.hoisted(() => vi.fn());
+const routingConfig = vi.hoisted(() => vi.fn());
 vi.mock("../lib/ai-model-routing", async importOriginal => ({
   ...(await importOriginal<typeof import("../lib/ai-model-routing")>()),
   runWithModelFallback: routed,
 }));
 vi.mock("./modelRouting", async importOriginal => ({
   ...(await importOriginal<typeof import("./modelRouting")>()),
-  convexModelRoutingConfig: async () => ({ openRouterApiKey: "test-only-key" }),
+  convexModelRoutingConfig: routingConfig,
 }));
 vi.mock("./sukiForumReplyAgent", async importOriginal => ({
   ...(await importOriginal<typeof import("./sukiForumReplyAgent")>()),
@@ -29,7 +30,7 @@ vi.mock("./sukiForumReplyAgent", async importOriginal => ({
   }),
 }));
 const modules = { ...import.meta.glob("./**/*.ts"), ...import.meta.glob("./**/*.tsx") };
-const sukiAction = makeFunctionReference<"action", { nonce: string; threadId: Id<"forumThreads"> }, {
+const sukiAction = makeFunctionReference<"action", { nonce: string; threadId: Id<"forumThreads">; useElizaRuntime?: boolean }, {
   duplicate: boolean; run: { status: string; shadowJobId?: Id<"elizaShadowJobs">; baselineDecision?: string };
 }>("elizaPilotValidation:validateSuki");
 
@@ -45,6 +46,8 @@ beforeEach(() => {
   vi.stubEnv("ELIZA_SHADOW_DAILY_BUDGET_USD", "1");
   vi.stubEnv("OPENROUTER_DAILY_BUDGET_USD", "10");
   routed.mockReset();
+  routingConfig.mockReset();
+  routingConfig.mockResolvedValue({ openRouterApiKey: "test-only-key" });
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -94,9 +97,10 @@ describe("successful pilot actions stay outside publication state", () => {
     expect(await t.run(ctx => ctx.db.query("forumPosts").take(10))).toEqual([]);
   });
 
-  test("public human Suki source uses normal route and enqueues one private shadow job", async () => {
-    routed.mockImplementation(async (_config, _options, models) => {
+  test.each([false, true])("public human Suki source uses requested runtime %s without publishing", async useElizaRuntime => {
+    routed.mockImplementation(async (_config, options, models) => {
       expect(models).toBeUndefined();
+      expect(options).toMatchObject({ stage: "suki:forum-reply" });
       return {
         route: { persistedModel: "openrouter/free" },
         value: {
@@ -127,7 +131,10 @@ describe("successful pilot actions stay outside publication state", () => {
         searchText: "reproducible comparisons", createdAt: 1, updatedAt: 1,
       });
     });
-    const result = await t.action(sukiAction, { nonce: "pilot_success_suki_001", threadId });
+    const result = await t.action(sukiAction, { nonce: "pilot_success_suki_001", threadId, useElizaRuntime });
+    expect(routingConfig).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      runtimeScope: "forum-newsletter", elizaRuntime: useElizaRuntime ? "force" : "off",
+    }));
     expect(result).toMatchObject({ duplicate: false, run: { status: "completed", baselineDecision: "reply" } });
     expect(result.run.shadowJobId).toBeDefined();
     expect(routed).toHaveBeenCalledTimes(1);

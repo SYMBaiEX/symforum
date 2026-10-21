@@ -71,7 +71,9 @@ describe("free-only structured operator probe", () => {
         runQuery: vi.fn(async () => ({ disabledModelIds: [] })),
         runMutation,
       } as unknown as ActionCtx;
-      const result = runStructuredProbe(ctx, undefined, true);
+      const result = runStructuredProbe(ctx, undefined, true, {
+        validationTag: "receipt-protocol-v2",
+      });
       if (valid) {
         await expect(result).resolves.toEqual({
           provider: "openrouter",
@@ -93,6 +95,9 @@ describe("free-only structured operator probe", () => {
         );
       }
       expect(bodies).toHaveLength(1);
+      expect(JSON.stringify(bodies[0].messages)).toContain(
+        "receipt-protocol-v2",
+      );
       expect(bodies[0]).toMatchObject({
         model: "openrouter/free",
         max_tokens: 8000,
@@ -101,4 +106,15 @@ describe("free-only structured operator probe", () => {
       });
     },
   );
+  test("invalid diagnostic tags fail before configuration, admission or HTTP", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = {} as ActionCtx;
+    await expect(
+      runStructuredProbe(ctx, undefined, true, {
+        validationTag: "invalid tag with whitespace",
+      }),
+    ).rejects.toThrow("invalid_canary_validation_tag");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

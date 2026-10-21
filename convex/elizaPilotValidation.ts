@@ -61,19 +61,19 @@ const readSnapshotRef = makeFunctionReference<"query", { snapshotDate: string; l
 }>("news:readIndexedSnapshot");
 const generateDailyRef = makeFunctionReference<"action", {
   runDate: string; snapshotDate: string; siteUrl: string;
-  shadowSourceRunKey: string; forceLegacyGeneration: boolean;
+  shadowSourceRunKey: string; forceLegacyGeneration?: boolean; forceElizaRuntimeGeneration?: boolean;
 }, {
   subject: string; storyCount: number; topStoryIds: number[];
   shadowEnqueue?: { status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: Id<"elizaShadowJobs"> };
 }>("newsletterAgent:generateDailySignal");
 
-/** Operator-selected real public thread, one legacy baseline, one shadow job; never publishes. */
+/** One real public source and comparison; optional forced Eliza path never publishes. */
 export const validateSuki = internalAction({
-  args: { nonce: v.string(), threadId: v.id("forumThreads") },
+  args: { nonce: v.string(), threadId: v.id("forumThreads"), useElizaRuntime: v.optional(v.boolean()) },
   returns: resultValidator,
   handler: async (ctx, args) => {
     const reserved = await ctx.runMutation(reserveRef, {
-      nonce: args.nonce, kind: "suki-reply", sourceKey: `thread:${args.threadId}`,
+      nonce: args.nonce, kind: "suki-reply", sourceKey: `thread:${args.threadId}${args.useElizaRuntime ? ":eliza" : ""}`,
     });
     if (reserved.duplicate) return reserved;
     try {
@@ -85,14 +85,14 @@ export const validateSuki = internalAction({
       const evidence = await fetchForumReplyEvidence(candidate);
       const prompt = sukiReplyPrompt(candidate, "Suki", evidence);
       const routing = await convexModelRoutingConfig(ctx, {
-        correlationId: `pilot:suki:${args.nonce}`, elizaRuntime: "off",
+        correlationId: `pilot:suki:${args.nonce}`, runtimeScope: "forum-newsletter", elizaRuntime: args.useElizaRuntime ? "force" : "off",
       });
       if (!routing.openRouterApiKey?.trim()) {
         return done(ctx, args.nonce, "blocked", "baseline_model_unconfigured", sourceHash, 1);
       }
       const started = Date.now();
       const generation = await runWithModelFallback(routing, {
-        stage: "pilot:suki:reply", correlationId: `pilot:suki:${args.nonce}`,
+        stage: "suki:forum-reply", correlationId: `pilot:suki:${args.nonce}`,
         feature: "forum-reply", agent: "suki", totalTimeoutMs: 90_000,
         estimatedInputTokens: estimatePromptInputTokens(prompt),
         maxOutputTokens: route => openRouterStructuredOutputBudget(route.modelId, 1_400),
@@ -195,12 +195,12 @@ export const validateSuki = internalAction({
 
 /** Existing Belle draft action only: no issue, digest, forum post, send, or scheduler. */
 export const validateBelle = internalAction({
-  args: { nonce: v.string(), runDate: v.string(), snapshotDate: v.string() },
+  args: { nonce: v.string(), runDate: v.string(), snapshotDate: v.string(), useElizaRuntime: v.optional(v.boolean()) },
   returns: resultValidator,
   handler: async (ctx, args) => {
     const reserved = await ctx.runMutation(reserveRef, {
       nonce: args.nonce, kind: "belle-newsletter",
-      sourceKey: `snapshot:${args.snapshotDate}:run:${args.runDate}`,
+      sourceKey: `snapshot:${args.snapshotDate}:run:${args.runDate}${args.useElizaRuntime ? ":eliza" : ""}`,
     });
     if (reserved.duplicate) return reserved;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(args.runDate) ||
@@ -223,7 +223,7 @@ export const validateBelle = internalAction({
         runDate: args.runDate, snapshotDate: args.snapshotDate,
         siteUrl: "https://symbaiex.com",
         shadowSourceRunKey: `pilot:belle:${args.nonce}`,
-        forceLegacyGeneration: true,
+        ...(args.useElizaRuntime ? { forceElizaRuntimeGeneration: true } : { forceLegacyGeneration: true }),
       });
       const shadow = generated.shadowEnqueue;
       if (!shadow || shadow.status !== "queued" || !shadow.jobId) {

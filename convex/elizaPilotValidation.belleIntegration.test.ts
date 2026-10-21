@@ -16,7 +16,7 @@ vi.mock("../lib/ai-model-routing", async importOriginal => ({
 vi.mock("./modelRouting", async importOriginal => ({
   ...(await importOriginal<typeof import("./modelRouting")>()),
   convexModelRoutingConfig: async (_ctx: unknown, options: { elizaRuntime?: string }) => {
-    if (options.elizaRuntime !== "off") throw new Error("pilot baseline must use legacy route");
+    if (!["off", "force"].includes(options.elizaRuntime ?? "")) throw new Error("pilot must explicitly select its transport");
     return { openRouterApiKey: "test-only-key" };
   },
 }));
@@ -82,7 +82,7 @@ const draft = {
 };
 
 const modules = { ...import.meta.glob("./**/*.ts"), ...import.meta.glob("./**/*.tsx") };
-const belleAction = makeFunctionReference<"action", { nonce: string; runDate: string; snapshotDate: string }, {
+const belleAction = makeFunctionReference<"action", { nonce: string; runDate: string; snapshotDate: string; useElizaRuntime?: boolean }, {
   duplicate: boolean; run: { status: string; errorCode?: string; shadowJobId?: Id<"elizaShadowJobs">; sourceCount?: number };
 }>("elizaPilotValidation:validateBelle");
 
@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
-test("actual Belle generator scores a complete source packet and enqueues without publishing", async () => {
+test.each([false, true])("actual Belle generator uses requested runtime %s and never publishes", async useElizaRuntime => {
   const t = convexTest(schema, modules);
   registerRateLimiter(t);
   await t.run(async ctx => {
@@ -119,6 +119,7 @@ test("actual Belle generator scores a complete source packet and enqueues withou
   });
   const result = await t.action(belleAction, {
     nonce: "pilot_real_generator_belle_001", runDate: "2026-10-20", snapshotDate: "2026-10-20",
+    useElizaRuntime,
   });
   expect(result).toMatchObject({ duplicate: false, run: { status: "completed", sourceCount: 8 } });
   expect(result.run.shadowJobId).toBeDefined();
