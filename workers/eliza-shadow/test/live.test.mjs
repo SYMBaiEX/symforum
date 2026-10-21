@@ -391,11 +391,12 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
 test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
   const newsletterBody = {
     ...body,
-    model: "deepseek/deepseek-v4.1-flash-1017",
+    model: "openai/gpt-6-luna",
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
-      only: ["deepinfra/fp8/priority"],
+      only: ["openai"],
+      ignore: ["openai/fast", "openai/flex"],
       max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
@@ -523,21 +524,22 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      provider: { ...newsletterBody.provider, only: ["deepinfra"] },
+      provider: { ...newsletterBody.provider, only: ["openai/fast"] },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      provider: { ...newsletterBody.provider, only: ["deepinfra", "other"] },
+      provider: { ...newsletterBody.provider, only: ["openai", "other"] },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
-      provider: { ...newsletterBody.provider, only: "deepinfra" },
+      provider: { ...newsletterBody.provider, only: "openai" },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
       provider: {
         require_parameters: true,
-        only: ["deepinfra/fp8/priority"],
+        only: ["openai"],
+        ignore: newsletterBody.provider.ignore,
         max_price: newsletterBody.provider.max_price,
       },
     }),
@@ -592,6 +594,33 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
       reasoning_effort: "low",
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      model: "deepseek/deepseek-v4.1-flash-1017",
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      provider: { ...newsletterBody.provider, ignore: ["openai/flex"] },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      provider: {
+        ...newsletterBody.provider,
+        ignore: ["openai/flex", "openai/fast", "openai/fast"],
+      },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      temperature: 0,
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      top_p: 0.8,
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      top_k: 10,
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,

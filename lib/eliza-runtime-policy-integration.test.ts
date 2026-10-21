@@ -87,7 +87,8 @@ describe("newsletter SDK to live worker policy boundary", () => {
         model: OPENROUTER_NEWSLETTER_MODEL,
         provider: {
           allow_fallbacks: false,
-          only: ["deepinfra/fp8/priority"],
+          only: ["openai"],
+          ignore: ["openai/fast", "openai/flex"],
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
@@ -97,6 +98,9 @@ describe("newsletter SDK to live worker policy boundary", () => {
         reasoning: { enabled: false },
       });
       expect(body.reasoning_effort).toBeUndefined();
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
+      expect(body.top_k).toBeUndefined();
 
       const worker = await loadLiveWorkerPolicy();
       const envelope = {

@@ -21,6 +21,7 @@ import {
   generatedDailyDraftSchema,
   generatedWeeklyDraftSchema,
   hydrateEditorialEvidenceReview,
+  lunaEvidenceReviewWireSchema,
   materializeEditorialChart,
   NEWSLETTER_MODEL_IDS,
   newsletterModelsForRoutingConfig,
@@ -313,6 +314,17 @@ describe("Belle blind evidence review validation", () => {
     expect(issues).toContain("Evidence review omitted");
     expect(issues).toContain("unsupported at lead");
     expect(issues).toContain("unknown at dek");
+  });
+
+  test("Luna requires a nullable coherence reason while historical clear reviews may omit it", () => {
+    const clear = { fields: [{ path: "lead", verdict: "analysis" }], coherence: "clear" };
+    expect(evidenceReviewWireSchema.safeParse(clear).success).toBe(true);
+    expect(lunaEvidenceReviewWireSchema.safeParse(clear).success).toBe(false);
+    expect(lunaEvidenceReviewWireSchema.safeParse({ ...clear, coherenceReason: null }).success).toBe(true);
+    expect(hydrateEditorialEvidenceReview({ ...clear, coherenceReason: null }, catalog).coherenceReason).toBeNull();
+    expect(() => hydrateEditorialEvidenceReview({
+      ...clear, coherence: "unsupported", coherenceReason: null,
+    }, catalog)).toThrow("omitted a coherence reason");
   });
 
   test("bounds verbose wire diagnostics without changing blocking verdicts", () => {

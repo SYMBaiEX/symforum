@@ -595,6 +595,49 @@ describe("Eliza live compatible transport", () => {
     await expect(transport("unused", init)).rejects.toThrow("invalid_receipt");
   });
 
+  test("accepts only the catalogued GPT-6 Luna dated snapshot alias", async () => {
+    let servedModel = "openai/gpt-6-luna-20260922";
+    const receipts: Array<{ servedModel?: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const envelope = JSON.parse(String(init?.body));
+        return Response.json({
+          ...envelope,
+          runtimeVersion: "1.7.2",
+          completion: completion(servedModel),
+        });
+      }),
+    );
+    const transport = elizaRuntimeFetch(
+      {
+        ...config.elizaRuntime,
+        onReceipt: (receipt) => {
+          receipts.push(receipt);
+        },
+      },
+      { ...context, agentSlug: "system", stage: "health-canary" },
+    );
+    const init = {
+      body: JSON.stringify({
+        model: "openai/gpt-6-luna",
+        max_tokens: 200,
+        messages: [{ role: "user", content: "x" }],
+      }),
+    };
+    expect((await transport("unused", init)).status).toBe(200);
+    expect(receipts[0]).toMatchObject({
+      model: "openai/gpt-6-luna",
+      servedModel: "openai/gpt-6-luna-20260922",
+    });
+    servedModel = "openai/gpt-6-luna-20261001";
+    await expect(transport("unused", init)).rejects.toThrow("invalid_receipt");
+    servedModel = "openai/gpt-6-mini";
+    await expect(transport("unused", init)).rejects.toThrow("invalid_receipt");
+    servedModel = "openai/gpt-6-luna";
+    expect((await transport("unused", init)).status).toBe(200);
+  });
+
   test("cancels an oversized worker response stream", async () => {
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({

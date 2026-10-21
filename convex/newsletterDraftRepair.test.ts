@@ -173,7 +173,24 @@ function compactReview(draft: typeof validDraft) {
         }
       : { path: field.path, verdict: "analysis" }),
     coherence: "clear",
+    coherenceReason: null,
   };
+}
+
+function expectStrictReviewObjects(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) expectStrictReviewObjects(item);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  const node = value as Record<string, unknown>;
+  expect(node).not.toHaveProperty("oneOf");
+  if (node.type === "object") {
+    const properties = node.properties as Record<string, unknown>;
+    expect(node.additionalProperties).toBe(false);
+    expect((node.required as string[]).slice().sort()).toEqual(Object.keys(properties).sort());
+  }
+  for (const child of Object.values(node)) expectStrictReviewObjects(child);
 }
 
 test("daily writer counts only publication prose and keeps the same target on revision", () => {
@@ -271,7 +288,9 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, validDraft);
-  const result = await t.action(generateDailySignal, args);
+  const result = await t.action(generateDailySignal, {
+    ...args, shadowSourceRunKey: "newsletter:nonpilot-repair-test",
+  });
   expect(route).toHaveBeenCalledTimes(3);
   expect(route.mock.calls.map(call => call[2])).toEqual([
     [OPENROUTER_PAID_FALLBACK_MODEL], [OPENROUTER_PAID_FALLBACK_MODEL],
@@ -287,6 +306,7 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   const baseline = JSON.parse(shadow[0]!.baselineJson);
   expect(baseline.evaluation.evidenceReview.reviewedFields).toBeGreaterThan(0);
   expect(baseline.generation).toMatchObject({ inputTokens: 1_700, outputTokens: 2_000 });
+  expect(baseline.generation).not.toHaveProperty("revisionEvaluation");
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("dailyNewsletterRuns").take(10))).toEqual([]);
 });
@@ -483,6 +503,11 @@ test("a clipped subject triggers one revision and accepts a complete replacement
   expect(route.mock.calls[2]?.[1]?.estimatedInputTokens).toBeGreaterThan(0);
   expect(result.subject).toBe(validDraft.subject);
   expect(result.payload.quality.score).toBeGreaterThanOrEqual(82);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  const generation = JSON.parse(shadow[0]!.baselineJson).generation;
+  expect(generation.revisionAccepted).toBe(true);
+  expect(generation).not.toHaveProperty("revisionEvaluation");
 });
 
 test("a repeatedly clipped subject fails closed after one revision", async () => {
@@ -519,9 +544,57 @@ test("a structurally valid original is retained when its revision has a bad sele
   expect(route).toHaveBeenCalledTimes(3);
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
-  expect(JSON.parse(shadow[0]!.baselineJson).evaluation).toMatchObject({
+  const baseline = JSON.parse(shadow[0]!.baselineJson);
+  expect(baseline.evaluation).toMatchObject({
     wordCount: editorialDraftWordCount(shortValidDraft),
   });
+  expect(baseline.draft.lead).toBe(shortValidDraft.lead);
+  expect(baseline.generation).toMatchObject({
+    revisionAttempted: true,
+    revisionAccepted: false,
+    revisionEvaluation: {
+      score: 0,
+      wordCount: editorialDraftWordCount(invalidStoryDraft),
+      blockingIssueCount: 1,
+      blockingIssues: ["Belle selected a source outside the research packet"],
+      truncated: false,
+    },
+  });
+  expect(baseline.generation.revisionEvaluation).not.toHaveProperty("totalIssueCount");
+  expect(JSON.stringify(baseline.generation)).not.toContain(validDraft.lead);
+  expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
+});
+
+test("pilot captures bounded reasons when a revision is rejected", async () => {
+  const t = setup();
+  await seedSnapshot(t);
+  mockDrafts(shortValidDraft, validDraft);
+  reviewOverrides.push(review => review, review => {
+    for (const field of review.fields.slice(0, 15)) {
+      field.verdict = "unsupported";
+      field.reason = `Revision-only private diagnostic ${"x".repeat(300)}`;
+    }
+    return review;
+  });
+  await expect(t.action(generateDailySignal, {
+    ...args, shadowSourceRunKey: "pilot:belle:bounded-revision-diagnostic",
+  })).rejects.toThrow("baseline_quality_rejected");
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  const baseline = JSON.parse(shadow[0]!.baselineJson);
+  expect(baseline.draft.lead).toBe(shortValidDraft.lead);
+  expect(baseline.evaluation.wordCount).toBe(editorialDraftWordCount(shortValidDraft));
+  expect(baseline.generation.revisionAccepted).toBe(false);
+  expect(baseline.generation.revisionEvaluation).toMatchObject({
+    score: expect.any(Number),
+    wordCount: editorialDraftWordCount(validDraft),
+    blockingIssueCount: 15,
+    truncated: true,
+  });
+  const issues: string[] = baseline.generation.revisionEvaluation.blockingIssues;
+  expect(issues).toHaveLength(12);
+  expect(issues.every(issue => issue.length <= 240)).toBe(true);
+  expect(JSON.stringify(baseline.generation)).not.toContain(validDraft.lead);
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
@@ -628,6 +701,38 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   const reviewed = await reviewRun(candidate, new AbortController().signal);
   expect(reviewed.review.fields).toHaveLength(editorialEvidenceFields(validDraft).length);
   expect(requestBodies).toHaveLength(3);
+  const schemas = requestBodies.map(body => {
+    const responseFormat = body.response_format as {
+      type: string;
+      json_schema: { strict: boolean; schema: Record<string, unknown> };
+    };
+    expect(responseFormat.type).toBe("json_schema");
+    expect(responseFormat.json_schema.strict).toBe(true);
+    expectStrictReviewObjects(responseFormat.json_schema.schema);
+    return responseFormat.json_schema.schema;
+  });
+  const reviewSchema = schemas[2]!;
+  const reviewProperties = reviewSchema.properties as Record<string, {
+    anyOf?: Array<{ type: string }>;
+    items?: { anyOf?: unknown[] };
+  }>;
+  expect(reviewProperties.coherenceReason.anyOf?.map(option => option.type))
+    .toEqual(["string", "null"]);
+  expect(reviewProperties.fields.items?.anyOf).toHaveLength(4);
+  const worker = await import(new URL("../workers/eliza-shadow/src/live.mjs", import.meta.url).href) as {
+    liveInputHash(body: Record<string, unknown>): string;
+    validateLiveRequest(input: unknown): unknown;
+  };
+  for (const [index, body] of requestBodies.slice(0, 3).entries()) {
+    const envelope = {
+      version: 2, jobId: `belle-strict-schema-test-${index}`,
+      inputHash: worker.liveInputHash(body),
+      agentSlug: "belle",
+      stage: `belle:daily-signal:${index === 0 ? "draft" : index === 1 ? "revision" : "evidence-review"}`,
+      body,
+    };
+    expect(worker.validateLiveRequest(envelope)).toEqual(envelope);
+  }
   for (const body of requestBodies.slice(0, 2)) {
     expect(body).toMatchObject({
       model: NEWSLETTER_MODEL_IDS[0],
@@ -682,6 +787,7 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("never repeat an ID within a field");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("If no four-quote set supports every clause, mark the field unsupported or unknown");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A later caveat does not repair an earlier categorical assertion");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Set coherenceReason to null for clear coherence");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain('issueDate\\\":\\\"2026-10-21');
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Check temporal claims as facts too");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("issueDate is a comparison anchor for relative wording only");

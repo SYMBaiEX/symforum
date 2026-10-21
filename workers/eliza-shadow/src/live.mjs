@@ -14,9 +14,9 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
-  "deepseek/deepseek-v4.1-flash-1017",
+  "openai/gpt-6-luna",
 ]);
-const BOUNDED_NEWSLETTER_MODEL = "deepseek/deepseek-v4.1-flash-1017";
+const BOUNDED_NEWSLETTER_MODEL = "openai/gpt-6-luna";
 function withinNewsletterPriceCap(value, ceilingDigit) {
   if (
     typeof value !== "string" ||
@@ -362,7 +362,14 @@ export function validateLiveRequest(input) {
       body.provider?.require_parameters !== true ||
       !Array.isArray(body.provider?.only) ||
       body.provider.only.length !== 1 ||
-      body.provider.only[0] !== "deepinfra/fp8/priority" ||
+      body.provider.only[0] !== "openai" ||
+      !Array.isArray(body.provider?.ignore) ||
+      body.provider.ignore.length !== 2 ||
+      !body.provider.ignore.includes("openai/fast") ||
+      !body.provider.ignore.includes("openai/flex") ||
+      body.temperature !== undefined ||
+      body.top_p !== undefined ||
+      body.top_k !== undefined ||
       !record(price) ||
       Object.keys(price).length !== 2 ||
       !Object.keys(price).every((key) =>

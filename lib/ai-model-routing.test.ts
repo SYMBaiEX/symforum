@@ -200,7 +200,7 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("enforces the fixed newsletter price ceilings and disables reasoning on the wire", async () => {
+  test("pins the fixed newsletter route and disables unsupported controls on the wire", async () => {
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal(
       "fetch",
@@ -235,6 +235,9 @@ describe("OpenRouter-only model routing", () => {
         prompt: "Return ok.",
         maxOutputTokens: 4_000,
         maxRetries: 0,
+        temperature: 0.2,
+        topP: 0.8,
+        topK: 10,
         reasoning: "low",
         providerOptions: {
           openrouter: {
@@ -253,7 +256,8 @@ describe("OpenRouter-only model routing", () => {
         max_tokens: 4_000,
         provider: {
           allow_fallbacks: false,
-          only: ["deepinfra/fp8/priority"],
+          only: ["openai"],
+          ignore: ["openai/fast", "openai/flex"],
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
@@ -263,6 +267,9 @@ describe("OpenRouter-only model routing", () => {
       });
       expect(bodies[0].reasoning).toEqual({ enabled: false });
       expect(bodies[0].reasoning_effort).toBeUndefined();
+      expect(bodies[0].temperature).toBeUndefined();
+      expect(bodies[0].top_p).toBeUndefined();
+      expect(bodies[0].top_k).toBeUndefined();
     } finally {
       vi.unstubAllGlobals();
     }

@@ -186,10 +186,14 @@ function validCompletion(
   const knownAlias =
     requestedModel === "~deepseek/deepseek-v4-flash-latest" &&
     /^deepseek\/deepseek-v4-flash(?:-[a-zA-Z0-9-]{1,40})?$/.test(value.model);
+  const knownLunaSnapshotAlias =
+    requestedModel === "openai/gpt-6-luna" &&
+    value.model === "openai/gpt-6-luna-20260922";
   if (
     requestedModel !== "openrouter/free" &&
     value.model !== requestedModel &&
-    !knownAlias
+    !knownAlias &&
+    !knownLunaSnapshotAlias
   )
     return false;
   return value.choices.every((choice) => {

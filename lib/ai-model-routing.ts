@@ -153,11 +153,17 @@ function openRouterRequestBody(body: Record<string, unknown>) {
     // answer rather than a hidden thinking phase.
     request.reasoning = { enabled: false };
     delete request.reasoning_effort;
+    // The selected OpenAI endpoint does not advertise sampling controls.
+    // Omit them so require_parameters can fail closed on the exact endpoint.
+    delete request.temperature;
+    delete request.top_p;
+    delete request.top_k;
     request.provider = {
       ...(request.provider as Record<string, unknown> | undefined),
       allow_fallbacks: false,
-      // Pin the verified priority endpoint, not the provider's other tiers.
-      only: ["deepinfra/fp8/priority"],
+      // Pin the standard endpoint and exclude OpenAI's other service tiers.
+      only: ["openai"],
+      ignore: ["openai/fast", "openai/flex"],
       require_parameters: true,
       // The current ProviderPreferences OpenAPI contract uses decimal strings,
       // unlike older guide examples. Numeric policy values stay in accounting.
