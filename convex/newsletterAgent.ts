@@ -608,6 +608,7 @@ async function generateEditorialPackage(
     edition: args.edition,
     runDate: args.runDate,
     shadowSourceRunKey: args.shadowSourceRunKey,
+    elizaRuntimeGeneration: routingConfig.elizaRuntime !== undefined,
     snapshotDate: args.snapshotDate,
     snapshots,
     recent,
@@ -618,6 +619,7 @@ async function generateEditorialPackage(
       sourceText: snapshotSourceText(snapshotsById.get(story.hnItemId), story),
     })),
   };
+  const isBellePilot = args.shadowSourceRunKey?.startsWith("pilot:belle:") ?? false;
   let inFlightRevisionModel: string | undefined;
   let inFlightRevisionUsage: { inputTokens?: number; outputTokens?: number } | undefined;
   const { threshold, minimumWords, maximumWords } = editorialDraftLimits(args.edition);
@@ -677,10 +679,11 @@ async function generateEditorialPackage(
       });
     } catch (error) {
       if (!(error instanceof CompletedEditorialReviewError)) throw error;
-      if (!args.shadowSourceRunKey?.startsWith("pilot:belle:")) throw error.originalError;
+      if (!isBellePilot) throw error.originalError;
       const unavailable = "Evidence review unavailable; no verdict was accepted.";
       const shadow = await enqueueBelleNewsletterShadowComparison(ctx, {
         ...shadowCaptureContext,
+        artifactStatus: "review_failed",
         baseline: {
           draft,
           evaluation: {
@@ -711,8 +714,12 @@ async function generateEditorialPackage(
           },
         },
       });
-      if (shadow?.status === "queued" && shadow.jobId) {
-        throw new ConvexError({ code: "baseline_review_failed", shadowJobId: shadow.jobId });
+      if (shadow?.artifactRetained) {
+        throw new ConvexError({
+          code: "baseline_review_failed", artifactRetained: true,
+          shadowStatus: shadow.status,
+          ...(shadow.jobId === undefined ? {} : { shadowJobId: shadow.jobId }),
+        });
       }
       throw error.originalError;
     }
@@ -795,7 +802,7 @@ async function generateEditorialPackage(
       draft = originalDraft;
       evaluation = originalEvaluation;
       shadowRevisionAccepted = false;
-      if (args.shadowSourceRunKey?.startsWith("pilot:belle:")) {
+      if (isBellePilot) {
         const blockingIssues = revisionEvaluation.quality.blockingIssues;
         pilotRevisionEvaluation = {
           score: revisionEvaluation.quality.score,
@@ -815,8 +822,9 @@ async function generateEditorialPackage(
       revision.usage.outputTokens,
     );
   }
-  const enqueueShadow = () => enqueueBelleNewsletterShadowComparison(ctx, {
+  const enqueueShadow = (artifactStatus: "accepted" | "rejected") => enqueueBelleNewsletterShadowComparison(ctx, {
     ...shadowCaptureContext,
+    artifactStatus,
     baseline: {
       draft,
       evaluation,
@@ -833,10 +841,14 @@ async function generateEditorialPackage(
     },
   });
   const rejectEditorialDraft = async (message: string): Promise<never> => {
-    if (args.shadowSourceRunKey?.startsWith("pilot:belle:")) {
-      const shadow = await enqueueShadow();
-      if (shadow?.status === "queued" && shadow.jobId) {
-        throw new ConvexError({ code: "baseline_quality_rejected", shadowJobId: shadow.jobId });
+    if (isBellePilot) {
+      const shadow = await enqueueShadow("rejected");
+      if (shadow?.artifactRetained) {
+        throw new ConvexError({
+          code: "baseline_quality_rejected", artifactRetained: true,
+          shadowStatus: shadow.status,
+          ...(shadow.jobId === undefined ? {} : { shadowJobId: shadow.jobId }),
+        });
       }
     }
     throw new Error(message);
@@ -954,7 +966,7 @@ async function generateEditorialPackage(
     quality,
   };
 
-  const shadowEnqueue: { status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs"> } | undefined = await enqueueShadow();
+  const shadowEnqueue = await enqueueShadow("accepted");
 
   return {
     subject: draft.subject,
@@ -989,6 +1001,8 @@ export async function enqueueBelleNewsletterShadowComparison(
     edition: "daily-signal" | "weekly-field-note";
     runDate: string;
     shadowSourceRunKey?: string;
+    artifactStatus?: "accepted" | "rejected" | "review_failed";
+    elizaRuntimeGeneration?: boolean;
     snapshotDate: string;
     snapshots: ArticleSnapshot[];
     recent: { headlines: string[]; theses: string[]; storyIds: number[] };
@@ -1021,7 +1035,9 @@ export async function enqueueBelleNewsletterShadowComparison(
       };
     };
   },
-): Promise<{ status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs"> } | undefined> {
+): Promise<{ status: "queued" | "disabled" | "duplicate" | "limited" | "unavailable"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs">; artifactRetained?: true } | undefined> {
+  const isBellePilot = args.shadowSourceRunKey?.startsWith("pilot:belle:") ?? false;
+  let artifactRetained = false;
   try {
     const schema =
       args.edition === "daily-signal"
@@ -1040,6 +1056,30 @@ export async function enqueueBelleNewsletterShadowComparison(
       articleDescription: compact(snapshot.articleDescription, 450),
       articleText: compact(snapshot.articleText, 1_500),
     }));
+    const baselineJson = JSON.stringify(args.baseline);
+    // Keep the exact live scoring evidence, not the shorter worker excerpts.
+    const evaluationJson = JSON.stringify({
+      edition: args.edition,
+      stories: args.sources.slice(0, sourceLimit),
+      recent: args.recent,
+    });
+    if (
+      Buffer.byteLength(baselineJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES ||
+      Buffer.byteLength(evaluationJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES
+    ) {
+      throw new Error("shadow-packet-limit");
+    }
+    if (isBellePilot) {
+      if (args.artifactStatus === undefined) throw new Error("pilot_artifact_status_missing");
+      await ctx.runMutation(internal.elizaPilotValidationData.recordArtifact, {
+        nonce: args.shadowSourceRunKey!.slice("pilot:belle:".length),
+        sourceKey: `snapshot:${args.snapshotDate}:run:${args.runDate}${args.elizaRuntimeGeneration ? ":eliza" : ""}`,
+        baselineJson,
+        evaluationJson,
+        artifactStatus: args.artifactStatus,
+      });
+      artifactRetained = true;
+    }
     const inputJson = JSON.stringify({
       version: 1,
       kind: "belle-newsletter",
@@ -1055,22 +1095,13 @@ export async function enqueueBelleNewsletterShadowComparison(
       }),
       schema: z.toJSONSchema(schema, { target: "draft-7" }),
     });
-    const baselineJson = JSON.stringify(args.baseline);
-    // Keep the exact live scoring evidence, not the shorter worker excerpts.
-    const evaluationJson = JSON.stringify({
-      edition: args.edition,
-      stories: args.sources.slice(0, sourceLimit),
-      recent: args.recent,
-    });
     if (
-      Buffer.byteLength(inputJson, "utf8") > ELIZA_SHADOW_INPUT_MAX_BYTES ||
-      Buffer.byteLength(baselineJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES ||
-      Buffer.byteLength(evaluationJson, "utf8") > ELIZA_SHADOW_PRIVATE_MAX_BYTES
+      Buffer.byteLength(inputJson, "utf8") > ELIZA_SHADOW_INPUT_MAX_BYTES
     ) {
       throw new Error("shadow-packet-limit");
     }
     const sourceRunKey = args.shadowSourceRunKey ?? `newsletter:${args.edition}:${args.runDate}`;
-    return await ctx.runMutation(internal.elizaShadowData.enqueue, {
+    const shadow = await ctx.runMutation(internal.elizaShadowData.enqueue, {
       jobKey: `eliza-shadow:v1:${sourceRunKey}`,
       kind: "belle-newsletter",
       sourceRunKey,
@@ -1079,8 +1110,11 @@ export async function enqueueBelleNewsletterShadowComparison(
       baselineJson,
       evaluationJson,
     });
-  } catch {
+    return artifactRetained ? { ...shadow, artifactRetained: true } : shadow;
+  } catch (error) {
+    if (isBellePilot && !artifactRetained) throw error;
     console.warn("Eliza shadow Belle observation skipped; live newsletter unchanged.");
+    return artifactRetained ? { status: "unavailable", artifactRetained: true } : undefined;
   }
 }
 

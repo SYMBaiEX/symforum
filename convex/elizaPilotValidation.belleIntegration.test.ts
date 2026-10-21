@@ -18,7 +18,12 @@ vi.mock("./modelRouting", async importOriginal => ({
   ...(await importOriginal<typeof import("./modelRouting")>()),
   convexModelRoutingConfig: async (_ctx: unknown, options: { elizaRuntime?: string }) => {
     if (!["off", "force"].includes(options.elizaRuntime ?? "")) throw new Error("pilot must explicitly select its transport");
-    return { openRouterApiKey: "test-only-key" };
+    return {
+      openRouterApiKey: "test-only-key",
+      ...(options.elizaRuntime === "force" ? { elizaRuntime: {
+        url: "https://runtime.example", secret: "test-only-runtime-secret-at-least-32-characters",
+      } } : {}),
+    };
   },
 }));
 vi.mock("./sukiForumAgent", async importOriginal => ({
@@ -94,6 +99,9 @@ const inspectPilot = makeFunctionReference<"query", { nonce: string; jobId: Id<"
   run: { status: string; errorCode?: string; shadowJobId?: Id<"elizaShadowJobs"> };
   baselineJson: string; evaluationJson: string;
 } | null>("elizaPilotValidationData:inspectSelected");
+const reservePilot = makeFunctionReference<"mutation", {
+  nonce: string; kind: "belle-newsletter"; sourceKey: string;
+}>("elizaPilotValidationData:reserve");
 
 beforeEach(() => {
   vi.stubEnv("ELIZA_SHADOW_MODE", "shadow");
@@ -238,14 +246,18 @@ test("rejected Belle pilot stays failed with a private inspectable draft and no 
     nonce: "pilot_rejected_belle_off_001", runDate: "2026-10-20", snapshotDate: "2026-10-20",
   });
   expect(uncaptured).toMatchObject({ duplicate: false, run: {
-    status: "failed", errorCode: "baseline_or_source_failed",
+    status: "failed", errorCode: "baseline_quality_rejected",
   } });
   expect(uncaptured.run.shadowJobId).toBeUndefined();
+  await t.mutation(reservePilot, {
+    nonce: "disabled_direct_capture_001", kind: "belle-newsletter",
+    sourceKey: "snapshot:2026-10-20:run:2026-10-20",
+  });
   await expect(t.action(organicBelleAction, {
     runDate: "2026-10-20", snapshotDate: "2026-10-20",
     siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
     shadowSourceRunKey: "pilot:belle:disabled_direct_capture_001",
-  })).rejects.toThrow("failed editorial gates");
+  })).rejects.toThrow("baseline_quality_rejected");
   expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
 });
 
@@ -317,10 +329,14 @@ test("completed but unusable Belle review captures a private diagnostic without 
   })).rejects.toBe(reviewFailure);
   expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
   vi.stubEnv("ELIZA_SHADOW_MODE", "off");
+  await t.mutation(reservePilot, {
+    nonce: "disabled_review_capture_001", kind: "belle-newsletter",
+    sourceKey: "snapshot:2026-10-20:run:2026-10-20",
+  });
   await expect(t.action(organicBelleAction, {
     runDate: "2026-10-20", snapshotDate: "2026-10-20",
     siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
     shadowSourceRunKey: "pilot:belle:disabled_review_capture_001",
-  })).rejects.toBe(reviewFailure);
+  })).rejects.toThrow("baseline_review_failed");
   expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
 });

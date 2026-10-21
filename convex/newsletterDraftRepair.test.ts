@@ -8,8 +8,9 @@ import { makeFunctionReference } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { routedModelCandidates } from "../lib/ai-model-routing";
 import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
+import { internal } from "./_generated/api";
 import schema from "./schema";
-import { dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, editorialPrompt, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
+import { CompletedEditorialReviewError, dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, editorialPrompt, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
 
 const route = vi.hoisted(() => vi.fn());
 const routingConfig = vi.hoisted(() => vi.fn());
@@ -253,6 +254,22 @@ const args = {
   shadowSourceRunKey: "pilot:belle:draft-repair-test", forceLegacyGeneration: true,
 };
 
+async function runDraft(t: ReturnType<typeof setup>, actionArgs: typeof args & {
+  forceElizaRuntimeGeneration?: boolean;
+}) {
+  if (actionArgs.shadowSourceRunKey.startsWith("pilot:belle:")) {
+    await t.run(ctx => ctx.db.insert("elizaPilotRuns", {
+      nonce: actionArgs.shadowSourceRunKey.slice("pilot:belle:".length),
+      kind: "belle-newsletter",
+      sourceKey: `snapshot:${actionArgs.snapshotDate}:run:${actionArgs.runDate}${actionArgs.forceElizaRuntimeGeneration && !actionArgs.forceLegacyGeneration ? ":eliza" : ""}`,
+      status: "reserved",
+      createdAt: 1,
+      updatedAt: 1,
+    }));
+  }
+  return t.action(generateDailySignal, actionArgs);
+}
+
 beforeEach(() => {
   vi.stubEnv("ELIZA_SHADOW_MODE", "shadow");
   vi.stubEnv("ELIZA_SHADOW_WORKER_SECRET", "test-only-shadow-secret-at-least-32-characters");
@@ -293,7 +310,7 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, validDraft);
-  const result = await t.action(generateDailySignal, {
+  const result = await runDraft(t, {
     ...args, shadowSourceRunKey: "newsletter:nonpilot-repair-test",
   });
   expect(route).toHaveBeenCalledTimes(3);
@@ -314,6 +331,88 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(baseline.generation).not.toHaveProperty("revisionEvaluation");
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("dailyNewsletterRuns").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("elizaPilotRuns").take(10))).toEqual([]);
+});
+
+test("pilot retains accepted private output before a disabled comparison", async () => {
+  vi.stubEnv("ELIZA_SHADOW_MODE", "off");
+  const t = setup();
+  await seedSnapshot(t);
+  mockDrafts(validDraft);
+  const result = await runDraft(t, {
+    ...args, shadowSourceRunKey: "pilot:belle:disabled-accepted-capture",
+  });
+  expect(result.shadowEnqueue).toMatchObject({ status: "disabled", artifactRetained: true });
+  expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+    "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+  ]);
+  const [pilot] = await t.run(ctx => ctx.db.query("elizaPilotRuns").take(10));
+  expect(pilot).toMatchObject({
+    artifactStatus: "accepted",
+    sourceKey: "snapshot:2026-10-20:run:2026-10-20",
+  });
+  expect(JSON.parse(pilot!.baselineJson!).draft.subject).toBe(validDraft.subject);
+  expect(JSON.parse(pilot!.evaluationJson!).stories[0].sourceText).toContain("manifest records");
+  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
+});
+
+test("pilot retains rejected private output after comparison capacity is exhausted", async () => {
+  const t = setup();
+  await seedSnapshot(t);
+  const packet = JSON.stringify({
+    version: 1, kind: "belle-newsletter", system: "fixture", prompt: "fixture",
+    schema: { type: "object", properties: { healthy: { type: "boolean" } } },
+  });
+  for (let i = 0; i < 12; i++) {
+    const queued = await t.mutation(internal.elizaShadowData.enqueue, {
+      jobKey: `capacity-${i}`, kind: "belle-newsletter", sourceRunKey: `capacity-${i}`,
+      promptVersion: "fixture", inputJson: packet,
+      baselineJson: "{}", evaluationJson: "{}",
+    });
+    expect(queued.status).toBe("queued");
+  }
+  const clipped = dailyDraftSchema.parse({
+    ...validDraft, lead: `${validDraft.lead} The report stopped because`,
+  });
+  mockDrafts(clipped, clipped);
+  await expect(runDraft(t, {
+    ...args, shadowSourceRunKey: "pilot:belle:limited-rejected-capture",
+  })).rejects.toThrow(/baseline_quality_rejected.*artifactRetained.*true.*shadowStatus.*limited/);
+  expect(route.mock.calls.filter(call => call[1]?.stage.endsWith(":evidence-review"))).toHaveLength(2);
+  const [pilot] = await t.run(ctx => ctx.db.query("elizaPilotRuns").take(10));
+  expect(pilot).toMatchObject({ artifactStatus: "rejected" });
+  expect(JSON.parse(pilot!.baselineJson!).evaluation.feedback).toContainEqual(
+    expect.stringContaining("lead ends without a complete sentence"),
+  );
+  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(20))).toHaveLength(12);
+  expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
+});
+
+test("completed pilot reviewer failure retains private output even when comparison is disabled", async () => {
+  vi.stubEnv("ELIZA_SHADOW_MODE", "off");
+  const t = setup();
+  await seedSnapshot(t);
+  route.mockImplementation(async (_config, options) => {
+    if (options.stage.endsWith(":evidence-review")) {
+      throw new CompletedEditorialReviewError(new Error("completed unusable review"));
+    }
+    return {
+      route: { persistedModel: "openrouter/free" },
+      value: { draft: validDraft, usage: { inputTokens: 700, outputTokens: 900 }, modelId: "openrouter/free" },
+    };
+  });
+  await expect(runDraft(t, {
+    ...args, shadowSourceRunKey: "pilot:belle:disabled-review-failure",
+  })).rejects.toThrow(/baseline_review_failed.*artifactRetained.*true.*shadowStatus.*disabled/);
+  expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+    "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+  ]);
+  const [pilot] = await t.run(ctx => ctx.db.query("elizaPilotRuns").take(10));
+  expect(pilot).toMatchObject({ artifactStatus: "review_failed" });
+  expect(JSON.parse(pilot!.baselineJson!).evaluation.reviewStatus).toBe("unavailable");
+  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
 test("a blind-review unit mismatch enters the one revision and a clean review can pass", async () => {
@@ -326,7 +425,7 @@ test("a blind-review unit mismatch enters the one revision and a clean review ca
     field.reason = "10,000 AI sessions cannot be reported as 10,000 ChatGPT citations";
     return review;
   });
-  const result = await t.action(generateDailySignal, {
+  const result = await runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:evidence-unit-repair",
   });
   expect(result.payload.quality.score).toBeGreaterThanOrEqual(82);
@@ -347,7 +446,7 @@ test("two incomplete prose drafts fail closed after exactly two reviews", async 
     ...validDraft, lead: `${validDraft.lead} The report stopped because`,
   });
   mockDrafts(clipped, clipped);
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:clipped-prose-failed",
   })).rejects.toThrow("baseline_quality_rejected");
   expect(route.mock.calls.filter(call => call[1]?.stage.endsWith(":evidence-review"))).toHaveLength(2);
@@ -367,7 +466,7 @@ test("partial blind-review coverage is not treated as approval", async () => {
     review.fields.pop();
     return review;
   }));
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:partial-review-failed",
   })).rejects.toThrow("baseline_quality_rejected");
   expect(route.mock.calls.filter(call => call[1]?.stage.endsWith(":evidence-review"))).toHaveLength(2);
@@ -389,13 +488,14 @@ test("unknown reviewer transport fails closed without revision or publication", 
       value: { draft: validDraft, usage: { inputTokens: 700, outputTokens: 900 }, modelId: "openrouter/free" },
     };
   });
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:review-transport-unknown",
   })).rejects.toThrow("transport unknown outcome");
   expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
     "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
   ]);
   expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  expect((await t.run(ctx => ctx.db.query("elizaPilotRuns").take(10)))[0]).not.toHaveProperty("artifactStatus");
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
@@ -432,7 +532,7 @@ test("completed reviewer failure followed by budget or unknown transport preserv
       }
       throw failure;
     });
-    await expect(t.action(generateDailySignal, {
+    await expect(runDraft(t, {
       ...args, shadowSourceRunKey: `pilot:belle:review-fail-then-${failure.message.includes("transport") ? "transport" : "budget"}`,
     })).rejects.toBe(failure);
     expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
@@ -449,7 +549,7 @@ test("oversize original selected evidence fails before any review route call", a
   await seedSnapshot(t);
   articleTextOverride = "Original source evidence. ".repeat(6_000);
   mockDrafts(validDraft);
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:review-input-overflow",
   })).rejects.toThrow("bounded input window; no source was truncated");
   expect(route.mock.calls.map(call => call[1]?.stage)).toEqual(["belle:daily-signal:draft"]);
@@ -464,7 +564,7 @@ test("oversize full selected revision packet fails before the revision route", a
     ? "Original selected source evidence. ".repeat(1_900)
     : sourceText;
   mockDrafts(shortValidDraft);
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:revision-prompt-overflow",
   })).rejects.toThrow("Belle revision prompt exceeds the bounded input window; no selected source was truncated");
   expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
@@ -480,7 +580,7 @@ test("repeated invalid selection fails after one repair with private capture but
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, invalidStoryDraft);
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:draft-repair-invalid",
   })).rejects.toThrow("baseline_quality_rejected");
   expect(route).toHaveBeenCalledTimes(2);
@@ -499,7 +599,7 @@ test("a clipped subject triggers one revision and accepts a complete replacement
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(truncatedSubjectDraft, validDraft);
-  const result = await t.action(generateDailySignal, {
+  const result = await runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:subject-repair-test",
   });
   expect(route).toHaveBeenCalledTimes(4);
@@ -519,7 +619,7 @@ test("a repeatedly clipped subject fails closed after one revision", async () =>
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(truncatedSubjectDraft, truncatedSubjectDraft);
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:subject-repair-failed-test",
   })).rejects.toThrow("baseline_quality_rejected");
   expect(route).toHaveBeenCalledTimes(4);
@@ -538,7 +638,7 @@ test("a structurally valid original is retained when its revision has a bad sele
   mockDrafts(shortValidDraft, invalidStoryDraft);
   let message = "";
   try {
-    await t.action(generateDailySignal, {
+    await runDraft(t, {
       ...args, shadowSourceRunKey: "pilot:belle:draft-repair-regression",
     });
   } catch (error) {
@@ -581,7 +681,7 @@ test("pilot captures bounded reasons when a revision is rejected", async () => {
     }
     return review;
   });
-  await expect(t.action(generateDailySignal, {
+  await expect(runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:bounded-revision-diagnostic",
   })).rejects.toThrow("baseline_quality_rejected");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
@@ -607,7 +707,7 @@ test("chart rows come from selected story scores and analysis, never foreign mod
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidChartDraft);
-  const result = await t.action(generateDailySignal, {
+  const result = await runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:chart-derived-test",
   });
   expect(route).toHaveBeenCalledTimes(2);
@@ -626,7 +726,7 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(validDraft);
-  await t.action(generateDailySignal, {
+  await runDraft(t, {
     ...args,
     forceLegacyGeneration: false,
     forceElizaRuntimeGeneration: true,
@@ -640,7 +740,9 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
   expect(route.mock.calls.map(call => call[2])).toEqual([
     NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS,
   ]);
-  await expect(t.action(generateDailySignal, {
+  expect((await t.run(ctx => ctx.db.query("elizaPilotRuns").first()))?.sourceKey)
+    .toBe("snapshot:2026-10-20:run:2026-10-20:eliza");
+  await expect(runDraft(t, {
     ...args,
     forceElizaRuntimeGeneration: true,
     shadowSourceRunKey: "pilot:belle:conflicting-overrides-test",
@@ -652,7 +754,7 @@ test("normal legacy generation keeps DeepSeek for both writer and reviewer", asy
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(validDraft);
-  await t.action(generateDailySignal, {
+  await runDraft(t, {
     ...args, forceLegacyGeneration: false,
     shadowSourceRunKey: "pilot:belle:normal-runtime-off-model",
   });
@@ -670,7 +772,7 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   });
   expect(JSON.stringify(wire).length).toBeLessThan(JSON.stringify(reviewedDraft(validDraft)).length);
   mockDrafts(invalidStoryDraft, validDraft);
-  await t.action(generateDailySignal, {
+  await runDraft(t, {
     ...args, runDate: "2026-10-21", forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
     shadowSourceRunKey: "pilot:belle:fixed-model-serialization-test",
   });
@@ -813,7 +915,7 @@ test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async (
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(validDraft);
-  await t.action(generateDailySignal, {
+  await runDraft(t, {
     ...args, shadowSourceRunKey: "pilot:belle:legacy-deepseek-serialization-test",
   });
   expect(route.mock.calls.map(call => call[2])).toEqual([

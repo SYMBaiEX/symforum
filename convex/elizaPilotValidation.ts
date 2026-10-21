@@ -59,12 +59,14 @@ const readSnapshotRef = makeFunctionReference<"query", { snapshotDate: string; l
   snapshot: { snapshotDate: string; status: "running" | "complete" | "failed"; completedAt?: number } | null;
   stories: Array<{ hnItemId: number; title: string; rank: number }>;
 }>("news:readIndexedSnapshot");
+const readArtifactStatusRef = makeFunctionReference<"query", { nonce: string },
+  "accepted" | "rejected" | "review_failed" | null>("elizaPilotValidationData:readArtifactStatus");
 const generateDailyRef = makeFunctionReference<"action", {
   runDate: string; snapshotDate: string; siteUrl: string;
   shadowSourceRunKey: string; forceLegacyGeneration?: boolean; forceElizaRuntimeGeneration?: boolean;
 }, {
   subject: string; storyCount: number; topStoryIds: number[];
-  shadowEnqueue?: { status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: Id<"elizaShadowJobs"> };
+  shadowEnqueue?: { status: "queued" | "disabled" | "duplicate" | "limited" | "unavailable"; jobId?: Id<"elizaShadowJobs"> };
 }>("newsletterAgent:generateDailySignal");
 
 /** One real public source and comparison; optional forced Eliza path never publishes. */
@@ -233,13 +235,18 @@ export const validateBelle = internalAction({
           data !== null && typeof data === "object" &&
           "code" in data &&
           (data.code === "baseline_quality_rejected" || data.code === "baseline_review_failed") &&
-          "shadowJobId" in data && typeof data.shadowJobId === "string"
+          (("shadowJobId" in data && typeof data.shadowJobId === "string") ||
+            ("artifactRetained" in data && data.artifactRetained === true))
         ) {
+          const shadowJobId = "shadowJobId" in data && typeof data.shadowJobId === "string"
+            ? data.shadowJobId as Id<"elizaShadowJobs"> : undefined;
           const run = await ctx.runMutation(finishRef, {
             nonce: args.nonce, status: "failed", errorCode: data.code,
             sourceHash, sourceCount: indexed.stories.length,
-            shadowJobId: data.shadowJobId as Id<"elizaShadowJobs">,
-            shadowStatus: "queued",
+            ...(shadowJobId ? { shadowJobId } : {}),
+            shadowStatus: shadowJobId ? "queued" :
+              ("shadowStatus" in data && typeof data.shadowStatus === "string"
+                ? data.shadowStatus : "unavailable"),
           });
           return { duplicate: false, run };
         }
@@ -247,6 +254,21 @@ export const validateBelle = internalAction({
       }
       const shadow = generated.shadowEnqueue;
       if (!shadow || shadow.status !== "queued" || !shadow.jobId) {
+        // This forced pilot already generated through ElizaOS. A separate
+        // comparison's quota is not a generation-quality verdict. Accept only
+        // a retained, independently inspectable backend-accepted artifact;
+        // legacy pilots still require their ElizaOS comparison to be queued.
+        const artifactStatus = args.useElizaRuntime && shadow?.status === "limited"
+          ? await ctx.runQuery(readArtifactStatusRef, { nonce: args.nonce }) : null;
+        if (artifactStatus === "accepted") {
+          const run = await ctx.runMutation(finishRef, {
+            nonce: args.nonce, status: "completed", sourceHash,
+            sourceCount: indexed.stories.length,
+            shadowStatus: shadow?.status ?? "unavailable",
+            baselineDecision: "accepted",
+          });
+          return { duplicate: false, run };
+        }
         return done(ctx, args.nonce, "blocked", `shadow_${shadow?.status ?? "enqueue_failed"}`,
           sourceHash, indexed.stories.length);
       }

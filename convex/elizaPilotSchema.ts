@@ -20,5 +20,18 @@ export const elizaPilotTables = {
     shadowStatus: v.optional(v.string()),
     baselineDecision: v.optional(v.string()),
     errorCode: v.optional(v.string()),
-  }).index("by_nonce", ["nonce"]),
+    baselineJson: v.optional(v.string()),
+    evaluationJson: v.optional(v.string()),
+    artifactStatus: v.optional(
+      v.union(
+        v.literal("accepted"),
+        v.literal("rejected"),
+        v.literal("review_failed"),
+      ),
+    ),
+    artifactExpiresAt: v.optional(v.number()),
+    artifactHash: v.optional(v.string()),
+  })
+    .index("by_nonce", ["nonce"])
+    .index("by_artifactExpiresAt", ["artifactExpiresAt"]),
 };

@@ -6,6 +6,7 @@ const crons = cronJobs();
 crons.interval("expire ElizaOS shadow comparisons", { hours: 6 }, internal.elizaShadowData.cleanup, {});
 crons.interval("purge ElizaOS worker candidate copies", { hours: 6 }, internal.elizaShadow.maintain, {});
 crons.interval("expire ElizaOS runtime metadata receipts", { hours: 6 }, internal.elizaRuntimeData.cleanup, {});
+crons.interval("expire private ElizaOS pilot artifacts", { hours: 6 }, internal.elizaPilotValidationData.cleanupArtifacts, {});
 crons.interval(
   "cleanup service-auth registrations and credentials",
   { hours: 1 },
