@@ -55,9 +55,10 @@ const enqueueReturns = v.object({
   jobId: v.optional(v.id("elizaShadowJobs")),
 });
 
-export function shadowEnabled() {
+export function shadowEnabled(isCanary = false) {
   return (
-    env.ELIZA_SHADOW_MODE === "shadow" &&
+    (env.ELIZA_SHADOW_MODE === "shadow" ||
+      (env.ELIZA_SHADOW_MODE === "canary" && isCanary === true)) &&
     (env.ELIZA_SHADOW_WORKER_SECRET?.length ?? 0) >= 32 &&
     shadowWorkerOrigin(env.ELIZA_SHADOW_WORKER_URL) !== null &&
     shadowBudgetMicroUsd(env.ELIZA_SHADOW_DAILY_BUDGET_USD) > 0
@@ -83,7 +84,7 @@ async function enqueueImpl(
   },
   isCanary: boolean,
 ) {
-  if (!shadowEnabled()) return { status: "disabled" as const };
+  if (!shadowEnabled(isCanary)) return { status: "disabled" as const };
   if (
     !args.jobKey ||
     args.jobKey.length > 240 ||
@@ -133,13 +134,14 @@ export const claim = internalMutation({
       inputHash: v.string(),
       model: v.string(),
       maxOutputTokens: v.number(),
+      isCanary: v.boolean(),
     }),
   ),
   handler: async (ctx, { jobId }) => {
     const job = await ctx.db.get("elizaShadowJobs", jobId);
     if (!job || job.status !== "queued") return null;
     const now = Date.now();
-    if (!shadowEnabled() || job.expiresAt <= now) {
+    if (!shadowEnabled(job.isCanary) || job.expiresAt <= now) {
       await ctx.db.patch("elizaShadowJobs", jobId, {
         status: job.expiresAt <= now ? "expired" : "disabled",
         updatedAt: now,
@@ -214,6 +216,7 @@ export const claim = internalMutation({
       inputHash: job.inputHash,
       model: ELIZA_SHADOW_MODEL,
       maxOutputTokens,
+      isCanary: job.isCanary,
     };
   },
 });

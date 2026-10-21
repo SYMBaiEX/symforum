@@ -1,11 +1,13 @@
 /// <reference types="vite/client" />
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
+import { getFunctionName } from "convex/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { ActionCtx } from "./_generated/server";
 import schema from "./schema";
-import { readBoundedResponse } from "./elizaShadow";
+import { dispatch, readBoundedResponse } from "./elizaShadow";
 import {
   parseShadowInput,
   shadowBudgetMicroUsd,
@@ -21,8 +23,8 @@ function setup() {
   registerRateLimiter(t);
   return t;
 }
-function enable() {
-  vi.stubEnv("ELIZA_SHADOW_MODE", "shadow");
+function enable(mode: "shadow" | "canary" = "shadow") {
+  vi.stubEnv("ELIZA_SHADOW_MODE", mode);
   vi.stubEnv(
     "ELIZA_SHADOW_WORKER_SECRET",
     "test-only-shadow-secret-at-least-32-characters",
@@ -116,6 +118,67 @@ describe("ElizaOS shadow isolation", () => {
     ).toHaveLength(1);
   });
 
+  test.each(["suki-reply", "belle-newsletter"] as const)(
+    "canary mode admits and claims only the synthetic %s lane",
+    async (kind) => {
+      enable("canary");
+      const t = setup();
+      expect(
+        await t.mutation(internal.elizaShadowData.enqueue, {
+          ...args(`organic-${kind}`),
+          kind,
+          inputJson: JSON.stringify({ ...packet, kind }),
+        }),
+      ).toEqual({ status: "disabled" });
+      const canary = await t.mutation(internal.elizaShadowData.enqueueCanary, {
+        kind,
+        nonce: "canary-mode",
+      });
+      expect(canary.status).toBe("queued");
+      const claim = await t.mutation(internal.elizaShadowData.claim, {
+        jobId: canary.jobId!,
+      });
+      expect(claim).toMatchObject({ isCanary: true, maxOutputTokens: 128 });
+      expect(JSON.parse(claim!.inputJson).kind).toBe(kind);
+      expect(
+        await t.run((ctx) => ctx.db.query("elizaShadowJobs").take(10)),
+      ).toHaveLength(1);
+      expect(await t.run((ctx) => ctx.db.query("forumPosts").take(1))).toEqual(
+        [],
+      );
+      expect(
+        await t.run((ctx) => ctx.db.query("newsletterIssues").take(1)),
+      ).toEqual([]);
+    },
+  );
+
+  test.each(["suki-reply", "belle-newsletter"] as const)(
+    "canary mode refuses an already queued organic %s job before reservation",
+    async (kind) => {
+      enable();
+      const t = setup();
+      const queued = await t.mutation(internal.elizaShadowData.enqueue, {
+        ...args(`queued-${kind}`),
+        kind,
+        inputJson: JSON.stringify({ ...packet, kind }),
+      });
+      expect(queued.status).toBe("queued");
+      vi.stubEnv("ELIZA_SHADOW_MODE", "canary");
+      expect(
+        await t.mutation(internal.elizaShadowData.claim, {
+          jobId: queued.jobId!,
+        }),
+      ).toBeNull();
+      expect(
+        (await t.run((ctx) => ctx.db.get("elizaShadowJobs", queued.jobId!)))
+          ?.status,
+      ).toBe("disabled");
+      expect(
+        await t.run((ctx) => ctx.db.query("aiModelCallReservations").take(10)),
+      ).toEqual([]);
+    },
+  );
+
   test("bounds public/private packets and rejects wrong-kind packets", async () => {
     enable();
     const t = setup();
@@ -167,6 +230,7 @@ describe("ElizaOS shadow isolation", () => {
       t.mutation(internal.elizaShadowData.claim, { jobId: jobId! }),
     ]);
     expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(claims.find(Boolean)?.isCanary).toBe(false);
     expect(
       await t.run((ctx) => ctx.db.query("aiModelCallReservations").take(10)),
     ).toHaveLength(1);
@@ -293,53 +357,105 @@ describe("ElizaOS shadow isolation", () => {
     ).toEqual([]);
   });
 
-  test("canary dispatch sends only allowlisted generation input; never baseline", async () => {
-    enable();
-    const t = setup();
-    const { jobId } = await t.mutation(internal.elizaShadowData.enqueueCanary, {
-      kind: "suki-reply",
-      nonce: "e2e",
-    });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (_url, init) => {
-        const request = JSON.parse(String(init?.body));
-        expect(Object.keys(request).sort()).toEqual(
-          [
-            "version",
-            "kind",
-            "system",
-            "prompt",
-            "schema",
-            "jobId",
-            "inputHash",
-            "model",
-            "maxOutputTokens",
-          ].sort(),
-        );
-        expect(init?.redirect).toBe("error");
-        return Response.json({
-          version: 1,
-          jobId: request.jobId,
-          inputHash: request.inputHash,
-          output: { healthy: true, mode: "shadow" },
-          model: request.model,
-          servedModel: request.model,
-          inputTokens: 50,
-          outputTokens: 15,
-          durationMs: 10,
-          runtimeVersion: "1.7.2",
+  test.each([
+    ["shadow", "suki-reply"],
+    ["shadow", "belle-newsletter"],
+    ["canary", "suki-reply"],
+    ["canary", "belle-newsletter"],
+  ] as const)(
+    "%s mode dispatches the %s canary with only allowlisted input",
+    async (mode, kind) => {
+      enable(mode);
+      const t = setup();
+      const { jobId } = await t.mutation(
+        internal.elizaShadowData.enqueueCanary,
+        {
+          kind,
+          nonce: "e2e",
+        },
+      );
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (_url, init) => {
+          const request = JSON.parse(String(init?.body));
+          expect(Object.keys(request).sort()).toEqual(
+            [
+              "version",
+              "kind",
+              "system",
+              "prompt",
+              "schema",
+              "jobId",
+              "inputHash",
+              "model",
+              "maxOutputTokens",
+            ].sort(),
+          );
+          expect(init?.redirect).toBe("error");
+          return Response.json({
+            version: 1,
+            jobId: request.jobId,
+            inputHash: request.inputHash,
+            output: { healthy: true, mode: "shadow" },
+            model: request.model,
+            servedModel: request.model,
+            inputTokens: 50,
+            outputTokens: 15,
+            durationMs: 10,
+            runtimeVersion: "1.7.2",
+          });
         });
+      await t.action(internal.elizaShadow.dispatch, { jobId: jobId! });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const stored = await t.run((ctx) =>
+        ctx.db.get("elizaShadowJobs", jobId!),
+      );
+      expect(stored?.status).toBe("completed");
+      expect(JSON.parse(stored!.comparisonJson!)).toMatchObject({
+        healthy: true,
+        publicationAllowed: false,
       });
-    await t.action(internal.elizaShadow.dispatch, { jobId: jobId! });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const stored = await t.run((ctx) => ctx.db.get("elizaShadowJobs", jobId!));
-    expect(stored?.status).toBe("completed");
-    expect(JSON.parse(stored!.comparisonJson!)).toMatchObject({
-      healthy: true,
-      publicationAllowed: false,
-    });
-  });
+    },
+  );
+
+  test.each([false, undefined])(
+    "dispatch rechecks canary mode against a claimed non-canary flag %s",
+    async (isCanary) => {
+      enable();
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("Provider must not be called"));
+      const runMutation = vi.fn(
+        async (reference: Parameters<typeof getFunctionName>[0]) => {
+          if (getFunctionName(reference) === "elizaShadowData:claim") {
+            // Model the switch changing after admission but before dispatch sends.
+            vi.stubEnv("ELIZA_SHADOW_MODE", "canary");
+            return {
+              inputJson: JSON.stringify(packet),
+              inputHash: "a".repeat(64),
+              model: "openai/gpt-4.1-mini",
+              maxOutputTokens: 2_400,
+              isCanary,
+            };
+          }
+          return null;
+        },
+      );
+      const ctx = { runMutation } as unknown as ActionCtx;
+      await (
+        dispatch as unknown as {
+          _handler: (
+            ctx: ActionCtx,
+            args: { jobId: Id<"elizaShadowJobs"> },
+          ) => Promise<null>;
+        }
+      )._handler(ctx, { jobId: "test-shadow-job" as Id<"elizaShadowJobs"> });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        runMutation.mock.calls.map(([reference]) => getFunctionName(reference)),
+      ).toEqual(["elizaShadowData:claim", "elizaShadowData:fail"]);
+    },
+  );
 
   test("response limits apply without content-length and budget/config typos stop work", async () => {
     await expect(

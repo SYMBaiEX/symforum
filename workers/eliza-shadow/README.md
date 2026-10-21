@@ -15,16 +15,32 @@ bun run start
 
 Environment variables (configure in the deployment secret store; never commit values):
 
-| Name                               | Requirement                                              |
-| ---------------------------------- | -------------------------------------------------------- |
-| `ELIZA_SHADOW_WORKER_SECRET`       | Random bearer secret, 32–512 non-whitespace characters   |
-| `OPENROUTER_API_KEY`               | Dedicated, capped OpenRouter inference key               |
-| `DATABASE_URL` or `POSTGRES_URL`   | Dedicated PostgreSQL database; mandatory in production   |
-| `ELIZA_SHADOW_PGLITE_DIR`          | Optional absolute local-test directory, never production |
-| `ELIZA_SHADOW_PROVIDER_TIMEOUT_MS` | Optional 1–120000ms; default 120000                      |
-| `PORT`                             | Optional HTTP port; default 8080                         |
+| Name                               | Requirement                                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ELIZA_SHADOW_WORKER_SECRET`       | Random bearer secret, 32–512 non-whitespace characters                                                      |
+| `OPENROUTER_API_KEY`               | Dedicated, capped OpenRouter inference key                                                                  |
+| `DATABASE_URL` or `POSTGRES_URL`   | Dedicated restricted-runtime PostgreSQL login; mandatory in production, with explicit `sslmode=verify-full` |
+| `ELIZA_SHADOW_PGLITE_DIR`          | Optional absolute local-test directory, never production                                                    |
+| `ELIZA_SHADOW_PROVIDER_TIMEOUT_MS` | Optional 1–120000ms; default 120000                                                                         |
+| `PORT`                             | Optional HTTP port; default 8080                                                                            |
 
-The SQL plugin must migrate before `AgentRuntime.initialize()` on a blank database. Startup applies its pinned schema and creates the two character runtimes and idempotency table. Database credentials therefore need schema-creation privileges. Use a dedicated database, not Convex application storage. Adapter connections are closed explicitly on SIGTERM/SIGINT; `runtime.stop()` alone does not close them.
+Production PostgreSQL startup runs no migrations, schema creation, or RLS changes. It requires a dedicated login without superuser, role/database/schema creation, RLS-bypass, or public-schema CREATE rights. It verifies the pre-provisioned tables and ledger contract using SELECT, then initializes the two character runtimes with ordinary DML. Adapter connections are closed explicitly on SIGTERM/SIGINT; `runtime.stop()` alone does not close them.
+
+### One-time PostgreSQL bootstrap
+
+Use a dedicated database/project. Before the first deployment, provide its admin URL through the one-time `ELIZA_SHADOW_BOOTSTRAP_DATABASE_URL` secret and run locally:
+
+```sh
+bun run bootstrap:postgres
+```
+
+The helper refuses any existing public base table, existing public-table RLS, or migration metadata before invoking Eliza's migrator. It then creates the pinned Eliza schema and ledger and revokes PUBLIC/Supabase Data API role access to the new tables. Never bypass this guard for a shared populated database: Eliza SQL 1.7.2 has a legacy migration preflight that can disable public-table RLS before its dry-run checks. `ENABLE_DATA_ISOLATION=true` is rejected; it is not a safe substitute for isolating the bootstrap.
+
+After bootstrap, provision the restricted runtime role and grant CONNECT to this database, USAGE on `public`, SELECT/INSERT/UPDATE on `agents` and `eliza_shadow_jobs`, SELECT/INSERT on `worlds`, `entities`, `rooms`, `participants`, and INSERT on `logs`. Do not make it a member of `postgres`, `service_role`, or other privileged Supabase roles. Keep the migration owner/admin URL out of container secrets. These grants cover the model-only lifecycle, not arbitrary Eliza plugins; verify the restricted login with real PostgreSQL before enabling dispatch.
+
+Supabase shared **session** pooler port 5432 is the IPv4-compatible choice; copy its actual hostname from the dashboard rather than guessing it. Transaction pooler port 6543 is not suitable for the upstream migrator's session advisory locks. Direct Supabase connections normally require IPv6 (unless the project has its IPv4 add-on). Use verified TLS with the Supabase CA provided through a trusted root store or a mounted certificate referenced by `sslrootcert`; never use `sslmode=no-verify`, an unverified TLS workaround, or `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+
+Runtime pool limits are 2 connections, 5s connection timeout, 10s idle lifetime, 15s SQL statement timeout, 20s client-query timeout and 5s lock timeout. The bootstrap uses one persistent session, 60s statement and 65s query limits. Only local PGlite automatically bootstraps at runtime.
 
 ## HTTP contract v1
 

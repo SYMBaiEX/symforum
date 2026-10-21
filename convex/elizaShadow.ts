@@ -30,7 +30,8 @@ export const dispatch = internalAction({
         !origin ||
         !secret ||
         secret.length < 32 ||
-        env.ELIZA_SHADOW_MODE !== "shadow"
+        (env.ELIZA_SHADOW_MODE !== "shadow" &&
+          !(env.ELIZA_SHADOW_MODE === "canary" && job.isCanary === true))
       )
         throw new Error("disabled");
       const input = parseShadowInput(job.inputJson);

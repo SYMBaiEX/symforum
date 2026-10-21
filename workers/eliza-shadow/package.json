@@ -8,6 +8,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "bootstrap:postgres": "node scripts/bootstrap-postgres.mjs",
     "start": "node src/index.mjs",
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "build": "node scripts/check.mjs"

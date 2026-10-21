@@ -1,5 +1,5 @@
 import { AgentRuntime, ModelType, logger, stringToUuid } from "@elizaos/core";
-import sqlPlugin, { createDatabaseAdapter } from "@elizaos/plugin-sql";
+import { createDatabaseAdapter } from "@elizaos/plugin-sql";
 import {
   RUNTIME_VERSION,
   MODEL,
@@ -7,7 +7,11 @@ import {
   requestHash,
   validateRequest,
 } from "./contract.mjs";
-import { SqlJobStore } from "./store.mjs";
+import {
+  initializeRuntimeDatabase,
+  validatePostgresUrl,
+  assertDedicatedDatabaseConfiguration,
+} from "./database.mjs";
 
 // Upstream database errors can contain SQL parameters. Keep all upstream logging
 // disabled; this process emits only the fixed safe lifecycle/error codes below.
@@ -44,7 +48,12 @@ export async function createRuntimeBackend({
   const adapters = [];
   const runtimes = new Map();
   const pendingLogs = new Set();
+  let store;
   try {
+    if (postgresUrl) {
+      validatePostgresUrl(postgresUrl);
+      assertDedicatedDatabaseConfiguration();
+    }
     for (const [kind, persona] of Object.entries(personas)) {
       const id = stringToUuid(`symbaiex:eliza-shadow:v1:${kind}`);
       const adapter = createDatabaseAdapter(
@@ -52,23 +61,8 @@ export async function createRuntimeBackend({
         id,
       );
       adapters.push(adapter);
-      if (postgresUrl) {
-        // Both pg and the Neon pg-compatible client expose pool options. The
-        // SQL package defaults to 20 connections; one draft at a time needs two.
-        const connection = await adapter.getConnection();
-        if (connection.options) {
-          connection.options.max = 2;
-          connection.options.min = 0;
-          connection.options.idleTimeoutMillis = 10_000;
-          connection.options.connectionTimeoutMillis = 5_000;
-        }
-      }
-      // 1.7.2 initializes the agent before automatic migrations: migrate first.
       if (adapters.length === 1) {
-        await adapter.runPluginMigrations(
-          [{ name: sqlPlugin.name, schema: sqlPlugin.schema }],
-          { verbose: false },
-        );
+        store = await initializeRuntimeDatabase(adapter, { postgresUrl });
       }
       const persistLog = adapter.log.bind(adapter);
       adapter.log = (entry) => {
@@ -115,8 +109,6 @@ export async function createRuntimeBackend({
       await runtime.initialize({ skipMigrations: true });
       runtimes.set(kind, runtime);
     }
-    const store = new SqlJobStore(await adapters[0].getConnection());
-    await store.initialize();
     return {
       store,
       async run(request, signal) {
