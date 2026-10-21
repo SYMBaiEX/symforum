@@ -118,6 +118,35 @@ Keep both ledgers, receipts and operation holds. Rollback does not authorize
 replaying unknown inference, removing holds, changing schedules, increasing
 budgets or upgrading infrastructure plans.
 
+## Current repaired deployment verification (2026-10-21)
+
+- Production Convex `strong-bee-384` has source commit `f76a829` deployed.
+  Cloudflare gateway version `203c1446-5d08-4a48-b79d-acb20fd473fd` uses image
+  `sha256:0c384e865935ef38427f14574ff64ab7d596d926e59d8845d8e8e0ec42ee8f65`.
+  The actual `pilot` instance was verified running application version 15 after
+  replacement; authenticated maintenance passed before inference.
+- Qwen3.8 canary `eliza-9b23bece-50b2-489e-bcee-a72cfc5e3cc3` completed through
+  ElizaOS 1.7.2, with exact served-model match, 145 input / 114 output tokens and
+  a durable Convex receipt. This is a transport/schema pass, not a newsletter
+  editorial pass.
+- All 33 production personas remain enabled with `openrouter/free` defaults.
+  The first real-source Qwen3.8 Belle pilot was rejected at 541 prose words,
+  below the unchanged 650-word minimum, despite a deterministic score of 100.
+  Independent inspection also rejected unsupported scope/causal extrapolations;
+  that score and a model reviewer verdict are not promotion proof. Live mode
+  remains off while the revised writer/reviewer and manual acceptance are pending.
+  Shadow capture was restored after replacement.
+  The normal $0.75/day application cap and $1/day shadow cap are unchanged.
+- Daily writing now plans 900–1,100 counted prose words, explicitly excluding
+  JSON/identifier/chart metadata; the 650-word minimum is not lowered. Factual
+  numeric tokens must appear in the exact cited passages, not merely somewhere
+  else in the selected source set. This catches missing numeric citations but is
+  still not a proof of semantic support, scope, attribution or causality.
+- Latest local verification: 2,255 tests pass with the same eight unrelated
+  baseline failures; 112 focused tests, 35 isolated worker tests, worker build,
+  both typechecks, lint and platform build pass. Build-created frontend bundle
+  diffs were restored without changing frontend source or unrelated work.
+
 ## Earlier rollout evidence (before the repair pass)
 
 Verified on 2026-10-20 (America/Chicago):

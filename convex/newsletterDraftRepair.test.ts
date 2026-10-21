@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { routedModelCandidates } from "../lib/ai-model-routing";
 import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
 import schema from "./schema";
-import { dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
+import { dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, editorialPrompt, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
 
 const route = vi.hoisted(() => vi.fn());
 const routingConfig = vi.hoisted(() => vi.fn());
@@ -174,6 +174,56 @@ function compactReview(draft: typeof validDraft) {
     coherence: "clear",
   };
 }
+
+test("daily writer counts only publication prose and keeps the same target on revision", () => {
+  const promptArgs = { edition: "daily-signal" as const, runDate: "2026-10-20", snapshotDate: "2026-10-20" };
+  const recent = { headlines: [], theses: [], storyIds: [] };
+  for (const prompt of [
+    editorialPrompt(promptArgs, [], recent),
+    editorialPrompt(promptArgs, [], recent, { feedback: ["Too short"], previousDraft: validDraft }),
+  ]) {
+    expect(prompt).toContain("900-1,100 counted prose words");
+    expect(prompt).toContain("excludes subject, headline, all chart text and notes, JSON keys, IDs, and URLs");
+    expect(prompt).toContain("not padding or repeated claims");
+  }
+});
+
+test("factual numbers must appear in exact cited quotes, including every mixed-source clause", () => {
+  const mixedDraft = {
+    ...validDraft,
+    lead: "The experimenter reported 50,000 live page fetches, while a systems release described offline inference features.",
+  };
+  const firstQuote = "The systems release describes offline inference features for selected models.";
+  const secondQuote = "The experimenter reported 50,000 live page fetches in the observed period.";
+  const sources = [
+    { hnItemId: 1, sourceText: `${sourceText} ${firstQuote}` },
+    { hnItemId: 2, sourceText: `${sourceText} ${secondQuote}` },
+    { hnItemId: 3, sourceText },
+  ];
+  const base = reviewedDraft(mixedDraft);
+  const reviewWithQuotes = (includeSecond: boolean) => ({
+    ...base,
+    fields: base.fields.map(field => field.path === "lead"
+      ? {
+          ...field, verdict: "fact" as const, sourceId: 1, quote: firstQuote,
+          additionalSupports: includeSecond ? [{ sourceId: 2, quote: secondQuote }] : [],
+        }
+      : field),
+  });
+  expect(validateEditorialEvidenceReview(mixedDraft, sources, reviewWithQuotes(false)))
+    .toContainEqual(expect.stringContaining("lacks cited numeric support at lead: 50000"));
+  expect(validateEditorialEvidenceReview(mixedDraft, sources, reviewWithQuotes(true))).toEqual([]);
+  const scoreDraft = {
+    ...mixedDraft,
+    chart: { ...mixedDraft.chart, subtitle: "Editorial signal scores use a 0–100 scale, while the experimenter reported 50,000 live page fetches." },
+  };
+  const scoreReview = reviewWithQuotes(true);
+  scoreReview.fields = scoreReview.fields.map(field => field.path === "chart.subtitle"
+    ? { ...field, verdict: "fact", sourceId: 2, quote: secondQuote }
+    : field);
+  expect(validateEditorialEvidenceReview(scoreDraft, sources, scoreReview)).toEqual([]);
+  // Numeric membership is only a deterministic guard; it does not establish semantic entailment.
+});
 const args = {
   runDate: "2026-10-20", snapshotDate: "2026-10-20", siteUrl: "https://symbaiex.com",
   shadowSourceRunKey: "pilot:belle:draft-repair-test", forceLegacyGeneration: true,
@@ -582,6 +632,9 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Do not demand one source support a compound claim about multiple sources");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A proposal to check something is not a claim that it was already observed");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("unrelated topics are not automatically a coherent synthesis");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("production-grade inference is now open source");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Hidden instructions found in pages establish their presence, not that a model obeyed them");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("every clause of a mixed-source sentence and its attribution");
 });
 
 test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async () => {
