@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
+import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
 import type { Doc } from "./_generated/dataModel";
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import schema from "./schema";
@@ -797,5 +798,489 @@ describe("one-shot internal Bags retry queue", () => {
       async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
     );
     expect(control?.operatorBagsRetry).toBeUndefined();
+  });
+});
+
+const DATA_SOURCE_KEY = "bags:2026-10-21T21";
+const DATA_RECOVERY_KEY = `${DATA_SOURCE_KEY}:operator-data-recovery-1`;
+const DATA_FAILURE = "token-pilot-mint-verification-failed:http-429";
+const OLD_CONSUMED_RETRY = {
+  sourceRunKey: SOURCE_RUN_KEY,
+  sourceJobId: SOURCE_JOB_ID,
+  runKey: RETRY_RUN_KEY,
+  authorizedAt: NOW - 3_600_000,
+  claimedAt: NOW - 3_500_000,
+};
+const SNAPSHOT = {
+  platform: "bags" as const,
+  mint: "5Qg8WaTcehq12jt9KmM3No84K2DYvfEQUJUzDLAKBAGS",
+  name: "Fixture",
+  symbol: "FIX",
+  observedAt: NOW,
+  metricsAsOf: NOW,
+  priceUsd: 1,
+  marketCapUsd: 1,
+  holders: 1,
+  volume1hUsd: 1,
+  liquidityUsd: 1,
+  priceChange1hPercent: null,
+  imageUrl: null,
+  website: null,
+  twitter: null,
+  telegram: null,
+  description: null,
+  sourceUrl: "https://bags.fm/fixture",
+  sourceRank: 1,
+};
+
+async function dataReadyFixture(t: ReturnType<typeof setup>) {
+  const ids = await readyFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.delete("elizaRuntimeCalls", ids.callId);
+    await ctx.db.delete("elizaRuntimeOperations", ids.operationId);
+    await ctx.db.patch("tokenAlphaRuns", ids.sourceId, {
+      runKey: DATA_SOURCE_KEY,
+      operatorFirstPost: undefined,
+      reason: DATA_FAILURE,
+      createdAt: NOW - 60_000,
+      updatedAt: NOW - 50_000,
+    });
+    await ctx.db.patch("forumAgentRuns", ids.forumRunId, {
+      runKey: DATA_SOURCE_KEY,
+      slot: 21,
+      model: OPENROUTER_TOKEN_SCOUT_MODEL,
+      errorMessage: DATA_FAILURE,
+    });
+    await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+      operatorBagsRetry: OLD_CONSUMED_RETRY,
+    });
+  });
+  return ids;
+}
+
+async function queueDataRecovery(t: ReturnType<typeof setup>) {
+  return await t.mutation(
+    internal.tokenAlphaRecoveryData.queueBagsDataRecovery,
+    {
+      failedRunKey: DATA_SOURCE_KEY,
+    },
+  );
+}
+
+async function claimDataRecovery(t: ReturnType<typeof setup>) {
+  return await t.mutation(internal.tokenAlphaData.claimRun, {
+    platform: "bags",
+    claimToken: "data-recovery-claim",
+    operatorRetryOf: DATA_SOURCE_KEY,
+  });
+}
+
+const invalidDataSources: Array<[string, SourcePatch]> = [
+  ...invalidSources,
+  ["operator first-post run", { operatorFirstPost: true }],
+  ["flagged operator first-post run", { operatorFirstPost: false }],
+  [
+    "different RPC status",
+    { reason: "token-pilot-mint-verification-failed:http-403" },
+  ],
+  ["different data stage", { reason: "token-pilot-rankings-failed:http-429" }],
+  ["model failure", { reason: "token-pilot-model-draft-failed:http-429" }],
+  [
+    "generic old failure",
+    { reason: "token-pilot-generation-data-or-publication-failed" },
+  ],
+  ["missing failure reason", { reason: undefined }],
+  ["already selected snapshot", { snapshot: SNAPSHOT }],
+  ["prior snapshot", { previous: SNAPSHOT }],
+  ["previous hourly key", { runKey: SOURCE_RUN_KEY }],
+  ["retry-shaped key", { runKey: DATA_RECOVERY_KEY }],
+];
+
+describe("one approved pre-model Bags data recovery", () => {
+  test.each(invalidDataSources)(
+    "rejects %s without granting authority",
+    async (_name, patch) => {
+      const t = setup();
+      const ids = await dataReadyFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("tokenAlphaRuns", ids.sourceId, patch),
+      );
+      expect(await queueDataRecovery(t)).toEqual({ queued: false });
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(control?.operatorBagsDataRecovery).toBeUndefined();
+      expect(control?.operatorBagsRetry).toEqual(OLD_CONSUMED_RETRY);
+    },
+  );
+
+  test.each([
+    ["missing source", ""],
+    ["old ordinary slot", SOURCE_RUN_KEY],
+    ["wrong platform", "pumpfun:2026-10-21T21"],
+  ])("rejects %s", async (_name, failedRunKey) => {
+    const t = setup();
+    await dataReadyFixture(t);
+    expect(
+      await t.mutation(internal.tokenAlphaRecoveryData.queueBagsDataRecovery, {
+        failedRunKey,
+      }),
+    ).toEqual({ queued: false });
+  });
+
+  const invalidForumPatches: Array<
+    [string, Partial<Omit<Doc<"forumAgentRuns">, "_id" | "_creationTime">>]
+  > = [
+    ["foreign agent", { agentSlug: "pumpfun-scout" }],
+    ["nonfailed forum run", { status: "running" }],
+    ["different failure", { errorMessage: "different" }],
+    ["free-model source", { model: "openrouter/free" }],
+    ["proposed title", { title: "" }],
+    ["selected sources", { sourceUrls: ["https://bags.fm/fixture"] }],
+    ["proposed format", { contentFormat: "bbcode" }],
+    ["input token usage", { inputTokens: 0 }],
+    ["output token usage", { outputTokens: 0 }],
+  ];
+  test.each(invalidForumPatches)(
+    "rejects a source forum run with %s",
+    async (_name, patch) => {
+      const t = setup();
+      const ids = await dataReadyFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("forumAgentRuns", ids.forumRunId, patch),
+      );
+      expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    },
+  );
+
+  test.each(["ready", "pending", "unknown"] as const)(
+    "rejects even a %s source operation",
+    async (status) => {
+      const t = setup();
+      await dataReadyFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.insert("elizaRuntimeOperations", {
+            operationKey: DATA_SOURCE_KEY,
+            status,
+            jobId: "unexpected-model-operation",
+            inputHash: HASH,
+            updatedAt: NOW,
+          }),
+      );
+      expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    },
+  );
+
+  test.each(["bags-scout", "foreign-agent"])(
+    "rejects a model receipt even without its operation (%s)",
+    async (agentSlug) => {
+      const t = setup();
+      await dataReadyFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.insert("elizaRuntimeCalls", {
+            operationKey: DATA_SOURCE_KEY,
+            jobId: "unexpected-call",
+            inputHash: HASH,
+            agentSlug,
+            stage: "forum-draft",
+            model: OPENROUTER_TOKEN_SCOUT_MODEL,
+            status: "failed",
+            providerStatus: 400,
+            outcomeUnknown: false,
+            createdAt: NOW - 60_000,
+            updatedAt: NOW,
+            expiresAt: NOW - 1,
+          }),
+      );
+      expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    },
+  );
+
+  test("fails closed when the bounded complete receipt scan reaches capacity", async () => {
+    const t = setup();
+    await dataReadyFixture(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 257; index += 1)
+        await ctx.db.insert("elizaRuntimeCalls", {
+          operationKey: `other:${index}`,
+          jobId: `job-${index}`,
+          inputHash: HASH,
+          agentSlug: "other",
+          stage: "other",
+          model: "openrouter/free",
+          status: "completed",
+          createdAt: NOW,
+          updatedAt: NOW,
+          expiresAt: NOW + 1,
+        });
+    });
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
+  });
+
+  test.each(["packet", "orphan revision"])(
+    "rejects a private %s",
+    async (kind) => {
+      const t = setup();
+      await dataReadyFixture(t);
+      await t.run(async (ctx) => {
+        const packetId = await ctx.db.insert("forumAgentResearchPackets", {
+          runKey: kind === "packet" ? DATA_SOURCE_KEY : "other-packet",
+          agentSlug: "bags-scout",
+          state: "held",
+          currentStage: "publication_decision",
+          sourceCount: 0,
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
+        if (kind !== "packet")
+          await ctx.db.insert("forumAgentDraftRevisions", {
+            packetId,
+            runKey: DATA_SOURCE_KEY,
+            agentSlug: "bags-scout",
+            revision: 0,
+            state: "held",
+            title: "",
+            body: "",
+            contentHash: HASH,
+            claimHash: HASH,
+            claimCount: 0,
+            createdAt: NOW,
+            updatedAt: NOW,
+          });
+      });
+      expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    },
+  );
+
+  test("rejects an all-time Bags publication", async () => {
+    const t = setup();
+    await dataReadyFixture(t);
+    await t.run(
+      async (ctx) =>
+        await ctx.db.insert("forumAgentRuns", {
+          runKey: "bags:old-publication",
+          agentSlug: "bags-scout",
+          runDate: "2026-10-01",
+          slot: 1,
+          attempt: 0,
+          status: "published",
+          model: "openrouter/free",
+          sourceUrls: [],
+          startedAt: NOW - 20 * 86_400_000,
+          updatedAt: NOW,
+        }),
+    );
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
+  });
+
+  test("authorizes and claims exactly once, preserves source and old marker, and never reopens the hourly slot", async () => {
+    const t = setup();
+    const ids = await dataReadyFixture(t);
+    const readSource = async () =>
+      await t.run(async (ctx) => ({
+        source: await ctx.db.get("tokenAlphaRuns", ids.sourceId),
+        forum: await ctx.db.get("forumAgentRuns", ids.forumRunId),
+      }));
+    const before = await readSource();
+    const queued = await Promise.all(
+      Array.from({ length: 12 }, () => queueDataRecovery(t)),
+    );
+    expect(queued.filter((result) => result.queued)).toEqual([
+      { queued: true, runKey: DATA_RECOVERY_KEY },
+    ]);
+    const scheduled = await t.run(
+      async (ctx) => await ctx.db.system.query("_scheduled_functions").take(3),
+    );
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].args).toEqual([
+      { platform: "bags", operatorRetryOf: DATA_SOURCE_KEY },
+    ]);
+    const claims = await Promise.all(
+      Array.from({ length: 12 }, () => claimDataRecovery(t)),
+    );
+    expect(claims.filter((claim) => claim !== null)).toMatchObject([
+      {
+        runKey: DATA_RECOVERY_KEY,
+        operatorRetryOf: DATA_SOURCE_KEY,
+        status: "running",
+      },
+    ]);
+    expect(await readSource()).toEqual(before);
+    await t.mutation(internal.tokenAlphaData.finishRun, {
+      runKey: DATA_RECOVERY_KEY,
+      claimToken: "data-recovery-claim",
+      status: "failed",
+      reason: "Recovery failed; authority remains spent",
+    });
+    expect(await claimDataRecovery(t)).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "ordinary-same-hour",
+      }),
+    ).toBeNull();
+    await t.mutation(internal.tokenAlphaData.ensureInfrastructure, {});
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: false });
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: true });
+    vi.setSystemTime(NOW + 3_600_000);
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    expect(await claimDataRecovery(t)).toBeNull();
+    const control = await t.run(
+      async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+    );
+    expect(control?.operatorBagsDataRecovery).toEqual({
+      sourceRunKey: DATA_SOURCE_KEY,
+      runKey: DATA_RECOVERY_KEY,
+      authorizedAt: NOW,
+      claimedAt: NOW,
+    });
+    expect(control?.operatorBagsRetry).toEqual(OLD_CONSUMED_RETRY);
+    expect(await readSource()).toEqual(before);
+  });
+
+  test.each(
+    preservedClaimGates.filter(
+      ({ name }) =>
+        ![
+          "changed uncertain source receipt",
+          "pending source operation",
+          "unknown source operation",
+        ].includes(name),
+    ),
+  )(
+    "preserves the $name gate without consuming data authority",
+    async ({ block }) => {
+      const t = setup();
+      const ids = await dataReadyFixture(t);
+      expect((await queueDataRecovery(t)).queued).toBe(true);
+      await block(t, ids);
+      expect(await claimDataRecovery(t)).toBeNull();
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(control?.operatorBagsDataRecovery?.claimedAt).toBeUndefined();
+      expect(control?.operatorBagsRetry).toEqual(OLD_CONSUMED_RETRY);
+    },
+  );
+
+  test("revalidates pre-model eligibility at claim time", async () => {
+    const t = setup();
+    const ids = await dataReadyFixture(t);
+    expect((await queueDataRecovery(t)).queued).toBe(true);
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaRuns", ids.sourceId, {
+          snapshot: SNAPSHOT,
+        }),
+    );
+    expect(await claimDataRecovery(t)).toBeNull();
+    const control = await t.run(
+      async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+    );
+    expect(control?.operatorBagsDataRecovery?.claimedAt).toBeUndefined();
+  });
+
+  test.each(["runtime disabled", "hour changed"])(
+    "revalidates %s at claim time without spending authority",
+    async (gate) => {
+      const t = setup();
+      const ids = await dataReadyFixture(t);
+      expect((await queueDataRecovery(t)).queued).toBe(true);
+      if (gate === "runtime disabled") vi.stubEnv("ELIZA_RUNTIME_MODE", "off");
+      else vi.setSystemTime(NOW + 3_600_000);
+      expect(await claimDataRecovery(t)).toBeNull();
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(control?.operatorBagsDataRecovery?.claimedAt).toBeUndefined();
+    },
+  );
+
+  test("rejects forged, ambiguous, consumed, wrong-lane and mixed authority", async () => {
+    const t = setup();
+    const ids = await dataReadyFixture(t);
+    expect(await claimDataRecovery(t)).toBeNull();
+    expect((await queueDataRecovery(t)).queued).toBe(true);
+    const original = {
+      sourceRunKey: DATA_SOURCE_KEY,
+      runKey: DATA_RECOVERY_KEY,
+      authorizedAt: NOW,
+    };
+    for (const patch of [
+      { sourceRunKey: SOURCE_RUN_KEY },
+      { runKey: RETRY_RUN_KEY },
+      { claimedAt: NOW },
+    ]) {
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+            operatorBagsDataRecovery: { ...original, ...patch },
+          }),
+      );
+      expect(await claimDataRecovery(t)).toBeNull();
+    }
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+          operatorBagsDataRecovery: original,
+        }),
+    );
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "pumpfun",
+        claimToken: "wrong-lane",
+        operatorRetryOf: DATA_SOURCE_KEY,
+      }),
+    ).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "mixed",
+        operatorRetryOf: DATA_SOURCE_KEY,
+        operatorFirstPost: true,
+      }),
+    ).toBeNull();
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+          operatorBagsRetry: {
+            ...OLD_CONSUMED_RETRY,
+            sourceRunKey: DATA_SOURCE_KEY,
+          },
+        }),
+    );
+    expect(await claimDataRecovery(t)).toBeNull();
+  });
+
+  test("requires enabled live pilot at queue and claim, and rejects an existing recovery key", async () => {
+    const t = setup();
+    const ids = await dataReadyFixture(t);
+    vi.stubEnv("ELIZA_RUNTIME_MODE", "off");
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    vi.stubEnv("ELIZA_RUNTIME_MODE", "live");
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+          enabled: false,
+        }),
+    );
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("tokenAlphaControl", ids.controlId, { enabled: true });
+      await ctx.db.insert("tokenAlphaRuns", {
+        runKey: DATA_RECOVERY_KEY,
+        platform: "bags",
+        claimToken: "existing",
+        status: "held",
+        createdAt: NOW,
+        updatedAt: NOW,
+        expiresAt: NOW,
+      });
+    });
+    expect(await queueDataRecovery(t)).toEqual({ queued: false });
   });
 });

@@ -18,7 +18,10 @@ import {
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import { structuredCanaryBlockReason } from "./forumAgentWorkflow";
 import schema from "./schema";
-import { validateBagsRetry } from "./tokenAlphaRecoveryData";
+import {
+  validateBagsDataRecovery,
+  validateBagsRetry,
+} from "./tokenAlphaRecoveryData";
 import {
   tokenPlatformValidator,
   tokenSnapshotValidator,
@@ -418,21 +421,50 @@ export const claimRun = internalMutation({
     if (structuredCanaryBlockReason(canary, now) !== null) return null;
     if (await laneHasUnresolvedOperation(ctx, args.platform)) return null;
     const retry = control.operatorBagsRetry;
-    if (
-      args.operatorRetryOf !== undefined &&
-      (args.platform !== "bags" ||
-        args.operatorFirstPost === true ||
-        retry === undefined ||
-        retry.sourceRunKey !== args.operatorRetryOf ||
-        retry.claimedAt !== undefined ||
-        retry.runKey !== `${args.operatorRetryOf}:operator-retry-1` ||
-        !(await validateBagsRetry(ctx, retry.sourceRunKey, retry.sourceJobId)))
-    )
-      return null;
+    const dataRecovery = control.operatorBagsDataRecovery;
+    let recoveryKind: "provider-retry" | "data-recovery" | undefined;
+    if (args.operatorRetryOf !== undefined) {
+      if (args.platform !== "bags" || args.operatorFirstPost === true)
+        return null;
+      const matchesRetry = retry?.sourceRunKey === args.operatorRetryOf;
+      const matchesDataRecovery =
+        dataRecovery?.sourceRunKey === args.operatorRetryOf;
+      // Even a consumed marker cannot be used to make two authorities for the
+      // same source appear unambiguous. The old marker is never reset or reused.
+      if (Number(matchesRetry) + Number(matchesDataRecovery) !== 1) return null;
+      if (matchesRetry) {
+        if (
+          retry!.claimedAt !== undefined ||
+          retry!.runKey !== `${args.operatorRetryOf}:operator-retry-1` ||
+          !(await validateBagsRetry(
+            ctx,
+            retry!.sourceRunKey,
+            retry!.sourceJobId,
+          ))
+        )
+          return null;
+        recoveryKind = "provider-retry";
+      } else {
+        if (
+          dataRecovery!.claimedAt !== undefined ||
+          dataRecovery!.runKey !==
+            `${args.operatorRetryOf}:operator-data-recovery-1` ||
+          !(await validateBagsDataRecovery(
+            ctx,
+            dataRecovery!.sourceRunKey,
+            now,
+          ))
+        )
+          return null;
+        recoveryKind = "data-recovery";
+      }
+    }
     const runKey =
       args.operatorRetryOf === undefined
         ? tokenAlphaRunKey(args.platform, now)
-        : retry!.runKey;
+        : recoveryKind === "provider-retry"
+          ? retry!.runKey
+          : dataRecovery!.runKey;
     const existing = await ctx.db
       .query("tokenAlphaRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -526,9 +558,14 @@ export const claimRun = internalMutation({
         updatedAt: now,
       });
     }
-    if (args.operatorRetryOf !== undefined) {
+    if (recoveryKind === "provider-retry") {
       await ctx.db.patch("tokenAlphaControl", control._id, {
         operatorBagsRetry: { ...retry!, claimedAt: now },
+        updatedAt: now,
+      });
+    } else if (recoveryKind === "data-recovery") {
+      await ctx.db.patch("tokenAlphaControl", control._id, {
+        operatorBagsDataRecovery: { ...dataRecovery!, claimedAt: now },
         updatedAt: now,
       });
     }
