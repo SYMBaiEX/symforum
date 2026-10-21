@@ -241,6 +241,7 @@ describe("OpenRouter-only model routing", () => {
             reasoning: { enabled: true },
             provider: {
               allow_fallbacks: true,
+              only: ["another-provider"],
               max_price: { prompt: 100, completion: 100 },
             },
           },
@@ -252,6 +253,7 @@ describe("OpenRouter-only model routing", () => {
         max_tokens: 4_000,
         provider: {
           allow_fallbacks: false,
+          only: ["deepinfra"],
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
