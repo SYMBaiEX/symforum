@@ -6,6 +6,7 @@ import {
   runWithModelFallback,
 } from "./ai-model-routing";
 import { elizaRuntimeFetch } from "./eliza-runtime-transport";
+import { OPENROUTER_NEWSLETTER_MODEL } from "./ai-models";
 
 const origin = "https://eliza-worker.example";
 const workerSecret = "private-worker-secret-32-characters-long";
@@ -39,6 +40,96 @@ function completion(model = "openrouter/free", content = "hello") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Eliza live compatible transport", () => {
+  test.each(["belle", "system"])(
+    "carries the price-capped Qwen SDK request and receipt for %s",
+    async (agentSlug) => {
+      const onRequest = vi.fn();
+      const onReceipt = vi.fn();
+      const workerFetch = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const envelope = JSON.parse(String(init?.body));
+          expect(envelope).toMatchObject({
+            version: 2,
+            agentSlug,
+            body: {
+              model: OPENROUTER_NEWSLETTER_MODEL,
+              provider: {
+                require_parameters: true,
+                max_price: { prompt: 0.2, completion: 0.5 },
+              },
+            },
+          });
+          expect(envelope.body.reasoning).toBeUndefined();
+          expect(envelope.body.reasoning_effort).toBeUndefined();
+          expect(onRequest).toHaveBeenCalledTimes(1);
+          return Response.json({
+            ...envelope,
+            runtimeVersion: "1.7.2",
+            completion: completion(
+              OPENROUTER_NEWSLETTER_MODEL,
+              '{"status":"ok"}',
+            ),
+          });
+        },
+      );
+      vi.stubGlobal("fetch", workerFetch);
+      const [route] = await routedModelCandidates(
+        {
+          ...config,
+          elizaRuntime: { ...config.elizaRuntime, onRequest, onReceipt },
+        },
+        [OPENROUTER_NEWSLETTER_MODEL],
+        {
+          agentSlug,
+          stage:
+            agentSlug === "belle"
+              ? "belle:daily-signal:draft"
+              : "health-canary",
+        },
+      );
+      const result = await generateText({
+        model: route.model,
+        prompt: "Return ok.",
+        output: Output.object({
+          schema: z.object({ status: z.literal("ok") }),
+        }),
+        maxOutputTokens: 8000,
+        maxRetries: 0,
+        reasoning: "low",
+      });
+      expect(result.output).toEqual({ status: "ok" });
+      expect(workerFetch).toHaveBeenCalledTimes(1);
+      expect(onReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: OPENROUTER_NEWSLETTER_MODEL,
+          servedModel: OPENROUTER_NEWSLETTER_MODEL,
+          status: "completed",
+          runtimeVersion: "1.7.2",
+        }),
+      );
+    },
+  );
+
+  test("does not admit a Qwen request for other personas", async () => {
+    const workerFetch = vi.fn();
+    const onRequest = vi.fn();
+    vi.stubGlobal("fetch", workerFetch);
+    const [route] = await routedModelCandidates(
+      { ...config, elizaRuntime: { ...config.elizaRuntime, onRequest } },
+      [OPENROUTER_NEWSLETTER_MODEL],
+      context,
+    );
+    await expect(
+      generateText({
+        model: route.model,
+        prompt: "No request.",
+        maxRetries: 0,
+      }),
+    ).rejects.toThrow("model_not_allowed");
+    expect(onRequest).not.toHaveBeenCalled();
+    expect(workerFetch).not.toHaveBeenCalled();
+  });
+
   test("forwards the SDK-transformed history and structured schema privately and returns usage", async () => {
     const receipts: unknown[] = [];
     const workerFetch = vi.fn(

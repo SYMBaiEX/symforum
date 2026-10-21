@@ -3,6 +3,7 @@
 import {
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
 } from "./ai-models";
 
 export type ElizaRuntimeReceipt = {
@@ -55,6 +56,7 @@ const MAX_TRANSPORT_MS = 120_000;
 const LIVE_MODELS = new Set<string>([
   ...OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
 ]);
 const STAGE_PATTERN = /^[a-zA-Z0-9:_-]{1,160}$/;
 const AGENT_PATTERN = /^[a-zA-Z0-9_-]{1,80}$/;
@@ -285,7 +287,11 @@ export function elizaRuntimeFetch(
           : "invalid_request",
       );
     }
-    if (!LIVE_MODELS.has(body.model))
+    if (
+      !LIVE_MODELS.has(body.model) ||
+      (body.model === OPENROUTER_NEWSLETTER_MODEL &&
+        !["belle", "system"].includes(context.agentSlug))
+    )
       throw new ElizaRuntimeTransportError("model_not_allowed");
     const outputLimit = body.max_tokens ?? body.max_completion_tokens;
     if (
