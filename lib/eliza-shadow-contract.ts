@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ELIZA_SHADOW_INPUT_MAX_BYTES = 100 * 1024;
 export const ELIZA_SHADOW_PRIVATE_MAX_BYTES = 160 * 1024;
 export const ELIZA_SHADOW_OUTPUT_MAX_BYTES = 128 * 1024;
-export const ELIZA_SHADOW_MODEL = "openai/gpt-4.1-mini";
+export const ELIZA_SHADOW_MODEL = "~deepseek/deepseek-v4-flash-latest";
 export const ELIZA_SHADOW_RUNTIME_VERSION = "1.7.2";
 export const ELIZA_SHADOW_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 export const ELIZA_SHADOW_TIMEOUT_MS = 150_000;

@@ -1,6 +1,6 @@
 # ElizaOS shadow draft worker
 
-Standalone Node service pinned to `@elizaos/core` and SQL `1.7.2`. Convex alone selects jobs, enforces spending limits, schedules work, evaluates drafts, and owns publication. This service has no Convex credentials, autonomous services, social plugins, tools, scheduling, or publishing endpoint. Each of its Suki/Belle runtimes registers only one model handler.
+Standalone Node service pinned to `@elizaos/core` and SQL `1.7.2`. Convex alone selects jobs, enforces spending limits, schedules work, evaluates drafts, and owns publication. This service has no Convex credentials, autonomous services, social plugins, scheduling, or publishing endpoint. The existing Suki/Belle shadow runtimes remain unchanged; the separate live endpoint lazily instantiates one model-only runtime per allowlisted forum persona.
 
 ## Run and verify
 
@@ -18,6 +18,7 @@ Environment variables (configure in the deployment secret store; never commit va
 | Name                               | Requirement                                                                                                 |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `ELIZA_SHADOW_WORKER_SECRET`       | Random bearer secret, 32–512 non-whitespace characters                                                      |
+| `ELIZA_RUNTIME_WORKER_SECRET`      | Separate live bearer secret, 32–512 non-whitespace characters; absent disables `/complete` only             |
 | `OPENROUTER_API_KEY`               | Dedicated, capped OpenRouter inference key                                                                  |
 | `DATABASE_URL` or `POSTGRES_URL`   | Dedicated restricted-runtime PostgreSQL login; mandatory in production, with explicit `sslmode=verify-full` |
 | `ELIZA_SHADOW_PGLITE_DIR`          | Optional absolute local-test directory, never production                                                    |
@@ -46,17 +47,31 @@ Runtime pool limits are 2 connections, 5s connection timeout, 10s idle lifetime,
 
 `GET /healthz` is public and returns only startup readiness, `shadowOnly`, runtime version and busy state. `POST /generate` requires `Authorization: Bearer <worker secret>` and `Content-Type: application/json`. `POST /maintenance` uses the same secret and a JSON `{}` body; it redacts expired results and checks database readiness without making any model call. Its safe response includes `ok`, `purgedResults` and the runtime version.
 
-Input fields: `{version:1, jobId, inputHash, kind, system, prompt, schema, model, maxOutputTokens}`. `kind` is `suki-reply` or `belle-newsletter`. `model` must be `openai/gpt-4.1-mini`; callers cannot select other models. `maxOutputTokens` is an integer from 1 to 10000. Unknown fields, including baselines, are rejected. Identifiers are 1–200 (`jobId`) or 1–128 (`inputHash`) ASCII letters, digits, colons, underscores or hyphens.
+Input fields: `{version:1, jobId, inputHash, kind, system, prompt, schema, model, maxOutputTokens}`. `kind` is `suki-reply` or `belle-newsletter`. `model` must be the cheap DeepSeek alias `~deepseek/deepseek-v4-flash-latest`; callers cannot select other models. `maxOutputTokens` is an integer from 1 to 10000. Unknown fields, including baselines, are rejected. Identifiers are 1–200 (`jobId`) or 1–128 (`inputHash`) ASCII letters, digits, colons, underscores or hyphens.
 
 Output: `{version:1, jobId, inputHash, output, model, servedModel, inputTokens, outputTokens, providerCostMicroUsd?, durationMs, runtimeVersion:"1.7.2"}`. `output` is validated against the original JSON schema. Provider cost is included only when supplied by OpenRouter; it is not a price estimate. The requesting model and actual served model are reported separately.
 
 Request limit is 128KiB, combined prompt/system limit 100KiB, provider response limit 256KiB, and output limit 128KiB. JSON schemas are bounded by depth/node counts. Ordinary object/scalar/array schemas and unions are supported, including Zod's `$schema` annotation, `uri` (URL constructor) and `safeint` formats. References, regular expressions, unknown formats and unsupported schema keywords are rejected. The provider receives a strict object wrapper around the original schema to support Suki's root union; annotations/formats are removed and `oneOf` is relaxed to `anyOf` only for the provider. The original schema remains authoritative for local validation.
 
+The shadow DeepSeek request sets native `reasoning:{effort:"low"}` to keep the bounded draft from consuming a high default reasoning budget. It still sends one non-streaming strict-schema request with provider fallback disabled.
+
+## Live HTTP contract v2
+
+`POST /complete` requires the distinct `ELIZA_RUNTIME_WORKER_SECRET` bearer. The shadow key never authorizes this route, and the live key never authorizes `/generate` or `/maintenance`. A missing live key leaves shadow running and returns `live_not_configured` on `/complete`. `GET /healthz` reports `liveAvailable` only when configured; it does not call the provider.
+
+The request is `{version:2,jobId,inputHash,agentSlug,stage,body}`. `body` is the exact non-streaming OpenAI chat-completion JSON emitted by the installed SDK; the worker validates bounds and allowed fields, but neither rewrites its model/messages/tools/schema/options nor adds a second model adapter. It must include `max_tokens` or `max_completion_tokens` from 1 to 40000. `inputHash` is lowercase SHA-256 of `JSON.stringify(body)` after recursively sorting object keys with JavaScript's default `.sort()` (arrays retain order). The SQL ledger also hashes the entire v2 envelope. The model is limited to `openrouter/free` or `~deepseek/deepseek-v4-flash-latest`. The 30 roster slugs plus Suki, Belle and Nyx are allowlisted, and stages must match the named agent's forum or Belle newsletter/digest workflow; `system` is limited to `health-canary`. Unknown fields, streaming, remote schema references, arbitrary URLs/options and unapproved model overrides are rejected.
+
+Success returns `{version:2,jobId,inputHash,agentSlug,stage,runtimeVersion:"1.7.2",completion}`. The bounded original OpenAI completion is preserved, including usage/cost/model fields. Only a narrow set of definite provider 4xx rejections returns `{error:"provider_rejected",providerStatus,outcomeUnknown:false}` at that HTTP status. Ambiguous HTTP 408/409, embedded provider errors, network, timeout, provider 5xx and ambiguous results fail closed with fixed error codes and `outcomeUnknown:true`; raw provider content is never returned. The worker makes one HTTP request, with no retries or its own fallback. Live admission permits two different personas at once, never two overlapping runs of one persona; the pre-claim busy response is 503. Shadow retains its own single-flight lane. Durable replay and tombstones use the existing private ledger.
+
+`POST /status` uses the same distinct live bearer but is read-only. It accepts only `{jobId}` (1–200 safe ASCII characters; at most 512 request bytes) and returns ledger state, fixed error code, hashes, and timestamps. It never returns the stored completion, calls a provider, claims or mutates a job, or publishes content. Unknown job IDs return a safe 404. This endpoint is for operator reconciliation of held jobs; it is not a retry or tombstone-clearing API.
+
 ## Failure and retry boundary
 
-Concurrency is one per process; busy requests fail immediately with HTTP 503 (`worker_busy`), never queue. Each accepted job makes at most one HTTP inference request, with no SDK/provider model fallbacks, retries, or repair calls. The timeout covers response reading too. An interrupted or timed-out generation is outcome-unknown and is never retried by this worker.
+Shadow concurrency is one per process; busy requests fail immediately with HTTP 503 (`worker_busy`), never queue. Each accepted job makes at most one HTTP inference request, with no SDK/provider model fallbacks, retries, or repair calls. The timeout covers response reading too. An interrupted or timed-out generation is outcome-unknown and is never retried by this worker.
 
 The PostgreSQL ledger atomically claims each `jobId`, storing the caller's `inputHash` plus a canonical full-request hash. An exact successful redelivery returns the stored result without inference for seven days. Successful draft output is then redacted at startup, maintenance, or redelivery; permanent identifier/hash tombstones remain and return 409 (`job_result_expired`), never another inference call. Convex should call authenticated `/maintenance` every six hours to bound retention even without generation traffic. There is no worker-owned scheduler.
+
+Changing the fixed shadow model does not alter old ledger rows or run a migration. A reused `jobId` whose old request included a different model returns `job_input_conflict`; it never replays old output or silently issues a new inference request.
 
 Reusing an ID with changed input returns 409 (`job_input_conflict`). Existing running/unknown jobs return 409 (`job_outcome_unknown`); failed jobs return 409 (`job_failed_no_retry`). These rows require explicit operator reconciliation, not deletion or automatic retry. A new attempt must be authorized/budgeted by Convex and use a new job ID. Tombstones must not be deleted by content-retention cleanup.
 
@@ -64,7 +79,7 @@ Logs contain fixed event/error codes only. Upstream SDK console logging is suppr
 
 ## Cloudflare Containers / Docker
 
-Use this directory (`workers/eliza-shadow`) as the Docker build context. Cloudflare's container wrapper supplies port 8080 and forwards only the generation, maintenance and health routes. Attach a dedicated PostgreSQL database and configure the variables above. Run one logical container instance; do not autoscale concurrent inference replicas. The service starts HTTP only after SQL/runtime initialization; health check is `/healthz`. Do not configure an HTTP-level retry proxy for `/generate`.
+Use this directory (`workers/eliza-shadow`) as the Docker build context. Cloudflare's container wrapper supplies port 8080 and forwards only the generation, maintenance, completion and health routes. Attach a dedicated PostgreSQL database and configure the variables above. Run one logical container instance; do not autoscale concurrent inference replicas. The service starts HTTP only after SQL/runtime initialization; health check is `/healthz`. Do not configure an HTTP-level retry proxy for `/generate` or `/complete`.
 
 For a local image build from the repository root:
 

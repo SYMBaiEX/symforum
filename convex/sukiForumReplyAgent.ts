@@ -9,6 +9,7 @@ import { components, internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { runWithModelFallback, type ModelRoutingConfig, type ModelRouteAttempt } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
+import { isElizaRuntimeTransportError } from "../lib/eliza-runtime-transport";
 import {
   AgentPublicationQualityError,
   assertAgentPublicationHygiene,
@@ -183,6 +184,7 @@ async function runReplySweepForAgent(
     const replyRunKey = `reply:${claim.runId}`;
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: replyRunKey,
+      runtimeScope: "forum-newsletter",
     });
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: replyRunKey,
@@ -429,7 +431,7 @@ export async function enqueueSukiShadowComparison(
     evidence: readonly ForumReplyEvidence[];
     baseline: SukiShadowBaseline;
   },
-) {
+): Promise<{ status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs"> } | undefined> {
   if (args.agentSlug !== "suki") return;
   try {
     // Deliberately reconstruct the public prompt fields. The claimed candidate
@@ -471,7 +473,7 @@ export async function enqueueSukiShadowComparison(
     ) {
       throw new Error("shadow-packet-limit");
     }
-    await ctx.runMutation(internal.elizaShadowData.enqueue, {
+    return await ctx.runMutation(internal.elizaShadowData.enqueue, {
       jobKey: `eliza-shadow:v1:${args.sourceRunKey}:${args.attempt}`,
       kind: "suki-reply",
       sourceRunKey: args.sourceRunKey,
@@ -506,6 +508,11 @@ export function validateSukiReplyDecision(value: unknown): SukiReplyDecision {
   if (!markup.valid) throw new Error(`Reply markup is incomplete: ${markup.feedback.join("; ")}`);
   const readability = assessForumReadability(body);
   if (!readability.valid) throw new AgentPublicationQualityError(`Reply prose is too dense: ${readability.feedback.join("; ")}`);
+  // Catch obvious truncated prose without imposing sentence punctuation on
+  // complete replies, questions, or replies ending in a closed code block.
+  if (/(?:^|\s)(?:the|and|because|otherwise|of|to|with)$/i.test(body)) {
+    throw new AgentPublicationQualityError("Reply ends with a dangling function word");
+  }
   if (/\b(?:i (?:tested|tried|observed|measured|ran)|in my experience|we found|my (?:lab|team|experiment))\b/i.test(body)) {
     throw new Error("Reply simulated unsupported personal experience");
   }
@@ -817,7 +824,8 @@ function publicSukiReplyErrorMessage(error: unknown) {
     : "Suki's forum reply run failed.";
 }
 
-function isRetryableSukiReplyError(error: unknown) {
+export function isRetryableSukiReplyError(error: unknown) {
+  if (isElizaRuntimeTransportError(error)) return false;
   if (
     error instanceof SukiReplyConfigurationError ||
     error instanceof AgentPublicationQualityError

@@ -65,8 +65,8 @@ async function result(
     jobId,
     inputHash: doc!.inputHash,
     output: { healthy: true, mode: "shadow" },
-    model: "openai/gpt-4.1-mini",
-    servedModel: "openai/gpt-4.1-mini-2025-04-14",
+    model: "~deepseek/deepseek-v4-flash-latest",
+    servedModel: "deepseek/deepseek-v4-flash",
     inputTokens: 100,
     outputTokens: 15,
     providerCostMicroUsd: 64,
@@ -433,7 +433,7 @@ describe("ElizaOS shadow isolation", () => {
             return {
               inputJson: JSON.stringify(packet),
               inputHash: "a".repeat(64),
-              model: "openai/gpt-4.1-mini",
+              model: "~deepseek/deepseek-v4-flash-latest",
               maxOutputTokens: 2_400,
               isCanary,
             };

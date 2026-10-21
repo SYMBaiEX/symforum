@@ -270,16 +270,28 @@ test("provider is one bounded HTTP call with persona, exact model, wrapper schem
   const sent = JSON.parse(calls[0].options.body);
   assert.equal(sent.model, MODEL);
   assert.equal(sent.max_tokens, 100);
+  assert.deepEqual(sent.reasoning, { effort: "low" });
   assert.equal(sent.provider.allow_fallbacks, false);
+  assert.equal(sent.provider.require_parameters, true);
   assert.equal(sent.messages[0].role, "system");
   assert.ok(sent.messages[0].content.includes("You are Suki."));
   assert.deepEqual(
     sent.response_format.json_schema.schema.properties.output,
     schema,
   );
+  assert.equal(sent.response_format.json_schema.strict, true);
   assert.equal(sent.tools, undefined);
   assert.equal(result.providerCostMicroUsd, 32);
   assert.deepEqual(result.output, { text: "A harmless draft." });
+  const resolved = createProvider({
+    apiKey: "not-a-real-key",
+    fetchImpl: async () =>
+      providerResponse({ model: "deepseek/deepseek-v4-flash-0731" }),
+  });
+  assert.equal(
+    (await resolved(request())).servedModel,
+    "deepseek/deepseek-v4-flash-0731",
+  );
 });
 
 test("provider fails once without exposing error bodies and enforces response/model/output limits", async () => {
@@ -375,6 +387,27 @@ test("single-flight busy, successful replay, changed-input conflict, and output-
   await assert.rejects(bad.generate(request()), /job_failed_no_retry/);
   await service.close();
   await bad.close();
+});
+
+test("pre-switch ledger rows cannot replay under the new fixed model", async () => {
+  let calls = 0;
+  const backend = memoryBackend(async () => {
+    calls++;
+    return generated();
+  });
+  backend.jobs.set("old-model-job", {
+    input_hash: "hash-1",
+    request_hash: "old-model-request-hash",
+    state: "succeeded",
+    result: { output: { text: "old model output" } },
+  });
+  const service = new ShadowService(backend);
+  await assert.rejects(
+    service.generate(request({ jobId: "old-model-job" })),
+    /job_input_conflict/,
+  );
+  assert.equal(calls, 0);
+  await service.close();
 });
 
 test("real pinned runtime lifecycle, SQL migrations, durable replay and redacted model logs via PGlite", async () => {

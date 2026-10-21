@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export const RUNTIME_VERSION = "1.7.2";
-export const MODEL = "openai/gpt-4.1-mini";
+export const MODEL = "~deepseek/deepseek-v4-flash-latest";
 export const MAX_REQUEST_BYTES = 128 * 1024;
 export const MAX_PROMPT_BYTES = 100 * 1024;
 export const MAX_PROVIDER_BYTES = 256 * 1024;

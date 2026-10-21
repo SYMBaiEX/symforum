@@ -2,6 +2,7 @@ import { createHttpServer, validSecret } from "./server.mjs";
 import { createProvider } from "./provider.mjs";
 import { createRuntimeBackend, ShadowService } from "./runtime.mjs";
 import { WorkerError } from "./contract.mjs";
+import { createLiveProvider, LiveService } from "./live.mjs";
 
 async function main() {
   const secret = process.env.ELIZA_SHADOW_WORKER_SECRET;
@@ -22,19 +23,33 @@ async function main() {
     apiKey: process.env.OPENROUTER_API_KEY,
     timeoutMs,
   });
+  const liveSecret = process.env.ELIZA_RUNTIME_WORKER_SECRET;
+  if (
+    liveSecret !== undefined &&
+    (!validSecret(liveSecret) || liveSecret === secret)
+  )
+    throw new WorkerError("invalid_runtime_worker_secret", 500);
   const backend = await createRuntimeBackend({
     postgresUrl,
     pgliteDir,
     generate,
+    generateLive: liveSecret
+      ? createLiveProvider({
+          apiKey: process.env.OPENROUTER_API_KEY,
+          timeoutMs,
+        })
+      : undefined,
   });
   const service = new ShadowService(backend);
-  const server = createHttpServer({ service, secret });
+  const liveService = liveSecret ? new LiveService(backend) : undefined;
+  const server = createHttpServer({ service, secret, liveService, liveSecret });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(port, "0.0.0.0", resolve);
     });
   } catch (error) {
+    await liveService?.close();
     await service.close();
     throw error;
   }
@@ -42,7 +57,8 @@ async function main() {
     JSON.stringify({
       event: "worker_ready",
       runtimeVersion: "1.7.2",
-      shadowOnly: true,
+      shadowOnly: !liveService,
+      liveAvailable: !!liveService,
     }),
   );
   let stopping = false;
@@ -51,6 +67,7 @@ async function main() {
     stopping = true;
     server.close();
     server.closeIdleConnections();
+    await liveService?.close();
     await service.close();
   };
   process.once("SIGTERM", () => {

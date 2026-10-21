@@ -3,6 +3,7 @@ import {
   estimatedModelCostMicroUsd,
   forumDayKey,
   hasModelPrice,
+  openRouterBillingModel,
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
@@ -14,6 +15,10 @@ import {
 } from "./ai-models";
 
 describe("AI model cost controls", () => {
+  test("the retired GPT pilot has no allowed price or configured generation route", () => {
+    expect(hasModelPrice("openai/gpt-4.1-mini")).toBe(false);
+    expect(OPENROUTER_GENERATION_MODELS).not.toContain("openai/gpt-4.1-mini");
+  });
   test("prices free generation at zero and rejects unknown models", () => {
     for (const model of OPENROUTER_FREE_GENERATION_MODELS) {
       expect(estimatedModelCostMicroUsd(model, 1_000_000, 1_000_000)).toBe(0);

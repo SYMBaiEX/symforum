@@ -12,6 +12,7 @@ import {
   validatePostgresUrl,
   assertDedicatedDatabaseConfiguration,
 } from "./database.mjs";
+import { createLiveRunner } from "./live.mjs";
 
 // Upstream database errors can contain SQL parameters. Keep all upstream logging
 // disabled; this process emits only the fixed safe lifecycle/error codes below.
@@ -44,11 +45,13 @@ export async function createRuntimeBackend({
   postgresUrl,
   pgliteDir,
   generate,
+  generateLive,
 }) {
   const adapters = [];
   const runtimes = new Map();
   const pendingLogs = new Set();
   let store;
+  let live;
   try {
     if (postgresUrl) {
       validatePostgresUrl(postgresUrl);
@@ -109,8 +112,17 @@ export async function createRuntimeBackend({
       await runtime.initialize({ skipMigrations: true });
       runtimes.set(kind, runtime);
     }
+    if (generateLive)
+      live = createLiveRunner({
+        postgresUrl,
+        pgliteDir,
+        generate: generateLive,
+        adapters,
+        quiet,
+      });
     return {
       store,
+      live,
       async run(request, signal) {
         const runtime = runtimes.get(request.kind);
         runtime.startRun();
@@ -133,6 +145,7 @@ export async function createRuntimeBackend({
         }));
       },
       async close() {
+        await live?.close();
         for (const runtime of runtimes.values()) await runtime.stop();
         await Promise.allSettled([...pendingLogs]);
         // Adapters share one upstream connection pool/client. Close it once.

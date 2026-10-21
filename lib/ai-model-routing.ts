@@ -24,6 +24,18 @@ import {
   OPENROUTER_IDEATION_MODELS,
   OPENROUTER_TOPIC_MODEL,
 } from "./ai-models";
+import {
+  elizaRuntimeFetch,
+  isElizaRuntimeTransportError,
+  type ElizaRuntimeConfig,
+  type ElizaRuntimeContext,
+} from "./eliza-runtime-transport";
+export type {
+  ElizaRuntimeConfig,
+  ElizaRuntimeContext,
+  ElizaRuntimeRequest,
+  ElizaRuntimeReceipt,
+} from "./eliza-runtime-transport";
 
 export type ModelRoute = {
   provider: "openrouter";
@@ -57,6 +69,7 @@ export type RoutedModel = ModelRoute & {
 
 export type ModelRoutingConfig = {
   openRouterApiKey?: string;
+  elizaRuntime?: ElizaRuntimeConfig;
   disabledModelIds?: readonly string[];
   beforeAttempt?: (
     candidate: RoutedModel,
@@ -196,6 +209,7 @@ function clean(value: string | undefined) {
 function openRouterModel(
   config: ModelRoutingConfig,
   modelId: string,
+  context?: ElizaRuntimeContext,
 ): RoutedModel | undefined {
   const apiKey = clean(config.openRouterApiKey);
   if (!apiKey) return undefined;
@@ -206,6 +220,14 @@ function openRouterModel(
     includeUsage: true,
     supportsStructuredOutputs: true,
     transformRequestBody: openRouterRequestBody,
+    ...(config.elizaRuntime
+      ? {
+          fetch: elizaRuntimeFetch(
+            config.elizaRuntime,
+            context ?? { agentSlug: "system", stage: "invalid" },
+          ),
+        }
+      : {}),
     headers: {
       "HTTP-Referer": OPENROUTER_SITE_URL,
       "X-OpenRouter-Title": OPENROUTER_APP_NAME,
@@ -301,13 +323,17 @@ function isLowStakesIdeationStage(stage: string) {
 export async function routedModelCandidates(
   config: ModelRoutingConfig,
   openRouterModelIds: readonly string[] = OPENROUTER_GENERATION_MODELS,
+  context?: ElizaRuntimeContext,
 ) {
+  if (config.elizaRuntime && !context) {
+    throw new Error("Eliza runtime route requires agent and stage context.");
+  }
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
   const modelIds = [...new Set(openRouterModelIds)];
   for (const modelId of modelIds) {
     if (disabled.has(modelId)) continue;
-    const primary = openRouterModel(config, modelId);
+    const primary = openRouterModel(config, modelId, context);
     if (primary) candidates.push(primary);
   }
   if (!clean(config.openRouterApiKey)) {
@@ -325,7 +351,7 @@ export async function routedModelCandidates(
     const emergency =
       emergencyModelId === undefined
         ? undefined
-        : openRouterModel(config, emergencyModelId);
+        : openRouterModel(config, emergencyModelId, context);
     if (emergency) return [emergency];
     throw new Error("No enabled AI model route is available.");
   }
@@ -333,6 +359,8 @@ export async function routedModelCandidates(
 }
 
 function safeError(error: unknown) {
+  if (isElizaRuntimeTransportError(error))
+    return "Eliza runtime transport failed";
   const message = error instanceof Error ? error.message : String(error);
   if (NoObjectGeneratedError.isInstance(error)) {
     // Record enough to distinguish malformed JSON from exhausted output,
@@ -355,6 +383,7 @@ function safeError(error: unknown) {
 }
 
 function shouldAttemptModelFallback(error: unknown) {
+  if (isElizaRuntimeTransportError(error)) return false;
   // These OpenRouter responses are account-level failures. Sending the same
   // request to another model with the same credentials cannot repair invalid
   // authentication or missing payment, and can turn one failure into a paid
@@ -560,6 +589,11 @@ export async function runWithModelFallback<T>(
   const candidates = await routedModelCandidates(
     config,
     fallbackModelIds ?? openRouterModelsForStage(args.stage),
+    {
+      agentSlug: args.agent ?? "system",
+      stage: args.stage,
+      correlationId: args.correlationId,
+    },
   );
   return runRoutedCandidates(candidates, {
     ...args,
@@ -569,6 +603,8 @@ export async function runWithModelFallback<T>(
 }
 
 export async function selectStreamingModel(config: ModelRoutingConfig) {
+  if (config.elizaRuntime)
+    throw new Error("Eliza runtime streaming is unsupported.");
   const [candidate, ...fallbacks] = await routedModelCandidates(
     config,
     OPENROUTER_IDEATION_MODELS,

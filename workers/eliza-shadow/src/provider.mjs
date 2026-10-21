@@ -69,6 +69,7 @@ export function createProvider({
           model: MODEL,
           stream: false,
           temperature: 0.4,
+          reasoning: { effort: "low" },
           max_tokens: request.maxOutputTokens,
           provider: { allow_fallbacks: false, require_parameters: true },
           messages: [
@@ -149,7 +150,9 @@ export function createProvider({
       }
       if (
         data.model !== MODEL &&
-        !/^openai\/gpt-4\.1-mini-\d{4}-\d{2}-\d{2}$/.test(data.model)
+        !/^deepseek\/deepseek-v4-flash(?:-(?:latest|\d{4}|\d{4}-\d{2}-\d{2}))?$/.test(
+          data.model,
+        )
       ) {
         throw new WorkerError("provider_model_mismatch", 502);
       }

@@ -31,6 +31,15 @@ export class SqlJobStore {
     return true;
   }
 
+  async inspect(jobId) {
+    const { rows } = await this.connection.query(
+      `SELECT job_id,input_hash,request_hash,state,error_code,created_at,updated_at
+       FROM eliza_shadow_jobs WHERE job_id=$1 LIMIT 1`,
+      [jobId],
+    );
+    return rows[0] ?? null;
+  }
+
   async claim(request, hash) {
     const inserted = await this.connection.query(
       `INSERT INTO eliza_shadow_jobs (job_id,input_hash,request_hash,state)

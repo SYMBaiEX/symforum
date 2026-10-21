@@ -5,6 +5,8 @@ import { agentScopeValidator } from "./authz";
 import { serviceAuthTables } from "./agentServiceAuthSchema";
 import { forumPluginTables } from "./forumPluginSchema";
 import { elizaShadowTables } from "./elizaShadowSchema";
+import { elizaRuntimeTables } from "./elizaRuntimeSchema";
+import { elizaPilotTables } from "./elizaPilotSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -25,6 +27,8 @@ export default defineSchema({
   ...serviceAuthTables,
   ...forumPluginTables,
   ...elizaShadowTables,
+  ...elizaRuntimeTables,
+  ...elizaPilotTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),

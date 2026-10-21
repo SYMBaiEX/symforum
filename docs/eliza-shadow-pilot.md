@@ -16,7 +16,7 @@ The worker receives no Convex deployment key, user account credentials, subscrib
 
 - Suki receives the explicit public source/evidence packet without the live Agent component's 20-message private conversation history. Display names are pseudonymized; public text can still contain user-posted personal information.
 - Belle receives compact public source excerpts (1,500 characters each) and no recent unpublished editorial headlines/theses. Private scoring uses the original evidence in Convex. Oversized immutable packets are skipped rather than silently losing evidence.
-- The shadow model is fixed to `openai/gpt-4.1-mini`; existing live routing is unchanged. Results therefore compare both runtime and model/context choices, not a controlled runtime-only experiment.
+- The shadow model is fixed to the low-cost `~deepseek/deepseek-v4-flash-latest` route; existing live routing is unchanged. Results therefore compare both runtime and model/context choices, not a controlled runtime-only experiment. The initial GPT-4.1-mini pilot route was retired on 2026-10-20 at the operator's request.
 - Deterministic validation is not semantic fact-check approval. The comparisons explicitly record the missing independent semantic reviewer and never authorize publication.
 
 ## Operational controls

@@ -21,8 +21,8 @@ function authorized(header, secret) {
   return timingSafeEqual(digest(header.slice(7)), digest(secret));
 }
 
-async function readRequest(req) {
-  if (Number(req.headers["content-length"]) > MAX_REQUEST_BYTES)
+async function readRequest(req, limit = MAX_REQUEST_BYTES) {
+  if (Number(req.headers["content-length"]) > limit)
     throw new WorkerError("request_too_large", 413);
   if (
     req.headers["content-encoding"] &&
@@ -35,8 +35,7 @@ async function readRequest(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_REQUEST_BYTES)
-      throw new WorkerError("request_too_large", 413);
+    if (size > limit) throw new WorkerError("request_too_large", 413);
     chunks.push(chunk);
   }
   try {
@@ -49,9 +48,16 @@ async function readRequest(req) {
 export function createHttpServer({
   service,
   secret,
+  liveService,
+  liveSecret,
   log = (event) => console.log(JSON.stringify(event)),
 }) {
   if (!validSecret(secret)) throw new WorkerError("invalid_worker_secret", 500);
+  if (
+    liveSecret !== undefined &&
+    (!validSecret(liveSecret) || liveSecret === secret)
+  )
+    throw new WorkerError("invalid_runtime_worker_secret", 500);
   const server = createServer(async (req, res) => {
     const send = (status, value) => {
       res.writeHead(status, {
@@ -67,22 +73,55 @@ export function createHttpServer({
         shadowOnly: true,
         runtimeVersion: RUNTIME_VERSION,
         busy: service.busy,
+        ...(liveService
+          ? {
+              liveAvailable: true,
+              liveBusy: liveService.active.size,
+              shadowOnly: false,
+            }
+          : {}),
       });
     }
     if (
-      !["/generate", "/maintenance"].includes(req.url) ||
+      !["/generate", "/maintenance", "/complete", "/status"].includes(
+        req.url,
+      ) ||
       req.method !== "POST"
     )
-      return send(404, { error: "not_found" });
-    if (!authorized(req.headers.authorization, secret))
-      return send(401, { error: "unauthorized" });
+      return send(404, {
+        error: "not_found",
+        ...(["/complete", "/status"].includes(req.url)
+          ? { outcomeUnknown: false }
+          : {}),
+      });
+    if (["/complete", "/status"].includes(req.url) && !liveService)
+      return send(503, { error: "live_not_configured", outcomeUnknown: false });
+    if (
+      !authorized(
+        req.headers.authorization,
+        ["/complete", "/status"].includes(req.url) ? liveSecret : secret,
+      )
+    )
+      return send(401, {
+        error: "unauthorized",
+        ...(["/complete", "/status"].includes(req.url)
+          ? { outcomeUnknown: false }
+          : {}),
+      });
     try {
-      const input = await readRequest(req);
+      const input = await readRequest(
+        req,
+        req.url === "/status" ? 512 : MAX_REQUEST_BYTES,
+      );
       send(
         200,
         req.url === "/maintenance"
           ? await service.maintenance()
-          : await service.generate(input),
+          : req.url === "/status"
+            ? await liveService.status(input)
+            : req.url === "/complete"
+              ? await liveService.complete(input)
+              : await service.generate(input),
       );
     } catch (error) {
       const safe =
@@ -95,7 +134,18 @@ export function createHttpServer({
         code: safe.code,
         status: safe.status,
       });
-      if (!res.destroyed) send(safe.status, { error: safe.code });
+      if (!res.destroyed)
+        send(safe.status, {
+          error: safe.code,
+          ...(safe.code === "provider_rejected"
+            ? { providerStatus: safe.status }
+            : {}),
+          ...(["/complete", "/status"].includes(req.url)
+            ? { outcomeUnknown: safe.outcomeUnknown }
+            : safe.outcomeUnknown
+              ? { outcomeUnknown: true }
+              : {}),
+        });
     }
   });
   server.requestTimeout = 130_000;

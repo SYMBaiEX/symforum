@@ -17,6 +17,7 @@ import {
   ForumGenerationBudgetError,
 } from "../lib/forum-generation-budget";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
+import { isElizaRuntimeTransportError } from "../lib/eliza-runtime-transport";
 import {
   runWithModelFallback,
   type RoutedModel,
@@ -438,6 +439,7 @@ export async function runForumResearchSlot(
     const routeFeature = config.routeFeature ?? "forum-agent";
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
+      runtimeScope: "forum-newsletter",
     });
     // Editorial generation explicitly selects openrouter/free; routing controls
     // still enforce provider health and the account's request budget.
@@ -3178,6 +3180,7 @@ function publicErrorMessage(error: unknown, agentName = "Suki") {
 }
 
 export function isRetryableError(error: unknown) {
+  if (isElizaRuntimeTransportError(error)) return false;
   if (isResearchQualityGateError(error)) {
     return false;
   }

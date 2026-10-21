@@ -24,6 +24,8 @@ import { openRouterStructuredOutputBudget } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
+import { shadowWorkerOrigin } from "../lib/eliza-shadow-contract";
+import { ElizaRuntimeTransportError } from "../lib/eliza-runtime-transport";
 
 const CANARY_MESSAGE = "SYMBiEX structured model route healthy";
 const CANARY_FAILURE_PAUSE_MS = 30 * 60 * 1_000;
@@ -37,12 +39,74 @@ const canaryOutputSchema = z.object({
 
 export async function convexModelRoutingConfig(
   ctx?: ActionCtx,
-  options?: { correlationId?: string },
+  options?: {
+    correlationId?: string;
+    runtimeScope?: "forum-newsletter" | "system-canary";
+    elizaRuntime?: "force" | "off";
+  },
 ): Promise<ModelRoutingConfig> {
   const base: ModelRoutingConfig = {
     openRouterApiKey: env.OPENROUTER_API_KEY,
   };
+  const useEliza =
+    options?.elizaRuntime !== "off" &&
+    (options?.elizaRuntime === "force" ||
+      (options?.runtimeScope !== undefined &&
+        env.ELIZA_RUNTIME_MODE === "live"));
+  if (useEliza) {
+    const url = shadowWorkerOrigin(env.ELIZA_RUNTIME_WORKER_URL);
+    const secret = env.ELIZA_RUNTIME_WORKER_SECRET;
+    // Once live generation is enabled, configuration failures must not silently
+    // put some agents back on the legacy provider transport.
+    if (
+      !url ||
+      !secret ||
+      secret.length < 32 ||
+      secret.length > 512 ||
+      /\s/.test(secret)
+    ) {
+      throw new ElizaRuntimeTransportError("configuration_unavailable");
+    }
+    base.elizaRuntime = {
+      url,
+      secret,
+      ...(ctx === undefined
+        ? {}
+        : {
+            onRequest: async (request) => {
+              if (!options?.correlationId)
+                throw new ElizaRuntimeTransportError(
+                  "operation_identity_required",
+                );
+              await ctx.runMutation(internal.elizaRuntimeData.reserveCall, {
+                ...request,
+                operationKey: options.correlationId,
+              });
+            },
+            onReceipt: async (receipt) => {
+              if (!options?.correlationId)
+                throw new ElizaRuntimeTransportError(
+                  "operation_identity_required",
+                );
+              await ctx.runMutation(internal.elizaRuntimeData.recordReceipt, {
+                ...receipt,
+                operationKey: options.correlationId,
+              });
+            },
+          }),
+    };
+  }
   if (ctx === undefined) return base;
+  if (options?.runtimeScope !== undefined || options?.elizaRuntime === "force") {
+    try {
+      if (!options?.correlationId) throw new Error("missing_identity");
+      await ctx.runQuery(internal.elizaRuntimeData.assertOperationReady, {
+        operationKey: options.correlationId,
+      });
+    } catch {
+      throw new ElizaRuntimeTransportError("operation_unavailable");
+    }
+  }
 
   const control = await ctx.runQuery(
     internal.aiRoutingControlData.readRoutingControl,
@@ -97,6 +161,13 @@ export const probe = internalAction({
   args: {
     provider: v.optional(v.literal("openrouter")),
     freeOnly: v.optional(v.boolean()),
+    elizaRuntime: v.optional(v.boolean()),
+    model: v.optional(
+      v.union(
+        v.literal("openrouter/free"),
+        v.literal("~deepseek/deepseek-v4-flash-latest"),
+      ),
+    ),
   },
   returns: v.object({
     provider: v.union(v.literal("openrouter")),
@@ -104,7 +175,7 @@ export const probe = internalAction({
     response: v.string(),
   }),
   handler: async (ctx, args) =>
-    await runStructuredProbe(ctx, args.provider, args.freeOnly),
+    await runStructuredProbe(ctx, args.provider, args.freeOnly, args),
 });
 
 export const runStructuredCanary = internalAction({
@@ -147,10 +218,15 @@ export async function runStructuredProbe(
   ctx: ActionCtx,
   provider?: "openrouter",
   freeOnly = false,
+  options?: { elizaRuntime?: boolean; model?: string },
 ) {
   const correlationId = `model-canary:${Date.now()}`;
   const generationStartedAt = Date.now();
-  const config = await convexModelRoutingConfig(ctx, { correlationId });
+  const config = await convexModelRoutingConfig(ctx, {
+    correlationId,
+    runtimeScope: "system-canary",
+    ...(options?.elizaRuntime ? { elizaRuntime: "force" as const } : {}),
+  });
   const canaryPrompt =
     "You are validating the exact structured-output contract used by a " +
     "forum agent before it may publish. Return one structured object using " +
@@ -210,7 +286,7 @@ export async function runStructuredProbe(
     },
   };
   const generation =
-    provider === undefined && !freeOnly
+    provider === undefined && !freeOnly && !options?.model
       ? await runWithModelFallback<{
           response: string;
           modelId: string;
@@ -222,7 +298,12 @@ export async function runStructuredProbe(
           (
             await routedModelCandidates(
               config,
-              freeOnly ? ["openrouter/free"] : undefined,
+              options?.model
+                ? [options.model]
+                : freeOnly
+                  ? ["openrouter/free"]
+                  : undefined,
+              { agentSlug: "system", stage: "health-canary", correlationId },
             )
           ).filter(
             (candidate) =>

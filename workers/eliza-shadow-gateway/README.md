@@ -4,8 +4,9 @@ An isolated Cloudflare Workers gateway for the sibling `../eliza-shadow` Node 24
 container. This package has its own manifest and Bun lockfile; it does not change
 the app's dependencies or grant access to Convex publishing operations.
 
-Only `POST /generate` and `POST /maintenance` can reach the named `pilot`
-container. Both require `Authorization: Bearer <ELIZA_SHADOW_WORKER_SECRET>`.
+Only `POST /generate`, `POST /maintenance`, `POST /complete`, and read-only `POST /status` can reach the named `pilot`
+container. The first two require `Authorization: Bearer <ELIZA_SHADOW_WORKER_SECRET>`;
+`/complete` and `/status` require a distinct `ELIZA_RUNTIME_WORKER_SECRET` bearer. `/status` accepts only `{jobId}` with a 512-byte cap; malformed requests are rejected before container wake.
 The gateway verifies authorization, JSON content type, uncompressed encoding,
 declared content length, and a complete streaming read capped at 128 KiB **before
 obtaining a container stub**. It forwards the original body bytes and bearer to
@@ -21,16 +22,20 @@ control routes are exposed.
 It never wakes or probes a container and does not establish that ElizaOS, the
 provider, or Postgres is healthy. An authenticated generation or maintenance call
 is needed to exercise that path.
+When the live secret is configured, gateway health instead reports `shadowOnly:false,liveConfigured:true`; this is configuration status, not a container or provider health claim.
 
 ## Runtime configuration
 
-Provision these three Worker secrets separately, without putting their values
+Provision these Worker secrets separately, without putting their values
 in Wrangler configuration, build arguments, source, or command-line arguments:
 
 - `OPENROUTER_API_KEY`: provider credential used inside the container.
 - `DATABASE_URL`: external PostgreSQL connection string used by ElizaOS.
 - `ELIZA_SHADOW_WORKER_SECRET`: 32–512 non-whitespace characters, shared with the
   authorized Convex caller and container server.
+- `ELIZA_RUNTIME_WORKER_SECRET`: distinct 32–512 character live bearer, shared
+  with the authorized Convex caller and container server; leave absent until
+  pilot validation and live cutover are authorized.
 
 The `Container` constructor passes only those secrets plus `LOG_LEVEL=error` and
 `NODE_ENV=production` through its `envVars` startup configuration. Secrets are
