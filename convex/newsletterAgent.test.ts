@@ -201,6 +201,33 @@ describe("Belle blind evidence review validation", () => {
     expect(issues).toContain("unknown at dek");
   });
 
+  test("bounds verbose wire diagnostics without changing blocking verdicts", () => {
+    const wire = {
+      fields: [
+        { path: "lead", verdict: "unsupported", reason: "A".repeat(121) },
+        { path: "dek", verdict: "unknown", reason: "B".repeat(300) },
+      ],
+      coherence: "unsupported",
+      coherenceReason: "C".repeat(300),
+    };
+    const review = hydrateEditorialEvidenceReview(wire, catalog);
+    expect(review.fields.map(field => field.verdict)).toEqual(["unsupported", "unknown"]);
+    expect(review.fields[0]?.reason).toHaveLength(121);
+    expect(review.fields[1]?.reason).toHaveLength(240);
+    expect(review.coherence).toBe("unsupported");
+    expect(review.coherenceReason).toHaveLength(240);
+    const issues = validateEditorialEvidenceReview(dailyDraft(), sources, review).join(" ");
+    expect(issues).toContain("unsupported at lead");
+    expect(issues).toContain("unknown at dek");
+    expect(issues).toContain("coherence unsupported");
+    expect(() => hydrateEditorialEvidenceReview({
+      ...wire, fields: [{ path: "lead", verdict: "unsupported", reason: "A".repeat(1_025) }],
+    }, catalog)).toThrow();
+    expect(() => hydrateEditorialEvidenceReview({
+      ...wire, coherenceReason: "C".repeat(1_025),
+    }, catalog)).toThrow();
+  });
+
   test("compact wire rejects missing fact evidence and empty issue reasons", () => {
     const base = { coherence: "clear" };
     expect(evidenceReviewWireSchema.safeParse({
@@ -210,7 +237,13 @@ describe("Belle blind evidence review validation", () => {
       ...base, fields: [{ path: "lead", verdict: "unsupported", reason: "" }],
     }).success).toBe(false);
     expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "unsupported" }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
       ...base, fields: [{ path: "lead", verdict: "unknown", reason: "" }],
+    }).success).toBe(false);
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "unknown", reason: null }],
     }).success).toBe(false);
     expect(evidenceReviewWireSchema.safeParse({
       ...base, fields: [{ path: "thesis", verdict: "analysis", sourceId: null, quote: null, reason: null }],
