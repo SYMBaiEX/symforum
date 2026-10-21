@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { verifySolanaMints } from "./solana-mint-validation";
+import {
+  verifySolanaMints,
+  SolanaMintVerificationError,
+} from "./solana-mint-validation";
 
 const FIRST = "8Ta68iepck46U9PQzQvNPceN2f3mxJQN7dWe6CMYBAGS";
 const SECOND = "CSocnzcRpgSCr1naKcNTieWZUxb6rABe45j844m7pump";
@@ -7,7 +10,7 @@ const SYSVAR_RENT = "SysvarRent111111111111111111111111111111111";
 const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const RPC_ID = "symbaiex-token-mint-validation";
-const FAILURE = "Solana mint verification failed; no retry was attempted.";
+const FAILURE = "Solana mint verification failed.";
 
 function account(overrides: Record<string, unknown> = {}) {
   return {
@@ -69,7 +72,7 @@ describe("finalized on-chain Solana mint verification", () => {
       "https://api.mainnet-beta.solana.com",
       expect.objectContaining({
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal: expect.any(AbortSignal),
         headers: {
           "content-type": "application/json",
@@ -167,8 +170,9 @@ describe("finalized on-chain Solana mint verification", () => {
   ])(
     "excludes missing, wrong-program, non-mint, uninitialized or malformed mint state: %#",
     async (value) => {
-      setup([value]);
+      const fetch = setup([value]);
       expect(await verifySolanaMints([FIRST])).toEqual(new Set());
+      expect(fetch).toHaveBeenCalledOnce();
     },
   );
 
@@ -240,11 +244,11 @@ describe("finalized on-chain Solana mint verification", () => {
     },
   );
 
-  test("fails HTTP, network, parse and redirect errors without body leakage or retries", async () => {
+  test("fails permanent HTTP, parse and redirect errors without body leakage or retries", async () => {
     const fetch = setup();
     const secret = "secret-body-do-not-publish";
     for (const response of [
-      new Response(secret, { status: 429 }),
+      new Response(secret, { status: 403 }),
       new Response(secret),
       new Response(secret, {
         status: 302,
@@ -254,9 +258,87 @@ describe("finalized on-chain Solana mint verification", () => {
       fetch.mockResolvedValueOnce(response);
       await expect(verifySolanaMints([FIRST])).rejects.toThrow(FAILURE);
     }
-    fetch.mockRejectedValueOnce(new Error(secret));
-    await expect(verifySolanaMints([FIRST])).rejects.toThrow(FAILURE);
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([429, 500, 503])(
+    "allows only one bounded retry for transient HTTP %s",
+    async (status) => {
+      const fetch = setup();
+      fetch.mockResolvedValueOnce(
+        new Response("private response", {
+          status,
+          headers: { "retry-after": "0" },
+        }),
+      );
+      expect(await verifySolanaMints([FIRST])).toEqual(new Set([FIRST]));
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch.mock.calls[1][0]).toBe(fetch.mock.calls[0][0]);
+      expect(fetch.mock.calls[1][1]!.body).toBe(fetch.mock.calls[0][1]!.body);
+    },
+  );
+
+  test("network failures are retried once then classified without raw text", async () => {
+    const fetch = setup();
+    fetch.mockRejectedValue(new Error("private response"));
+    const assertion = verifySolanaMints([FIRST]);
+    await expect(assertion).rejects.toBeInstanceOf(SolanaMintVerificationError);
+    await expect(assertion).rejects.toMatchObject({
+      code: "network",
+      message: FAILURE,
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("repeated transient HTTP errors stop after the second request", async () => {
+    const fetch = setup();
+    fetch.mockResolvedValue(
+      new Response("private body", {
+        status: 429,
+        headers: { "retry-after": "0" },
+      }),
+    );
+    const result = verifySolanaMints([FIRST]);
+    await expect(result).rejects.toMatchObject({
+      code: "http-429",
+      message: FAILURE,
+    });
+    const error = await result.catch((value: unknown) => value);
+    expect(JSON.stringify(error)).not.toContain("private body");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("a Retry-After beyond two seconds prevents a retry", async () => {
+    const fetch = setup();
+    fetch.mockResolvedValueOnce(
+      new Response("private response", {
+        status: 429,
+        headers: { "retry-after": "3" },
+      }),
+    );
+    await expect(verifySolanaMints([FIRST])).rejects.toMatchObject({
+      code: "http-429",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  test("waits the whole valid HTTP-date Retry-After before retrying", async () => {
+    vi.useFakeTimers();
+    const now = Date.UTC(2026, 9, 21, 21);
+    vi.setSystemTime(now);
+    const fetch = setup();
+    fetch.mockResolvedValueOnce(
+      new Response("private response", {
+        status: 503,
+        headers: { "retry-after": new Date(now + 2_000).toUTCString() },
+      }),
+    );
+    const result = verifySolanaMints([FIRST]);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetch).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual(new Set([FIRST]));
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   test("rejects response redirects even when a fetch implementation resolves them", async () => {
@@ -277,7 +359,7 @@ describe("finalized on-chain Solana mint verification", () => {
     await expect(verifySolanaMints([FIRST])).rejects.toThrow(FAILURE);
   });
 
-  test("aborts the single request after ten seconds", async () => {
+  test("aborts each request after ten seconds with at most one timeout retry", async () => {
     vi.useFakeTimers();
     const fetch = setup();
     fetch.mockImplementation(
@@ -288,11 +370,12 @@ describe("finalized on-chain Solana mint verification", () => {
           );
         }),
     );
-    const assertion = expect(verifySolanaMints([FIRST])).rejects.toThrow(
-      FAILURE,
-    );
-    await vi.advanceTimersByTimeAsync(10_000);
+    const assertion = expect(verifySolanaMints([FIRST])).rejects.toMatchObject({
+      code: "timeout",
+      message: FAILURE,
+    });
+    await vi.advanceTimersByTimeAsync(20_250);
     await assertion;
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -310,7 +310,12 @@ export function elizaRuntimeFetch(
     if (
       !LIVE_MODELS.has(body.model) ||
       (body.model === OPENROUTER_NEWSLETTER_MODEL &&
-        !["belle", "system"].includes(context.agentSlug))
+        !["belle", "system"].includes(context.agentSlug) &&
+        !(
+          ["bags-scout", "pumpfun-scout"].includes(context.agentSlug) &&
+          (stage === `${context.agentSlug}:forum-draft` ||
+            stage === `${context.agentSlug}:forum-evidence-review`)
+        ))
     )
       throw new ElizaRuntimeTransportError("model_not_allowed");
     const outputLimit = body.max_tokens ?? body.max_completion_tokens;

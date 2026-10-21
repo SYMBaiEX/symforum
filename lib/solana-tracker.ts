@@ -21,6 +21,76 @@ const UNSAFE_URL =
 export const TOKEN_INDEX_COVERAGE_WARNING =
   "Limited-coverage pilot: eligible tokens in Solana Tracker's index, not the platform-wide top five.";
 
+export type TokenDataErrorCode =
+  | "configuration"
+  | "budget-denied"
+  | "invalid-request"
+  | "network"
+  | "timeout"
+  | "http-400"
+  | "http-401"
+  | "http-402"
+  | "http-403"
+  | "http-429"
+  | "http-4xx"
+  | "http-5xx"
+  | "redirect"
+  | "oversized-response"
+  | "missing-response"
+  | "invalid-json"
+  | "invalid-response";
+
+export class SolanaTrackerError extends Error {
+  constructor(readonly code: TokenDataErrorCode) {
+    super("Solana Tracker data request failed.");
+    this.name = "SolanaTrackerError";
+  }
+}
+
+/** Shared closed classifiers; no provider text is retained. */
+export function tokenDataHttpFailure(status: number): TokenDataErrorCode {
+  if (status >= 300 && status < 400) return "redirect";
+  if (status === 400) return "http-400";
+  if (status === 401) return "http-401";
+  if (status === 402) return "http-402";
+  if (status === 403) return "http-403";
+  if (status === 429) return "http-429";
+  return status >= 500 && status < 600 ? "http-5xx" : "http-4xx";
+}
+
+export function tokenDataFailureIsRetryable(code: TokenDataErrorCode): boolean {
+  return ["network", "timeout", "http-429", "http-5xx"].includes(code);
+}
+
+/** Null means the server's hint cannot safely fit the two-second retry bound. */
+export function tokenDataRetryDelay(
+  header: string | null,
+  now = Date.now(),
+): number | null {
+  if (header === null) return 250;
+  const value = header.trim();
+  let delay: number;
+  if (/^\d+(?:\.\d+)?$/.test(value)) delay = Math.ceil(Number(value) * 1_000);
+  else {
+    // HTTP-date forms begin with a weekday. Do not let Date.parse interpret
+    // malformed delta-seconds such as "-1" as a date in a previous year.
+    if (!/^[A-Za-z]{3,9}[,\s]/.test(value)) return null;
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return null;
+    delay = Math.max(0, timestamp - now);
+  }
+  return Number.isFinite(delay) && delay >= 0 && delay <= 2_000 ? delay : null;
+}
+
+class AttemptFailure extends Error {
+  constructor(
+    readonly code: TokenDataErrorCode,
+    readonly retryDelay: number | null = 250,
+  ) {
+    super("Solana Tracker transport attempt failed.");
+  }
+}
+
 type RequestOptions = {
   apiKey: string;
   now: number;
@@ -155,10 +225,10 @@ function validateRequest(options: RequestOptions): void {
     !Number.isSafeInteger(options.now) ||
     options.now <= 0
   )
-    throw new Error("Solana Tracker request configuration is invalid.");
+    throw new SolanaTrackerError("configuration");
 }
 
-/** One attempt only. Error text never contains a provider body, URL or key. */
+/** Exactly one transport attempt; the ranking wrapper owns bounded retries. */
 async function requestJson(
   path: string,
   options: RequestOptions,
@@ -168,20 +238,26 @@ async function requestJson(
   try {
     const response = await fetch(`${API_ORIGIN}${path}`, {
       headers: { "x-api-key": options.apiKey, accept: "application/json" },
-      redirect: "error",
+      // Manual mode follows no redirect and lets us reject 3xx without
+      // confusing fetch's opaque redirect TypeError with a retryable network error.
+      redirect: "manual",
       signal: controller.signal,
     });
     if (
       response.redirected ||
       (response.url && new URL(response.url).origin !== API_ORIGIN)
     ) {
-      throw new Error("unsafe-redirect");
+      throw new AttemptFailure("redirect");
     }
-    if (!response.ok) throw new Error("http-error");
+    if (!response.ok)
+      throw new AttemptFailure(
+        tokenDataHttpFailure(response.status),
+        tokenDataRetryDelay(response.headers.get("retry-after")),
+      );
     const declaredLength = Number(response.headers.get("content-length"));
     if (declaredLength > MAX_RESPONSE_BYTES)
-      throw new Error("oversized-response");
-    if (!response.body) throw new Error("missing-response");
+      throw new AttemptFailure("oversized-response");
+    if (!response.body) throw new AttemptFailure("missing-response");
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let bytes = 0;
@@ -190,7 +266,8 @@ async function requestJson(
         const chunk = await reader.read();
         if (chunk.done) break;
         bytes += chunk.value.byteLength;
-        if (bytes > MAX_RESPONSE_BYTES) throw new Error("oversized-response");
+        if (bytes > MAX_RESPONSE_BYTES)
+          throw new AttemptFailure("oversized-response");
         chunks.push(chunk.value);
       }
     } finally {
@@ -203,15 +280,58 @@ async function requestJson(
       joined.set(chunk, position);
       position += chunk.byteLength;
     }
-    return JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(joined),
-    ) as unknown;
-  } catch {
-    throw new Error("Solana Tracker request failed; no retry was attempted.");
+    try {
+      return JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(joined),
+      ) as unknown;
+    } catch {
+      throw new AttemptFailure("invalid-json");
+    }
+  } catch (error) {
+    if (error instanceof AttemptFailure) throw error;
+    throw new AttemptFailure(controller.signal.aborted ? "timeout" : "network");
   } finally {
     clearTimeout(timeout);
     controller.abort();
   }
+}
+
+async function reserve(options: RequestOptions): Promise<boolean> {
+  try {
+    return await options.reserveRequest();
+  } catch {
+    throw new SolanaTrackerError("budget-denied");
+  }
+}
+
+async function requestRanking(
+  path: string,
+  options: RequestOptions,
+): Promise<unknown | undefined> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!(await reserve(options))) {
+      if (attempt === 0) return undefined;
+      throw new SolanaTrackerError("budget-denied");
+    }
+    try {
+      return await requestJson(path, options);
+    } catch (error) {
+      const failure =
+        error instanceof AttemptFailure ? error : new AttemptFailure("network");
+      if (
+        attempt === 0 &&
+        tokenDataFailureIsRetryable(failure.code) &&
+        failure.retryDelay !== null
+      ) {
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, failure.retryDelay!),
+        );
+        continue;
+      }
+      throw new SolanaTrackerError(failure.code);
+    }
+  }
+  throw new SolanaTrackerError("network");
 }
 
 function rankedSnapshot(
@@ -288,9 +408,8 @@ export async function fetchTokenRankings(
 ): Promise<TokenSnapshot[]> {
   validateRequest(options);
   if (options.platform !== "bags" && options.platform !== "pumpfun") {
-    throw new Error("Solana Tracker platform is invalid.");
+    throw new SolanaTrackerError("invalid-request");
   }
-  if (!(await options.reserveRequest())) return [];
   const params = new URLSearchParams({
     launchpad: options.platform,
     sortBy: "volume_1h",
@@ -298,14 +417,16 @@ export async function fetchTokenRankings(
     limit: "30",
     showPriceChanges: "true",
   });
-  const result = object(await requestJson(`/search?${params}`, options));
+  const response = await requestRanking(`/search?${params}`, options);
+  if (response === undefined) return [];
+  const result = object(response);
   if (
     !result ||
     result.status !== "success" ||
     !Array.isArray(result.data) ||
     result.data.length > 35
   ) {
-    throw new Error("Solana Tracker returned an invalid ranking response.");
+    throw new SolanaTrackerError("invalid-response");
   }
   const seen = new Set<string>();
   return result.data
@@ -338,7 +459,7 @@ export async function enrichTokenSnapshot(
   const { snapshot } = options;
   if (!eligibleMint(snapshot.mint))
     return withWarning(snapshot, "Metadata unavailable: invalid mint.");
-  if (!(await options.reserveRequest()))
+  if (!(await reserve(options)))
     return withWarning(
       snapshot,
       "Metadata enrichment skipped: free-tier request budget exhausted.",

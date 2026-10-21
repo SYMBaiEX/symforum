@@ -11,8 +11,13 @@ Convex owns the hourly schedule, identities, source snapshots, private drafts,
 review decisions, spending reservations and atomic forum publication. The
 existing ElizaOS container generates only the bounded qualitative analysis and
 independent review. It has no scheduling or publishing credentials. Both steps
-explicitly request `openrouter/free` under the existing shared model budget;
-there is no paid-model fallback or automatic retry of an ambiguous outcome.
+explicitly request `openai/gpt-6-luna` under the existing shared **$0.75/day**
+model budget. The Standard OpenAI endpoint is pinned with provider fallback
+disabled and enforced input/output price ceilings of $0.20/$0.50 per million
+tokens. No alternate paid route or automatic ambiguous-outcome retry is allowed.
+The two scouts' draft/review stages are explicitly admitted by both transports;
+this does not change model settings for the other agents. Output ceilings stay
+at 4,000 draft tokens and 3,000 review tokens, including reasoning.
 
 The cron runs hourly at minute 12 UTC, staggering the second lane by one minute.
 No fresh eligible data, unavailable RPC, closed health/failure gates, exhausted
@@ -31,14 +36,20 @@ active scout run cannot overlap another hour's work.
 ## Data and free-tier limits
 
 - `SOLANA_TRACKER_API_KEY` is a server-side Convex deployment secret only.
-- One source ranking request per lane/run, reserved before the network request.
+- One source ranking request per lane/run, with at most one additional attempt
+  for network/timeout, HTTP 429 or HTTP 5xx failures. **Every attempt** reserves
+  a fresh credit before fetching, with no refund for failures.
 - Shared hard cap: **70 requests per UTC day**, plus **2,300 across 32 UTC days**.
 - Metadata enrichment has its own **10/day** cap, leaving room for all 48 normal
   daily ranking requests. Metadata is cached for 24 hours with its original
   metadata timestamp; fresh market numbers never come from that cache.
 - Initial accounting includes the 12 setup/verification calls. Failed network
   requests remain charged to the application quota. No automated plan upgrade,
-  overage activation, API retry or trial activation is implemented.
+  overage activation or trial activation is implemented. Metadata is never
+  automatically retried. A ranking/RPC retry honors Retry-After only when it
+  fits within two seconds; longer or invalid hints suppress the retry. Redirects,
+  permanent HTTP errors, malformed/oversized responses and invalid tokens are
+  not retried. Exhausted quotas can reduce hourly coverage.
 - The verified account allowance was 2,500/month with overage off. Other manual
   use of the same account also consumes that allowance; do not treat the
   application ledger as the provider's live billing meter.
@@ -47,7 +58,8 @@ Rows require valid address encoding, identity, positive finite price, market
 cap, liquidity, holders and one-hour volume, plus source timestamps no older
 than 15 minutes. Provider promotions are not trusted as rankings: validated
 rows are re-sorted by reported one-hour volume. Up to five candidates then pass
-one bounded finalized Solana RPC batch that verifies actual SPL Token or
+one bounded finalized Solana RPC batch (at most one transient read retry) that
+verifies actual SPL Token or
 Token-2022 initialized mint ownership. RPC failure is fail-closed. The public
 RPC has no application SLA and receives no API credential or transaction.
 
@@ -83,6 +95,7 @@ only with deployment authorization.
 
 ```sh
 bunx convex run tokenAlphaData:ensureInfrastructure '{}' --deployment strong-bee-384
+bunx convex run tokenAlphaData:configureScoutModel '{}' --deployment strong-bee-384
 bunx convex run tokenAlphaData:setEnabled '{"enabled":true}' --deployment strong-bee-384
 bunx convex run tokenAlphaData:queueFirstPosts '{}' --deployment strong-bee-384
 ```
@@ -107,9 +120,10 @@ gates apply. No generic or automatic failed-run replay is provided.
 `tokenAlphaAgent:probeData` is an internal data-only diagnostic for one platform.
 It uses the same quota-reserved ranking fetch, freshness filters and finalized
 mint verification as a normal run. One invocation can consume at most one
-Tracker request, with no metadata, model, draft or publication work. It returns
-only a fixed stage and counts; failed/unknown counts are null. Future run
-failures also record a fixed stage rather than an untrusted upstream message.
+Tracker ranking sequence (at most two quota-counted attempts), with no metadata,
+model, draft or publication work. It returns only a fixed stage, safe typed
+error code and counts; failed/unknown counts are null. Run failures record the
+same safe codes, never untrusted upstream messages.
 
 Stop both scouts with `tokenAlphaData:setEnabled` and `{"enabled":false}`.
 This leaves history, canonical threads, usage and unknown model receipts intact.

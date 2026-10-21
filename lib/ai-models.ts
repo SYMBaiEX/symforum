@@ -10,6 +10,8 @@ export const OPENROUTER_PAID_FALLBACK_MODEL =
 
 /** Fixed, non-thinking long-form route; never inherit a floating model price. */
 export const OPENROUTER_NEWSLETTER_MODEL = "openai/gpt-6-luna";
+/** The token scouts use the same fixed, price-capped Standard endpoint. */
+export const OPENROUTER_TOKEN_SCOUT_MODEL = OPENROUTER_NEWSLETTER_MODEL;
 /** USD per million tokens, enforced upstream and used for conservative reserves. */
 export const OPENROUTER_NEWSLETTER_PRICE_CEILING = {
   prompt: 0.2,

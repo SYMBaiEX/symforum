@@ -130,6 +130,107 @@ describe("Eliza live compatible transport", () => {
     expect(workerFetch).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["bags-scout", "draft"],
+    ["bags-scout", "evidence-review"],
+    ["pumpfun-scout", "draft"],
+    ["pumpfun-scout", "evidence-review"],
+  ])("carries bounded Luna only for %s forum %s", async (agentSlug, suffix) => {
+    const stage = `${agentSlug}:forum-${suffix}`;
+    const onRequest = vi.fn();
+    const onReceipt = vi.fn();
+    const workerFetch = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const envelope = JSON.parse(String(init?.body));
+        expect(envelope).toMatchObject({ agentSlug, stage });
+        expect(envelope.body.model).toBe(OPENROUTER_NEWSLETTER_MODEL);
+        expect(envelope.body.reasoning).toEqual({ effort: "low", exclude: true });
+        expect(envelope.body.provider).toEqual({
+          require_parameters: true,
+          allow_fallbacks: false,
+          only: ["openai"],
+          ignore: ["openai/fast", "openai/flex"],
+          max_price: { prompt: "0.2", completion: "0.5" },
+        });
+        expect(envelope.body.response_format.type).toBe("json_schema");
+        expect(envelope.body.temperature).toBeUndefined();
+        expect(envelope.body.top_p).toBeUndefined();
+        expect(envelope.body.reasoning_effort).toBeUndefined();
+        expect(onRequest).toHaveBeenCalledTimes(1);
+        return Response.json({
+          ...envelope,
+          runtimeVersion: "1.7.2",
+          completion: completion(OPENROUTER_NEWSLETTER_MODEL, '{"status":"ok"}'),
+        });
+      },
+    );
+    vi.stubGlobal("fetch", workerFetch);
+    const [route] = await routedModelCandidates(
+      {
+        ...config,
+        elizaRuntime: { ...config.elizaRuntime, onRequest, onReceipt },
+      },
+      [OPENROUTER_NEWSLETTER_MODEL],
+      { agentSlug, stage },
+    );
+    const result = await generateText({
+      model: route.model,
+      prompt: "Return ok.",
+      output: Output.object({ schema: z.object({ status: z.enum(["ok"]) }) }),
+      maxOutputTokens: 4_000,
+      maxRetries: 0,
+      reasoning: "high",
+      temperature: 0.8,
+      topP: 0.9,
+    });
+    expect(result.output).toEqual({ status: "ok" });
+    expect(workerFetch).toHaveBeenCalledTimes(1);
+    expect(onReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentSlug,
+        stage,
+        model: OPENROUTER_NEWSLETTER_MODEL,
+        status: "completed",
+      }),
+    );
+  });
+
+  test.each(["bags-scout", "pumpfun-scout"])(
+    "rejects foreign or non-pilot Luna stages for %s before dispatch",
+    async (agentSlug) => {
+      const onRequest = vi.fn();
+      const workerFetch = vi.fn();
+      vi.stubGlobal("fetch", workerFetch);
+      const otherScout = agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout";
+      for (const stage of [
+        `${agentSlug}:forum-topic`,
+        `${agentSlug}:forum-revision`,
+        `${agentSlug}:forum-reply`,
+        `${agentSlug}:forum-evidence-review-extra`,
+        `${otherScout}:forum-draft`,
+        `${otherScout}:forum-evidence-review`,
+        "belle:daily-signal:draft",
+        "health-canary",
+      ]) {
+        const transport = elizaRuntimeFetch(
+          { ...config.elizaRuntime, onRequest },
+          { agentSlug, stage },
+        );
+        await expect(
+          transport("https://provider.example", {
+            body: JSON.stringify({
+              model: OPENROUTER_NEWSLETTER_MODEL,
+              max_tokens: 100,
+              messages: [{ role: "user", content: "No request." }],
+            }),
+          }),
+        ).rejects.toThrow("model_not_allowed");
+      }
+      expect(onRequest).not.toHaveBeenCalled();
+      expect(workerFetch).not.toHaveBeenCalled();
+    },
+  );
+
   test("forwards the SDK-transformed history and structured schema privately and returns usage", async () => {
     const receipts: unknown[] = [];
     const workerFetch = vi.fn(

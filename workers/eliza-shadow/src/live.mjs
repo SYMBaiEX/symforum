@@ -356,7 +356,12 @@ export function validateLiveRequest(input) {
   if (body.model === BOUNDED_NEWSLETTER_MODEL) {
     const price = body.provider?.max_price;
     if (
-      !["belle", "system"].includes(input.agentSlug) ||
+      (!["belle", "system"].includes(input.agentSlug) &&
+        !(
+          ["bags-scout", "pumpfun-scout"].includes(input.agentSlug) &&
+          (input.stage === `${input.agentSlug}:forum-draft` ||
+            input.stage === `${input.agentSlug}:forum-evidence-review`)
+        )) ||
       !record(body.reasoning) ||
       Object.keys(body.reasoning).length !== 2 ||
       body.reasoning.effort !== "low" ||

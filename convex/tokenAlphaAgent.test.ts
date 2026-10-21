@@ -3,6 +3,9 @@ import { getFunctionName } from "convex/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ActionCtx } from "./_generated/server";
 import type { TokenSnapshot } from "../lib/token-alpha";
+import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
+import { SolanaTrackerError } from "../lib/solana-tracker";
+import { SolanaMintVerificationError } from "../lib/solana-mint-validation";
 
 const mocks = vi.hoisted(() => ({
   rankings: vi.fn(),
@@ -12,11 +15,13 @@ const mocks = vi.hoisted(() => ({
   route: vi.fn(),
   config: vi.fn(),
 }));
-vi.mock("../lib/solana-tracker", () => ({
+vi.mock("../lib/solana-tracker", async (original) => ({
+  ...(await original<typeof import("../lib/solana-tracker")>()),
   fetchTokenRankings: mocks.rankings,
   enrichTokenSnapshot: mocks.enrich,
 }));
-vi.mock("../lib/solana-mint-validation", () => ({
+vi.mock("../lib/solana-mint-validation", async (original) => ({
+  ...(await original<typeof import("../lib/solana-mint-validation")>()),
   verifySolanaMints: mocks.verify,
 }));
 vi.mock("./modelRouting", () => ({ convexModelRoutingConfig: mocks.config }));
@@ -136,15 +141,15 @@ beforeEach(() => {
     value: await args.run(
       {
         provider: "openrouter",
-        modelId: "openrouter/free",
-        persistedModel: "openrouter/free",
+        modelId: OPENROUTER_TOKEN_SCOUT_MODEL,
+        persistedModel: OPENROUTER_TOKEN_SCOUT_MODEL,
       },
       new AbortController().signal,
     ),
     route: {
-      persistedModel: "openrouter/free",
+      persistedModel: OPENROUTER_TOKEN_SCOUT_MODEL,
       reservationKey: `reserve-${args.stage}`,
-      reservationModel: "openrouter/free",
+      reservationModel: OPENROUTER_TOKEN_SCOUT_MODEL,
     },
   }));
 });
@@ -196,6 +201,34 @@ describe("token pilot orchestration", () => {
     expect(mocks.rankings).not.toHaveBeenCalled();
     expect(mocks.generate).not.toHaveBeenCalled();
   });
+  test.each([
+    ["rankings", new SolanaTrackerError("http-429"), "http-429"],
+    [
+      "mint-verification",
+      new SolanaMintVerificationError("timeout"),
+      "timeout",
+    ],
+  ] as const)(
+    "data probe and run retain only the safe %s failure code",
+    async (stage, error, code) => {
+      if (stage === "rankings") mocks.rankings.mockRejectedValue(error);
+      else mocks.verify.mockRejectedValue(error);
+      const ctx = context();
+      expect(await probeTokenData(ctx.ctx, "bags")).toEqual({
+        status: "failed",
+        stage,
+        code,
+        indexed: null,
+        verified: null,
+      });
+      expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+        status: "failed",
+        reason: `token-pilot-${stage}-failed:${code}`,
+      });
+      expect(mocks.generate).not.toHaveBeenCalled();
+      expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+    },
+  );
   test("invalid on-chain accounts are removed before generation", async () => {
     mocks.verify.mockResolvedValue(new Set());
     const ctx = context();
@@ -236,7 +269,7 @@ describe("token pilot orchestration", () => {
     ).toBe(true);
     expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(1);
     for (const [, args, fallback] of mocks.route.mock.calls) {
-      expect(fallback).toEqual(["openrouter/free"]);
+      expect(fallback).toEqual([OPENROUTER_TOKEN_SCOUT_MODEL]);
       expect(args.agent).toBe("bags-scout");
     }
     expect(
@@ -245,7 +278,7 @@ describe("token pilot orchestration", () => {
       ),
     ).toBe(true);
   });
-  test("an explicit retry preserves the source key and still uses only forced Eliza free routes", async () => {
+  test("an explicit retry preserves the source key and still uses only the forced Eliza bounded scout route", async () => {
     const ctx = context();
     const operatorRetryOf = "bags:2026-10-21T19";
     expect(
@@ -258,7 +291,9 @@ describe("token pilot orchestration", () => {
     });
     expect(
       mocks.route.mock.calls.every(
-        ([, , routes]) => JSON.stringify(routes) === '["openrouter/free"]',
+        ([, , routes]) =>
+          JSON.stringify(routes) ===
+          JSON.stringify([OPENROUTER_TOKEN_SCOUT_MODEL]),
       ),
     ).toBe(true);
     expect(

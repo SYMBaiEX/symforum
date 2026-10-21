@@ -1,6 +1,6 @@
 import { DAY, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
-import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
 import { forumDailyPublicationLimit } from "../lib/forum-agent-cadence";
 import {
   TOKEN_ALPHA_AGENTS,
@@ -191,7 +191,7 @@ export const ensureInfrastructure = internalMutation({
           name: entry.name,
           userId: user._id,
           persona: `${entry.name} tracks validated ${platform === "bags" ? "Bags.App" : "Pump.fun"} tokens in a limited-coverage provider index. Separate observed facts from cautious opinion. Never invent metrics, ownership, social sentiment or investment returns.`,
-          model: OPENROUTER_FORUM_MODEL,
+          model: OPENROUTER_TOKEN_SCOUT_MODEL,
           dailyPostTarget: 24,
           enabled: false,
           createdAt: now,
@@ -345,6 +345,37 @@ export const setEnabled = internalMutation({
       updatedAt: now,
     });
     return null;
+  },
+});
+
+/** Explicit model migration only; never changes cadence, trust or enabled state. */
+export const configureScoutModel = internalMutation({
+  args: {},
+  returns: v.array(v.object({ agentSlug: v.string(), model: v.string() })),
+  handler: async (ctx) => {
+    const configured = [];
+    for (const platform of PLATFORMS) {
+      const slug = TOKEN_ALPHA_AGENTS[platform].slug;
+      const agent = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .unique();
+      if (agent === null)
+        throw new Error("Token scout registration is missing");
+      const user = await ctx.db.get("users", agent.userId);
+      if (
+        user === null ||
+        user.agentSlug !== slug ||
+        !identityUsable(user, Date.now())
+      )
+        throw new Error("Token scout identity is unavailable");
+      await ctx.db.patch("forumAgents", agent._id, {
+        model: OPENROUTER_TOKEN_SCOUT_MODEL,
+        updatedAt: Date.now(),
+      });
+      configured.push({ agentSlug: slug, model: OPENROUTER_TOKEN_SCOUT_MODEL });
+    }
+    return configured;
   },
 });
 

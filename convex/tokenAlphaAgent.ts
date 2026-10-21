@@ -5,11 +5,21 @@ import { generateText, Output } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
-import { openRouterStructuredOutputBudget } from "../lib/ai-models";
+import {
+  OPENROUTER_TOKEN_SCOUT_MODEL,
+  openRouterStructuredOutputBudget,
+} from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
-import { enrichTokenSnapshot, fetchTokenRankings } from "../lib/solana-tracker";
-import { verifySolanaMints } from "../lib/solana-mint-validation";
+import {
+  enrichTokenSnapshot,
+  fetchTokenRankings,
+  SolanaTrackerError,
+} from "../lib/solana-tracker";
+import {
+  verifySolanaMints,
+  SolanaMintVerificationError,
+} from "../lib/solana-mint-validation";
 import {
   renderTokenPost,
   selectTokenCandidate,
@@ -47,6 +57,13 @@ type TokenStage =
   | "model-review"
   | "review-proof"
   | "publication";
+
+function dataFailureCode(error: unknown) {
+  return error instanceof SolanaTrackerError ||
+    error instanceof SolanaMintVerificationError
+    ? error.code
+    : undefined;
+}
 
 async function loadTokenCandidates(
   ctx: ActionCtx,
@@ -87,8 +104,14 @@ export async function probeTokenData(ctx: ActionCtx, platform: TokenPlatform) {
       indexed: data.indexed,
       verified: data.candidates.length,
     };
-  } catch {
-    return { status: "failed" as const, stage, indexed: null, verified: null };
+  } catch (error) {
+    return {
+      status: "failed" as const,
+      stage,
+      indexed: null,
+      verified: null,
+      ...(dataFailureCode(error) ? { code: dataFailureCode(error) } : {}),
+    };
   }
 }
 
@@ -104,6 +127,7 @@ export const probeData = internalAction({
     ),
     indexed: v.union(v.number(), v.null()),
     verified: v.union(v.number(), v.null()),
+    code: v.optional(v.string()),
   }),
   handler: (ctx, args) => probeTokenData(ctx, args.platform),
 });
@@ -176,7 +200,7 @@ async function generateAnalysis(
     JSON.stringify(args.snapshot),
   ].join("\n");
   const maxOutputTokens = openRouterStructuredOutputBudget(
-    "openrouter/free",
+    OPENROUTER_TOKEN_SCOUT_MODEL,
     2_000,
   );
   const startedAt = Date.now();
@@ -210,7 +234,7 @@ async function generateAnalysis(
           abortSignal: signal,
         }),
     },
-    ["openrouter/free"],
+    [OPENROUTER_TOKEN_SCOUT_MODEL],
   );
   await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
     runKey: args.runKey,
@@ -259,7 +283,7 @@ async function reviewAnalysis(
     JSON.stringify({ snapshot: args.snapshot, body: args.body }),
   ].join("\n");
   const maxOutputTokens = openRouterStructuredOutputBudget(
-    "openrouter/free",
+    OPENROUTER_TOKEN_SCOUT_MODEL,
     1_500,
   );
   const startedAt = Date.now();
@@ -292,7 +316,7 @@ async function reviewAnalysis(
           abortSignal: signal,
         }),
     },
-    ["openrouter/free"],
+    [OPENROUTER_TOKEN_SCOUT_MODEL],
   );
   await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
     runKey: args.runKey,
@@ -522,18 +546,20 @@ export async function runTokenPilot(
         ? { reason: "research-quality-review" }
         : {}),
     };
-  } catch {
+  } catch (error) {
     // Fixed diagnostics only: upstream errors can contain response bodies,
     // credentials or model text. Unknown Eliza receipts remain quarantined.
+    const code = dataFailureCode(error);
+    const reason = `token-pilot-${phase}-failed${code ? `:${code}` : ""}`;
     await ctx.runMutation(internal.tokenAlphaData.finishRun, {
       runKey,
       claimToken,
       status: "failed",
-      reason: `token-pilot-${phase}-failed`,
+      reason,
     });
     return {
       status: "failed",
-      reason: `token-pilot-${phase}-failed`,
+      reason,
     };
   }
 }

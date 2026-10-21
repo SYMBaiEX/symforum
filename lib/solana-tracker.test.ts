@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { enrichTokenSnapshot, fetchTokenRankings } from "./solana-tracker";
+import {
+  enrichTokenSnapshot,
+  fetchTokenRankings,
+  SolanaTrackerError,
+} from "./solana-tracker";
 
 const NOW = Date.UTC(2026, 9, 21, 20);
 const KEY = "test-key-never-published";
@@ -70,7 +74,7 @@ describe("Solana Tracker eligible indexed rankings", () => {
     expect(options.fetch).toHaveBeenCalledWith(
       "https://data.solanatracker.io/search?launchpad=bags&sortBy=volume_1h&sortOrder=desc&limit=30&showPriceChanges=true",
       expect.objectContaining({
-        redirect: "error",
+        redirect: "manual",
         headers: { "x-api-key": KEY, accept: "application/json" },
         signal: expect.any(AbortSignal),
       }),
@@ -282,28 +286,131 @@ describe("Solana Tracker eligible indexed rankings", () => {
   ])("rejects invalid envelopes without leaking raw data: %j", async (body) => {
     const options = setup();
     options.fetch.mockResolvedValue(Response.json(body));
-    await expect(fetchTokenRankings(options)).rejects.toThrow(
-      "invalid ranking response",
-    );
+    await expect(fetchTokenRankings(options)).rejects.toMatchObject({
+      code: "invalid-response",
+    });
     expect(options.fetch).toHaveBeenCalledOnce();
   });
 
-  test("does not retry HTTP errors, parse errors, or expose provider body/errors", async () => {
-    const options = setup();
-    for (const response of [
-      new Response(`key=${KEY}`, { status: 429 }),
-      new Response(`not-json-${KEY}`),
-    ]) {
-      options.fetch.mockResolvedValueOnce(response);
-      await expect(fetchTokenRankings(options)).rejects.toThrow(
-        "Solana Tracker request failed; no retry was attempted.",
+  test.each([400, 401, 402, 403, 404, 302])(
+    "does not retry permanent HTTP %s failures or expose bodies",
+    async (status) => {
+      const options = setup();
+      options.fetch.mockResolvedValueOnce(new Response(KEY, { status }));
+      await expect(fetchTokenRankings(options)).rejects.toBeInstanceOf(
+        SolanaTrackerError,
       );
-    }
-    options.fetch.mockRejectedValueOnce(new Error(`network ${KEY}`));
-    await expect(fetchTokenRankings(options)).rejects.not.toThrow(KEY);
-    expect(options.reserveRequest).toHaveBeenCalledTimes(3);
-    expect(options.fetch).toHaveBeenCalledTimes(3);
+      expect(options.reserveRequest).toHaveBeenCalledOnce();
+      expect(options.fetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  test("malformed JSON is classified and never retried", async () => {
+    const options = setup();
+    options.fetch.mockResolvedValueOnce(new Response(KEY));
+    await expect(fetchTokenRankings(options)).rejects.toMatchObject({
+      code: "invalid-json",
+      message: "Solana Tracker data request failed.",
+    });
+    expect(options.fetch).toHaveBeenCalledOnce();
   });
+
+  test.each([429, 500, 503])(
+    "reserves a second request before one retry of HTTP %s, with identical credentials",
+    async (status) => {
+      const options = setup();
+      options.fetch.mockResolvedValueOnce(
+        new Response(KEY, { status, headers: { "retry-after": "0" } }),
+      );
+      expect(await fetchTokenRankings(options)).toHaveLength(1);
+      expect(options.reserveRequest).toHaveBeenCalledTimes(2);
+      expect(options.fetch).toHaveBeenCalledTimes(2);
+      expect(options.fetch.mock.calls[1][0]).toBe(
+        options.fetch.mock.calls[0][0],
+      );
+      expect(options.fetch.mock.calls[1][1]!.headers).toEqual(
+        options.fetch.mock.calls[0][1]!.headers,
+      );
+      expect(options.reserveRequest.mock.invocationCallOrder[1]).toBeLessThan(
+        options.fetch.mock.invocationCallOrder[1],
+      );
+    },
+  );
+
+  test("network failure receives at most one funded retry and exposes no raw error", async () => {
+    const options = setup();
+    options.fetch.mockRejectedValue(new Error(KEY));
+    await expect(fetchTokenRankings(options)).rejects.toMatchObject({
+      code: "network",
+      message: "Solana Tracker data request failed.",
+    });
+    expect(options.reserveRequest).toHaveBeenCalledTimes(2);
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("repeated transient HTTP failures stop after the second funded attempt", async () => {
+    const options = setup();
+    options.fetch.mockResolvedValue(
+      new Response(KEY, { status: 503, headers: { "retry-after": "0" } }),
+    );
+    const result = fetchTokenRankings(options);
+    await expect(result).rejects.toMatchObject({
+      code: "http-5xx",
+      message: "Solana Tracker data request failed.",
+    });
+    const error = await result.catch((value: unknown) => value);
+    expect(JSON.stringify(error)).not.toContain(KEY);
+    expect(String(error)).not.toContain(KEY);
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+    expect(options.reserveRequest).toHaveBeenCalledTimes(2);
+  });
+
+  test("retry budget denial never sends an unreserved request or refunds the original", async () => {
+    const options = setup();
+    options.reserveRequest
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    options.fetch.mockResolvedValueOnce(
+      new Response(KEY, { status: 503, headers: { "retry-after": "0" } }),
+    );
+    await expect(fetchTokenRankings(options)).rejects.toMatchObject({
+      code: "budget-denied",
+    });
+    expect(options.reserveRequest).toHaveBeenCalledTimes(2);
+    expect(options.fetch).toHaveBeenCalledOnce();
+  });
+
+  test("honors a two-second Retry-After before reserving and sending another request", async () => {
+    vi.useFakeTimers();
+    const options = setup();
+    options.fetch.mockResolvedValueOnce(
+      new Response(KEY, { status: 429, headers: { "retry-after": "2" } }),
+    );
+    const result = fetchTokenRankings(options);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(options.fetch).toHaveBeenCalledOnce();
+    expect(options.reserveRequest).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toHaveLength(1);
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(["3", "-1", "bad-hint", new Date(NOW + 3_000).toUTCString()])(
+    "does not retry when Retry-After cannot fit the bound: %s",
+    async (hint) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const options = setup();
+      options.fetch.mockResolvedValueOnce(
+        new Response(KEY, { status: 429, headers: { "retry-after": hint } }),
+      );
+      await expect(fetchTokenRankings(options)).rejects.toMatchObject({
+        code: "http-429",
+      });
+      expect(options.fetch).toHaveBeenCalledOnce();
+      expect(options.reserveRequest).toHaveBeenCalledOnce();
+    },
+  );
 
   test("rejects redirects and never reads a redirect error body", async () => {
     const options = setup();
@@ -330,7 +437,7 @@ describe("Solana Tracker eligible indexed rankings", () => {
     await expect(fetchTokenRankings(options)).rejects.toThrow("request failed");
   });
 
-  test("aborts one attempt after the 20-second deadline", async () => {
+  test("aborts each attempt after twenty seconds and performs at most one funded timeout retry", async () => {
     vi.useFakeTimers();
     const options = setup();
     options.fetch.mockImplementation(
@@ -342,26 +449,38 @@ describe("Solana Tracker eligible indexed rankings", () => {
         }),
     );
     const result = fetchTokenRankings(options);
-    const assertion = expect(result).rejects.toThrow("request failed");
-    await vi.advanceTimersByTimeAsync(20_000);
+    const assertion = expect(result).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(40_250);
     await assertion;
-    expect(options.fetch).toHaveBeenCalledOnce();
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+    expect(options.reserveRequest).toHaveBeenCalledTimes(2);
   });
 
   test("invalid local configuration never reserves or sends a request", async () => {
     const options = setup();
     await expect(
       fetchTokenRankings({ ...options, apiKey: "bad\nkey" }),
-    ).rejects.toThrow("configuration is invalid");
-    await expect(fetchTokenRankings({ ...options, now: NaN })).rejects.toThrow(
-      "configuration is invalid",
-    );
+    ).rejects.toMatchObject({ code: "configuration" });
+    await expect(
+      fetchTokenRankings({ ...options, now: NaN }),
+    ).rejects.toMatchObject({ code: "configuration" });
     expect(options.reserveRequest).not.toHaveBeenCalled();
     expect(options.fetch).not.toHaveBeenCalled();
   });
 });
 
 describe("optional token metadata enrichment", () => {
+  test("optional metadata remains single-attempt even on a transient failure", async () => {
+    const options = setup();
+    const [snapshot] = await fetchTokenRankings(options);
+    options.fetch.mockResolvedValueOnce(new Response(KEY, { status: 503 }));
+    const enriched = await enrichTokenSnapshot({ ...options, snapshot });
+    expect(enriched.warnings?.join(" ")).toContain(
+      "Metadata enrichment unavailable",
+    );
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+    expect(options.reserveRequest).toHaveBeenCalledTimes(2);
+  });
   test("uses one reservation and retains numeric search metrics and timestamps", async () => {
     const options = setup();
     const [snapshot] = await fetchTokenRankings(options);

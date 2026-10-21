@@ -4,6 +4,7 @@ import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { TokenSnapshot } from "../lib/token-alpha";
+import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import schema from "./schema";
@@ -75,6 +76,88 @@ afterEach(() => {
 });
 
 describe("token alpha infrastructure and claims", () => {
+  test("migrates only scout models without enabling paused scouts or changing history", async () => {
+    const t = setup();
+    const { agents } = await initialized(t);
+    await t.run(async (ctx) => {
+      for (const agent of agents)
+        await ctx.db.patch("forumAgents", agent.agentId, {
+          model: "openrouter/free",
+        });
+      await ctx.db.patch("forumAgents", agents[0].agentId, { enabled: false });
+      await ctx.db.insert("forumAgents", {
+        slug: "suki",
+        name: "Suki",
+        userId: agents[0].userId,
+        persona: "Original persona",
+        model: "original-model",
+        dailyPostTarget: 3,
+        enabled: true,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+    });
+    const before = await t.run(async (ctx) => ({
+      users: await ctx.db.query("users").take(10),
+      usage: await ctx.db.query("tokenAlphaUsageDays").take(10),
+      control: await ctx.db.query("tokenAlphaControl").take(10),
+    }));
+    expect(
+      await t.mutation(internal.tokenAlphaData.configureScoutModel, {}),
+    ).toEqual([
+      { agentSlug: "bags-scout", model: OPENROUTER_TOKEN_SCOUT_MODEL },
+      { agentSlug: "pumpfun-scout", model: OPENROUTER_TOKEN_SCOUT_MODEL },
+    ]);
+    await t.mutation(internal.tokenAlphaData.configureScoutModel, {});
+    const after = await t.run(async (ctx) => ({
+      users: await ctx.db.query("users").take(10),
+      usage: await ctx.db.query("tokenAlphaUsageDays").take(10),
+      control: await ctx.db.query("tokenAlphaControl").take(10),
+      agents: await ctx.db.query("forumAgents").take(10),
+    }));
+    expect({
+      users: after.users,
+      usage: after.usage,
+      control: after.control,
+    }).toEqual(before);
+    expect(
+      after.agents.find((agent) => agent.slug === "bags-scout"),
+    ).toMatchObject({
+      enabled: false,
+      dailyPostTarget: 24,
+      model: OPENROUTER_TOKEN_SCOUT_MODEL,
+    });
+    expect(after.agents.find((agent) => agent.slug === "suki")).toMatchObject({
+      enabled: true,
+      dailyPostTarget: 3,
+      model: "original-model",
+    });
+  });
+
+  test("model migration fails atomically if either scout identity is revoked", async () => {
+    const t = setup();
+    const { agents } = await initialized(t);
+    await t.run(async (ctx) => {
+      for (const agent of agents)
+        await ctx.db.patch("forumAgents", agent.agentId, {
+          model: "openrouter/free",
+        });
+      await ctx.db.patch("users", agents[1].userId, { agentStatus: "revoked" });
+    });
+    await expect(
+      t.mutation(internal.tokenAlphaData.configureScoutModel, {}),
+    ).rejects.toThrow(/unavailable/);
+    const models = await t.run(async (ctx) =>
+      Promise.all(
+        agents.map(
+          async (agent) =>
+            (await ctx.db.get("forumAgents", agent.agentId))?.model,
+        ),
+      ),
+    );
+    expect(models).toEqual(["openrouter/free", "openrouter/free"]);
+  });
+
   test("creates only two disabled reader identities and preserves collisions, pauses and other agents", async () => {
     const t = setup();
     await t.run(async (ctx) => {

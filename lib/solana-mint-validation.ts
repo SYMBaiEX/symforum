@@ -1,12 +1,28 @@
 const RPC_URL = "https://api.mainnet-beta.solana.com";
 const RPC_ID = "symbaiex-token-mint-validation";
 const MAX_RESPONSE_BYTES = 256 * 1_024;
-const FAILURE = "Solana mint verification failed; no retry was attempted.";
+const FAILURE = "Solana mint verification failed.";
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const TOKEN_PROGRAMS = new Map([
   ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "spl-token"],
   ["TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", "spl-token-2022"],
 ]);
+
+export class SolanaMintVerificationError extends Error {
+  constructor(readonly code: TokenDataErrorCode) {
+    super(FAILURE);
+    this.name = "SolanaMintVerificationError";
+  }
+}
+
+class AttemptFailure extends Error {
+  constructor(
+    readonly code: TokenDataErrorCode,
+    readonly retryDelay: number | null = 250,
+  ) {
+    super("Solana mint verification attempt failed.");
+  }
+}
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -73,13 +89,9 @@ function initializedMint(value: unknown): boolean {
  * Parser schema (including Token-2022 extensions) is delegated to the RPC node:
  * https://github.com/anza-xyz/agave/blob/v3.1.8/account-decoder/src/parse_token.rs
  */
-export async function verifySolanaMints(
-  mints: readonly string[],
+async function verifyMintAttempt(
+  requested: readonly string[],
 ): Promise<Set<string>> {
-  if (mints.length > 5 || mints.some((mint) => !address(mint)))
-    throw new Error(FAILURE);
-  const requested = [...new Set(mints)];
-  if (!requested.length) return new Set();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -98,17 +110,22 @@ export async function verifySolanaMints(
           { commitment: "finalized", encoding: "jsonParsed" },
         ],
       }),
-      redirect: "error",
+      redirect: "manual",
       signal: controller.signal,
     });
     if (
-      !response.ok ||
       response.redirected ||
-      (response.url && new URL(response.url).origin !== RPC_URL) ||
-      Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES ||
-      !response.body
+      (response.url && new URL(response.url).origin !== RPC_URL)
     )
-      throw new Error(FAILURE);
+      throw new AttemptFailure("redirect");
+    if (!response.ok)
+      throw new AttemptFailure(
+        tokenDataHttpFailure(response.status),
+        tokenDataRetryDelay(response.headers.get("retry-after")),
+      );
+    if (Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES)
+      throw new AttemptFailure("oversized-response");
+    if (!response.body) throw new AttemptFailure("missing-response");
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let bytes = 0;
@@ -117,7 +134,8 @@ export async function verifySolanaMints(
         const chunk = await reader.read();
         if (chunk.done) break;
         bytes += chunk.value.byteLength;
-        if (bytes > MAX_RESPONSE_BYTES) throw new Error(FAILURE);
+        if (bytes > MAX_RESPONSE_BYTES)
+          throw new AttemptFailure("oversized-response");
         chunks.push(chunk.value);
       }
     } finally {
@@ -130,11 +148,15 @@ export async function verifySolanaMints(
       joined.set(chunk, position);
       position += chunk.byteLength;
     }
-    const envelope = object(
-      JSON.parse(
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(
         new TextDecoder("utf-8", { fatal: true }).decode(joined),
-      ) as unknown,
-    );
+      ) as unknown;
+    } catch {
+      throw new AttemptFailure("invalid-json");
+    }
+    const envelope = object(decoded);
     const result = object(envelope?.result);
     const context = object(result?.context);
     if (
@@ -150,15 +172,52 @@ export async function verifySolanaMints(
       !Array.isArray(result.value) ||
       result.value.length !== requested.length
     )
-      throw new Error(FAILURE);
+      throw new AttemptFailure("invalid-response");
     const values = result.value;
     return new Set(
       requested.filter((_mint, index) => initializedMint(values[index])),
     );
-  } catch {
-    throw new Error(FAILURE);
+  } catch (error) {
+    if (error instanceof AttemptFailure) throw error;
+    throw new AttemptFailure(controller.signal.aborted ? "timeout" : "network");
   } finally {
     clearTimeout(timeout);
     controller.abort();
   }
+}
+import {
+  tokenDataFailureIsRetryable,
+  tokenDataHttpFailure,
+  tokenDataRetryDelay,
+  type TokenDataErrorCode,
+} from "./solana-tracker";
+
+/** At most one transient read-only retry; mint eligibility is never relaxed. */
+export async function verifySolanaMints(
+  mints: readonly string[],
+): Promise<Set<string>> {
+  if (mints.length > 5 || mints.some((mint) => !address(mint)))
+    throw new SolanaMintVerificationError("invalid-request");
+  const requested = [...new Set(mints)];
+  if (!requested.length) return new Set();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await verifyMintAttempt(requested);
+    } catch (error) {
+      const failure =
+        error instanceof AttemptFailure ? error : new AttemptFailure("network");
+      if (
+        attempt === 0 &&
+        tokenDataFailureIsRetryable(failure.code) &&
+        failure.retryDelay !== null
+      ) {
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, failure.retryDelay!),
+        );
+        continue;
+      }
+      throw new SolanaMintVerificationError(failure.code);
+    }
+  }
+  throw new SolanaMintVerificationError("network");
 }
