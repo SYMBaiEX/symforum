@@ -3,6 +3,7 @@ import { AgentRuntime, ModelType, stringToUuid } from "@elizaos/core";
 import { createDatabaseAdapter } from "@elizaos/plugin-sql";
 import {
   MAX_REQUEST_BYTES,
+  PREINFERENCE_REJECTION_CODES,
   RUNTIME_VERSION,
   WorkerError,
   readBoundedResponse,
@@ -80,6 +81,7 @@ const BODY_KEYS = new Set([
 const KNOWN_PREINFERENCE_STATUSES = new Set([
   400, 401, 402, 403, 404, 410, 413, 415, 422, 429,
 ]);
+const MAX_REJECTION_BYTES = 32 * 1024;
 const FORUM_STAGE_SUFFIXES = new Set([
   "topic",
   "draft",
@@ -157,6 +159,100 @@ function boundedTree(
       throw new WorkerError("invalid_request");
   }
   visit(value, 0);
+}
+
+function classifyRejection(body) {
+  let error;
+  try {
+    error = JSON.parse(body)?.error;
+  } catch {
+    return "provider_rejected";
+  }
+  if (!record(error)) return "provider_rejected";
+  const metadata = record(error.metadata) ? error.metadata : {};
+  const details = [
+    error.message,
+    metadata.reason,
+    metadata.message,
+    metadata.raw,
+  ].filter((value) => typeof value === "string" && value.length <= 16_384);
+  for (const detail of details) {
+    if (
+      /(?:json[_ -]?schema|response_format|structured output)/i.test(detail) &&
+      /(?:unsupported|not supported|invalid|unavailable|no (?:provider|endpoint))/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_schema";
+    if (
+      /(?:unsupported|unknown|unrecognized|invalid) (?:request )?parameter|parameter .{1,80} (?:unsupported|not supported|invalid)|(?:unsupported|invalid|unrecognized) (?:provider\.)?max_price|(?:provider\.)?max_price (?:unsupported|not supported|invalid)/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_parameter";
+    if (
+      /(?:max_price|price (?:limit|cap|ceiling)|pricing (?:limit|filter))/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_price";
+    if (
+      /(?:insufficient (?:credits|balance)|quota exceeded|billing (?:issue|error|disabled)|account (?:suspended|disabled))/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_account";
+    if (
+      /(?:model (?:not found|unavailable|does not exist|is not available)|unknown model|invalid model id)/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_model";
+    if (
+      /(?:no (?:available )?(?:endpoints?|providers?) (?:found|available)|no endpoints? for this model)/i.test(
+        detail,
+      )
+    )
+      return "provider_rejected_no_endpoints";
+  }
+  return "provider_rejected";
+}
+
+async function readRejectionCode(response, signal) {
+  const length = response.headers.get("content-length");
+  if (length && Number(length) > MAX_REJECTION_BYTES) {
+    void response.body?.cancel().catch(() => {});
+    return "provider_rejected";
+  }
+  if (!response.body) return "provider_rejected";
+  let reader;
+  try {
+    reader = response.body.getReader();
+  } catch {
+    return "provider_rejected";
+  }
+  const abort = () => void reader.cancel().catch(() => {});
+  signal.addEventListener("abort", abort, { once: true });
+  const chunks = [];
+  let size = 0;
+  try {
+    if (signal.aborted) return "provider_rejected";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REJECTION_BYTES) return "provider_rejected";
+      chunks.push(Buffer.from(value));
+    }
+    if (signal.aborted) return "provider_rejected";
+    return classifyRejection(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return "provider_rejected";
+  } finally {
+    signal.removeEventListener("abort", abort);
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 export function validateLiveRequest(input) {
@@ -376,9 +472,11 @@ export function createLiveProvider({
         },
       );
       if (!response.ok) {
-        await response.body?.cancel();
-        if (KNOWN_PREINFERENCE_STATUSES.has(response.status))
-          throw new WorkerError("provider_rejected", response.status);
+        if (KNOWN_PREINFERENCE_STATUSES.has(response.status)) {
+          const code = await readRejectionCode(response, controller.signal);
+          throw new WorkerError(code, response.status);
+        }
+        void response.body?.cancel().catch(() => {});
         throw new WorkerError("provider_unavailable", 502, true);
       }
       // A non-streaming chat completion is a JSON document. Never interpret
@@ -390,7 +488,7 @@ export function createLiveProvider({
           .trim()
           .toLowerCase() === "text/event-stream"
       ) {
-        await response.body?.cancel();
+        void response.body?.cancel().catch(() => {});
         throw new WorkerError("provider_unexpected_stream", 502, true);
       }
       let completion;
@@ -647,7 +745,7 @@ export class LiveService {
             .fail(
               request.jobId,
               safe.code,
-              inferenceStarted && safe.code !== "provider_rejected",
+              inferenceStarted && !PREINFERENCE_REJECTION_CODES.has(safe.code),
             )
             .catch(() => {});
         throw safe;

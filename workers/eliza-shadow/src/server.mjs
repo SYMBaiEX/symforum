@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import {
   MAX_REQUEST_BYTES,
+  PREINFERENCE_REJECTION_CODES,
   RUNTIME_VERSION,
   WorkerError,
 } from "./contract.mjs";
@@ -137,7 +138,7 @@ export function createHttpServer({
       if (!res.destroyed)
         send(safe.status, {
           error: safe.code,
-          ...(safe.code === "provider_rejected"
+          ...(PREINFERENCE_REJECTION_CODES.has(safe.code)
             ? { providerStatus: safe.status }
             : {}),
           ...(["/complete", "/status"].includes(req.url)

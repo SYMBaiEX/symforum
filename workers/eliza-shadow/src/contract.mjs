@@ -8,6 +8,15 @@ export const MAX_PROMPT_BYTES = 100 * 1024;
 export const MAX_PROVIDER_BYTES = 256 * 1024;
 export const MAX_OUTPUT_BYTES = 128 * 1024;
 export const MAX_OUTPUT_TOKENS = 10_000;
+export const PREINFERENCE_REJECTION_CODES = new Set([
+  "provider_rejected",
+  "provider_rejected_parameter",
+  "provider_rejected_schema",
+  "provider_rejected_no_endpoints",
+  "provider_rejected_price",
+  "provider_rejected_account",
+  "provider_rejected_model",
+]);
 
 export class WorkerError extends Error {
   constructor(code, status = 400, outcomeUnknown = false) {

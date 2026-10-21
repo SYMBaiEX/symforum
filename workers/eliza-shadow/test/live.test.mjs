@@ -184,6 +184,65 @@ test("HTTP status requires live bearer and excludes result content", async () =>
   }
 });
 
+test("HTTP classified rejection exposes only fixed code, provider status and known outcome", async () => {
+  const privateText = "private reflected prompt and account secret";
+  const logs = [];
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    fetchImpl: async () =>
+      Response.json(
+        { error: { message: `No provider matches max_price; ${privateText}` } },
+        { status: 400 },
+      ),
+  });
+  const liveService = new LiveService({
+    live: { run: provider },
+    store: {
+      async claim() {
+        return { claimed: true };
+      },
+      async fail() {},
+    },
+  });
+  const server = createHttpServer({
+    service: { stopped: false, busy: false },
+    secret: shadowSecret,
+    liveService,
+    liveSecret,
+    log: (event) => logs.push(event),
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${server.address().port}/complete`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${liveSecret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request()),
+      },
+    );
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.deepEqual(payload, {
+      error: "provider_rejected_price",
+      providerStatus: 400,
+      outcomeUnknown: false,
+    });
+    assert.equal(
+      JSON.stringify({ payload, logs }).includes(privateText),
+      false,
+    );
+  } finally {
+    server.close();
+    server.closeAllConnections();
+    await once(server, "close");
+  }
+});
+
 test("allowlist covers exactly roster 30 plus Suki, Belle and Nyx", async () => {
   const roster = await readFile(
     new URL("../../../convex/forumAgentRoster.ts", import.meta.url),
@@ -482,6 +541,251 @@ test("provider performs one exact-body request and classifies known versus unkno
       error.outcomeUnknown &&
       !error.message.includes("private"),
   );
+});
+
+test("known provider rejections emit only bounded fixed diagnostics and remain failed", async () => {
+  const privateText = "private prompt and bearer secret";
+  for (const [message, code] of [
+    ["Unsupported parameter: temperature", "provider_rejected_parameter"],
+    [
+      "Unsupported parameter: provider.max_price",
+      "provider_rejected_parameter",
+    ],
+    [
+      "JSON schema is not supported by this endpoint",
+      "provider_rejected_schema",
+    ],
+    ["No endpoints found for this model", "provider_rejected_no_endpoints"],
+    ["No provider matches max_price", "provider_rejected_price"],
+    ["Insufficient credits for request", "provider_rejected_account"],
+    ["Model not found", "provider_rejected_model"],
+  ]) {
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () =>
+        Response.json(
+          { error: { message: `${message}; ${privateText}` } },
+          { status: 400 },
+        ),
+    });
+    await assert.rejects(
+      provider(request()),
+      (error) =>
+        error.code === code &&
+        error.status === 400 &&
+        error.outcomeUnknown === false &&
+        error.message === code &&
+        !JSON.stringify(error).includes(privateText),
+    );
+  }
+  const metadataProvider = createLiveProvider({
+    apiKey: "private-key",
+    fetchImpl: async () =>
+      Response.json(
+        {
+          error: {
+            message: "Bad request",
+            metadata: { raw: "Unsupported parameter: temperature" },
+          },
+        },
+        { status: 422 },
+      ),
+  });
+  await assert.rejects(
+    metadataProvider(request()),
+    (error) =>
+      error.code === "provider_rejected_parameter" && error.status === 422,
+  );
+  for (const response of [
+    new Response("private non-JSON", { status: 400 }),
+    new Response(JSON.stringify({ error: { message: privateText } }), {
+      status: 400,
+    }),
+    new Response("private", {
+      status: 400,
+      headers: { "Content-Length": String(32 * 1024 + 1) },
+    }),
+    new Response("x".repeat(32 * 1024 + 1), { status: 400 }),
+    new Response(
+      new ReadableStream({
+        pull() {
+          throw new Error(privateText);
+        },
+      }),
+      { status: 400 },
+    ),
+  ]) {
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      fetchImpl: async () => response,
+    });
+    await assert.rejects(
+      provider(request()),
+      (error) =>
+        error.code === "provider_rejected" &&
+        error.status === 400 &&
+        error.outcomeUnknown === false &&
+        !error.message.includes("private"),
+    );
+  }
+  const state = { failed: null };
+  const provider = createLiveProvider({
+    apiKey: "private-key",
+    fetchImpl: async () =>
+      Response.json(
+        { error: { message: "No provider matches max_price" } },
+        { status: 400 },
+      ),
+  });
+  const store = {
+    async claim() {
+      return { claimed: true };
+    },
+    async fail(_jobId, code, unknown) {
+      state.failed = { code, unknown };
+    },
+    async inspect(jobId) {
+      return {
+        job_id: jobId,
+        input_hash: request().inputHash,
+        request_hash: "b".repeat(64),
+        state: state.failed?.unknown ? "unknown" : "failed",
+        error_code: state.failed?.code ?? null,
+        created_at: "2026-10-20T00:00:00.000Z",
+        updated_at: "2026-10-20T00:00:01.000Z",
+      };
+    },
+    async complete() {
+      throw new Error("unexpected completion");
+    },
+  };
+  const service = new LiveService({ live: { run: provider }, store });
+  await assert.rejects(service.complete(request()), {
+    code: "provider_rejected_price",
+    status: 400,
+    outcomeUnknown: false,
+  });
+  assert.deepEqual(state.failed, {
+    code: "provider_rejected_price",
+    unknown: false,
+  });
+  const status = await service.status({ jobId: request().jobId });
+  assert.equal(status.state, "failed");
+  assert.equal(status.errorCode, "provider_rejected_price");
+  assert.equal(JSON.stringify(status).includes(privateText), false);
+  let cancelCalled = false;
+  const oversizedProvider = createLiveProvider({
+    apiKey: "private-key",
+    timeoutMs: 100,
+    fetchImpl: async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelCalled = true;
+            return new Promise(() => {});
+          },
+        }),
+        {
+          status: 400,
+          headers: { "Content-Length": String(32 * 1024 + 1) },
+        },
+      ),
+  });
+  state.failed = null;
+  const oversizedService = new LiveService({
+    live: { run: oversizedProvider },
+    store,
+  });
+  let timeoutId;
+  try {
+    await assert.rejects(
+      Promise.race([
+        oversizedService.complete(request()),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("read stalled")), 500);
+        }),
+      ]),
+      { code: "provider_rejected", status: 400, outcomeUnknown: false },
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  assert.equal(cancelCalled, true);
+  assert.deepEqual(state.failed, { code: "provider_rejected", unknown: false });
+  assert.equal(
+    (await oversizedService.status({ jobId: request().jobId })).state,
+    "failed",
+  );
+  let cancelled = false;
+  const stalledProvider = createLiveProvider({
+    apiKey: "private-key",
+    timeoutMs: 20,
+    fetchImpl: async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 400 },
+      ),
+  });
+  await assert.rejects(
+    stalledProvider(request()),
+    (error) =>
+      error.code === "provider_rejected" &&
+      error.status === 400 &&
+      error.outcomeUnknown === false,
+  );
+  assert.equal(cancelled, true);
+});
+
+test("non-known status and unexpected stream do not wait for provider body cancellation", async () => {
+  for (const [status, headers, code] of [
+    [408, {}, "provider_unavailable"],
+    [
+      200,
+      { "Content-Type": "text/event-stream" },
+      "provider_unexpected_stream",
+    ],
+  ]) {
+    let cancelCalled = false;
+    const provider = createLiveProvider({
+      apiKey: "private-key",
+      timeoutMs: 100,
+      fetchImpl: async () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              cancelCalled = true;
+              return new Promise(() => {});
+            },
+          }),
+          { status, headers },
+        ),
+    });
+    let timeoutId;
+    try {
+      await assert.rejects(
+        Promise.race([
+          provider(request()),
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error("cancel stalled")),
+              500,
+            );
+          }),
+        ]),
+        (error) =>
+          error.code === code &&
+          error.outcomeUnknown === true &&
+          error.status === 502,
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    assert.equal(cancelCalled, true);
+  }
 });
 
 test("non-streaming provider failures have fixed diagnostics without leaking content", async () => {

@@ -60,6 +60,16 @@ const LIVE_MODELS = new Set<string>([
 ]);
 const STAGE_PATTERN = /^[a-zA-Z0-9:_-]{1,160}$/;
 const AGENT_PATTERN = /^[a-zA-Z0-9_-]{1,80}$/;
+// Protocol enums only. Never propagate arbitrary provider error text.
+const PROVIDER_REJECTION_CODES = new Set([
+  "provider_rejected",
+  "provider_rejected_parameter",
+  "provider_rejected_schema",
+  "provider_rejected_no_endpoints",
+  "provider_rejected_price",
+  "provider_rejected_account",
+  "provider_rejected_model",
+]);
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -354,7 +364,8 @@ export function elizaRuntimeFetch(
     if (!response.ok) {
       const providerStatus =
         object(payload) &&
-        payload.error === "provider_rejected" &&
+        typeof payload.error === "string" &&
+        PROVIDER_REJECTION_CODES.has(payload.error) &&
         Number.isInteger(payload.providerStatus)
           ? (payload.providerStatus as number)
           : undefined;
@@ -380,7 +391,10 @@ export function elizaRuntimeFetch(
         return new Response(
           JSON.stringify({
             error: {
-              message: "Provider rejected request",
+              message:
+                object(payload) && payload.error !== "provider_rejected"
+                  ? `Provider rejected request (${payload.error})`
+                  : "Provider rejected request",
               code: providerStatus,
             },
           }),

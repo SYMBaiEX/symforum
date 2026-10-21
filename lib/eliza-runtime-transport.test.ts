@@ -303,41 +303,141 @@ describe("Eliza live compatible transport", () => {
     expect(workerFetch).toHaveBeenCalledTimes(1);
   });
 
-  test("only explicit provider rejection permits budgeted candidate fallback", async () => {
-    const workerFetch = vi.fn(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const envelope = JSON.parse(String(init?.body));
-        return envelope.body.model === "openrouter/free"
-          ? Response.json(
-              { error: "provider_rejected", providerStatus: 404 },
-              { status: 404 },
-            )
-          : Response.json({
-              ...envelope,
-              runtimeVersion: "1.7.2",
-              completion: completion(envelope.body.model),
-            });
-      },
+  test.each([
+    "provider_rejected",
+    "provider_rejected_parameter",
+    "provider_rejected_schema",
+    "provider_rejected_no_endpoints",
+    "provider_rejected_price",
+    "provider_rejected_account",
+    "provider_rejected_model",
+  ])(
+    "only explicit fixed provider rejection %s permits budgeted candidate fallback",
+    async (errorCode) => {
+      const onReceipt = vi.fn();
+      const workerFetch = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const envelope = JSON.parse(String(init?.body));
+          return envelope.body.model === "openrouter/free"
+            ? Response.json(
+                {
+                  error: errorCode,
+                  providerStatus: 404,
+                  outcomeUnknown: false,
+                },
+                { status: 404 },
+              )
+            : Response.json({
+                ...envelope,
+                runtimeVersion: "1.7.2",
+                completion: completion(envelope.body.model),
+              });
+        },
+      );
+      vi.stubGlobal("fetch", workerFetch);
+      const result = await runWithModelFallback(
+        { ...config, elizaRuntime: { ...config.elizaRuntime, onReceipt } },
+        {
+          agent: "suki",
+          stage: "suki:forum-draft",
+          totalTimeoutMs: 90_000,
+          run: async (candidate) =>
+            generateText({
+              model: candidate.model,
+              prompt: "Hello",
+              maxOutputTokens: 200,
+              maxRetries: 0,
+            }),
+        },
+        ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"],
+      );
+      expect(result.route.modelId).toBe("~deepseek/deepseek-v4-flash-latest");
+      expect(workerFetch).toHaveBeenCalledTimes(2);
+      expect(onReceipt).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          status: "failed",
+          providerStatus: 404,
+          outcomeUnknown: false,
+        }),
+      );
+    },
+  );
+
+  test("keeps a fixed rejection diagnosis visible without arbitrary provider text", async () => {
+    const onReceipt = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: "provider_rejected_parameter",
+            providerStatus: 400,
+            outcomeUnknown: false,
+          },
+          { status: 400 },
+        ),
+      ),
     );
-    vi.stubGlobal("fetch", workerFetch);
-    const result = await runWithModelFallback(
-      config,
-      {
-        agent: "suki",
-        stage: "suki:forum-draft",
-        totalTimeoutMs: 90_000,
-        run: async (candidate) =>
-          generateText({
-            model: candidate.model,
-            prompt: "Hello",
-            maxOutputTokens: 200,
-            maxRetries: 0,
-          }),
-      },
-      ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"],
+    const [route] = await routedModelCandidates(
+      { ...config, elizaRuntime: { ...config.elizaRuntime, onReceipt } },
+      ["openrouter/free"],
+      context,
     );
-    expect(result.route.modelId).toBe("~deepseek/deepseek-v4-flash-latest");
-    expect(workerFetch).toHaveBeenCalledTimes(2);
+    await expect(
+      generateText({
+        model: route.model,
+        prompt: "x",
+        maxRetries: 0,
+        maxOutputTokens: 200,
+      }),
+    ).rejects.toThrow(
+      "Provider rejected request (provider_rejected_parameter)",
+    );
+    expect(onReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        providerStatus: 400,
+        outcomeUnknown: false,
+      }),
+    );
+  });
+
+  test("does not recognize arbitrary diagnostic prefixes as provider rejection", async () => {
+    const onReceipt = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: "provider_rejected_schema_private-reflection",
+            providerStatus: 400,
+            outcomeUnknown: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const [route] = await routedModelCandidates(
+      { ...config, elizaRuntime: { ...config.elizaRuntime, onReceipt } },
+      ["openrouter/free"],
+      context,
+    );
+    await expect(
+      generateText({
+        model: route.model,
+        prompt: "x",
+        maxRetries: 0,
+        maxOutputTokens: 200,
+      }),
+    ).rejects.toThrow("worker_failure");
+    expect(onReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        providerStatus: undefined,
+        outcomeUnknown: false,
+      }),
+    );
   });
 
   test("mismatched receipts fail closed without exposing response content", async () => {
@@ -664,48 +764,51 @@ describe("Eliza live compatible transport", () => {
     expect(workerFetch).not.toHaveBeenCalled();
   });
 
-  test("reported provider 408 cannot trigger SDK or route fallback", async () => {
-    const receipts: unknown[] = [];
-    const workerFetch = vi.fn(async () =>
-      Response.json(
-        {
-          error: "provider_rejected",
-          providerStatus: 408,
-          outcomeUnknown: false,
-        },
-        { status: 408 },
-      ),
-    );
-    vi.stubGlobal("fetch", workerFetch);
-    await expect(
-      runWithModelFallback(
-        {
-          ...config,
-          elizaRuntime: {
-            ...config.elizaRuntime,
-            onReceipt: (receipt) => {
-              receipts.push(receipt);
+  test.each(["provider_rejected", "provider_rejected_schema"])(
+    "reported provider 408 (%s) cannot trigger SDK or route fallback",
+    async (errorCode) => {
+      const receipts: unknown[] = [];
+      const workerFetch = vi.fn(async () =>
+        Response.json(
+          {
+            error: errorCode,
+            providerStatus: 408,
+            outcomeUnknown: false,
+          },
+          { status: 408 },
+        ),
+      );
+      vi.stubGlobal("fetch", workerFetch);
+      await expect(
+        runWithModelFallback(
+          {
+            ...config,
+            elizaRuntime: {
+              ...config.elizaRuntime,
+              onReceipt: (receipt) => {
+                receipts.push(receipt);
+              },
             },
           },
-        },
-        {
-          agent: "suki",
-          stage: "suki:forum-draft",
-          totalTimeoutMs: 20_000,
-          run: async (candidate) =>
-            generateText({
-              model: candidate.model,
-              prompt: "x",
-              maxOutputTokens: 200,
-              maxRetries: 2,
-            }),
-        },
-        ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"],
-      ),
-    ).rejects.toThrow();
-    expect(workerFetch).toHaveBeenCalledTimes(1);
-    expect(receipts).toMatchObject([
-      { status: "failed", outcomeUnknown: true },
-    ]);
-  });
+          {
+            agent: "suki",
+            stage: "suki:forum-draft",
+            totalTimeoutMs: 20_000,
+            run: async (candidate) =>
+              generateText({
+                model: candidate.model,
+                prompt: "x",
+                maxOutputTokens: 200,
+                maxRetries: 2,
+              }),
+          },
+          ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"],
+        ),
+      ).rejects.toThrow();
+      expect(workerFetch).toHaveBeenCalledTimes(1);
+      expect(receipts).toMatchObject([
+        { status: "failed", outcomeUnknown: true },
+      ]);
+    },
+  );
 });
