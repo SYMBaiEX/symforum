@@ -7,6 +7,7 @@ import { makeFunctionReference } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import schema from "./schema";
 import type { Id } from "./_generated/dataModel";
+import { editorialEvidenceFields } from "./newsletterAgent";
 
 const route = vi.hoisted(() => vi.fn());
 vi.mock("../lib/ai-model-routing", async importOriginal => ({
@@ -93,10 +94,24 @@ beforeEach(() => {
   vi.stubEnv("ELIZA_SHADOW_DAILY_BUDGET_USD", "1");
   vi.stubEnv("OPENROUTER_DAILY_BUDGET_USD", "10");
   route.mockReset();
-  route.mockResolvedValue({
+  route.mockImplementation(async (_config, options) => ({
     route: { persistedModel: "openrouter/free" },
-    value: { draft, usage: { inputTokens: 800, outputTokens: 1_200 }, modelId: "openrouter/free" },
-  });
+    value: options.stage.endsWith(":evidence-review")
+      ? {
+          review: {
+            fields: editorialEvidenceFields(draft).map(field => ({
+              path: field.path,
+              verdict: field.path.endsWith(".summary") ? "fact" : "analysis",
+              sourceId: field.path.endsWith(".summary") ? field.ownSourceId ?? null : null,
+              quote: field.path.endsWith(".summary") ? sourceText.slice(0, 80) : null,
+              reason: null,
+            })),
+            coherence: "clear", coherenceReason: null,
+          },
+          usage: { inputTokens: 300, outputTokens: 200 }, modelId: "openrouter/free",
+        }
+      : { draft, usage: { inputTokens: 800, outputTokens: 1_200 }, modelId: "openrouter/free" },
+  }));
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -124,6 +139,9 @@ test.each([false, true])("actual Belle generator uses requested runtime %s and n
   expect(result).toMatchObject({ duplicate: false, run: { status: "completed", sourceCount: 8 } });
   expect(result.run.shadowJobId).toBeDefined();
   expect(route).toHaveBeenCalled();
+  expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+    "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+  ]);
   const state = await t.run(async ctx => ({
     issues: await ctx.db.query("newsletterIssues").take(10),
     runs: await ctx.db.query("dailyNewsletterRuns").take(10),

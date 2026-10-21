@@ -2,14 +2,20 @@
 
 import { describe, expect, test } from "vitest";
 
-import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
+import {
+  OPENROUTER_FORUM_MODEL,
+  OPENROUTER_PAID_FALLBACK_MODEL,
+} from "../lib/ai-models";
 import {
   articleSnapshotsForForumDigest,
   editorialPrompt,
+  editorialEvidenceFields,
+  evidenceReviewSchema,
   NEWSLETTER_MODEL_IDS,
   reusableDailyDigestStories,
   scoreEditorialPackage,
   shouldAcceptEditorialRevision,
+  validateEditorialEvidenceReview,
 } from "./newsletterAgent";
 
 function long(value: string, length: number) {
@@ -103,6 +109,106 @@ const sources = [
   },
 ];
 
+function completeReview(draft = dailyDraft()): Parameters<typeof validateEditorialEvidenceReview>[2] {
+  return {
+    fields: editorialEvidenceFields(draft).map(field => ({
+      path: field.path,
+      verdict: "fact" as const,
+      sourceId: field.ownSourceId ?? 1,
+      quote: sources[(field.ownSourceId ?? 1) - 1]?.sourceText.slice(0, 25) ?? "",
+      reason: null,
+    })),
+    coherence: "clear", coherenceReason: null,
+  };
+}
+
+describe("Belle blind evidence review validation", () => {
+  test("requires every prose path exactly once and blocks extra or duplicate verdicts", () => {
+    const draft = dailyDraft();
+    const review = completeReview(draft);
+    review.fields.pop();
+    review.fields.push({ ...review.fields[0]! });
+    review.fields.push({ ...review.fields[0]!, path: "invented.field" });
+    const issues = validateEditorialEvidenceReview(draft, sources, review).join(" ");
+    expect(issues).toContain("omitted");
+    expect(issues).toContain("duplicate or unexpected");
+    expect(evidenceReviewSchema.safeParse({
+      ...review, fields: Array.from({ length: 101 }, () => review.fields[0]),
+    }).success).toBe(false);
+  });
+
+  test("rejects a story quote borrowed from another selected source", () => {
+    const draft = dailyDraft();
+    const review = completeReview(draft);
+    const field = review.fields.find(item => item.path === "stories.0.summary")!;
+    field.sourceId = 2;
+    field.quote = sources[1]!.sourceText.slice(0, 25);
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("correct selected source for stories.0.summary");
+  });
+
+  test("validates every bounded extra support for a multi-source field", () => {
+    const draft = dailyDraft();
+    const review = completeReview(draft);
+    const thesis = review.fields.find(item => item.path === "thesis")!;
+    thesis.additionalSupports = [{ sourceId: 2, quote: sources[1]!.sourceText.slice(0, 25) }];
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .not.toContain("correct selected source for thesis");
+    thesis.additionalSupports = [{ sourceId: 999, quote: sources[1]!.sourceText.slice(0, 25) }];
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("correct selected source for thesis");
+  });
+
+  test("blocks unsupported units, unknown attribution, coherence and clipped prose", () => {
+    const draft = dailyDraft();
+    draft.lead = "The author reported 10,000 AI sessions but this sentence trails because";
+    const review = completeReview(draft);
+    const lead = review.fields.find(item => item.path === "lead")!;
+    lead.verdict = "unsupported";
+    lead.reason = "10,000 AI sessions is not a ChatGPT citation count";
+    const thesis = review.fields.find(item => item.path === "thesis")!;
+    thesis.verdict = "unknown";
+    thesis.reason = "Attribution not established";
+    review.coherence = "unsupported";
+    review.coherenceReason = "The conclusion contradicts the source unit";
+    const issues = validateEditorialEvidenceReview(draft, sources, review).join(" ");
+    expect(issues).toContain("10,000 AI sessions is not a ChatGPT citation count");
+    expect(issues).toContain("unknown at thesis");
+    expect(issues).toContain("coherence unsupported");
+  });
+
+  test("will not accept a numeric source claim labeled as analysis", () => {
+    const draft = dailyDraft();
+    draft.stories[0]!.summary = "The page recorded 10,000 AI sessions, not 10,000 ChatGPT citations.";
+    const review = completeReview(draft);
+    review.fields.find(item => item.path === "stories.0.summary")!.verdict = "analysis";
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("factual field or token as analysis at stories.0.summary");
+  });
+
+  test("will not accept a nonnumeric story summary labeled as analysis", () => {
+    const draft = dailyDraft();
+    draft.stories[0]!.summary = "The product launched a feature and replaced its database.";
+    const review = completeReview(draft);
+    review.fields.find(item => item.path === "stories.0.summary")!.verdict = "analysis";
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("factual field or token as analysis at stories.0.summary");
+  });
+
+  test("allows only the editorial score scale in an analytical chart subtitle", () => {
+    const draft = dailyDraft();
+    const review = completeReview(draft);
+    const subtitle = review.fields.find(item => item.path === "chart.subtitle")!;
+    subtitle.verdict = "analysis";
+    draft.chart.subtitle = "Belle's editorial score uses a 0–100 scale, not a measured benchmark.";
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .not.toContain("factual field or token as analysis at chart.subtitle");
+    draft.chart.subtitle = "Belle's editorial score uses a 0–100 scale and reported 10,000 ChatGPT citations.";
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("factual field or token as analysis at chart.subtitle");
+  });
+});
+
 describe("Belle editorial scoring", () => {
   test("limits daily handoff to the stories Belle reads and retains weekly candidates", () => {
     const snapshots = Array.from({ length: 28 }, (_, index) => ({
@@ -142,8 +248,9 @@ describe("Belle editorial scoring", () => {
     expect(digestStories[11]).toMatchObject({ rank: 12, score: 89 });
   });
 
-  test("uses the canonical OpenRouter structured route", () => {
-    expect(NEWSLETTER_MODEL_IDS).toEqual(OPENROUTER_GENERATION_MODELS);
+  test("routes long Belle drafts directly to the existing cheap alias, unlike forum drafts", () => {
+    expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_PAID_FALLBACK_MODEL]);
+    expect(NEWSLETTER_MODEL_IDS).not.toContain(OPENROUTER_FORUM_MODEL);
   });
 
   test("bounds repeated newsletter source text during revision", () => {
@@ -237,6 +344,21 @@ describe("Belle editorial scoring", () => {
       "repeats a recent editorial frame",
     );
     expect(quality.originality).toBeLessThan(100);
+  });
+
+  test("blocks clipped or dangling subjects without rejecting a complete short one", () => {
+    const evaluate = (subject: string) => scoreEditorialPackage({
+      draft: { ...dailyDraft(), subject },
+      edition: "daily-signal",
+      recent: { headlines: [], theses: [], storyIds: [] },
+      sources,
+    });
+    const truncated = "The web is now a place where fake statistics get cited by AI, hidden ".padEnd(70);
+    expect(evaluate(truncated).blockingIssues.join(" ")).toContain("subject is incomplete");
+    expect(evaluate("What the source records reveal about the").blockingIssues.join(" "))
+      .toContain("subject is incomplete");
+    expect(evaluate("Source records change deployment decisions").blockingIssues.join(" "))
+      .not.toContain("subject is incomplete");
   });
 
   test("blocks process scaffolding and canned model prose", () => {

@@ -195,6 +195,7 @@ function newsletterArgs(
   };
   const sources = snapshots.map((snapshot, index) => ({
     hnItemId: index + 1,
+    title: snapshot.title,
     host: snapshot.sourceName,
     sourceText: snapshot.articleText,
   }));
@@ -314,6 +315,9 @@ describe("shadow hooks", () => {
         '"headlines":[],"theses":[],"storyIds":[]',
       );
       expect(input.prompt).toContain("publisher-1.example/report");
+      const schema = input.schema as { properties?: { chart?: { properties?: Record<string, unknown> } } };
+      expect(schema.properties?.chart?.properties).not.toHaveProperty("items");
+      expect(queued.evaluationJson).toContain('"title":"Public source 1"');
       expect(input.prompt).not.toContain(args.snapshots[0].articleText);
       expect(queued.evaluationJson).toContain("UNPUBLISHED_PRIVATE_HEADLINE");
       expect(queued.evaluationJson).toContain(args.snapshots[0].articleText);
@@ -358,6 +362,7 @@ describe("shadow hooks", () => {
       );
       args.sources = args.snapshots.map((snapshot, index) => ({
         hnItemId: index + 1,
+        title: snapshot.title,
         host: snapshot.sourceName,
         sourceText: snapshot.articleText,
       }));
@@ -524,6 +529,46 @@ describe("deterministic shadow evaluation", () => {
         outputJson: JSON.stringify(draft),
       }),
     ).toMatchObject({ valid: false, shadow: { deterministicValid: false } });
+  });
+
+  test("Belle scores model-facing rows and old foreign chart output identically", async () => {
+    const { ctx, runMutation } = queuedContext();
+    const args = newsletterArgs();
+    await enqueueBelleNewsletterShadowComparison(ctx, args);
+    const queued = runMutation.mock.calls[0][1] as unknown as {
+      kind: "belle-newsletter";
+      inputJson: string;
+      evaluationJson: string;
+      baselineJson: string;
+    };
+    const { items: _items, ...chart } = args.baseline.draft.chart;
+    const modelFacing = { ...args.baseline.draft, chart };
+    const oldCapture = structuredClone(args.baseline.draft);
+    oldCapture.chart.items[0] = {
+      hnItemId: 999,
+      label: "Unselected foreign source",
+      value: 100,
+      note: "A foreign row that must never be mapped into another story.",
+    };
+    const current = evaluateShadowComparison({
+      ...queued,
+      outputJson: JSON.stringify(modelFacing),
+    });
+    const old = evaluateShadowComparison({
+      ...queued,
+      outputJson: JSON.stringify(oldCapture),
+    });
+    expect(current).toMatchObject({
+      scoreDelta: 0,
+      wordCountDelta: 0,
+      shadow: { schemaValid: true },
+    });
+    expect(old).toMatchObject({
+      scoreDelta: 0,
+      wordCountDelta: 0,
+      shadow: { schemaValid: true },
+    });
+    expect(JSON.stringify(old)).not.toContain("Unselected foreign source");
   });
 
   test("a wrong kind or invalid JSON fails closed without echoing content", async () => {

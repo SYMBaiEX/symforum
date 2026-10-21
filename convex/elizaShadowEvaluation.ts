@@ -26,12 +26,15 @@ import {
   dailyDraftSchema,
   editorialDraftLimits,
   editorialDraftWordCount,
+  generatedDailyDraftSchema,
+  generatedWeeklyDraftSchema,
+  materializeEditorialChart,
   scoreEditorialPackage,
   validateEditorialDraft,
   weeklyDraftSchema,
 } from "./newsletterAgent";
 
-const EVALUATOR_VERSION = "eliza-shadow-deterministic-v1";
+const EVALUATOR_VERSION = "eliza-shadow-deterministic-v2-derived-chart-rows";
 const replyContextSchema = z.object({
   candidate: z.object({
     authorName: z.string().max(160),
@@ -69,6 +72,7 @@ const newsletterContextSchema = z.object({
     .array(
       z.object({
         hnItemId: z.number().int().positive(),
+        title: z.string().max(500).optional(),
         host: z.string().max(500).optional(),
         sourceText: z.string(),
       }),
@@ -281,9 +285,11 @@ function evaluateNewsletter(
   value: unknown,
   context: z.infer<typeof newsletterContextSchema>,
 ) {
-  const schema =
-    context.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
-  const parsed = schema.safeParse(value);
+  const generatedSchema =
+    context.edition === "daily-signal"
+      ? generatedDailyDraftSchema
+      : generatedWeeklyDraftSchema;
+  const parsed = generatedSchema.safeParse(value);
   const invalid = {
     schemaValid: parsed.success,
     deterministicValid: false,
@@ -298,16 +304,26 @@ function evaluateNewsletter(
     const storiesById = new Map(
       context.stories.map((story) => [story.hnItemId, story]),
     );
-    validateEditorialDraft(parsed.data, storiesById);
+    // Old captured outputs may still contain chart.items. Never trust or remap
+    // those independent IDs or labels; both transports derive rows identically.
+    const materialized = materializeEditorialChart(parsed.data, storiesById);
+    const schema =
+      context.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
+    const complete = schema.safeParse(materialized);
+    if (!complete.success) {
+      return { ...invalid, schemaValid: false, errors: safeEvaluationErrors(complete.error) };
+    }
+    const draft = complete.data;
+    validateEditorialDraft(draft, storiesById);
     const quality = scoreEditorialPackage({
-      draft: parsed.data,
+      draft,
       edition: context.edition,
       recent: context.recent,
-      sources: parsed.data.stories.map((story) =>
+      sources: draft.stories.map((story) =>
         storiesById.get(story.hnItemId)!,
       ),
     });
-    const wordCount = editorialDraftWordCount(parsed.data);
+    const wordCount = editorialDraftWordCount(draft);
     const limits = editorialDraftLimits(context.edition);
     const errors = quality.blockingIssues.map(() => "editorial-blocking-issue");
     if (quality.score < limits.threshold)
