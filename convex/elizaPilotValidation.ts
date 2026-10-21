@@ -2,7 +2,7 @@
 
 import { generateText, Output } from "ai";
 import { makeFunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
@@ -219,12 +219,31 @@ export const validateBelle = internalAction({
       const sourceHash = await shadowInputHash(JSON.stringify(indexed.stories.map(
         story => [story.hnItemId, story.rank, story.title],
       )));
-      const generated = await ctx.runAction(generateDailyRef, {
-        runDate: args.runDate, snapshotDate: args.snapshotDate,
-        siteUrl: "https://symbaiex.com",
-        shadowSourceRunKey: `pilot:belle:${args.nonce}`,
-        ...(args.useElizaRuntime ? { forceElizaRuntimeGeneration: true } : { forceLegacyGeneration: true }),
-      });
+      let generated: Awaited<ReturnType<typeof ctx.runAction<typeof generateDailyRef>>>;
+      try {
+        generated = await ctx.runAction(generateDailyRef, {
+          runDate: args.runDate, snapshotDate: args.snapshotDate,
+          siteUrl: "https://symbaiex.com",
+          shadowSourceRunKey: `pilot:belle:${args.nonce}`,
+          ...(args.useElizaRuntime ? { forceElizaRuntimeGeneration: true } : { forceLegacyGeneration: true }),
+        });
+      } catch (error) {
+        const data = error instanceof ConvexError ? error.data : null;
+        if (
+          data !== null && typeof data === "object" &&
+          "code" in data && data.code === "baseline_quality_rejected" &&
+          "shadowJobId" in data && typeof data.shadowJobId === "string"
+        ) {
+          const run = await ctx.runMutation(finishRef, {
+            nonce: args.nonce, status: "failed", errorCode: "baseline_quality_rejected",
+            sourceHash, sourceCount: indexed.stories.length,
+            shadowJobId: data.shadowJobId as Id<"elizaShadowJobs">,
+            shadowStatus: "queued",
+          });
+          return { duplicate: false, run };
+        }
+        throw error;
+      }
       const shadow = generated.shadowEnqueue;
       if (!shadow || shadow.status !== "queued" || !shadow.jobId) {
         return done(ctx, args.nonce, "blocked", `shadow_${shadow?.status ?? "enqueue_failed"}`,

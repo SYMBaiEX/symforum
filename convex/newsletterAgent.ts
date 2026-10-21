@@ -2,7 +2,7 @@
 
 import { isStepCount, Output, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -660,11 +660,47 @@ async function generateEditorialPackage(
       revision.usage.outputTokens,
     );
   }
+  const enqueueShadow = () => enqueueBelleNewsletterShadowComparison(ctx, {
+    edition: args.edition,
+    runDate: args.runDate,
+    shadowSourceRunKey: args.shadowSourceRunKey,
+    snapshotDate: args.snapshotDate,
+    snapshots,
+    recent,
+    sources: [...storiesById.values()].map((story) => ({
+      hnItemId: story.hnItemId,
+      title: story.title,
+      host: story.host,
+      sourceText: snapshotSourceText(snapshotsById.get(story.hnItemId), story),
+    })),
+    baseline: {
+      draft,
+      evaluation,
+      generation: {
+        model: shadowSelectedModel,
+        initialModel: generation.modelId,
+        revisionAttempted: shadowRevisionAccepted !== undefined,
+        revisionAccepted: shadowRevisionAccepted ?? false,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        durationMs: Date.now() - shadowGenerationStartedAt,
+      },
+    },
+  });
+  const rejectEditorialDraft = async (message: string): Promise<never> => {
+    if (args.shadowSourceRunKey?.startsWith("pilot:belle:")) {
+      const shadow = await enqueueShadow();
+      if (shadow?.status === "queued" && shadow.jobId) {
+        throw new ConvexError({ code: "baseline_quality_rejected", shadowJobId: shadow.jobId });
+      }
+    }
+    throw new Error(message);
+  };
   if (
     evaluation.quality.score < threshold ||
     evaluation.quality.blockingIssues.length > 0
   ) {
-    throw new Error(
+    await rejectEditorialDraft(
       `Belle's ${args.edition} failed editorial gates (score ${evaluation.quality.score}, threshold ${threshold}): ${evaluation.feedback.join("; ")}`,
     );
   }
@@ -672,7 +708,7 @@ async function generateEditorialPackage(
     evaluation.wordCount < minimumWords ||
     evaluation.wordCount > maximumWords
   ) {
-    throw new Error(
+    await rejectEditorialDraft(
       `Belle's ${args.edition} length was ${evaluation.wordCount} words; expected ${minimumWords}-${maximumWords}.`,
     );
   }
@@ -773,33 +809,7 @@ async function generateEditorialPackage(
     quality,
   };
 
-  const shadowEnqueue: { status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs"> } | undefined = await enqueueBelleNewsletterShadowComparison(ctx, {
-    edition: args.edition,
-    runDate: args.runDate,
-    shadowSourceRunKey: args.shadowSourceRunKey,
-    snapshotDate: args.snapshotDate,
-    snapshots,
-    recent,
-    sources: [...storiesById.values()].map((story) => ({
-      hnItemId: story.hnItemId,
-      title: story.title,
-      host: story.host,
-      sourceText: snapshotSourceText(snapshotsById.get(story.hnItemId), story),
-    })),
-    baseline: {
-      draft,
-      evaluation,
-      generation: {
-        model: shadowSelectedModel,
-        initialModel: generation.modelId,
-        revisionAttempted: shadowRevisionAccepted !== undefined,
-        revisionAccepted: shadowRevisionAccepted ?? false,
-        inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens,
-        durationMs: Date.now() - shadowGenerationStartedAt,
-      },
-    },
-  });
+  const shadowEnqueue: { status: "queued" | "disabled" | "duplicate" | "limited"; jobId?: import("./_generated/dataModel").Id<"elizaShadowJobs"> } | undefined = await enqueueShadow();
 
   return {
     subject: draft.subject,

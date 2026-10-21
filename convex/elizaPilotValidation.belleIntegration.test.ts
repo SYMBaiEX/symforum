@@ -86,6 +86,14 @@ const modules = { ...import.meta.glob("./**/*.ts"), ...import.meta.glob("./**/*.
 const belleAction = makeFunctionReference<"action", { nonce: string; runDate: string; snapshotDate: string; useElizaRuntime?: boolean }, {
   duplicate: boolean; run: { status: string; errorCode?: string; shadowJobId?: Id<"elizaShadowJobs">; sourceCount?: number };
 }>("elizaPilotValidation:validateBelle");
+const organicBelleAction = makeFunctionReference<"action", {
+  runDate: string; snapshotDate: string; siteUrl: string; forceLegacyGeneration: boolean;
+  shadowSourceRunKey?: string;
+}, unknown>("newsletterAgent:generateDailySignal");
+const inspectPilot = makeFunctionReference<"query", { nonce: string; jobId: Id<"elizaShadowJobs"> }, {
+  run: { status: string; errorCode?: string; shadowJobId?: Id<"elizaShadowJobs"> };
+  baselineJson: string; evaluationJson: string;
+} | null>("elizaPilotValidationData:inspectSelected");
 
 beforeEach(() => {
   vi.stubEnv("ELIZA_SHADOW_MODE", "shadow");
@@ -153,4 +161,90 @@ test.each([false, true])("actual Belle generator uses requested runtime %s and n
   expect(state.sends).toEqual([]);
   expect(state.shadow).toHaveLength(1);
   expect(state.shadow[0]).toMatchObject({ kind: "belle-newsletter", status: "queued", isCanary: false });
+});
+
+test("rejected Belle pilot stays failed with a private inspectable draft and no publication", async () => {
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  await t.run(async ctx => {
+    await ctx.db.insert("newsSnapshots", {
+      snapshotDate: "2026-10-20", status: "complete", startedAt: 1,
+      completedAt: 2, storyCount: 8,
+    });
+    for (let rank = 1; rank <= 8; rank++) {
+      await ctx.db.insert("hnStories", {
+        hnItemId: rank, snapshotDate: "2026-10-20", rank,
+        title: `Public HN story ${rank}`, host: `publisher${rank}.example`,
+        url: `https://publisher${rank}.example/report`,
+        text: sourceText, fetchedAt: 2,
+      });
+    }
+  });
+  route.mockImplementation(async (_config, options) => ({
+    route: { persistedModel: "openrouter/free" },
+    value: options.stage.endsWith(":evidence-review")
+      ? {
+          review: {
+            fields: editorialEvidenceFields(draft).map(field => ({
+              path: field.path,
+              verdict: field.path === "lead" ? "unsupported" : field.path.endsWith(".summary") ? "fact" : "analysis",
+              sourceId: field.path.endsWith(".summary") ? field.ownSourceId ?? null : null,
+              quote: field.path.endsWith(".summary") ? sourceText.slice(0, 80) : null,
+              reason: field.path === "lead" ? "unsupported in source packet" : null,
+            })),
+            coherence: "clear", coherenceReason: null,
+          },
+          usage: { inputTokens: 300, outputTokens: 200 }, modelId: "openrouter/free",
+        }
+      : { draft, usage: { inputTokens: 800, outputTokens: 1_200 }, modelId: "openrouter/free" },
+  }));
+  const nonce = "pilot_rejected_belle_001";
+  const result = await t.action(belleAction, {
+    nonce, runDate: "2026-10-20", snapshotDate: "2026-10-20",
+  });
+  expect(result).toMatchObject({ duplicate: false, run: {
+    status: "failed", errorCode: "baseline_quality_rejected", sourceCount: 8,
+  } });
+  expect(result.run.shadowJobId).toBeDefined();
+  const inspected = await t.query(inspectPilot, { nonce, jobId: result.run.shadowJobId! });
+  expect(inspected?.run).toMatchObject({ status: "failed", errorCode: "baseline_quality_rejected" });
+  expect(JSON.parse(inspected!.baselineJson)).toMatchObject({
+    draft: { subject: draft.subject },
+    evaluation: { quality: { blockingIssues: expect.arrayContaining([expect.stringContaining("unsupported at lead")]) } },
+  });
+  expect(JSON.parse(inspected!.evaluationJson)).toMatchObject({ edition: "daily-signal" });
+  const replay = await t.action(belleAction, {
+    nonce, runDate: "2026-10-20", snapshotDate: "2026-10-20",
+  });
+  expect(replay).toMatchObject({ duplicate: true, run: { status: "failed", shadowJobId: result.run.shadowJobId } });
+  const state = await t.run(async ctx => ({
+    issues: await ctx.db.query("newsletterIssues").take(10),
+    runs: await ctx.db.query("dailyNewsletterRuns").take(10),
+    sends: await ctx.db.query("newsletterSendLogs").take(10),
+    shadow: await ctx.db.query("elizaShadowJobs").take(10),
+  }));
+  expect(state.issues).toEqual([]);
+  expect(state.runs).toEqual([]);
+  expect(state.sends).toEqual([]);
+  expect(state.shadow).toHaveLength(1);
+  await expect(t.action(organicBelleAction, {
+    runDate: "2026-10-20", snapshotDate: "2026-10-20",
+    siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
+  })).rejects.toThrow("failed editorial gates");
+  const shadowAfterOrganic = await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadowAfterOrganic).toHaveLength(1);
+  vi.stubEnv("ELIZA_SHADOW_MODE", "off");
+  const uncaptured = await t.action(belleAction, {
+    nonce: "pilot_rejected_belle_off_001", runDate: "2026-10-20", snapshotDate: "2026-10-20",
+  });
+  expect(uncaptured).toMatchObject({ duplicate: false, run: {
+    status: "failed", errorCode: "baseline_or_source_failed",
+  } });
+  expect(uncaptured.run.shadowJobId).toBeUndefined();
+  await expect(t.action(organicBelleAction, {
+    runDate: "2026-10-20", snapshotDate: "2026-10-20",
+    siteUrl: "https://symbaiex.com", forceLegacyGeneration: true,
+    shadowSourceRunKey: "pilot:belle:disabled_direct_capture_001",
+  })).rejects.toThrow("failed editorial gates");
+  expect(await t.run(async ctx => await ctx.db.query("elizaShadowJobs").take(10))).toHaveLength(1);
 });

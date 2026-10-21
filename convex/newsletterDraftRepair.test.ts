@@ -272,9 +272,13 @@ test("two incomplete prose drafts fail closed after exactly two reviews", async 
   mockDrafts(clipped, clipped);
   await expect(t.action(generateDailySignal, {
     ...args, shadowSourceRunKey: "pilot:belle:clipped-prose-failed",
-  })).rejects.toThrow("lead ends without a complete sentence");
+  })).rejects.toThrow("baseline_quality_rejected");
   expect(route.mock.calls.filter(call => call[1]?.stage.endsWith(":evidence-review"))).toHaveLength(2);
-  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  expect(JSON.parse(shadow[0]!.baselineJson).evaluation.feedback).toContainEqual(
+    expect.stringContaining("lead ends without a complete sentence"),
+  );
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
@@ -288,9 +292,13 @@ test("partial blind-review coverage is not treated as approval", async () => {
   }));
   await expect(t.action(generateDailySignal, {
     ...args, shadowSourceRunKey: "pilot:belle:partial-review-failed",
-  })).rejects.toThrow("Evidence review omitted");
+  })).rejects.toThrow("baseline_quality_rejected");
   expect(route.mock.calls.filter(call => call[1]?.stage.endsWith(":evidence-review"))).toHaveLength(2);
-  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  expect(JSON.parse(shadow[0]!.baselineJson).evaluation.feedback).toContainEqual(
+    expect.stringContaining("Evidence review omitted"),
+  );
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
@@ -327,15 +335,19 @@ test("oversize original selected evidence fails before any review route call", a
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
-test("repeated invalid selection fails after one repair without shadow or publication", async () => {
+test("repeated invalid selection fails after one repair with private capture but no publication", async () => {
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, invalidStoryDraft);
   await expect(t.action(generateDailySignal, {
     ...args, shadowSourceRunKey: "pilot:belle:draft-repair-invalid",
-  })).rejects.toThrow("selected a source outside the research packet");
+  })).rejects.toThrow("baseline_quality_rejected");
   expect(route).toHaveBeenCalledTimes(2);
-  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  expect(JSON.parse(shadow[0]!.baselineJson).evaluation.feedback).toContainEqual(
+    expect.stringContaining("selected a source outside the research packet"),
+  );
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("dailyNewsletterRuns").take(10))).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("newsletterSendLogs").take(10))).toEqual([]);
@@ -363,9 +375,13 @@ test("a repeatedly clipped subject fails closed after one revision", async () =>
   mockDrafts(truncatedSubjectDraft, truncatedSubjectDraft);
   await expect(t.action(generateDailySignal, {
     ...args, shadowSourceRunKey: "pilot:belle:subject-repair-failed-test",
-  })).rejects.toThrow("subject is incomplete");
+  })).rejects.toThrow("baseline_quality_rejected");
   expect(route).toHaveBeenCalledTimes(4);
-  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  expect(JSON.parse(shadow[0]!.baselineJson).evaluation.feedback).toContainEqual(
+    expect.stringContaining("subject is incomplete"),
+  );
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
@@ -382,10 +398,14 @@ test("a structurally valid original is retained when its revision has a bad sele
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
-  expect(message).toContain("Belle's daily-signal");
+  expect(message).toContain("baseline_quality_rejected");
   expect(message).not.toContain("selected a source outside");
   expect(route).toHaveBeenCalledTimes(3);
-  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
+  expect(shadow).toHaveLength(1);
+  expect(JSON.parse(shadow[0]!.baselineJson).evaluation).toMatchObject({
+    wordCount: editorialDraftWordCount(shortValidDraft),
+  });
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 

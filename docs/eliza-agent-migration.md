@@ -231,6 +231,12 @@ publishing were not changed to manufacture a passing test.
   short reason. Received records are hydrated into the unchanged full validator.
   Missing records are never synthesized. Full path/source/quote/coherence gates,
   original source context, the 4k cap and single revision remain unchanged.
+- Explicit operator Belle pilots may also capture a rejected baseline through
+  the same capped, private, seven-day shadow store. The run remains `failed`
+  with `baseline_quality_rejected` and a nonce-linked inspection ID; this is
+  diagnostic evidence, never publication or promotion approval. Ordinary rejected
+  generations do not gain a new capture path. Disabled/limited capture preserves
+  the original rejection.
 - The old generic provider-response quarantine cannot be reconstructed because
   the raw body was deliberately discarded. It remains held. Future malformed
   responses now get fixed protocol/shape diagnostic codes, without logging raw
