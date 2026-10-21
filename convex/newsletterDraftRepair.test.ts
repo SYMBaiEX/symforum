@@ -30,7 +30,8 @@ vi.mock("./sukiForumAgent", async importOriginal => ({
     ...candidate,
     articleTitle: candidate.title,
     articleDescription: "The original report describes source and evaluation records.",
-    articleText: articleTextOverride ?? sourceText,
+    articleText: typeof articleTextOverride === "function"
+      ? articleTextOverride(candidate) : articleTextOverride ?? sourceText,
     sourceFetchSucceeded: true,
   })),
 }));
@@ -54,7 +55,7 @@ const sourceText = [
   "The reports describe manifest records, prompt templates, evaluation settings, sandbox boundaries, execution permissions, isolated failures, sample provenance, selection rules, and original observations.",
   ...storyCopies.flatMap(copy => [copy.summary, copy.whyItMatters, ...copy.takeaways]),
 ].join(" ");
-let articleTextOverride: string | undefined;
+let articleTextOverride: string | ((candidate: { id: string }) => string) | undefined;
 const validDraft = dailyDraftSchema.parse({
   subject: "The records behind a reproducible technical comparison",
   headline: "Keep the boundary beside the reported outcome",
@@ -430,6 +431,25 @@ test("oversize original selected evidence fails before any review route call", a
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
 });
 
+test("oversize full selected revision packet fails before the revision route", async () => {
+  const t = setup();
+  await seedSnapshot(t);
+  articleTextOverride = candidate => candidate.id === "newsletter-1-0"
+    ? "Original selected source evidence. ".repeat(1_900)
+    : sourceText;
+  mockDrafts(shortValidDraft);
+  await expect(t.action(generateDailySignal, {
+    ...args, shadowSourceRunKey: "pilot:belle:revision-prompt-overflow",
+  })).rejects.toThrow("Belle revision prompt exceeds the bounded input window; no selected source was truncated");
+  expect(route.mock.calls.map(call => call[1]?.stage)).toEqual([
+    "belle:daily-signal:draft", "belle:daily-signal:evidence-review",
+  ]);
+  expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("dailyNewsletterRuns").take(10))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("newsletterSendLogs").take(10))).toEqual([]);
+});
+
 test("repeated invalid selection fails after one repair with private capture but no publication", async () => {
   const t = setup();
   await seedSnapshot(t);
@@ -618,6 +638,7 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     expect(JSON.stringify(body.messages)).toContain("Reasoning strength: none");
     expect(JSON.stringify(body.messages)).toContain("standalone email subject of at most 64 characters");
     expect(JSON.stringify(body.messages)).toContain("Citation or retrieval of a web page by ChatGPT is not evidence");
+    expect(JSON.stringify(body.messages)).toContain("at most four short original source passages");
     expect(JSON.stringify(body.messages)).toContain("prefer three genuinely connected source anchors");
     expect(JSON.stringify(body.messages)).toContain("remove a factual premise from an unselected source");
   }
@@ -635,6 +656,7 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("production-grade inference is now open source");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Hidden instructions found in pages establish their presence, not that a model obeyed them");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("every clause of a mixed-source sentence and its attribution");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A field that names a source version or release remains a fact");
 });
 
 test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async () => {
