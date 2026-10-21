@@ -378,7 +378,7 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
 test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
   const newsletterBody = {
     ...body,
-    model: "qwen/qwen3.8-flash",
+    model: "deepseek/deepseek-v4-flash-0731",
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
@@ -423,6 +423,16 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     () =>
       validateLiveRequest(
         newsletterRequest("belle", "belle:daily-signal:draft", retiredBody),
+      ),
+    /model_not_allowed/,
+  );
+  assert.throws(
+    () =>
+      validateLiveRequest(
+        newsletterRequest("belle", "belle:daily-signal:draft", {
+          ...newsletterBody,
+          model: "qwen/qwen3.8-flash",
+        }),
       ),
     /model_not_allowed/,
   );

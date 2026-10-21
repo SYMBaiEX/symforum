@@ -127,10 +127,10 @@ describe("free-only structured operator probe", () => {
         bodies.push(JSON.parse(String(init?.body)));
         return new Response(
           JSON.stringify({
-            id: "synthetic-qwen-probe",
+            id: "synthetic-newsletter-probe",
             object: "chat.completion",
             created: 1_760_000_000,
-            model: "qwen/qwen3.8-flash",
+            model: "deepseek/deepseek-v4-flash-0731",
             choices: [
               {
                 index: 0,
@@ -166,7 +166,10 @@ describe("free-only structured operator probe", () => {
         if (
           getFunctionName(reference) === "aiRoutingControlData:reserveModelCall"
         ) {
-          return { accepted: true, reservationKey: "qwen-probe-reservation" };
+          return {
+            accepted: true,
+            reservationKey: "newsletter-probe-reservation",
+          };
         }
         void args;
         return null;
@@ -179,17 +182,17 @@ describe("free-only structured operator probe", () => {
 
     await expect(
       runStructuredProbe(ctx, undefined, false, {
-        model: "qwen/qwen3.8-flash",
+        model: "deepseek/deepseek-v4-flash-0731",
       }),
     ).resolves.toEqual({
       provider: "openrouter",
-      model: "qwen/qwen3.8-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       response: "SYMBiEX structured model route healthy",
     });
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({
-      model: "qwen/qwen3.8-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
@@ -204,15 +207,15 @@ describe("free-only structured operator probe", () => {
         getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
     );
     expect(reservation?.[1]).toMatchObject({
-      model: "qwen/qwen3.8-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
         getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
-      model: "qwen/qwen3.8-flash",
-      servedModel: "qwen/qwen3.8-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
+      servedModel: "deepseek/deepseek-v4-flash-0731",
     });
   });
 

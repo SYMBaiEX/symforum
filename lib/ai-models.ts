@@ -9,8 +9,7 @@ export const OPENROUTER_PAID_FALLBACK_MODEL =
   "~deepseek/deepseek-v4-flash-latest";
 
 /** Fixed, non-thinking long-form route; never inherit a floating model price. */
-export const OPENROUTER_NEWSLETTER_MODEL =
-  "qwen/qwen3.8-flash";
+export const OPENROUTER_NEWSLETTER_MODEL = "deepseek/deepseek-v4-flash-0731";
 /** USD per million tokens, enforced upstream and used for conservative reserves. */
 export const OPENROUTER_NEWSLETTER_PRICE_CEILING = {
   prompt: 0.2,
