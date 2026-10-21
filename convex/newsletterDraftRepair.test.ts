@@ -6,6 +6,7 @@ import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { routedModelCandidates } from "../lib/ai-model-routing";
+import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
 import schema from "./schema";
 import { dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
 
@@ -189,7 +190,10 @@ beforeEach(() => {
       value: { draft: currentDraft, usage: { inputTokens: 700, outputTokens: 900 }, modelId: "openrouter/free" },
     };
   });
-  routingConfig.mockReset().mockResolvedValue({ openRouterApiKey: "test-only-key" });
+  routingConfig.mockReset().mockImplementation(async (_ctx, options) => ({
+    openRouterApiKey: "test-only-key",
+    ...(options.elizaRuntime === "force" ? { elizaRuntime: {} } : {}),
+  }));
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -206,7 +210,8 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   const result = await t.action(generateDailySignal, args);
   expect(route).toHaveBeenCalledTimes(3);
   expect(route.mock.calls.map(call => call[2])).toEqual([
-    NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS,
+    [OPENROUTER_PAID_FALLBACK_MODEL], [OPENROUTER_PAID_FALLBACK_MODEL],
+    [OPENROUTER_PAID_FALLBACK_MODEL],
   ]);
   expect(route.mock.calls[1]?.[1]?.stage).toBe("belle:daily-signal:revision");
   expect(route.mock.calls[1]?.[1]?.run).toBeDefined();
@@ -406,6 +411,9 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
     elizaRuntime: "force",
   });
   expect(route).toHaveBeenCalledTimes(2);
+  expect(route.mock.calls.map(call => call[2])).toEqual([
+    NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS,
+  ]);
   await expect(t.action(generateDailySignal, {
     ...args,
     forceElizaRuntimeGeneration: true,
@@ -414,12 +422,26 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
   expect(routingConfig).toHaveBeenCalledTimes(1);
 });
 
+test("normal legacy generation keeps DeepSeek for both writer and reviewer", async () => {
+  const t = setup();
+  await seedSnapshot(t);
+  mockDrafts(validDraft);
+  await t.action(generateDailySignal, {
+    ...args, forceLegacyGeneration: false,
+    shadowSourceRunKey: "pilot:belle:normal-runtime-off-model",
+  });
+  expect(route.mock.calls.map(call => call[2])).toEqual([
+    [OPENROUTER_PAID_FALLBACK_MODEL], [OPENROUTER_PAID_FALLBACK_MODEL],
+  ]);
+});
+
 test("Belle's Mistral SDK requests use the pinned price ceiling without reasoning output", async () => {
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, validDraft);
   await t.action(generateDailySignal, {
-    ...args, shadowSourceRunKey: "pilot:belle:reasoning-serialization-test",
+    ...args, forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
+    shadowSourceRunKey: "pilot:belle:mistral-serialization-test",
   });
   const requestBodies: Record<string, unknown>[] = [];
   vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -439,6 +461,9 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
     { openRouterApiKey: "test-only-key" }, NEWSLETTER_MODEL_IDS,
   );
   expect(route).toHaveBeenCalledTimes(3);
+  expect(route.mock.calls.map(call => call[2])).toEqual([
+    NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS, NEWSLETTER_MODEL_IDS,
+  ]);
   for (const call of route.mock.calls.filter(call => !call[1]?.stage.endsWith(":evidence-review"))) {
     const run = call[1]?.run;
     expect(run).toBeTypeOf("function");
@@ -475,4 +500,44 @@ test("Belle's Mistral SDK requests use the pinned price ceiling without reasonin
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Do not demand one source support a compound claim about multiple sources");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A proposal to check something is not a claim that it was already observed");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("unrelated topics are not automatically a coherent synthesis");
+});
+
+test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async () => {
+  const t = setup();
+  await seedSnapshot(t);
+  mockDrafts(validDraft);
+  await t.action(generateDailySignal, {
+    ...args, shadowSourceRunKey: "pilot:belle:legacy-deepseek-serialization-test",
+  });
+  expect(route.mock.calls.map(call => call[2])).toEqual([
+    [OPENROUTER_PAID_FALLBACK_MODEL], [OPENROUTER_PAID_FALLBACK_MODEL],
+  ]);
+  const requestBodies: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    requestBodies.push(body);
+    return new Response(JSON.stringify({
+      id: "belle-legacy-structured-test", object: "chat.completion", created: 1_760_000_000,
+      model: "deepseek/deepseek-v4-flash-latest",
+      choices: [{ index: 0, message: {
+        role: "assistant",
+        content: JSON.stringify(body.max_tokens === 4_000 ? reviewedDraft(validDraft) : validDraft),
+      }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 100, completion_tokens: 900, total_tokens: 1000 },
+    }), { headers: { "content-type": "application/json" } });
+  }));
+  const [candidate] = await routedModelCandidates(
+    { openRouterApiKey: "test-only-key" }, [OPENROUTER_PAID_FALLBACK_MODEL],
+  );
+  for (const call of route.mock.calls) {
+    await call[1].run(candidate, new AbortController().signal);
+  }
+  expect(requestBodies).toHaveLength(2);
+  expect(requestBodies.map(body => body.max_tokens)).toEqual([8_000, 4_000]);
+  for (const body of requestBodies) {
+    expect(body.model).toBe(OPENROUTER_PAID_FALLBACK_MODEL);
+    expect(body.reasoning).toEqual({ enabled: false });
+    expect(body.reasoning_effort).toBeUndefined();
+    expect((body.provider as Record<string, unknown>)?.max_price).toBeUndefined();
+  }
 });

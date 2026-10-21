@@ -17,6 +17,10 @@ revision and blind evidence review use the fixed non-thinking
 deadline and DeepSeek drafts failed source review. No publishing credentials or
 publishing tools exist in the worker.
 
+Until live mode is enabled, normal legacy Belle calls retain the existing
+DeepSeek route with separate reasoning disabled. Only an explicitly forced Eliza
+pilot or actual live Eliza configuration selects the bounded Mistral route.
+
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
 and that fixed Mistral model. Mistral is restricted to Belle and the system canary,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
