@@ -23,6 +23,8 @@ import {
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
   OPENROUTER_TOPIC_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_NEWSLETTER_PRICE_CEILING,
 } from "./ai-models";
 import {
   elizaRuntimeFetch,
@@ -144,6 +146,18 @@ function openRouterRequestBody(body: Record<string, unknown>) {
     )
       ? plugins
       : [...plugins, { id: "response-healing" }];
+  }
+  if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
+    // Qwen 2507 is non-thinking. Unsupported reasoning hints can eliminate
+    // otherwise valid structured-output endpoints under require_parameters.
+    delete request.reasoning;
+    delete request.reasoning_effort;
+    request.provider = {
+      ...(request.provider as Record<string, unknown> | undefined),
+      require_parameters: true,
+      max_price: { ...OPENROUTER_NEWSLETTER_PRICE_CEILING },
+    };
+    return request;
   }
   // The compatible SDK emits the legacy reasoning_effort field. OpenRouter's
   // native reasoning object controls the budget across its different providers.

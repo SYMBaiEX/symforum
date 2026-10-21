@@ -117,4 +117,104 @@ describe("free-only structured operator probe", () => {
     ).rejects.toThrow("invalid_canary_validation_tag");
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test("bounds the explicit Qwen structured probe and accounts for its route", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            id: "synthetic-qwen-probe",
+            object: "chat.completion",
+            created: 1_760_000_000,
+            model: "qwen/qwen3-235b-a22b-2507",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: JSON.stringify({
+                    topic: "Structured routing health check",
+                    title: "Structured routing health check passed",
+                    draft:
+                      "This synthetic payload validates the fixed Qwen route and schema contract without publishing a thread or changing any forum content.",
+                    sourceUrls: ["https://symbaiex.com/agents.md"],
+                    message: "SYMBiEX structured model route healthy",
+                  }),
+                },
+                finish_reason: "stop",
+              },
+            ],
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 100,
+              total_tokens: 200,
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    const runMutation = vi.fn(
+      async (
+        reference: Parameters<typeof getFunctionName>[0],
+        args: unknown,
+      ) => {
+        if (
+          getFunctionName(reference) ===
+          "aiRoutingControlData:reserveModelCall"
+        ) {
+          return { accepted: true, reservationKey: "qwen-probe-reservation" };
+        }
+        void args;
+        return null;
+      },
+    );
+    const ctx = {
+      runQuery: vi.fn(async () => ({ disabledModelIds: [] })),
+      runMutation,
+    } as unknown as ActionCtx;
+
+    await expect(
+      runStructuredProbe(ctx, undefined, false, {
+        model: "qwen/qwen3-235b-a22b-2507",
+      }),
+    ).resolves.toEqual({
+      provider: "openrouter",
+      model: "qwen/qwen3-235b-a22b-2507",
+      response: "SYMBiEX structured model route healthy",
+    });
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      model: "qwen/qwen3-235b-a22b-2507",
+      max_tokens: 8_000,
+      provider: {
+        require_parameters: true,
+        max_price: { prompt: 0.2, completion: 0.5 },
+      },
+    });
+    expect(bodies[0].reasoning).toBeUndefined();
+    expect(bodies[0].reasoning_effort).toBeUndefined();
+
+    const reservation = runMutation.mock.calls.find(
+      ([reference]) =>
+        getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
+    );
+    expect(reservation?.[1]).toMatchObject({
+      model: "qwen/qwen3-235b-a22b-2507",
+    });
+    const usage = runMutation.mock.calls.find(
+      ([reference]) =>
+        getFunctionName(reference) ===
+        "forumAgentEditorialData:recordUsage",
+    );
+    expect(usage?.[1]).toMatchObject({
+      model: "qwen/qwen3-235b-a22b-2507",
+      servedModel: "qwen/qwen3-235b-a22b-2507",
+    });
+  });
 });

@@ -4,7 +4,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   OPENROUTER_FORUM_MODEL,
-  OPENROUTER_PAID_FALLBACK_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
+  openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
 import {
   articleSnapshotsForForumDigest,
@@ -207,6 +208,19 @@ describe("Belle blind evidence review validation", () => {
     expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
       .toContain("factual field or token as analysis at chart.subtitle");
   });
+
+  test("accepts editorial labels and synthesis as analysis but not measured claims", () => {
+    const draft = dailyDraft();
+    const review = completeReview(draft);
+    for (const path of ["subject", "headline", "thesis", "chart.title"]) {
+      review.fields.find(item => item.path === path)!.verdict = "analysis";
+    }
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .not.toContain("classified a factual field or token as analysis");
+    draft.headline = "The page recorded 10,000 ChatGPT citations";
+    expect(validateEditorialEvidenceReview(draft, sources, review).join(" "))
+      .toContain("factual field or token as analysis at headline");
+  });
 });
 
 describe("Belle editorial scoring", () => {
@@ -248,9 +262,11 @@ describe("Belle editorial scoring", () => {
     expect(digestStories[11]).toMatchObject({ rank: 12, score: 89 });
   });
 
-  test("routes long Belle drafts directly to the existing cheap alias, unlike forum drafts", () => {
-    expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_PAID_FALLBACK_MODEL]);
+  test("routes Belle drafts and reviews to the bounded non-thinking newsletter alias", () => {
+    expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_NEWSLETTER_MODEL]);
     expect(NEWSLETTER_MODEL_IDS).not.toContain(OPENROUTER_FORUM_MODEL);
+    expect(openRouterStructuredOutputBudget(NEWSLETTER_MODEL_IDS[0], 4_000)).toBe(8_000);
+    expect(openRouterStructuredOutputBudget(NEWSLETTER_MODEL_IDS[0], 6_000)).toBe(12_000);
   });
 
   test("bounds repeated newsletter source text during revision", () => {

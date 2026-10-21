@@ -21,6 +21,8 @@ import {
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
+  OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_NEWSLETTER_PRICE_CEILING,
   OPENROUTER_PAID_FALLBACK_MODEL,
   openRouterStructuredOutputBudget,
 } from "./ai-models";
@@ -117,6 +119,80 @@ describe("OpenRouter-only model routing", () => {
     expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual(
       OPENROUTER_GENERATION_MODELS,
     );
+  });
+
+  test("keeps the fixed newsletter route separately priced and preserves token limits", () => {
+    expect(openRouterReservationModel(OPENROUTER_NEWSLETTER_MODEL)).toBe(
+      OPENROUTER_NEWSLETTER_MODEL,
+    );
+    expect(
+      openRouterStructuredOutputBudget(OPENROUTER_NEWSLETTER_MODEL, 4_000),
+    ).toBe(8_000);
+    expect(
+      openRouterStructuredOutputBudget(OPENROUTER_NEWSLETTER_MODEL, 6_000),
+    ).toBe(12_000);
+    expect(OPENROUTER_GENERATION_MODELS).not.toContain(
+      OPENROUTER_NEWSLETTER_MODEL,
+    );
+  });
+
+  test("enforces the fixed newsletter price ceilings and removes thinking hints on the wire", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            id: "newsletter-price-test",
+            object: "chat.completion",
+            created: 1_760_000_000,
+            model: OPENROUTER_NEWSLETTER_MODEL,
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "ok" },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    try {
+      const [route] = await routedModelCandidates(
+        { openRouterApiKey: "synthetic-key" },
+        [OPENROUTER_NEWSLETTER_MODEL],
+      );
+      await generateText({
+        model: route.model,
+        prompt: "Return ok.",
+        maxOutputTokens: 4_000,
+        maxRetries: 0,
+        reasoning: "low",
+        providerOptions: {
+          openrouter: {
+            reasoning: { enabled: true },
+            provider: { max_price: { prompt: 100, completion: 100 } },
+          },
+        },
+      });
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toMatchObject({
+        model: OPENROUTER_NEWSLETTER_MODEL,
+        max_tokens: 4_000,
+        provider: {
+          require_parameters: true,
+          max_price: OPENROUTER_NEWSLETTER_PRICE_CEILING,
+        },
+      });
+      expect(bodies[0].reasoning).toBeUndefined();
+      expect(bodies[0].reasoning_effort).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("sends structured object generation as strict JSON Schema", async () => {

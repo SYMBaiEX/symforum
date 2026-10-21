@@ -1,6 +1,10 @@
 # ElizaOS shadow pilot
 
-The first migration slice is **Suki forum replies and Belle daily/weekly newsletter drafts**, running beside the existing agents. There is deliberately no live ElizaOS publishing mode. The remaining forum roster and publication workflows are not migrated by this release.
+This document records the original **Suki forum replies and Belle daily/weekly
+newsletter draft** comparison pilot. The subsequent full-roster generation
+migration and its current verified rollout state are documented in
+[eliza-agent-migration.md](eliza-agent-migration.md). ElizaOS never owns publishing;
+Convex retains scheduling, validation, posting and email sending in both phases.
 
 ## Ownership and data flow
 
@@ -58,7 +62,7 @@ Set `ELIZA_SHADOW_MODE=off` on the confirmed Convex deployment. Newly captured a
 
 Future migration should add evaluated lanes explicitly, preserve Convex publication gates, and require a separate cutover decision. This pilot never automatically promotes any agent to live publishing.
 
-## Deployment checkpoint (2026-10-20)
+## Historical pilot deployment checkpoint (2026-10-20)
 
 - Additive backend schema/functions and the canary-only safety gate deployed successfully to production `strong-bee-384`; schema validation completed and no indexes were deleted. After both sequential canaries passed, `ELIZA_SHADOW_MODE=shadow` was enabled with a $1/day shadow cap. Existing live routing, scheduling, publishing and newsletter sending were not changed.
 - Cloudflare gateway/container application is deployed in account `c2fadb05722ca3df6528265a674ca69e`, application `a03970bd-1c20-4f86-aa9f-d42c877c0527`. Hardened image digest: `sha256:180cdcd4ea47600c80881f33599ff836eedff951a7fd349350714533fdbb366f`; active gateway version after secret installation: `6d90115b-39ac-4a71-871f-bbf44217151c`.

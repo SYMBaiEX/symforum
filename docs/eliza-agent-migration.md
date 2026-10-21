@@ -10,13 +10,22 @@ jobs are separate and are not migrated by this switch.
 
 Convex still owns source selection, prompts and private reply history, schedules,
 budgets and usage accounting, validation, publication, newsletter storage and
-email sending. Existing free-first OpenRouter selection and paid DeepSeek rescue
-are unchanged. No publishing credentials or publishing tools exist in the worker.
+email sending. Forum generation and evidence review remain free-first with the
+existing cheap DeepSeek rescue. Belle's long daily/weekly drafts, their single
+revision and blind evidence review use the fixed non-thinking
+`qwen/qwen3-235b-a22b-2507` route: the free attempt exceeded the safe worker
+deadline and DeepSeek drafts failed source review. No publishing credentials or
+publishing tools exist in the worker.
 
-Only `openrouter/free` and `~deepseek/deepseek-v4-flash-latest` are allowed on the
-live transport. The old fixed GPT pilot was retired at the operator's request.
-Shadow comparisons now use that same cheap DeepSeek alias, with low reasoning
-effort, one provider call and no provider fallback. No ChatGPT model is configured
+The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
+and that fixed Qwen model. Qwen is restricted to Belle and the system canary,
+with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
+reservations use those ceilings, not a catalog minimum. No cross-model server
+fallback is allowed. The old fixed GPT pilot was retired at the operator's request.
+Shadow comparisons use that same cheap DeepSeek alias, with separate reasoning
+disabled, one provider call and no provider fallback. Belle also explicitly
+uses a non-thinking route without unsupported reasoning hints. Token limits
+and editorial quality gates are unchanged. No ChatGPT model is configured
 for forum or newsletter generation. A Codex model label is not substituted for
 an unverified OpenRouter model identifier.
 
@@ -78,6 +87,10 @@ separately authorized operator procedure changes an unresolved operation.
 2. Deploy the existing Cloudflare worker/container with existing secrets retained.
    Set the new live bearer and URL on Cloudflare/production Convex while mode is
    off. Deploy additive Convex code to the explicitly approved deployment.
+   Pause shadow capture during container replacement. A successful deploy command
+   starts the rollout; it does not prove replacement finished. Require the running
+   `pilot` instance version to match the target application version/image, then
+   authenticate maintenance before restoring capture or starting operator checks.
 3. Verify authenticated maintenance. `/healthz` alone only proves gateway
    configuration, not the database, container or provider.
 4. Use `elizaPilotValidation:validateSuki` on a real public human thread and
@@ -96,7 +109,7 @@ Keep both ledgers, receipts and operation holds. Rollback does not authorize
 replaying unknown inference, removing holds, changing schedules, increasing
 budgets or upgrading infrastructure plans.
 
-## Deployment evidence
+## Earlier rollout evidence (before the repair pass)
 
 Verified on 2026-10-20 (America/Chicago):
 
@@ -149,3 +162,57 @@ verified paid live path. All 33 hook/stage paths are implemented, but no claim i
 made that all 33 have produced a verified production ElizaOS output. No validator
 manually published a forum post or sent a newsletter. Existing scheduling and
 publishing were not changed to manufacture a passing test.
+
+## Repair notes (2026-10-20)
+
+- Belle's chart rows are now derived from the selected story IDs, source titles,
+  story signal scores and source-linked analysis. The model supplies only chart
+  title/subtitle; independent chart-source selection can no longer conflict with
+  the selected stories. Unknown/duplicate source selection still fails closed.
+- A real forced-Eliza draft returned `finish=length`, 8,000 output tokens and
+  8,000 reasoning tokens with no content. Belle now sends native
+  `reasoning:{enabled:false}` on drafts/revisions and stops requesting an
+  `xhigh` reasoning phase in its instructions. The 8k daily / 12k weekly token
+  limits, one revision, source/word-count/quality gates and spend cap are unchanged.
+- Suki's prompt and deterministic guard reject recurring personal-observation,
+  loss/forgetting and rerun anecdotes. The blind reviewer explicitly checks them
+  too. Manual review remains required: a model reviewer approved one such draft,
+  which was rejected by the operator before any publication.
+- Full-context Suki validation `cutover-suki-gpu-20261020-v1` used the existing
+  unanswered public AI-opening GPU-scheduling question, with its retrieved original
+  Hugging Face/Ai2 article. Free writer receipt
+  `eliza-c3a4074c-da24-4b47-87b5-5b7edfbd157e` and cheap reviewer receipt
+  `eliza-96b7e44d-66d0-4cad-9857-503cbebb5276` completed on runtime 1.7.2.
+  The free reviewer rejected before inference (404), permitting the separately
+  reserved cheap rescue. The reviewed 111-word reply also passed manual inspection:
+  a bounded measurement proposal, a visible original citation, no invented personal
+  experience and no claim that the suggested experiment had already succeeded.
+  Comparison `r57qv59j2dyrct3nanf41sgeq98gph15` completed with both drafts
+  deterministically valid. No reply was published. Human-thread runs exercised
+  safe abstention/rejection; they are not claimed as approved reply drafts.
+- Belle v3/v4 produced complete JSON and high deterministic scores, but manual
+  review rejected a clipped subject, a visits-versus-citations metric change,
+  unselected-source claims and incomplete prose fields. These are failed quality
+  runs, not promotion evidence. Subject completion now participates in the single
+  revision gate; whole-field completion and a bounded selected-source review are
+  being verified before the generation switch.
+- Belle v5/v6 failed the bounded selected-source review after their single
+  revision. The final v6 still confused AI sessions with citations and could not
+  support its narrative connection. These failed runs did not create an issue,
+  post or email. The reviewer distinguishes editorial labels, interpretation and
+  proposals from factual claims, but does not waive factual support. A fixed
+  Qwen writer/reviewer route is now under verification with hard provider price
+  ceilings and the unchanged $0.75/day shared application budget. It is not yet
+  promotion evidence.
+- The old generic provider-response quarantine cannot be reconstructed because
+  the raw body was deliberately discarded. It remains held. Future malformed
+  responses now get fixed protocol/shape diagnostic codes, without logging raw
+  content or broadening accepted responses. A fresh distinct cheap live canary
+  `eliza-81f2579d-5847-4260-86b4-a7b66e92982a` completed with a durable receipt.
+- Belle job `eliza-4e70070e-c9f6-4387-bff9-16b6ff303f67` was interrupted while a
+  container rollout was still settling. The ledger reports outcome unknown and
+  `provider_timeout` after about 11 seconds. This is consistent with shutdown
+  cancellation, not proof of its historical cause. It remains held, with no replay
+  or hold clearing. Deployment verification now waits for the actual container
+  version before generating. [Cloudflare documents the asynchronous replacement
+  and SIGTERM drain window](https://developers.cloudflare.com/containers/configuration/rollouts/).

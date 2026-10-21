@@ -414,7 +414,7 @@ test("explicit v2 override reaches routing and conflicting overrides fail closed
   expect(routingConfig).toHaveBeenCalledTimes(1);
 });
 
-test("Belle's actual SDK request disables separate reasoning without raising output tokens", async () => {
+test("Belle's Qwen SDK requests use the pinned price ceiling without reasoning output", async () => {
   const t = setup();
   await seedSnapshot(t);
   mockDrafts(invalidStoryDraft, validDraft);
@@ -429,7 +429,7 @@ test("Belle's actual SDK request disables separate reasoning without raising out
       ? reviewedDraft(validDraft) : validDraft;
     return new Response(JSON.stringify({
       id: "belle-structured-test", object: "chat.completion", created: 1_760_000_000,
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: "qwen/qwen3-235b-a22b-2507",
       choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(responseContent) },
         finish_reason: "stop" }],
       usage: { prompt_tokens: 100, completion_tokens: 900, total_tokens: 1000 },
@@ -454,16 +454,25 @@ test("Belle's actual SDK request disables separate reasoning without raising out
     expect(body).toMatchObject({
       model: NEWSLETTER_MODEL_IDS[0],
       max_tokens: 8000,
-      reasoning: { enabled: false },
+      provider: { max_price: { prompt: 0.2, completion: 0.5 } },
     });
+    expect(body.reasoning).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
     expect(JSON.stringify(body.messages)).toContain("Reasoning strength: none");
     expect(JSON.stringify(body.messages)).toContain("standalone email subject of at most 64 characters");
     expect(JSON.stringify(body.messages)).toContain("Citation or retrieval of a web page by ChatGPT is not evidence");
+    expect(JSON.stringify(body.messages)).toContain("prefer three genuinely connected source anchors");
+    expect(JSON.stringify(body.messages)).toContain("remove a factual premise from an unselected source");
   }
   expect(requestBodies[2]).toMatchObject({
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
-    reasoning: { enabled: false },
+    provider: { max_price: { prompt: 0.2, completion: 0.5 } },
   });
+  expect(requestBodies[2]?.reasoning).toBeUndefined();
+  expect(requestBodies[2]?.reasoning_effort).toBeUndefined();
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("10,000 AI sessions is NOT 10,000 ChatGPT citations");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("editorial label; factual assertions still need evidence");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Do not demand one source support a compound claim about multiple sources");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A proposal to check something is not a claim that it was already observed");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("unrelated topics are not automatically a coherent synthesis");
 });

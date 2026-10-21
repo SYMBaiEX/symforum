@@ -13,7 +13,9 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
+  "qwen/qwen3-235b-a22b-2507",
 ]);
+const QWEN_MODEL = "qwen/qwen3-235b-a22b-2507";
 // Leave room for the v2 envelope inside the transport's 256 KiB response cap.
 const MAX_LIVE_COMPLETION_BYTES = 240 * 1024;
 export const LIVE_AGENTS = new Set([
@@ -197,6 +199,26 @@ export function validateLiveRequest(input) {
         ? "model_not_allowed"
         : "invalid_request",
     );
+  if (body.model === QWEN_MODEL) {
+    const price = body.provider?.max_price;
+    if (
+      !["belle", "system"].includes(input.agentSlug) ||
+      body.reasoning !== undefined ||
+      body.provider?.require_parameters !== true ||
+      !record(price) ||
+      Object.keys(price).length !== 2 ||
+      !Object.keys(price).every((key) =>
+        ["prompt", "completion"].includes(key),
+      ) ||
+      !Number.isFinite(price.prompt) ||
+      price.prompt <= 0 ||
+      price.prompt > 0.2 ||
+      !Number.isFinite(price.completion) ||
+      price.completion <= 0 ||
+      price.completion > 0.5
+    )
+      throw new WorkerError("invalid_request");
+  }
   if (
     !Array.isArray(body.messages) ||
     body.messages.length < 1 ||
@@ -263,6 +285,7 @@ export function validateLiveRequest(input) {
             "data_collection",
             "quantizations",
             "sort",
+            ...(body.model === QWEN_MODEL ? ["max_price"] : []),
           ].includes(key),
       ))
   )

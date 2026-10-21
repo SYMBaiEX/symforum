@@ -316,6 +316,101 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
   );
 });
 
+test("Qwen live requests require a Belle or system stage and bounded provider prices", () => {
+  const qwenBody = {
+    ...body,
+    model: "qwen/qwen3-235b-a22b-2507",
+    provider: {
+      allow_fallbacks: false,
+      require_parameters: true,
+      max_price: { prompt: 0.2, completion: 0.5 },
+    },
+  };
+  delete qwenBody.reasoning;
+  const qwenRequest = (agentSlug, stage, nextBody = qwenBody) =>
+    request({
+      agentSlug,
+      stage,
+      body: nextBody,
+      inputHash: liveInputHash(nextBody),
+    });
+  for (const [agentSlug, stage] of [
+    ["belle", "belle:daily-signal:draft"],
+    ["system", "health-canary"],
+  ]) {
+    assert.equal(
+      validateLiveRequest(qwenRequest(agentSlug, stage)).body,
+      qwenBody,
+    );
+  }
+  const cheaperBody = {
+    ...qwenBody,
+    provider: {
+      ...qwenBody.provider,
+      max_price: { prompt: 0.1, completion: 0.25 },
+    },
+  };
+  assert.equal(
+    validateLiveRequest(
+      qwenRequest("belle", "belle:daily-signal:draft", cheaperBody),
+    ).body,
+    cheaperBody,
+  );
+  for (const invalid of [
+    qwenRequest("suki", "suki:forum-reply"),
+    qwenRequest("mara-venn", "mara-venn:forum-draft"),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: { ...qwenBody.provider, require_parameters: false },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: { ...qwenBody.provider, max_price: { prompt: 0.2 } },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: {
+        ...qwenBody.provider,
+        max_price: { prompt: 0.2, completion: 0 },
+      },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: {
+        ...qwenBody.provider,
+        max_price: { prompt: 0.21, completion: 0.5 },
+      },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: {
+        ...qwenBody.provider,
+        max_price: { prompt: 0.2, completion: 0.51 },
+      },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      provider: {
+        ...qwenBody.provider,
+        max_price: { prompt: NaN, completion: 0.5 },
+      },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      reasoning: { effort: "low" },
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      reasoning_effort: "low",
+    }),
+    qwenRequest("belle", "belle:daily-signal:draft", {
+      ...qwenBody,
+      models: ["openrouter/free"],
+    }),
+  ])
+    assert.throws(() => validateLiveRequest(invalid));
+});
+
 test("provider performs one exact-body request and classifies known versus unknown failures safely", async () => {
   let calls = 0;
   const provider = createLiveProvider({
