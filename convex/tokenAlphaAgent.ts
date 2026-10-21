@@ -132,17 +132,43 @@ export const probeData = internalAction({
   handler: (ctx, args) => probeTokenData(ctx, args.platform),
 });
 
-export function tokenAnalysisIsSafe(analysis: string) {
-  return (
-    analysis.length >= 80 &&
-    analysis.length <= 700 &&
-    !/[\d\[\]<>\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(
-      analysis,
-    ) &&
-    !/(?:https?:|www\.|buy now|sell now|guaranteed|risk.free|price target|ape in|verified team|audited)/i.test(
-      analysis,
+type AnalysisValidationCode = "length" | "characters" | "policy-phrase";
+
+class TokenAnalysisValidationError extends Error {
+  constructor(readonly code: AnalysisValidationCode) {
+    super("token_analysis_validation_failed");
+  }
+}
+
+/** Inspect only explicit risk warnings; preserve the original draft for review. */
+function guaranteeWarningInspectionCopy(analysis: string): string {
+  return analysis.replace(/[^.!?;]+[.!?;]?/gu, (clause) =>
+    // Match complete declarative clauses, not embedded claims or questions.
+    /^(?:returns are not guaranteed|execution is not guaranteed(?: at a quoted price)?|liquidity describes funds available in the pool, not guaranteed execution at a quoted price)[.;]?$/i.test(
+      clause.trim(),
     )
+      ? ""
+      : clause,
   );
+}
+
+export function tokenAnalysisValidationCode(
+  analysis: string,
+): AnalysisValidationCode | null {
+  if (analysis.length < 80 || analysis.length > 700) return "length";
+  if (/[\d\[\]<>\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(analysis))
+    return "characters";
+  if (
+    /(?:https?:|www\.|buy now|sell now|guaranteed|risk.free|price target|ape in|verified team|audited)/i.test(
+      guaranteeWarningInspectionCopy(analysis),
+    )
+  )
+    return "policy-phrase";
+  return null;
+}
+
+export function tokenAnalysisIsSafe(analysis: string) {
+  return tokenAnalysisValidationCode(analysis) === null;
 }
 
 /** Cache only project metadata; never replace fresh numeric fields with cache. */
@@ -251,8 +277,8 @@ async function generateAnalysis(
     durationMs: Date.now() - startedAt,
   });
   const analysis = generation.value.output.analysis.trim();
-  if (!tokenAnalysisIsSafe(analysis))
-    throw new Error("token_analysis_validation_failed");
+  const validationCode = tokenAnalysisValidationCode(analysis);
+  if (validationCode) throw new TokenAnalysisValidationError(validationCode);
   return {
     analysis,
     inputTokens: generation.value.usage.inputTokens ?? 0,
@@ -551,7 +577,10 @@ export async function runTokenPilot(
   } catch (error) {
     // Fixed diagnostics only: upstream errors can contain response bodies,
     // credentials or model text. Unknown Eliza receipts remain quarantined.
-    const code = dataFailureCode(error);
+    const code =
+      error instanceof TokenAnalysisValidationError
+        ? `analysis-${error.code}`
+        : dataFailureCode(error);
     const reason = `token-pilot-${phase}-failed${code ? `:${code}` : ""}`;
     await ctx.runMutation(internal.tokenAlphaData.finishRun, {
       runKey,

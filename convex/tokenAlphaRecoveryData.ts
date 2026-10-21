@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { env, internalMutation, type MutationCtx } from "./_generated/server";
 
 const BAGS_DATA_FAILURE = "token-pilot-mint-verification-failed:http-429";
+const BAGS_VALIDATION_FAILURE = "token-pilot-model-draft-failed";
 const RECEIPT_SCAN_LIMIT = 257;
 
 /** Only the current ordinary slot's confirmed pre-model RPC failure qualifies. */
@@ -90,6 +91,107 @@ export async function validateBagsDataRecovery(
     packet === null &&
     revision === null &&
     publications.length === 0
+  );
+}
+
+/** Fresh verification after one known-completed draft failed local validation. */
+export async function validateBagsValidationVerification(
+  ctx: MutationCtx,
+  failedRunKey: string,
+  jobId: string,
+  now: number,
+): Promise<boolean> {
+  if (
+    failedRunKey !== `bags:${new Date(now).toISOString().slice(0, 13)}` ||
+    !/^[a-zA-Z0-9:_-]{1,200}$/.test(jobId)
+  )
+    return false;
+  const source = await ctx.db
+    .query("tokenAlphaRuns")
+    .withIndex("by_runKey", (q) => q.eq("runKey", failedRunKey))
+    .unique();
+  if (
+    source === null ||
+    source.platform !== "bags" ||
+    source.status !== "failed" ||
+    source.reason !== BAGS_VALIDATION_FAILURE ||
+    source.operatorFirstPost !== undefined ||
+    source.operatorRetryOf !== undefined ||
+    source.snapshot === undefined ||
+    source.analysis !== undefined ||
+    source.title !== undefined ||
+    source.body !== undefined ||
+    source.threadId !== undefined ||
+    source.postId !== undefined
+  )
+    return false;
+  const forumRun = await ctx.db
+    .query("forumAgentRuns")
+    .withIndex("by_runKey", (q) => q.eq("runKey", failedRunKey))
+    .unique();
+  if (
+    forumRun === null ||
+    forumRun.agentSlug !== "bags-scout" ||
+    forumRun.status !== "failed" ||
+    forumRun.model !== OPENROUTER_TOKEN_SCOUT_MODEL ||
+    forumRun.errorMessage !== BAGS_VALIDATION_FAILURE ||
+    forumRun.threadId !== undefined ||
+    forumRun.followUpPostId !== undefined ||
+    forumRun.title !== undefined ||
+    forumRun.imageSourceUrl !== undefined ||
+    forumRun.contentFormat !== undefined ||
+    forumRun.sourceUrls.length !== 0
+  )
+    return false;
+
+  const [operation, calls, packet, revision, publications] = await Promise.all([
+    ctx.db
+      .query("elizaRuntimeOperations")
+      .withIndex("by_operationKey", (q) => q.eq("operationKey", failedRunKey))
+      .unique(),
+    ctx.db
+      .query("elizaRuntimeCalls")
+      .withIndex("by_expiresAt")
+      .take(RECEIPT_SCAN_LIMIT),
+    ctx.db
+      .query("forumAgentResearchPackets")
+      .withIndex("by_runKey", (q) => q.eq("runKey", failedRunKey))
+      .first(),
+    ctx.db
+      .query("forumAgentDraftRevisions")
+      .withIndex("by_runKey_and_revision", (q) => q.eq("runKey", failedRunKey))
+      .first(),
+    ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
+        q.eq("agentSlug", "bags-scout").eq("status", "published"),
+      )
+      .take(1),
+  ]);
+  if (
+    operation === null ||
+    operation.status !== "ready" ||
+    operation.jobId !== jobId ||
+    calls.length === RECEIPT_SCAN_LIMIT ||
+    packet !== null ||
+    revision !== null ||
+    publications.length !== 0
+  )
+    return false;
+  const sourceCalls = calls.filter(
+    (call) => call.operationKey === failedRunKey,
+  );
+  if (sourceCalls.length !== 1) return false;
+  const call = sourceCalls[0];
+  return (
+    call.jobId === jobId &&
+    call.agentSlug === "bags-scout" &&
+    call.stage === "bags-scout:forum-draft" &&
+    call.model === OPENROUTER_TOKEN_SCOUT_MODEL &&
+    call.status === "completed" &&
+    call.outcomeUnknown !== true &&
+    /^[a-f0-9]{64}$/.test(call.inputHash) &&
+    operation.inputHash === call.inputHash
   );
 }
 
@@ -259,6 +361,58 @@ export const queueBagsDataRecovery = internalMutation({
     await ctx.db.patch("tokenAlphaControl", control._id, {
       operatorBagsDataRecovery: {
         sourceRunKey: args.failedRunKey,
+        runKey,
+        authorizedAt: now,
+      },
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.tokenAlphaAgent.run, {
+      platform: "bags",
+      operatorRetryOf: args.failedRunKey,
+    });
+    return { queued: true, runKey };
+  },
+});
+
+/** One owner-approved verification, separate from earlier permanent markers. */
+export const queueBagsValidationVerification = internalMutation({
+  args: { failedRunKey: v.string(), jobId: v.string() },
+  returns: v.object({ queued: v.boolean(), runKey: v.optional(v.string()) }),
+  handler: async (ctx, args): Promise<{ queued: boolean; runKey?: string }> => {
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    const now = Date.now();
+    if (
+      control?.enabled !== true ||
+      env.ELIZA_RUNTIME_MODE !== "live" ||
+      control.operatorBagsValidationVerification !== undefined ||
+      !(await validateBagsValidationVerification(
+        ctx,
+        args.failedRunKey,
+        args.jobId,
+        now,
+      ))
+    )
+      return { queued: false };
+    const runKey = `${args.failedRunKey}:operator-validation-verification-1`;
+    const [existingRun, existingForumRun] = await Promise.all([
+      ctx.db
+        .query("tokenAlphaRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique(),
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique(),
+    ]);
+    if (existingRun !== null || existingForumRun !== null)
+      return { queued: false };
+    await ctx.db.patch("tokenAlphaControl", control._id, {
+      operatorBagsValidationVerification: {
+        sourceRunKey: args.failedRunKey,
+        sourceJobId: args.jobId,
         runKey,
         authorizedAt: now,
       },

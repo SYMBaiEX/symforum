@@ -38,6 +38,7 @@ import {
   runTokenPilot,
   probeTokenData,
   tokenAnalysisIsSafe,
+  tokenAnalysisValidationCode,
   withCachedTokenMetadata,
 } from "./tokenAlphaAgent";
 
@@ -45,6 +46,8 @@ const NOW = Date.UTC(2026, 9, 21, 20);
 const MINT = "8Ta68iepck46U9PQzQvNPceN2f3mxJQN7dWe6CMYBAGS";
 const ANALYSIS =
   "Trading activity is visible in this sample, but volume alone cannot establish lasting demand. I would watch whether liquidity and participation remain consistent over successive observations.";
+const GUARANTEE_WARNING =
+  "Liquidity describes funds available in the pool, not guaranteed execution at a quoted price; volume records trading activity, not lasting demand. Further observations are needed before drawing conclusions about participation.";
 const snapshot: TokenSnapshot = {
   platform: "bags",
   mint: MINT,
@@ -430,6 +433,67 @@ describe("token pilot orchestration", () => {
     expect(reviewed.snapshot.description).toBe(description);
     expect(reviewed.body).toBe(revision.body);
   });
+  test("an explicit guarantee risk warning reaches independent review unchanged", async () => {
+    mocks.generate
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: { analysis: GUARANTEE_WARNING },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      })
+      .mockResolvedValueOnce({
+        output: { approved: false, reason: "Independent quality hold." },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      });
+    const ctx = context();
+    expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+      status: "held",
+      reason: "independent-review-rejected",
+    });
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+    const reviewed = JSON.parse(
+      mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+    );
+    expect(reviewed.body).toContain(GUARANTEE_WARNING);
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+  });
+  test.each([
+    ["length", "Short private draft."],
+    ["characters", `${ANALYSIS} 123 private draft`],
+    ["policy-phrase", `${ANALYSIS} Guaranteed execution is available.`],
+  ] as const)(
+    "local validation failure exposes only its fixed %s code",
+    async (code, analysis) => {
+      mocks.generate.mockReset().mockResolvedValueOnce({
+        output: { analysis },
+        response: { modelId: "vendor/free" },
+        usage: {},
+      });
+      const ctx = context();
+      const reason = `token-pilot-model-draft-failed:analysis-${code}`;
+      expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+        status: "failed",
+        reason,
+      });
+      expect(calls(ctx, "tokenAlphaData:finishRun")[0]).toMatchObject({
+        status: "failed",
+        reason,
+      });
+      expect(
+        calls(ctx, "forumAgentResearchPackets:recordDraftRevision"),
+      ).toHaveLength(0);
+      expect(
+        calls(ctx, "forumAgentResearchPackets:recordPublicationDecision"),
+      ).toHaveLength(0);
+      expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+      expect(mocks.generate).toHaveBeenCalledTimes(1);
+      expect(calls(ctx, "forumAgentEditorialData:recordUsage")).toHaveLength(1);
+      expect(
+        JSON.stringify(calls(ctx, "tokenAlphaData:finishRun")),
+      ).not.toContain(analysis);
+    },
+  );
   test("ambiguous generation failure is not retried or replaced by a fallback", async () => {
     mocks.route.mockRejectedValueOnce(new Error("unknown upstream outcome"));
     const ctx = context();
@@ -442,6 +506,62 @@ describe("token pilot orchestration", () => {
 });
 
 describe("opinion and metadata boundaries", () => {
+  test.each([
+    GUARANTEE_WARNING,
+    `${ANALYSIS} Returns are not guaranteed.`,
+    `${ANALYSIS} Execution is not guaranteed at a quoted price.`,
+    `${ANALYSIS} Execution is not guaranteed.`,
+  ])("accepts only explicit negated-guarantee warnings: %s", (analysis) => {
+    expect(tokenAnalysisIsSafe(analysis)).toBe(true);
+    expect(tokenAnalysisValidationCode(analysis)).toBeNull();
+  });
+  test.each([
+    "Guaranteed execution at a quoted price.",
+    "Guaranteed returns are available.",
+    "Returns are guaranteed.",
+    "Not not guaranteed execution at a quoted price.",
+    "Returns are not not guaranteed.",
+    "It is not true that returns are not guaranteed.",
+    "It is a lie that returns are not guaranteed.",
+    "The idea that returns are not guaranteed is a myth.",
+    "Returns are not guaranteed? Absolutely.",
+    "Execution is not guaranteed at a quoted price? Absolutely.",
+    "Liquidity describes funds available in the pool, not guaranteed execution at a quoted price? Absolutely.",
+    "Not guaranteed returns, only a snapshot of trading activity.",
+    "Returns are not guaranteed, unless you use this token.",
+    "No returns are not guaranteed.",
+    "Returns are not guaranteed is false.",
+    "Returns are not guaranteed except for this token.",
+    "Not guaranteed execution and guaranteed returns.",
+    "Not guaranteed returns. Execution is guaranteed.",
+    "Not guaranteed safety.",
+    "Not guaranteed returns. Do not buy now.",
+    "Not guaranteed returns. Do not sell now.",
+    "Not guaranteed returns. This is not audited.",
+    "Not guaranteed returns. This is not a verified team.",
+    "Not guaranteed returns. No price target is provided.",
+    "Not guaranteed returns. No risk-free trade exists.",
+    "Not guaranteed returns. Do not ape in.",
+    "Not guaranteed returns. Visit https://example.com.",
+    "Not guaranteed returns. Visit www.example.com.",
+  ])(
+    "keeps promises, ambiguous negation and all other policy phrases blocked: %s",
+    (clause) => {
+      const analysis = `${ANALYSIS} ${clause}`;
+      expect(tokenAnalysisIsSafe(analysis)).toBe(false);
+      expect(tokenAnalysisValidationCode(analysis)).toBe("policy-phrase");
+    },
+  );
+  test("diagnostic categories preserve the existing length and character limits", () => {
+    expect(tokenAnalysisValidationCode("x".repeat(79))).toBe("length");
+    expect(tokenAnalysisValidationCode("x".repeat(80))).toBeNull();
+    expect(tokenAnalysisValidationCode("x".repeat(700))).toBeNull();
+    expect(tokenAnalysisValidationCode("x".repeat(701))).toBe("length");
+    for (const character of ["1", "[", "]", "<", ">", "\n", "\u0000", "\u202e"])
+      expect(tokenAnalysisValidationCode(`${ANALYSIS} ${character}`)).toBe(
+        "characters",
+      );
+  });
   test("rejects new numerical, actionable or markup-bearing model claims", () => {
     expect(tokenAnalysisIsSafe(ANALYSIS)).toBe(true);
     for (const text of [

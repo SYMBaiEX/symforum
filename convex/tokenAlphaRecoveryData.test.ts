@@ -1284,3 +1284,482 @@ describe("one approved pre-model Bags data recovery", () => {
     expect(await queueDataRecovery(t)).toEqual({ queued: false });
   });
 });
+
+const VALIDATION_NOW = NOW + 3_600_000;
+const VALIDATION_SOURCE_KEY = "bags:2026-10-21T22";
+const VALIDATION_JOB_ID = "eliza-fc50590f-ab9d-4f68-abe1-371d4d2de1c2";
+const VALIDATION_RUN_KEY = `${VALIDATION_SOURCE_KEY}:operator-validation-verification-1`;
+const VALIDATION_FAILURE = "token-pilot-model-draft-failed";
+const OLD_CONSUMED_DATA_RECOVERY = {
+  sourceRunKey: DATA_SOURCE_KEY,
+  runKey: DATA_RECOVERY_KEY,
+  authorizedAt: NOW,
+  claimedAt: NOW,
+};
+
+async function validationFixture(t: ReturnType<typeof setup>) {
+  const ids = await dataReadyFixture(t);
+  vi.setSystemTime(VALIDATION_NOW);
+  const receiptIds = await t.run(async (ctx) => {
+    await ctx.db.patch("tokenAlphaRuns", ids.sourceId, {
+      runKey: VALIDATION_SOURCE_KEY,
+      reason: VALIDATION_FAILURE,
+      snapshot: {
+        ...SNAPSHOT,
+        observedAt: VALIDATION_NOW,
+        metricsAsOf: VALIDATION_NOW,
+      },
+    });
+    await ctx.db.patch("forumAgentRuns", ids.forumRunId, {
+      runKey: VALIDATION_SOURCE_KEY,
+      slot: 22,
+      errorMessage: VALIDATION_FAILURE,
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+      operatorBagsDataRecovery: OLD_CONSUMED_DATA_RECOVERY,
+    });
+    const callId = await ctx.db.insert("elizaRuntimeCalls", {
+      jobId: VALIDATION_JOB_ID,
+      operationKey: VALIDATION_SOURCE_KEY,
+      inputHash: HASH,
+      agentSlug: "bags-scout",
+      stage: "bags-scout:forum-draft",
+      model: OPENROUTER_TOKEN_SCOUT_MODEL,
+      status: "completed",
+      providerStatus: 200,
+      outcomeUnknown: false,
+      createdAt: VALIDATION_NOW - 60_000,
+      updatedAt: VALIDATION_NOW - 50_000,
+      expiresAt: VALIDATION_NOW + 86_400_000,
+    });
+    const operationId = await ctx.db.insert("elizaRuntimeOperations", {
+      operationKey: VALIDATION_SOURCE_KEY,
+      status: "ready",
+      jobId: VALIDATION_JOB_ID,
+      inputHash: HASH,
+      updatedAt: VALIDATION_NOW,
+    });
+    return { callId, operationId };
+  });
+  return { ...ids, ...receiptIds };
+}
+
+async function queueValidation(t: ReturnType<typeof setup>) {
+  return await t.mutation(
+    internal.tokenAlphaRecoveryData.queueBagsValidationVerification,
+    {
+      failedRunKey: VALIDATION_SOURCE_KEY,
+      jobId: VALIDATION_JOB_ID,
+    },
+  );
+}
+
+async function claimValidation(t: ReturnType<typeof setup>) {
+  return await t.mutation(internal.tokenAlphaData.claimRun, {
+    platform: "bags",
+    claimToken: "validation-verification-claim",
+    operatorRetryOf: VALIDATION_SOURCE_KEY,
+  });
+}
+
+describe("one approved completed-draft Bags validation verification", () => {
+  const invalidValidationSources: Array<[string, SourcePatch]> = [
+    ...invalidSources,
+    ["old hourly source", { runKey: DATA_SOURCE_KEY }],
+    ["missing snapshot", { snapshot: undefined }],
+    ["operator first post", { operatorFirstPost: true }],
+    ["false operator flag", { operatorFirstPost: false }],
+    ["RPC data failure", { reason: DATA_FAILURE }],
+    ["missing failure reason", { reason: undefined }],
+  ];
+  test.each(invalidValidationSources)("rejects %s", async (_name, patch) => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    await t.run(
+      async (ctx) => await ctx.db.patch("tokenAlphaRuns", ids.sourceId, patch),
+    );
+    expect(await queueValidation(t)).toEqual({ queued: false });
+    const control = await t.run(
+      async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+    );
+    expect(control?.operatorBagsValidationVerification).toBeUndefined();
+  });
+
+  const invalidValidationReceipts: Array<[string, CallPatch]> = [
+    ["pending call", { status: "pending" }],
+    ["failed call", { status: "failed" }],
+    ["unknown completion", { outcomeUnknown: true }],
+    ["wrong model", { model: "openrouter/free" }],
+    ["wrong agent", { agentSlug: "pumpfun-scout" }],
+    ["review stage", { stage: "bags-scout:forum-evidence-review" }],
+    ["wrong operation", { operationKey: "bags:other" }],
+    ["wrong job", { jobId: "different-job" }],
+    ["invalid hash", { inputHash: "invalid" }],
+    ["mismatched hash", { inputHash: "b".repeat(64) }],
+  ];
+  test.each(invalidValidationReceipts)(
+    "rejects a %s receipt",
+    async (_name, patch) => {
+      const t = setup();
+      const ids = await validationFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("elizaRuntimeCalls", ids.callId, patch),
+      );
+      expect(await queueValidation(t)).toEqual({ queued: false });
+    },
+  );
+
+  test.each([
+    ["missing receipt", "receipt"],
+    ["missing operation", "operation"],
+    ["unknown operation", "unknown"],
+    ["pending operation", "pending"],
+    ["wrong operation job", "job"],
+    ["wrong operation hash", "hash"],
+  ])("rejects %s", async (_name, variant) => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    await t.run(async (ctx) => {
+      if (variant === "receipt")
+        await ctx.db.delete("elizaRuntimeCalls", ids.callId);
+      else if (variant === "operation")
+        await ctx.db.delete("elizaRuntimeOperations", ids.operationId);
+      else
+        await ctx.db.patch(
+          "elizaRuntimeOperations",
+          ids.operationId,
+          variant === "job"
+            ? { jobId: "different-job" }
+            : variant === "hash"
+              ? { inputHash: "b".repeat(64) }
+              : { status: variant as "unknown" | "pending" },
+        );
+    });
+    expect(await queueValidation(t)).toEqual({ queued: false });
+  });
+
+  test.each(["bags-scout:forum-draft", "bags-scout:forum-evidence-review"])(
+    "rejects any second source call (%s)",
+    async (stage) => {
+      const t = setup();
+      await validationFixture(t);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.insert("elizaRuntimeCalls", {
+            jobId: "second-source-call",
+            operationKey: VALIDATION_SOURCE_KEY,
+            inputHash: HASH,
+            agentSlug: "bags-scout",
+            stage,
+            model: OPENROUTER_TOKEN_SCOUT_MODEL,
+            status: "completed",
+            outcomeUnknown: false,
+            createdAt: VALIDATION_NOW,
+            updatedAt: VALIDATION_NOW,
+            expiresAt: VALIDATION_NOW - 1,
+          }),
+      );
+      expect(await queueValidation(t)).toEqual({ queued: false });
+    },
+  );
+
+  test("fails closed at the complete receipt-scan cap", async () => {
+    const t = setup();
+    await validationFixture(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 256; index += 1)
+        await ctx.db.insert("elizaRuntimeCalls", {
+          jobId: `unrelated-${index}`,
+          operationKey: `other:${index}`,
+          inputHash: HASH,
+          agentSlug: "other",
+          stage: "other",
+          model: "openrouter/free",
+          status: "completed",
+          createdAt: VALIDATION_NOW,
+          updatedAt: VALIDATION_NOW,
+          expiresAt: VALIDATION_NOW,
+        });
+    });
+    expect(await queueValidation(t)).toEqual({ queued: false });
+  });
+
+  test.each(["packet", "revision"])(
+    "rejects existing private %s",
+    async (kind) => {
+      const t = setup();
+      await validationFixture(t);
+      await t.run(async (ctx) => {
+        const packetId = await ctx.db.insert("forumAgentResearchPackets", {
+          runKey:
+            kind === "packet" ? VALIDATION_SOURCE_KEY : "unrelated-packet",
+          agentSlug: "bags-scout",
+          state: "held",
+          currentStage: "publication_decision",
+          sourceCount: 0,
+          createdAt: VALIDATION_NOW,
+          updatedAt: VALIDATION_NOW,
+        });
+        if (kind === "revision")
+          await ctx.db.insert("forumAgentDraftRevisions", {
+            packetId,
+            runKey: VALIDATION_SOURCE_KEY,
+            agentSlug: "bags-scout",
+            revision: 0,
+            state: "held",
+            title: "",
+            body: "",
+            contentHash: HASH,
+            claimHash: HASH,
+            claimCount: 0,
+            createdAt: VALIDATION_NOW,
+            updatedAt: VALIDATION_NOW,
+          });
+      });
+      expect(await queueValidation(t)).toEqual({ queued: false });
+    },
+  );
+
+  test.each([
+    ["wrong forum model", { model: "openrouter/free" }],
+    ["wrong forum agent", { agentSlug: "pumpfun-scout" }],
+    ["wrong forum failure", { errorMessage: DATA_FAILURE }],
+    ["proposed title", { title: "" }],
+    ["proposed sources", { sourceUrls: ["https://bags.fm/fixture"] }],
+  ])("rejects %s", async (_name, patch) => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("forumAgentRuns", ids.forumRunId, patch),
+    );
+    expect(await queueValidation(t)).toEqual({ queued: false });
+  });
+
+  test("accepts completed receipts without an uncertainty flag and never reuses source output", async () => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("elizaRuntimeCalls", ids.callId, {
+          outcomeUnknown: undefined,
+        }),
+    );
+    expect(await queueValidation(t)).toEqual({
+      queued: true,
+      runKey: VALIDATION_RUN_KEY,
+    });
+    expect(await claimValidation(t)).toMatchObject({
+      runKey: VALIDATION_RUN_KEY,
+      status: "running",
+    });
+    const freshRun = await t.query(internal.tokenAlphaData.getRun, {
+      runKey: VALIDATION_RUN_KEY,
+    });
+    expect(freshRun?.snapshot).toBeUndefined();
+    expect(freshRun?.analysis).toBeUndefined();
+    expect(freshRun?.body).toBeUndefined();
+  });
+
+  test("queues and claims once concurrently, preserves source and both old markers, and permanently consumes verification", async () => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    const readSource = async () =>
+      await t.run(async (ctx) => ({
+        run: await ctx.db.get("tokenAlphaRuns", ids.sourceId),
+        forum: await ctx.db.get("forumAgentRuns", ids.forumRunId),
+        call: await ctx.db.get("elizaRuntimeCalls", ids.callId),
+        operation: await ctx.db.get("elizaRuntimeOperations", ids.operationId),
+      }));
+    const before = await readSource();
+    const queued = await Promise.all(
+      Array.from({ length: 12 }, () => queueValidation(t)),
+    );
+    expect(queued.filter((result) => result.queued)).toEqual([
+      { queued: true, runKey: VALIDATION_RUN_KEY },
+    ]);
+    const scheduled = await t.run(
+      async (ctx) => await ctx.db.system.query("_scheduled_functions").take(3),
+    );
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].args).toEqual([
+      { platform: "bags", operatorRetryOf: VALIDATION_SOURCE_KEY },
+    ]);
+    const claims = await Promise.all(
+      Array.from({ length: 12 }, () => claimValidation(t)),
+    );
+    expect(claims.filter((claim) => claim !== null)).toHaveLength(1);
+    expect(await readSource()).toEqual(before);
+    await t.mutation(internal.tokenAlphaData.finishRun, {
+      runKey: VALIDATION_RUN_KEY,
+      claimToken: "validation-verification-claim",
+      status: "failed",
+      reason: "No automatic replay",
+    });
+    expect(await claimValidation(t)).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "ordinary-same-hour",
+      }),
+    ).toBeNull();
+    await t.mutation(internal.tokenAlphaData.ensureInfrastructure, {});
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: false });
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: true });
+    vi.setSystemTime(VALIDATION_NOW + 3_600_000);
+    expect(await queueValidation(t)).toEqual({ queued: false });
+    expect(await claimValidation(t)).toBeNull();
+    const control = await t.run(
+      async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+    );
+    expect(control?.operatorBagsValidationVerification).toEqual({
+      sourceRunKey: VALIDATION_SOURCE_KEY,
+      sourceJobId: VALIDATION_JOB_ID,
+      runKey: VALIDATION_RUN_KEY,
+      authorizedAt: VALIDATION_NOW,
+      claimedAt: VALIDATION_NOW,
+    });
+    expect(control?.operatorBagsRetry).toEqual(OLD_CONSUMED_RETRY);
+    expect(control?.operatorBagsDataRecovery).toEqual(
+      OLD_CONSUMED_DATA_RECOVERY,
+    );
+    expect(await readSource()).toEqual(before);
+  });
+
+  test.each(preservedClaimGates)(
+    "preserves $name at claim time",
+    async ({ block }) => {
+      const t = setup();
+      const ids = await validationFixture(t);
+      expect((await queueValidation(t)).queued).toBe(true);
+      await block(t, ids);
+      expect(await claimValidation(t)).toBeNull();
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(
+        control?.operatorBagsValidationVerification?.claimedAt,
+      ).toBeUndefined();
+    },
+  );
+
+  test.each(["operatorBagsRetry", "operatorBagsDataRecovery"] as const)(
+    "rejects ambiguity with %s even when consumed",
+    async (field) => {
+      const t = setup();
+      const ids = await validationFixture(t);
+      expect((await queueValidation(t)).queued).toBe(true);
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+            [field]:
+              field === "operatorBagsRetry"
+                ? { ...OLD_CONSUMED_RETRY, sourceRunKey: VALIDATION_SOURCE_KEY }
+                : {
+                    ...OLD_CONSUMED_DATA_RECOVERY,
+                    sourceRunKey: VALIDATION_SOURCE_KEY,
+                  },
+          }),
+      );
+      expect(await claimValidation(t)).toBeNull();
+    },
+  );
+
+  test("rejects missing, forged, wrong-lane and first-post authority", async () => {
+    const t = setup();
+    const ids = await validationFixture(t);
+    expect(await claimValidation(t)).toBeNull();
+    expect((await queueValidation(t)).queued).toBe(true);
+    const marker = {
+      sourceRunKey: VALIDATION_SOURCE_KEY,
+      sourceJobId: VALIDATION_JOB_ID,
+      runKey: VALIDATION_RUN_KEY,
+      authorizedAt: VALIDATION_NOW,
+    };
+    for (const patch of [
+      { runKey: DATA_RECOVERY_KEY },
+      { sourceJobId: "wrong-job" },
+      { sourceRunKey: DATA_SOURCE_KEY },
+      { claimedAt: VALIDATION_NOW },
+    ]) {
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+            operatorBagsValidationVerification: { ...marker, ...patch },
+          }),
+      );
+      expect(await claimValidation(t)).toBeNull();
+    }
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+          operatorBagsValidationVerification: marker,
+        }),
+    );
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "pumpfun",
+        claimToken: "wrong-lane",
+        operatorRetryOf: VALIDATION_SOURCE_KEY,
+      }),
+    ).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "first-post-combo",
+        operatorRetryOf: VALIDATION_SOURCE_KEY,
+        operatorFirstPost: true,
+      }),
+    ).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "false-first-post-combo",
+        operatorRetryOf: VALIDATION_SOURCE_KEY,
+        operatorFirstPost: false,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects any all-time Bags publication before authorizing verification", async () => {
+    const t = setup();
+    await validationFixture(t);
+    await t.run(
+      async (ctx) =>
+        await ctx.db.insert("forumAgentRuns", {
+          runKey: "bags:older-published",
+          agentSlug: "bags-scout",
+          runDate: "2026-10-01",
+          slot: 1,
+          attempt: 0,
+          status: "published",
+          model: "openrouter/free",
+          sourceUrls: [],
+          startedAt: VALIDATION_NOW - 20 * 86_400_000,
+          updatedAt: VALIDATION_NOW,
+        }),
+    );
+    expect(await queueValidation(t)).toEqual({ queued: false });
+  });
+
+  test.each(["off", "hour changed"])(
+    "holds an authorized verification when runtime is %s",
+    async (gate) => {
+      const t = setup();
+      const ids = await validationFixture(t);
+      expect((await queueValidation(t)).queued).toBe(true);
+      if (gate === "off") vi.stubEnv("ELIZA_RUNTIME_MODE", "off");
+      else vi.setSystemTime(VALIDATION_NOW + 3_600_000);
+      expect(await claimValidation(t)).toBeNull();
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(
+        control?.operatorBagsValidationVerification?.claimedAt,
+      ).toBeUndefined();
+    },
+  );
+});

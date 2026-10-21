@@ -130,6 +130,16 @@ provider retry, source failure or unknown holds. Only that matched authorization
 can bypass same-hour attempt occupancy; all other gates apply. The cron cannot
 request it, and recovery fetches a new snapshot rather than reusing a probe.
 
+`tokenAlphaRecoveryData:queueBagsValidationVerification` is a third, separately
+owner-approved permanent one-shot. It accepts only the current ordinary Bags
+hour's exact local model-draft failure, with a stored source snapshot, exactly
+one known-completed Luna draft receipt and its matching ready operation. No
+saved analysis, private draft/review proof or previous Bags publication may
+exist. Its separate authorization is revalidated and consumed atomically; all
+earlier markers and failed/held runs remain unchanged. It starts fresh data,
+generation and independent review, never publishes the failed cached draft.
+All ordinary quotas, health, unresolved-operation and publishing gates apply.
+
 `tokenAlphaAgent:probeData` is an internal data-only diagnostic for one platform.
 It uses the same quota-reserved ranking fetch, freshness filters and finalized
 mint verification as a normal run. One invocation can consume at most one
@@ -273,3 +283,20 @@ account payments or a spending limit. No billing setting was changed. The
 platform Vercel preview passed; the other application previews were blocked or
 failed. Those preview statuses are not evidence for or against the separately
 verified Convex/Cloudflare production deployment.
+
+### Local validation false positive, 2026-10-21
+
+The normal 22:00 UTC Bags slot fetched valid data and completed its Luna draft,
+but the local policy filter rejected a legitimate "not guaranteed execution at
+a quoted price" caveat. The exact cause was confirmed by reading the existing
+known-completed worker result with the original hash-matched request; this was
+a cache-only inspection, not another inference or a replay of an unknown job.
+The failed source run remains unchanged.
+
+The validator now recognizes only narrowly specified whole declarative risk
+warnings in an inspection copy. The original analysis still reaches independent
+review unchanged. Positive guarantees, embedded denials, questions, double
+negatives, ambiguous variants and other policy phrases remain blocked. New
+local failures retain only fixed length/character/policy codes, never raw model
+text. The owner approved one separate fresh guarded verification, with no
+review waiver or increase to any limit.

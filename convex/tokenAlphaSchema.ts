@@ -56,6 +56,15 @@ export const tokenAlphaTables = {
         claimedAt: v.optional(v.number()),
       }),
     ),
+    operatorBagsValidationVerification: v.optional(
+      v.object({
+        sourceRunKey: v.string(),
+        sourceJobId: v.string(),
+        runKey: v.string(),
+        authorizedAt: v.number(),
+        claimedAt: v.optional(v.number()),
+      }),
+    ),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
   // Durable run keys never become retryable: an ambiguous model outcome must
