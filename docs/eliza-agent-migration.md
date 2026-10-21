@@ -2,6 +2,11 @@
 
 ## Ownership and scope
 
+Production generation was enabled on 2026-10-21 at 09:35 UTC after the Suki and
+Belle real-source pilots passed backend and independent manual review.
+`ELIZA_RUNTIME_MODE=live`; `ELIZA_SHADOW_MODE=off`. Convex publishing and scheduling
+remain unchanged.
+
 Generation for all 33 forum personas (the 30-person roster, Suki, Belle and NyX),
 plus Belle's daily and weekly newsletter, uses the existing Cloudflare container
 when `ELIZA_RUNTIME_MODE=live`. Topic selection, drafts, revisions, replies and
@@ -13,30 +18,46 @@ budgets and usage accounting, validation, publication, newsletter storage and
 email sending. Shared forum research topic selection and article drafts use the
 free router only; replies and independent reviews retain their existing
 free-first routing with cheap DeepSeek rescue where that stage permits it.
-Belle's long daily/weekly drafts, their single
-revision and blind evidence review use the fixed non-thinking
-`qwen/qwen3.8-flash` route with native thinking disabled: the free attempt
-exceeded the safe worker deadline, DeepSeek drafts failed source review, and the
-Mistral trial still exhausted the bounded review output. This is not the older
-Qwen235B route that failed pre-inference checks, or the Qwen3.5 route that lacked
-the required upstream strict-schema mode. No publishing credentials or
-publishing tools exist in the worker.
+Belle's long daily/weekly drafts, their single revision and blind evidence review
+use fixed `openai/gpt-6-luna`, with native low-effort reasoning and provider
+fallback disabled. Reasoning is excluded from returned text and counts against
+the unchanged output-token and cost caps. The exact provider tier is Standard (`openai`), with
+`openai/fast` and `openai/flex` explicitly excluded. Unsupported sampling controls
+are stripped before transport. This pinned model is distinct from the floating cheap-rescue
+alias. Earlier free, floating DeepSeek, Mistral and Qwen trials exposed timeout,
+source-visibility, prose and structured-output problems; their failed artifacts
+are not promotion evidence. No publishing credentials or publishing tools exist
+in the worker.
 
-Until live mode is enabled, normal legacy Belle calls retain the existing
-DeepSeek route with separate reasoning disabled. Only an explicitly forced Eliza
-pilot or actual live Eliza configuration selects the bounded Qwen3.8 route.
+When live mode is off, normal legacy Belle calls retain the existing DeepSeek
+route with separate reasoning disabled. An explicitly forced Eliza pilot or the
+actual live Eliza configuration selects the bounded pinned route.
 
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
-and that fixed Qwen3.8 model. The fixed model is restricted to Belle and the system canary,
+and that fixed Luna model. The fixed model is restricted to Belle and the system canary,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
 reservations use those ceilings, not a catalog minimum. No cross-model server
-fallback is allowed. The old fixed GPT pilot was retired at the operator's request.
+fallback is allowed. GPT-4.1-mini is retired from active generation policy;
+historical records and the existing embedding model are not rewritten.
 Shadow comparisons use that same cheap DeepSeek alias, with separate reasoning
-disabled, one provider call and no provider fallback. Belle also explicitly
-uses a non-thinking route without unsupported reasoning hints. Token limits
-and editorial quality gates are unchanged. No ChatGPT model is configured
-for forum or newsletter generation. A Codex model label is not substituted for
-an unverified OpenRouter model identifier.
+disabled, one provider call and no provider fallback. The fixed Luna request
+pins exactly `reasoning:{effort:"low",exclude:true}`; neither caller overrides
+nor the provider's medium default can raise it. Token limits
+and editorial quality gates are unchanged. The user-preferred Luna identifier was
+verified against the official OpenAI documentation and OpenRouter catalog, not
+inferred from a Codex model label. Receipt validation permits only the base Luna
+identifier or the verified canonical snapshot `openai/gpt-6-luna-20260922`.
+Luna's Chat Completions low-reasoning path uses strict `response_format`, not
+function calling: the worker rejects tools, tool choice and tool-call history
+for this fixed route. Legacy DeepSeek and shadow comparison reasoning stay off.
+
+The Standard Luna tier was listed at $0.10/M input and $0.50/M output during
+the October 21 check, under the unchanged conservative ceilings. Prices are
+not guaranteed future rates: if the endpoint no longer meets the ceilings,
+generation fails closed. The public [model endpoint catalog](https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints)
+and [provider routing contract](https://openrouter.ai/docs/guides/routing/provider-selection)
+support exact tier selection; successful deployment alone does not verify
+full newsletter generation or editorial quality.
 
 The official OpenAI-compatible AI SDK model uses an authenticated custom fetch
 transport; this is not a handwritten LanguageModel adapter. It preserves the
@@ -68,6 +89,18 @@ provider through ElizaOS, including private reply history and unpublished
 editorial context. This data boundary was explicitly approved by the operator.
 Only authenticated operator inspection may read private pilot outputs. Do not
 paste full context, completion bodies or credentials into deployment logs.
+
+Explicit Belle pilots retain one immutable private baseline/evaluation pair on
+their already reserved nonce, independent of comparison dispatch. Each JSON body
+keeps the existing 160 KiB bound; internal reads expire after seven days and
+six-hourly bounded cleanup removes private fields without deleting the nonce
+tombstone. This diagnostic write schedules no inference. The separate 12/day
+comparison limit remains unchanged. A forced ElizaOS pilot may report accepted
+generation with `shadowStatus=limited` only after the backend accepts its retained
+artifact; this is not evidence that the independent comparison ran. Legacy
+generation still requires an ElizaOS comparison. Rejected, review-failed, missing
+or expired artifacts cannot satisfy the generation gate, and unknown inference
+is never converted into a retained successful draft.
 
 ## Idempotency, audit and uncertain outcomes
 
@@ -120,11 +153,170 @@ budgets or upgrading infrastructure plans.
 
 ## Current repaired deployment verification (2026-10-21)
 
-- Production Convex `strong-bee-384` has source commit `f76a829` deployed.
-  Cloudflare gateway version `203c1446-5d08-4a48-b79d-acb20fd473fd` uses image
-  `sha256:0c384e865935ef38427f14574ff64ab7d596d926e59d8845d8e8e0ec42ee8f65`.
-  The actual `pilot` instance was verified running application version 15 after
+- Production Convex `strong-bee-384` has functional source commit `e94980d8` deployed.
+  Cloudflare gateway version `b67cd986-7970-4c64-8dd2-d783affe15e3` uses image
+  `sha256:2e4d6b7c630f6d792b9079857a61a936ffe56c81069801f7a4d37d45162d28f8`.
+  The actual `pilot` instance was verified running application version 20 after
   replacement; authenticated maintenance passed before inference.
+- Live generation was enabled at 09:35 UTC with shadow comparisons off, after
+  both real-source pilots passed backend and independent manual source review.
+  A subsequent **unforced** global probe (no `elizaRuntime` override) completed
+  through ElizaOS 1.7.2 with exact served model `openai/gpt-6-luna` and a durable
+  Convex receipt: `eliza-b68cd3e8-7ed4-481f-b993-abd9ee7c96b4`, 179 input / 119
+  total output tokens. This verifies actual global live routing, not merely the
+  forced pilot path. No validator forced a forum post, issue or email.
+- Belle pilot `cutover-belle-luna-low-20261021-v4` passed on its first draft:
+  722 words, score 100, 32/32 evidence fields, clear coherence, no blocking
+  issues and no revision. Independent manual review checked the selected
+  sources, attribution, temporal roles, scope, causality and exact citations;
+  it also passed. The retained artifact hash is
+  `4NJm69mD6yExHXWTRSPm_7kjyf_D6jWdSwUW8y5iih8`.
+  Its separate comparison was limited by the unchanged 12/day quota; this
+  acceptance proves actual ElizaOS generation quality, not a new comparison run.
+- The final read-only audit confirmed all 33 personas enabled with persisted
+  `openrouter/free` defaults, live mode on, shadow mode off and the original
+  $0.75/day shared / $1/day independent-shadow caps. The Chicago October 21
+  application ledger was $0.237282 across 93 requests, with no active
+  reservations; this is application accounting, not an invoice. All 54 runtime
+  operations were resolved except the two unchanged historical unknown holds
+  (52 ready, zero pending). Both holds retained their exact input/request hashes
+  and unknown states in Convex and the authenticated worker ledger; no replay
+  or clearing occurred.
+- Low-reasoning canary `eliza-816699af-69fb-4511-9d32-c25e82637309`
+  completed on the actual version 20 container through runtime 1.7.2, with exact
+  served model `openai/gpt-6-luna`, 180 input / 127 total output tokens and a
+  saved Convex receipt. This verifies the low structured-output path, not draft
+  editorial quality. Provider reasoning text is stripped before ledger storage;
+  usage counters remain intact for accounting.
+- Luna Standard canary `eliza-1280f2f0-10c9-47be-8a8b-a5686352d5f7`
+  completed through runtime 1.7.2, exact served model `openai/gpt-6-luna`,
+  181 input / 73 output tokens and a durable Convex receipt. Its first attempt
+  was a known pre-inference schema rejection, not a new uncertain hold: the
+  canary wire now uses an enum and HTTPS string pattern instead of `const` and
+  unsupported URI format. The original full local URL validation still applies.
+- Luna pilot `cutover-belle-luna-20261021-v1` completed all four generation
+  stages but was rejected with two evidence blockers. Its separate comparison
+  was rate-limited by the unchanged 12/day quota; the former coupling also lost
+  its private diagnostic artifact. Private pilot retention is now independent
+  of comparison capacity. The original failed nonce and receipts remain intact;
+  no historical operation was replayed or cleared to recover that output.
+- Luna v2 retained its rejected 824-word revision independently of comparison
+  capacity: score 100, 29/29 reviewed fields, clear coherence and two evidence
+  blockers. Independent inspection confirmed the full source says "single day"
+  where the draft says "one day," but the historical artifact retained source
+  IDs rather than exact supporting passages, so that run is not retroactively
+  approved. The second blocker concerns a negatively phrased claim about what
+  an audit establishes, not a demonstrated absence of assistant effects. The
+  remaining inspected prose was source-grounded; neither that observation nor
+  the deterministic score overrides the two blockers.
+- V29 recognizes only the explicit "one day"/"single day" equivalence, per
+  evidence passage. Source-level quality and cited-passage checks share this
+  rule; the final review still requires exact quote membership and the correct
+  selected source. Wrong durations, wrong sources and phrases manufactured by
+  joining two quotes fail. No other quantities or model counts are normalized.
+  Explicit pilot verdicts now retain their canonical supporting quotes privately
+  within the same size/expiry bounds. Writer guidance describes what a report
+  actually inspected rather than inferring real-world absence from missing tests.
+- Luna v3 was also rejected: its retained initial draft has 835 words, and its
+  833-word revision was not accepted. The timing wording preserves "about," but
+  the literal numeric guard does not equate "seven months" with source text
+  "7 months," and the review attached no supporting passages to that field.
+  Separately, the summary transferred an instructional attribute to an entire
+  counted hidden-text population. Independent inspection rejected that scope
+  extension. These are failed attempts, not promotion evidence.
+- V30 changes writing guidance only: keep source digits/qualifiers verbatim,
+  separate build/launch/report events, avoid calculated elapsed timelines, and
+  preserve denominator/subset labels. It prioritizes concise source observations
+  and useful implications over unnecessary numeric and temporal detail. Numeric,
+  evidence, word-count, quality and attempt gates are unchanged.
+- The no-reasoning v30 pilot `cutover-belle-luna-20261021-v4` also failed after
+  its single revision. V31 tests low-effort Luna reasoning on the same Standard
+  tier rather than increasing model prices, output tokens or attempts. Existing
+  4k reviewer / 8k daily / 12k weekly completion caps include reasoning tokens;
+  hidden reasoning text is excluded and never needed for draft inspection.
+- Low-reasoning pilot `cutover-belle-luna-low-20261021-v1` completed all four
+  calls and retained an 814-word revision: score 100, 30/30 reviewed fields and
+  clear coherence. It was rejected because one tsrs analysis paragraph needed
+  five distinct supporting passages, above the unchanged four-passage limit.
+  Independent manual review found that same citation-density blocker and no
+  other material factual, attribution, causality or coherence issue; this did
+  not override the failed gate. No issue, post or email was created.
+- V32 caps newly generated `whyItMatters` at 400 characters, targets 220–320,
+  and focuses it on one conditional implication/decision and next check grounded
+  in at most one factual premise. Material caveats remain in the appropriate
+  story fields. Historical 700-character analysis remains readable; exact-quote,
+  word-count, quality, one-revision and model-budget gates are unchanged.
+- Fresh forced pilot `cutover-belle-luna-low-20261021-v2` completed all four
+  calls. Its retained initial draft has 698 words, score 100, 29/29 reviewed
+  fields and clear coherence, but its lead recaps three sources and exceeds
+  the four-passage evidence limit. Its 711-word revision regressed to six
+  blockers and was not accepted. Independent manual review confirmed only the
+  initial lead's genuine citation-density problem; individual source facts
+  were accurate. No issue, post or email was created; live mode stayed off for
+  that trial.
+- V33 makes new leads at most 700 characters (historical parsing remains
+  1,200), with one selected-source premise and an explicitly editorial
+  implication/question. Daily planning no longer contradicts the shorter lead
+  and analysis fields. The single revision receives its own complete previous
+  draft, including the opening, and repairs reported fields and necessary
+  consistency issues instead of rewriting previously supported copy blindly.
+  Recent editorial wording remains withheld; originality checks, the full
+  selected-source packet, 80 KiB revision cap and complete independent review
+  remain unchanged.
+- V33 pilot `cutover-belle-luna-low-20261021-v3` passed backend checks with an
+  accepted 778-word revision, score 100, 33/33 reviewed fields and clear coherence.
+  Manual review nevertheless rejected a temporal overclaim: a source's one-day
+  page-generation duration had become a one-day launch claim. Its backend
+  artifact remains accepted as recorded, but it is not cutover evidence. V34
+  explicitly checks each event verb and time modifier, including conjoined
+  verbs, and omits nonessential durations. It changes no acceptance thresholds,
+  source quotes, duration equivalences, model caps or allowed attempts.
+- Fixed 1017 priority canary `eliza-5ff20b99-7514-4021-a5a7-5b2e7cdaca0c`
+  completed through runtime 1.7.2 with the exact served model, 115 input / 76
+  output tokens and a durable Convex receipt. The subsequent real-source pilot
+  `cutover-belle-ds41-20261021-v1` completed its draft, blind review, single
+  revision and second review without a provider failure. Its retained revision
+  has 823 words but fails evidence/coherence gates; the deterministic score of
+  99 is not acceptance. Private artifact `r57vp7tnq43t5vhtys50a0n3mh8gqcr0`
+  is retained for diagnosis. Nothing was published or sent; live mode stayed off
+  for that trial.
+- The subsequent v24 pilot `cutover-belle-ds41-20261021-v2` completed all four
+  stages, reached 943 words and received clear coherence with 34/34 reviewed
+  fields. It still failed three exact-cited-number checks. The original sources
+  and catalog do contain those numbers; source identity alone does not establish
+  that the reviewer's chosen passages cover them. Independent manual inspection
+  also found an intended-versus-observed-effect overstatement. Artifact
+  `r57v08h1bze0axnr0w8z43yzrd8gq213` is rejected, not a promotion pass.
+- V25 pilot `cutover-belle-ds41-20261021-v3` cleared the prior exact-number
+  checks and reached 667 words, but still failed semantic date and coherence
+  review. Independent inspection also found an older report presented as a
+  current-week release. The v26 reviewer now receives the issue date as a
+  comparison anchor, never as evidence of a source event. Writer and reviewer
+  distinguish work-start, completion, report, release and index dates. Lexical
+  ranking prioritizes contextually relevant numeric hints within the same
+  source and size constraints; it does not select or approve citations.
+- V26 pilot `cutover-belle-ds41-20261021-v4` stopped on a duplicate quote ID
+  before any review verdict was accepted. V27 removes redundant references to
+  the same quote only after strict wire parsing: more than four raw IDs still
+  fail, unknown IDs still fail, and no citation or factual approval is added.
+  All exact-source, numeric, semantic, coherence and quality checks remain.
+- V27 pilot `cutover-belle-ds41-20261021-v5` completed all four stages but
+  retained its initial 879-word draft after rejecting the revision. Five source,
+  numeric and coherence blockers remained. The rejected revision's evaluation
+  was not retained, so its exact rejection cannot be reconstructed safely; no
+  cache or inference request was guessed. Future explicit Belle pilots retain
+  only a bounded private rejected-revision evaluation, not full revision prose.
+- The Luna candidate uses a required nullable coherence reason and nested
+  `anyOf` field verdicts to meet strict OpenAI Structured Outputs requirements.
+  Legacy omitted clear reasons remain readable; null unsupported/unknown reasons
+  still fail. Tests inspect actual serialized SDK schemas and pass draft,
+  revision and review bodies through the worker's validator. This is local
+  compatibility evidence, not a live provider or editorial pass.
+- Pinned DeepSeek canary `eliza-3c025f99-fb42-4af9-a3bb-c92daf394b90` completed
+  through ElizaOS 1.7.2 with exact served-model match, 117 input / 102 output
+  tokens and a saved Convex receipt. The upstream request and worker both require
+  provider fallback disabled, native thinking disabled and the unchanged price
+  ceilings. This is a transport/schema pass, not an editorial acceptance.
 - Qwen3.8 canary `eliza-9b23bece-50b2-489e-bcee-a72cfc5e3cc3` completed through
   ElizaOS 1.7.2, with exact served-model match, 145 input / 114 output tokens and
   a durable Convex receipt. This is a transport/schema pass, not a newsletter
@@ -134,16 +326,64 @@ budgets or upgrading infrastructure plans.
   below the unchanged 650-word minimum, despite a deterministic score of 100.
   Independent inspection also rejected unsupported scope/causal extrapolations;
   that score and a model reviewer verdict are not promotion proof. Live mode
-  remains off while the revised writer/reviewer and manual acceptance are pending.
+  remained off while revised writing and manual acceptance were pending.
   Shadow capture was restored after replacement.
   The normal $0.75/day application cap and $1/day shadow cap are unchanged.
+- The second Qwen3.8 pilot reached 715 words but its completed review failed
+  local schema validation. An offline SDK reconstruction matched both recorded
+  input and request hashes before an identical succeeded-job cache read. The
+  response was valid JSON with three rejection explanations over 120 characters,
+  not an ambiguous provider outcome. Wire diagnostics now allow at most 1,024
+  characters and hydrate to the existing 240-character canonical bound;
+  unsupported/unknown verdicts still block. Neither unknown historical hold was
+  replayed or cleared.
+- The third pilot completed both reviews and one revision: 781 prose words,
+  29/29 reviewed fields, but nine evidence blockers. It remained rejected and
+  unpublished. Inspection found source caveats beyond the writer's initial
+  2,800-character discovery excerpts; the greedy 1,800-character revision excerpt
+  could omit them too. The existing single revision now receives full retained
+  selected-source summaries, descriptions and article text. A serialized prompt
+  over 80 KiB fails before the revision route rather than clipping that evidence.
+  Initial discovery and unselected alternatives remain bounded; source fetching
+  still retains its existing article-size limit. Live mode remained off at that
+  checkpoint pending another real-source pilot and independent manual acceptance.
 - Daily writing now plans 900–1,100 counted prose words, explicitly excluding
   JSON/identifier/chart metadata; the 650-word minimum is not lowered. Factual
   numeric tokens must appear in the exact cited passages, not merely somewhere
   else in the selected source set. This catches missing numeric citations but is
   still not a proof of semantic support, scope, attribution or causality.
-- Latest local verification: 2,255 tests pass with the same eight unrelated
-  baseline failures; 112 focused tests, 35 isolated worker tests, worker build,
+- Full-context trials on the retired exact `deepseek/deepseek-v4-flash-0731`
+  route hit known pre-inference HTTP 429 despite passing small canaries. One
+  draft and review completed before the revision hit that rejection; no candidate
+  from those runs passed the complete editorial gate. Known provider rejections
+  now expose only finite rate-limit categories, never provider response text.
+  HTTP 408, 409 and 5xx remain uncertain outcomes with operation holds.
+  The subsequent fixed 1017 priority route keeps the same price/output/attempt
+  ceilings and must independently pass the real-source pilot.
+- The actual AI SDK structured request is now passed into the worker's real
+  validator in a local integration test. It proves the exact model/provider pin,
+  disabled reasoning/fallback and price ceilings survive caller overrides across
+  both boundaries. It is not a substitute for provider or editorial verification.
+- Belle's chart title and subtitle are materialized with canonical server-owned
+  wording before validation and blind review. The story scores remain Belle's
+  subjective priorities; they are not a scientific checkability measure or the
+  separate issue-quality score. The writer still must return a valid structured
+  shape, and source/evidence gates still apply to the complete materialized draft.
+  Focused writing guidance reduces factual density to fit the existing four
+  short supporting passages per field; quote, token, attempt and quality limits
+  are not increased.
+- V25 adds bounded numeric-token retrieval hints drawn only from valid selected
+  source catalog IDs. Story hints remain confined to that story's source, and
+  shorter numbers/versions cannot match inside longer ones. Hints are not
+  citations or verdicts: all factual clauses, units and roles still require at
+  most four semantically sufficient exact passages. No hint or source-level
+  match can override the final evidence gate. The 120 KiB review prompt cap
+  remains unchanged. Newly generated summaries cap at 400 characters, with
+  a 320-character writing target; stored/canonical 850-character summaries stay
+  readable. Material caveats must remain in that story's summary, analysis or
+  takeaways, and intended effects must not be recast as observed outcomes.
+- Latest local verification: 2,303 tests pass with the same eight unrelated
+  baseline failures; 100 focused newsletter/pilot tests, 37 isolated worker tests, worker build,
   both typechecks, lint and platform build pass. Build-created frontend bundle
   diffs were restored without changing frontend source or unrelated work.
 
@@ -154,7 +394,7 @@ Verified on 2026-10-20 (America/Chicago):
 - The migration code is deployed to production Convex `strong-bee-384` and the
   existing Cloudflare worker. `ELIZA_RUNTIME_MODE=off`: **live cutover has not
   happened**. Existing agents still use their original free-first transport.
-- GPT was removed from active model/probe/price policies. Historical completed
+- GPT-4.1-mini was retired from active model/probe/price policies. Historical completed
   records are retained, not rewritten. `ELIZA_SHADOW_MODE=shadow` now uses the
   cheap DeepSeek route; its independent $1/day cap remains unchanged.
 - Cloudflare version `6b9e1166-6301-4261-85ba-14c7a385e831`, image
@@ -195,11 +435,11 @@ tests, root/Convex TypeScript and scoped lint pass. The isolated worker's canoni
 with worker build and gateway types passing. Bypassing the worker script with
 single-process `bun test` is not the supported PGlite test harness.
 
-The final generation switch remains gated on actual draft quality and a resolved,
-verified paid live path. All 33 hook/stage paths are implemented, but no claim is
-made that all 33 have produced a verified production ElizaOS output. No validator
-manually published a forum post or sent a newsletter. Existing scheduling and
-publishing were not changed to manufacture a passing test.
+At this earlier checkpoint, the generation switch was still gated on actual
+draft quality and a verified paid live path. All 33 hook/stage paths were
+implemented; this was not evidence that all 33 had produced a verified production
+ElizaOS output. No validator manually published a forum post or sent a newsletter.
+Existing scheduling and publishing were not changed to manufacture a passing test.
 
 ## Repair notes (2026-10-20)
 
