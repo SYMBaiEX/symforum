@@ -253,7 +253,7 @@ describe("OpenRouter-only model routing", () => {
         max_tokens: 4_000,
         provider: {
           allow_fallbacks: false,
-          only: ["deepinfra"],
+          only: ["deepinfra/fp8/priority"],
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),

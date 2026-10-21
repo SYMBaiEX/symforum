@@ -156,8 +156,8 @@ function openRouterRequestBody(body: Record<string, unknown>) {
     request.provider = {
       ...(request.provider as Record<string, unknown> | undefined),
       allow_fallbacks: false,
-      // Keep the pilot on one documented schema-capable provider endpoint.
-      only: ["deepinfra"],
+      // Pin the verified priority endpoint, not the provider's other tiers.
+      only: ["deepinfra/fp8/priority"],
       require_parameters: true,
       // The current ProviderPreferences OpenAPI contract uses decimal strings,
       // unlike older guide examples. Numeric policy values stay in accounting.

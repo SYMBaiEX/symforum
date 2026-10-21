@@ -14,9 +14,9 @@ import {
 export const LIVE_MODELS = new Set([
   "openrouter/free",
   "~deepseek/deepseek-v4-flash-latest",
-  "deepseek/deepseek-v4-flash-0731",
+  "deepseek/deepseek-v4.1-flash-1017",
 ]);
-const BOUNDED_NEWSLETTER_MODEL = "deepseek/deepseek-v4-flash-0731";
+const BOUNDED_NEWSLETTER_MODEL = "deepseek/deepseek-v4.1-flash-1017";
 function withinNewsletterPriceCap(value, ceilingDigit) {
   if (
     typeof value !== "string" ||
@@ -362,7 +362,7 @@ export function validateLiveRequest(input) {
       body.provider?.require_parameters !== true ||
       !Array.isArray(body.provider?.only) ||
       body.provider.only.length !== 1 ||
-      body.provider.only[0] !== "deepinfra" ||
+      body.provider.only[0] !== "deepinfra/fp8/priority" ||
       !record(price) ||
       Object.keys(price).length !== 2 ||
       !Object.keys(price).every((key) =>

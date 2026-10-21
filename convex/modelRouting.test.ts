@@ -130,7 +130,7 @@ describe("free-only structured operator probe", () => {
             id: "synthetic-newsletter-probe",
             object: "chat.completion",
             created: 1_760_000_000,
-            model: "deepseek/deepseek-v4-flash-0731",
+            model: "deepseek/deepseek-v4.1-flash-1017",
             choices: [
               {
                 index: 0,
@@ -182,17 +182,17 @@ describe("free-only structured operator probe", () => {
 
     await expect(
       runStructuredProbe(ctx, undefined, false, {
-        model: "deepseek/deepseek-v4-flash-0731",
+        model: "deepseek/deepseek-v4.1-flash-1017",
       }),
     ).resolves.toEqual({
       provider: "openrouter",
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: "deepseek/deepseek-v4.1-flash-1017",
       response: "SYMBiEX structured model route healthy",
     });
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: "deepseek/deepseek-v4.1-flash-1017",
       max_tokens: 8_000,
       provider: {
         require_parameters: true,
@@ -207,15 +207,15 @@ describe("free-only structured operator probe", () => {
         getFunctionName(reference) === "aiRoutingControlData:reserveModelCall",
     );
     expect(reservation?.[1]).toMatchObject({
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: "deepseek/deepseek-v4.1-flash-1017",
     });
     const usage = runMutation.mock.calls.find(
       ([reference]) =>
         getFunctionName(reference) === "forumAgentEditorialData:recordUsage",
     );
     expect(usage?.[1]).toMatchObject({
-      model: "deepseek/deepseek-v4-flash-0731",
-      servedModel: "deepseek/deepseek-v4-flash-0731",
+      model: "deepseek/deepseek-v4.1-flash-1017",
+      servedModel: "deepseek/deepseek-v4.1-flash-1017",
     });
   });
 

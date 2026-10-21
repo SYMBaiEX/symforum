@@ -391,11 +391,11 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
 test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
   const newsletterBody = {
     ...body,
-    model: "deepseek/deepseek-v4-flash-0731",
+    model: "deepseek/deepseek-v4.1-flash-1017",
     provider: {
       allow_fallbacks: false,
       require_parameters: true,
-      only: ["deepinfra"],
+      only: ["deepinfra/fp8/priority"],
       max_price: { prompt: "0.2", completion: "0.5" },
     },
   };
@@ -495,6 +495,10 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     );
   }
   for (const invalid of [
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      model: "deepseek/deepseek-v4-flash-0731",
+    }),
     newsletterRequest("suki", "suki:forum-reply"),
     newsletterRequest("mara-venn", "mara-venn:forum-draft"),
     newsletterRequest("belle", "belle:daily-signal:draft", {
@@ -519,6 +523,10 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
+      provider: { ...newsletterBody.provider, only: ["deepinfra"] },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: { ...newsletterBody.provider, only: ["deepinfra", "other"] },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
@@ -529,7 +537,7 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
       ...newsletterBody,
       provider: {
         require_parameters: true,
-        only: ["deepinfra"],
+        only: ["deepinfra/fp8/priority"],
         max_price: newsletterBody.provider.max_price,
       },
     }),

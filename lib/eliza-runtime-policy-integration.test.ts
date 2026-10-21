@@ -62,7 +62,9 @@ describe("newsletter SDK to live worker policy boundary", () => {
       const generated = await generateText({
         model: route.model,
         prompt: "Return a status object.",
-        output: Output.object({ schema: z.object({ status: z.literal("ok") }) }),
+        output: Output.object({
+          schema: z.object({ status: z.literal("ok") }),
+        }),
         maxOutputTokens: 4_000,
         maxRetries: 0,
         reasoning: "low",
@@ -85,7 +87,7 @@ describe("newsletter SDK to live worker policy boundary", () => {
         model: OPENROUTER_NEWSLETTER_MODEL,
         provider: {
           allow_fallbacks: false,
-          only: ["deepinfra"],
+          only: ["deepinfra/fp8/priority"],
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
