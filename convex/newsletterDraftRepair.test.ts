@@ -186,6 +186,7 @@ test("daily writer counts only publication prose and keeps the same target on re
     expect(prompt).toContain("900-1,100 counted prose words");
     expect(prompt).toContain("excludes subject, headline, all chart text and notes, JSON keys, IDs, and URLs");
     expect(prompt).toContain("not padding or repeated claims");
+    expect(prompt).toContain("summary at or below 320 characters in two focused factual sentences");
   }
 });
 
@@ -648,6 +649,12 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     expect(JSON.stringify(body.messages)).toContain("Source-specific assertions in whyItMatters are facts requiring citations");
     expect(JSON.stringify(body.messages)).toContain("Belle's editorial priorities");
     expect(JSON.stringify(body.messages)).toContain("not a measured result.");
+    expect(JSON.stringify(body.messages)).toContain("each story summary at or below 320 characters in no more than two focused factual sentences");
+    expect(JSON.stringify(body.messages)).toContain("central finding and one essential scope qualifier");
+    expect(JSON.stringify(body.messages)).toContain("Preserve all material source caveats");
+    expect(JSON.stringify(body.messages)).toContain("shortening a summary is not permission to drop a limitation");
+    expect(JSON.stringify(body.messages)).toContain("do not state that they shape what it will tell a user without observed answer behavior");
+    expect(JSON.stringify(body.messages)).toContain("even if a later sentence adds a caveat");
   }
   expect(requestBodies[2]).toMatchObject({
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
@@ -664,6 +671,10 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Hidden instructions found in pages establish their presence, not that a model obeyed them");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("every clause of a mixed-source sentence and its attribution");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A field that names a source version or release remains a fact");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("numericSupportCandidates");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("non-exhaustive search hints, not evidence verdicts or automatic citations");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("If no four-quote set supports every clause, mark the field unsupported or unknown");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A later caveat does not repair an earlier categorical assertion");
 });
 
 test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async () => {

@@ -15,8 +15,11 @@ import {
   editorialEvidenceReviewPrompt,
   editorialPrompt,
   editorialEvidenceFields,
+  dailyDraftSchema,
   evidenceReviewSchema,
   evidenceReviewWireSchema,
+  generatedDailyDraftSchema,
+  generatedWeeklyDraftSchema,
   hydrateEditorialEvidenceReview,
   materializeEditorialChart,
   NEWSLETTER_MODEL_IDS,
@@ -25,6 +28,7 @@ import {
   scoreEditorialPackage,
   shouldAcceptEditorialRevision,
   validateEditorialEvidenceReview,
+  weeklyDraftSchema,
 } from "./newsletterAgent";
 
 function long(value: string, length: number) {
@@ -133,6 +137,82 @@ function completeReview(draft = dailyDraft()): Parameters<typeof validateEditori
 
 describe("Belle blind evidence review validation", () => {
   const catalog = buildEditorialEvidenceCatalog(sources);
+  test("numeric quote hints are bounded, source-scoped, and never automatic citations", () => {
+    const draft = dailyDraft();
+    draft.stories[0]!.summary = long("The author reported 10,000 AI sessions.", 180);
+    draft.lead = long("The source reported 10,000 AI sessions.", 240);
+    const reviewSources = [
+      { hnItemId: 1, title: "First report", rank: 1,
+        sourceText: `The source describes publication details. ${"The author reported 10,000 AI sessions. ".repeat(24)}` },
+      { hnItemId: 2, title: "Second report", rank: 2,
+        sourceText: "A different source also reported 10,000 requests." },
+      { hnItemId: 3, title: "Third report", rank: 3,
+        sourceText: "A third source reported 10,000 users." },
+    ];
+    const { prompt, catalog } = editorialEvidenceReviewPrompt(draft, reviewSources);
+    const parsed = JSON.parse(prompt) as { fields: Array<{
+      path: string; text: string;
+      numericSupportCandidates: Array<{ token: string; quoteIds: string[] }>;
+    }> };
+    const storyField = parsed.fields.find(field => field.path === "stories.0.summary")!;
+    const ownHint = storyField.numericSupportCandidates.find(item => item.token === "10000")!;
+    expect(ownHint.quoteIds).toHaveLength(4);
+    expect(ownHint.quoteIds.every(id => catalog.byId.get(id)?.sourceId === 1)).toBe(true);
+    expect(ownHint.quoteIds.every(id => catalog.byId.get(id)?.quote.includes("10,000"))).toBe(true);
+    expect(parsed.fields.find(field => field.path === "lead")?.numericSupportCandidates
+      .find(item => item.token === "10000")?.quoteIds).toContain("2:q0");
+    expect(parsed.fields.find(field => field.path === "chart.subtitle")?.numericSupportCandidates).toEqual([]);
+    expect(storyField.text).toBe(draft.stories[0]!.summary);
+    for (const field of parsed.fields) {
+      expect(field.numericSupportCandidates.length).toBeLessThanOrEqual(16);
+      for (const hint of field.numericSupportCandidates) {
+        expect(hint.quoteIds.length).toBeLessThanOrEqual(4);
+        expect(hint.quoteIds.every(id => catalog.byId.has(id))).toBe(true);
+      }
+    }
+
+    const review = completeReview(draft);
+    review.fields.find(field => field.path === "stories.0.summary")!.quote =
+      "The source describes publication details.";
+    const issues = validateEditorialEvidenceReview(draft, reviewSources, review);
+    expect(issues.join(" ")).toContain("lacks cited numeric support at stories.0.summary: 10000");
+  });
+
+  test("numeric hints cap tokens without dropping the original field", () => {
+    const draft = dailyDraft();
+    draft.lead = `The source reported ${Array.from({ length: 20 }, (_, i) => `${i + 20} users`).join(", ")}.`;
+    const { prompt } = editorialEvidenceReviewPrompt(draft, sources.map((source, index) => ({
+      ...source, title: `Source ${index + 1}`, rank: index + 1,
+    })));
+    const lead = (JSON.parse(prompt) as { fields: Array<{
+      path: string; text: string; numericSupportCandidates: Array<{ token: string; quoteIds: string[] }>;
+    }> }).fields.find(field => field.path === "lead")!;
+    expect(lead.numericSupportCandidates).toHaveLength(16);
+    expect(lead.text).toBe(draft.lead);
+    expect(lead.text).toContain("39 users");
+  });
+
+  test("numeric hints reject larger-number and version substrings but keep comma-normalized matches", () => {
+    const draft = dailyDraft();
+    draft.lead = long("The report names 50 pages and v4.1. It counted 10,000 requests.", 240);
+    const { prompt, catalog } = editorialEvidenceReviewPrompt(draft, [
+      { hnItemId: 1, title: "Distractor A", rank: 1,
+        sourceText: "The old release was v14.1 and had 500 pages." },
+      { hnItemId: 2, title: "Distractor B", rank: 2,
+        sourceText: "The next release was v4.10 and had 5000 pages." },
+      { hnItemId: 3, title: "Exact report", rank: 3,
+        sourceText: "The report names 50 pages and v4.1. It counted 10,000 requests." },
+    ]);
+    const lead = (JSON.parse(prompt) as { fields: Array<{
+      path: string; numericSupportCandidates: Array<{ token: string; quoteIds: string[] }>;
+    }> }).fields.find(field => field.path === "lead")!;
+    for (const token of ["50", "v4.1", "10000 requests"]) {
+      const ids = lead.numericSupportCandidates.find(item => item.token === token)?.quoteIds;
+      expect(ids).toEqual(["3:q0"]);
+      expect(ids?.every(id => catalog.byId.has(id))).toBe(true);
+    }
+  });
+
   test("reviewer sees original selected source text once as ordered labeled segments", () => {
     const reviewSources = sources.map((source, index) => ({
       ...source, title: `Original title ${index + 1}`, rank: index + 1,
@@ -396,6 +476,33 @@ describe("Belle blind evidence review validation", () => {
 });
 
 describe("Belle editorial scoring", () => {
+  test("generated summaries stop at 400 characters while stored drafts retain 850", () => {
+    const draft = dailyDraft();
+    const summary = "S".repeat(401);
+    const atGeneratedLimit = draft.stories.map((item, index) =>
+      index === 0 ? { ...item, summary: "S".repeat(400) } : item);
+    const atStoredLimit = draft.stories.map((item, index) =>
+      index === 0 ? { ...item, summary: "S".repeat(850) } : item);
+    const stories = draft.stories.map((item, index) =>
+      index === 0 ? { ...item, summary } : item);
+    const { items: _items, ...chart } = draft.chart;
+    expect(generatedDailyDraftSchema.safeParse({ ...draft, chart, stories: atGeneratedLimit }).success).toBe(true);
+    expect(dailyDraftSchema.safeParse({ ...draft, stories: atStoredLimit }).success).toBe(true);
+    expect(dailyDraftSchema.safeParse({ ...draft, stories }).success).toBe(true);
+    expect(generatedDailyDraftSchema.safeParse({ ...draft, chart, stories }).success).toBe(false);
+
+    const weekly = {
+      ...draft,
+      stories: [...stories, story(4, "another report"), story(5, "fifth report")],
+      sections: Array.from({ length: 4 }, (_, index) => ({
+        heading: `Section ${index + 1}`,
+        body: long("The section develops a source-specific consequence.", 300),
+      })),
+    };
+    expect(weeklyDraftSchema.safeParse(weekly).success).toBe(true);
+    expect(generatedWeeklyDraftSchema.safeParse({ ...weekly, chart }).success).toBe(false);
+  });
+
   test("binds a complete editorial-priority chart caption before review", () => {
     const generated = dailyDraft();
     generated.chart.title = "How independently checkable is each claim?";
