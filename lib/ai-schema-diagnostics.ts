@@ -75,7 +75,9 @@ function safePath(path: unknown): string {
 
   const segments = path.slice(0, MAX_PATH_SEGMENTS).map((segment) => {
     if (typeof segment === "number") {
-      return Number.isSafeInteger(segment) && segment >= 0 && segment <= MAX_ARRAY_INDEX
+      return Number.isSafeInteger(segment) &&
+        segment >= 0 &&
+        segment <= MAX_ARRAY_INDEX
         ? `[${segment}]`
         : "[index]";
     }
@@ -149,14 +151,21 @@ export function formatAISchemaDiagnostics(cause: unknown): string | undefined {
     let current = cause;
 
     for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
-      if (typeof current !== "object" || current === null || visited.has(current)) {
+      if (
+        typeof current !== "object" ||
+        current === null ||
+        visited.has(current)
+      ) {
         break;
       }
       visited.add(current);
 
       const issues = ownValue(current, "issues");
       if (Array.isArray(issues)) {
-        for (const issue of issues.slice(0, MAX_SCHEMA_ISSUES - diagnostics.length)) {
+        for (const issue of issues.slice(
+          0,
+          MAX_SCHEMA_ISSUES - diagnostics.length,
+        )) {
           const diagnostic = diagnosticForIssue(issue);
           if (diagnostic !== undefined) diagnostics.push(diagnostic);
         }
