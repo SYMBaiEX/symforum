@@ -593,7 +593,7 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(wire).length).toBeLessThan(JSON.stringify(reviewedDraft(validDraft)).length);
   mockDrafts(invalidStoryDraft, validDraft);
   await t.action(generateDailySignal, {
-    ...args, forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
+    ...args, runDate: "2026-10-21", forceLegacyGeneration: false, forceElizaRuntimeGeneration: true,
     shadowSourceRunKey: "pilot:belle:fixed-model-serialization-test",
   });
   const requestBodies: Record<string, unknown>[] = [];
@@ -646,6 +646,11 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     expect(JSON.stringify(body.messages)).toContain("at most one figure or version rather than enumerating metrics");
     expect(JSON.stringify(body.messages)).toContain('Name the exact supported model from a source list instead of inferring a count such as \\"one model\\"');
     expect(JSON.stringify(body.messages)).toContain("Do not force unrelated reports into a shared observed failure");
+    expect(JSON.stringify(body.messages)).toContain("A coherent lead may use contrast or a counterpoint");
+    expect(JSON.stringify(body.messages)).toContain("date a source was discovered describe this newsletter's collection");
+    expect(JSON.stringify(body.messages)).toContain("do not turn an older event covered in a recent report into a current-week release");
+    expect(JSON.stringify(body.messages)).toContain("a bare undated release claim is fine");
+    expect(JSON.stringify(body.messages)).toContain("released this week");
     expect(JSON.stringify(body.messages)).toContain("Source-specific assertions in whyItMatters are facts requiring citations");
     expect(JSON.stringify(body.messages)).toContain("Belle's editorial priorities");
     expect(JSON.stringify(body.messages)).toContain("not a measured result.");
@@ -675,6 +680,11 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("non-exhaustive search hints, not evidence verdicts or automatic citations");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("If no four-quote set supports every clause, mark the field unsupported or unknown");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A later caveat does not repair an earlier categorical assertion");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain('issueDate\\\":\\\"2026-10-21');
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("Check temporal claims as facts too");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("issueDate is a comparison anchor for relative wording only");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("later report about earlier work is not a current-week release");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("An undated claim that an author released something can be supported");
 });
 
 test("legacy DeepSeek writer and reviewer explicitly disable reasoning", async () => {

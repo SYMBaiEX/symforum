@@ -213,6 +213,39 @@ describe("Belle blind evidence review validation", () => {
     }
   });
 
+  test("numeric hints rank a late contextual quote above same-year distractors", () => {
+    const draft = dailyDraft();
+    draft.lead = "In 2026, Peec documented generated pages and explained their provenance problem.";
+    const distraction = "In 2026, the archival weather station measured rainfall and cloud cover for a separate seasonal field study. ";
+    const relevantText = "In 2026, Peec documented generated pages and explained their provenance problem. ";
+    const { prompt, catalog } = editorialEvidenceReviewPrompt(draft, [{
+      hnItemId: 1, title: "Dated report", rank: 1,
+      sourceText: `${distraction.repeat(12)}${relevantText.repeat(3)}`,
+    }]);
+    const lead = (JSON.parse(prompt) as { fields: Array<{
+      path: string; numericSupportCandidates: Array<{ token: string; quoteIds: string[] }>;
+    }> }).fields.find(field => field.path === "lead")!;
+    const relevant = [...catalog.byId.entries()].find(([, support]) =>
+      support.quote.includes("2026, Peec documented generated pages"))?.[0];
+    const earlierMatches = [...catalog.byId.entries()].filter(([id, support]) =>
+      id !== relevant && support.quote.includes("2026"));
+    expect(relevant).toBeDefined();
+    expect(earlierMatches.length).toBeGreaterThan(4);
+    expect(lead.numericSupportCandidates.find(item => item.token === "2026")?.quoteIds[0])
+      .toBe(relevant);
+  });
+
+  test("reviewer treats an undated explicit release differently from current-week wording", () => {
+    const { prompt } = editorialEvidenceReviewPrompt(dailyDraft(), sources.map((source, index) => ({
+      ...source, title: `Source ${index + 1}`, rank: index + 1,
+    })), { issueDate: "2026-10-21" });
+    const parsed = JSON.parse(prompt) as { issueDate: string; task: string };
+    expect(parsed.issueDate).toBe("2026-10-21");
+    expect(parsed.task).toContain("issueDate is a comparison anchor for relative wording only");
+    expect(parsed.task).toContain("An undated claim that an author released something can be supported when the source explicitly establishes a release");
+    expect(parsed.task).toContain("released this week");
+  });
+
   test("reviewer sees original selected source text once as ordered labeled segments", () => {
     const reviewSources = sources.map((source, index) => ({
       ...source, title: `Original title ${index + 1}`, rank: index + 1,
