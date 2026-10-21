@@ -10,7 +10,7 @@ import { routedModelCandidates } from "../lib/ai-model-routing";
 import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import schema from "./schema";
-import { CompletedEditorialReviewError, dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, editorialPrompt, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
+import { CompletedEditorialReviewError, dailyDraftSchema, editorialDraftWordCount, editorialEvidenceFields, editorialEvidenceReviewPrompt, editorialPrompt, NEWSLETTER_MODEL_IDS, scoreEditorialPackage, validateEditorialEvidenceReview } from "./newsletterAgent";
 
 const route = vi.hoisted(() => vi.fn());
 const routingConfig = vi.hoisted(() => vi.fn());
@@ -249,6 +249,81 @@ test("factual numbers must appear in exact cited quotes, including every mixed-s
   expect(validateEditorialEvidenceReview(scoreDraft, sources, scoreReview)).toEqual([]);
   // Numeric membership is only a deterministic guard; it does not establish semantic entailment.
 });
+
+test("one day accepts only an exact cited single-day phrase from the selected source", () => {
+  const takeaway = "The author generated 50,000 pages in one day.";
+  const draft = {
+    ...validDraft,
+    stories: validDraft.stories.map((story, index) => index === 0
+      ? { ...story, takeaways: [takeaway, story.takeaways[1]!] }
+      : story),
+  };
+  const quote = "The author generated 50,000 pages in a single day.";
+  const source = `${sourceText} ${quote}`;
+  const sources = themes.map((theme, index) => ({
+    hnItemId: theme.id,
+    title: theme.name,
+    rank: index + 1,
+    sourceText: theme.id === 1 ? source : sourceText,
+  }));
+  const qualityFor = (evidence: typeof sources) => scoreEditorialPackage({
+    draft, edition: "daily-signal",
+    recent: { headlines: [], theses: [], storyIds: [] },
+    sources: evidence.map(item => ({
+      hnItemId: item.hnItemId, host: `source${item.hnItemId}.example`,
+      sourceText: item.sourceText,
+    })),
+  });
+  expect(qualityFor(sources).blockingIssues.join(" ")).not.toContain("one day");
+  const review = reviewedDraft(draft);
+  const field = review.fields.find(item => item.path === "stories.0.takeaways.0")!;
+  field.verdict = "fact";
+  field.sourceId = 1;
+  field.quote = quote;
+  expect(validateEditorialEvidenceReview(draft, sources, review)).toEqual([]);
+  const prompt = editorialEvidenceReviewPrompt(draft, sources);
+  expect(JSON.parse(prompt.prompt).task).toContain("lack of reported evidence is not evidence of real-world absence");
+  const promptField = (JSON.parse(prompt.prompt).fields as Array<{
+    path: string; numericSupportCandidates: Array<{ token: string; quoteIds: string[] }>;
+  }>).find(item => item.path === "stories.0.takeaways.0")!;
+  expect(promptField.numericSupportCandidates.find(item => item.token === "one day")?.quoteIds.length)
+    .toBeGreaterThan(0);
+
+  field.quote = "The author generated 50,000 pages in a SINGLE-DAY.";
+  const hyphenSources = sources.map(item => item.hnItemId === 1
+    ? { ...item, sourceText: `${sourceText} ${field.quote}` }
+    : item);
+  expect(qualityFor(hyphenSources).blockingIssues.join(" ")).not.toContain("one day");
+  expect(validateEditorialEvidenceReview(draft, hyphenSources, review)).toEqual([]);
+
+  for (const unsupported of [
+    "The author generated 50,000 pages in a single-daydream.",
+    "The author generated 50,000 pages in a single month.",
+    "The author generated 50,000 pages in two days.",
+  ]) {
+    field.quote = unsupported;
+    const alternateSources = sources.map(item => item.hnItemId === 1
+      ? { ...item, sourceText: `${sourceText} ${unsupported}` }
+      : item);
+    expect(qualityFor(alternateSources).blockingIssues.join(" ")).toContain("one day");
+    expect(validateEditorialEvidenceReview(draft, alternateSources, review))
+      .toContainEqual(expect.stringContaining("lacks cited numeric support at stories.0.takeaways.0: one day"));
+  }
+  field.quote = "The author generated 50,000 pages in a single";
+  field.additionalSupports = [{ sourceId: 1, quote: "day at the site." }];
+  expect(validateEditorialEvidenceReview(draft, sources.map(item => item.hnItemId === 1
+    ? { ...item, sourceText: `${sourceText} ${field.quote} later. day at the site.` }
+    : item), review))
+    .toContainEqual(expect.stringContaining("lacks cited numeric support at stories.0.takeaways.0: one day"));
+  field.additionalSupports = [];
+  field.quote = quote;
+  field.sourceId = 2;
+  expect(qualityFor(sources.map(item => item.hnItemId === 1
+    ? { ...item, sourceText }
+    : { ...item, sourceText: source })).blockingIssues.join(" ")).toContain("one day");
+  expect(validateEditorialEvidenceReview(draft, sources, review))
+    .toContainEqual(expect.stringContaining("exact quote from the correct selected source"));
+});
 const args = {
   runDate: "2026-10-20", snapshotDate: "2026-10-20", siteUrl: "https://symbaiex.com",
   shadowSourceRunKey: "pilot:belle:draft-repair-test", forceLegacyGeneration: true,
@@ -325,8 +400,13 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(result.shadowEnqueue?.status).toBe("queued");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
+  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v29-cited-duration-private-quotes");
+  expect(JSON.parse(shadow[0]!.inputJson).system).toContain(
+    "Do not turn a report that only documents hidden instructions into a categorical claim of no assistant exposure",
+  );
   const baseline = JSON.parse(shadow[0]!.baselineJson);
   expect(baseline.evaluation.evidenceReview.reviewedFields).toBeGreaterThan(0);
+  expect(baseline.evaluation.evidenceReview.verdicts[0]).not.toHaveProperty("selectedQuotes");
   expect(baseline.generation).toMatchObject({ inputTokens: 1_700, outputTokens: 2_000 });
   expect(baseline.generation).not.toHaveProperty("revisionEvaluation");
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
@@ -352,6 +432,11 @@ test("pilot retains accepted private output before a disabled comparison", async
     sourceKey: "snapshot:2026-10-20:run:2026-10-20",
   });
   expect(JSON.parse(pilot!.baselineJson!).draft.subject).toBe(validDraft.subject);
+  expect(JSON.parse(pilot!.baselineJson!).evaluation.evidenceReview.verdicts)
+    .toContainEqual(expect.objectContaining({
+      path: "stories.0.summary",
+      selectedQuotes: [{ sourceId: 1, quote: sourceText.slice(0, 80) }],
+    }));
   expect(JSON.parse(pilot!.evaluationJson!).stories[0].sourceText).toContain("manifest records");
   expect(await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10))).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("newsletterIssues").take(10))).toEqual([]);
