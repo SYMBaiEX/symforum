@@ -317,6 +317,9 @@ export function validateLiveRequest(input) {
       body.reasoning.enabled !== false ||
       body.provider?.allow_fallbacks !== false ||
       body.provider?.require_parameters !== true ||
+      !Array.isArray(body.provider?.only) ||
+      body.provider.only.length !== 1 ||
+      body.provider.only[0] !== "deepinfra" ||
       !record(price) ||
       Object.keys(price).length !== 2 ||
       !Object.keys(price).every((key) =>
@@ -393,7 +396,9 @@ export function validateLiveRequest(input) {
             "data_collection",
             "quantizations",
             "sort",
-            ...(body.model === BOUNDED_NEWSLETTER_MODEL ? ["max_price"] : []),
+            ...(body.model === BOUNDED_NEWSLETTER_MODEL
+              ? ["max_price", "only"]
+              : []),
           ].includes(key),
       ))
   )
