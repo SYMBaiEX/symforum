@@ -575,6 +575,27 @@ describe("Belle editorial scoring", () => {
     expect(generatedWeeklyDraftSchema.safeParse({ ...weekly, chart }).success).toBe(false);
   });
 
+  test("generated why-it-matters stops at 400 while historical drafts retain 700", () => {
+    const draft = dailyDraft();
+    const { items: _items, ...chart } = draft.chart;
+    const withAnalysis = (length: number) => draft.stories.map((item, index) =>
+      index === 0 ? { ...item, whyItMatters: "A".repeat(length) } : item);
+    expect(generatedDailyDraftSchema.safeParse({ ...draft, chart, stories: withAnalysis(400) }).success).toBe(true);
+    expect(generatedDailyDraftSchema.safeParse({ ...draft, chart, stories: withAnalysis(401) }).success).toBe(false);
+    expect(dailyDraftSchema.safeParse({ ...draft, stories: withAnalysis(700) }).success).toBe(true);
+    expect(dailyDraftSchema.safeParse({ ...draft, stories: withAnalysis(701) }).success).toBe(false);
+    const weekly = {
+      ...draft,
+      stories: [...withAnalysis(401), story(4, "another report"), story(5, "fifth report")],
+      sections: Array.from({ length: 4 }, (_, index) => ({
+        heading: `Section ${index + 1}`,
+        body: long("The section develops a source-specific consequence.", 300),
+      })),
+    };
+    expect(generatedWeeklyDraftSchema.safeParse({ ...weekly, chart }).success).toBe(false);
+    expect(weeklyDraftSchema.safeParse(weekly).success).toBe(true);
+  });
+
   test("binds a complete editorial-priority chart caption before review", () => {
     const generated = dailyDraft();
     generated.chart.title = "How independently checkable is each claim?";

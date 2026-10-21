@@ -400,7 +400,7 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(result.shadowEnqueue?.status).toBe("queued");
   const shadow = await t.run(ctx => ctx.db.query("elizaShadowJobs").take(10));
   expect(shadow).toHaveLength(1);
-  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v31-luna-low-reasoning");
+  expect(shadow[0]!.promptVersion).toBe("belle-newsletter-v32-focused-implication");
   const system = JSON.parse(shadow[0]!.inputJson).system as string;
   expect(system).toContain(
     "Do not turn a report that only documents hidden instructions into a categorical claim of no assistant exposure",
@@ -410,6 +410,10 @@ test("bad story selection gets one repair and accepts valid revision", async () 
   expect(system).toContain("a property of a noteworthy subset must not be assigned to every item in the larger count");
   expect(system).toContain("if its facts would need more than four quotes in total, remove clauses");
   expect(system).toContain("add a new numeric or temporal fact there only when essential and literally supported by the source");
+  expect(system).toContain("each whyItMatters at 220–320 characters and never above its generated 400-character ceiling");
+  expect(system).toContain("Make whyItMatters one focused conditional implication or decision and a useful next check");
+  expect(system).toContain("Do not inventory features, versions, benchmark conditions, or scope there");
+  expect(system).toContain("preserve material caveats in the appropriate story field instead of dropping them");
   const baseline = JSON.parse(shadow[0]!.baselineJson);
   expect(baseline.evaluation.evidenceReview.reviewedFields).toBeGreaterThan(0);
   expect(baseline.evaluation.evidenceReview.verdicts[0]).not.toHaveProperty("selectedQuotes");
@@ -917,6 +921,9 @@ test("Belle's fixed-model SDK requests use low private reasoning within the pinn
   });
   expect(writerProperties.stories.items?.properties?.signalScore).toMatchObject({
     type: "integer", minimum: 0, maximum: 100,
+  });
+  expect(writerProperties.stories.items?.properties?.whyItMatters).toMatchObject({
+    type: "string", minLength: 90, maxLength: 400,
   });
   const reviewSchema = schemas[2]!;
   const reviewProperties = reviewSchema.properties as Record<string, {
