@@ -489,6 +489,17 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
+      provider: { ...newsletterBody.provider, allow_fallbacks: true },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
+      provider: {
+        require_parameters: true,
+        max_price: newsletterBody.provider.max_price,
+      },
+    }),
+    newsletterRequest("belle", "belle:daily-signal:draft", {
+      ...newsletterBody,
       provider: { ...newsletterBody.provider, max_price: { prompt: "0.2" } },
     }),
     newsletterRequest("belle", "belle:daily-signal:draft", {

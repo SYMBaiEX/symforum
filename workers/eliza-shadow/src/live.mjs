@@ -315,6 +315,7 @@ export function validateLiveRequest(input) {
       !record(body.reasoning) ||
       Object.keys(body.reasoning).length !== 1 ||
       body.reasoning.enabled !== false ||
+      body.provider?.allow_fallbacks !== false ||
       body.provider?.require_parameters !== true ||
       !record(price) ||
       Object.keys(price).length !== 2 ||

@@ -87,7 +87,14 @@ describe("AI schema diagnostics", () => {
     );
     expect(
       formatAISchemaDiagnostics(
-        new Proxy({}, { getOwnPropertyDescriptor: () => { throw new Error("bad descriptor"); } }),
+        new Proxy(
+          {},
+          {
+            getOwnPropertyDescriptor: () => {
+              throw new Error("bad descriptor");
+            },
+          },
+        ),
       ),
     ).toBeUndefined();
   });
@@ -232,7 +239,10 @@ describe("OpenRouter-only model routing", () => {
         providerOptions: {
           openrouter: {
             reasoning: { enabled: true },
-            provider: { max_price: { prompt: 100, completion: 100 } },
+            provider: {
+              allow_fallbacks: true,
+              max_price: { prompt: 100, completion: 100 },
+            },
           },
         },
       });
@@ -241,6 +251,7 @@ describe("OpenRouter-only model routing", () => {
         model: OPENROUTER_NEWSLETTER_MODEL,
         max_tokens: 4_000,
         provider: {
+          allow_fallbacks: false,
           require_parameters: true,
           max_price: {
             prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),

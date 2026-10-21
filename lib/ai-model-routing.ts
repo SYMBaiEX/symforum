@@ -155,6 +155,7 @@ function openRouterRequestBody(body: Record<string, unknown>) {
     delete request.reasoning_effort;
     request.provider = {
       ...(request.provider as Record<string, unknown> | undefined),
+      allow_fallbacks: false,
       require_parameters: true,
       // The current ProviderPreferences OpenAPI contract uses decimal strings,
       // unlike older guide examples. Numeric policy values stay in accounting.
