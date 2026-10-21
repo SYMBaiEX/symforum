@@ -5,6 +5,8 @@ import { env, internalMutation, type MutationCtx } from "./_generated/server";
 
 const BAGS_DATA_FAILURE = "token-pilot-mint-verification-failed:http-429";
 const BAGS_VALIDATION_FAILURE = "token-pilot-model-draft-failed";
+const BAGS_GRAMMAR_FAILURE =
+  "token-pilot-model-draft-failed:analysis-policy-phrase";
 const RECEIPT_SCAN_LIMIT = 257;
 
 /** Only the current ordinary slot's confirmed pre-model RPC failure qualifies. */
@@ -94,12 +96,13 @@ export async function validateBagsDataRecovery(
   );
 }
 
-/** Fresh verification after one known-completed draft failed local validation. */
-export async function validateBagsValidationVerification(
+/** Shared receipt/proof checks; callers fix one exact local failure reason. */
+async function validateCompletedBagsDraftFailure(
   ctx: MutationCtx,
   failedRunKey: string,
   jobId: string,
   now: number,
+  failureReason: typeof BAGS_VALIDATION_FAILURE | typeof BAGS_GRAMMAR_FAILURE,
 ): Promise<boolean> {
   if (
     failedRunKey !== `bags:${new Date(now).toISOString().slice(0, 13)}` ||
@@ -114,7 +117,7 @@ export async function validateBagsValidationVerification(
     source === null ||
     source.platform !== "bags" ||
     source.status !== "failed" ||
-    source.reason !== BAGS_VALIDATION_FAILURE ||
+    source.reason !== failureReason ||
     source.operatorFirstPost !== undefined ||
     source.operatorRetryOf !== undefined ||
     source.snapshot === undefined ||
@@ -134,7 +137,7 @@ export async function validateBagsValidationVerification(
     forumRun.agentSlug !== "bags-scout" ||
     forumRun.status !== "failed" ||
     forumRun.model !== OPENROUTER_TOKEN_SCOUT_MODEL ||
-    forumRun.errorMessage !== BAGS_VALIDATION_FAILURE ||
+    forumRun.errorMessage !== failureReason ||
     forumRun.threadId !== undefined ||
     forumRun.followUpPostId !== undefined ||
     forumRun.title !== undefined ||
@@ -192,6 +195,38 @@ export async function validateBagsValidationVerification(
     call.outcomeUnknown !== true &&
     /^[a-f0-9]{64}$/.test(call.inputHash) &&
     operation.inputHash === call.inputHash
+  );
+}
+
+/** The earlier authorization remains restricted to its original generic code. */
+export async function validateBagsValidationVerification(
+  ctx: MutationCtx,
+  failedRunKey: string,
+  jobId: string,
+  now: number,
+): Promise<boolean> {
+  return await validateCompletedBagsDraftFailure(
+    ctx,
+    failedRunKey,
+    jobId,
+    now,
+    BAGS_VALIDATION_FAILURE,
+  );
+}
+
+/** Separate authorization for the confirmed grammar-policy false positive. */
+export async function validateBagsGrammarVerification(
+  ctx: MutationCtx,
+  failedRunKey: string,
+  jobId: string,
+  now: number,
+): Promise<boolean> {
+  return await validateCompletedBagsDraftFailure(
+    ctx,
+    failedRunKey,
+    jobId,
+    now,
+    BAGS_GRAMMAR_FAILURE,
   );
 }
 
@@ -411,6 +446,58 @@ export const queueBagsValidationVerification = internalMutation({
       return { queued: false };
     await ctx.db.patch("tokenAlphaControl", control._id, {
       operatorBagsValidationVerification: {
+        sourceRunKey: args.failedRunKey,
+        sourceJobId: args.jobId,
+        runKey,
+        authorizedAt: now,
+      },
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.tokenAlphaAgent.run, {
+      platform: "bags",
+      operatorRetryOf: args.failedRunKey,
+    });
+    return { queued: true, runKey };
+  },
+});
+
+/** One newly approved attempt; never resets or spends an earlier marker. */
+export const queueBagsGrammarVerification = internalMutation({
+  args: { failedRunKey: v.string(), jobId: v.string() },
+  returns: v.object({ queued: v.boolean(), runKey: v.optional(v.string()) }),
+  handler: async (ctx, args): Promise<{ queued: boolean; runKey?: string }> => {
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    const now = Date.now();
+    if (
+      control?.enabled !== true ||
+      env.ELIZA_RUNTIME_MODE !== "live" ||
+      control.operatorBagsGrammarVerification !== undefined ||
+      !(await validateBagsGrammarVerification(
+        ctx,
+        args.failedRunKey,
+        args.jobId,
+        now,
+      ))
+    )
+      return { queued: false };
+    const runKey = `${args.failedRunKey}:operator-grammar-verification-1`;
+    const [existingRun, existingForumRun] = await Promise.all([
+      ctx.db
+        .query("tokenAlphaRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique(),
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique(),
+    ]);
+    if (existingRun !== null || existingForumRun !== null)
+      return { queued: false };
+    await ctx.db.patch("tokenAlphaControl", control._id, {
+      operatorBagsGrammarVerification: {
         sourceRunKey: args.failedRunKey,
         sourceJobId: args.jobId,
         runKey,

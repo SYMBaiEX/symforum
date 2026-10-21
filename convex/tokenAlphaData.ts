@@ -20,6 +20,7 @@ import { structuredCanaryBlockReason } from "./forumAgentWorkflow";
 import schema from "./schema";
 import {
   validateBagsDataRecovery,
+  validateBagsGrammarVerification,
   validateBagsRetry,
   validateBagsValidationVerification,
 } from "./tokenAlphaRecoveryData";
@@ -424,10 +425,12 @@ export const claimRun = internalMutation({
     const retry = control.operatorBagsRetry;
     const dataRecovery = control.operatorBagsDataRecovery;
     const validationVerification = control.operatorBagsValidationVerification;
+    const grammarVerification = control.operatorBagsGrammarVerification;
     let recoveryKind:
       | "provider-retry"
       | "data-recovery"
       | "validation-verification"
+      | "grammar-verification"
       | undefined;
     if (args.operatorRetryOf !== undefined) {
       if (args.platform !== "bags" || args.operatorFirstPost !== undefined)
@@ -437,12 +440,15 @@ export const claimRun = internalMutation({
         dataRecovery?.sourceRunKey === args.operatorRetryOf;
       const matchesValidationVerification =
         validationVerification?.sourceRunKey === args.operatorRetryOf;
+      const matchesGrammarVerification =
+        grammarVerification?.sourceRunKey === args.operatorRetryOf;
       // Even a consumed marker cannot be used to make two authorities for the
       // same source appear unambiguous. The old marker is never reset or reused.
       if (
         Number(matchesRetry) +
           Number(matchesDataRecovery) +
-          Number(matchesValidationVerification) !==
+          Number(matchesValidationVerification) +
+          Number(matchesGrammarVerification) !==
         1
       )
         return null;
@@ -471,7 +477,7 @@ export const claimRun = internalMutation({
         )
           return null;
         recoveryKind = "data-recovery";
-      } else {
+      } else if (matchesValidationVerification) {
         if (
           validationVerification!.claimedAt !== undefined ||
           validationVerification!.runKey !==
@@ -485,6 +491,20 @@ export const claimRun = internalMutation({
         )
           return null;
         recoveryKind = "validation-verification";
+      } else {
+        if (
+          grammarVerification!.claimedAt !== undefined ||
+          grammarVerification!.runKey !==
+            `${args.operatorRetryOf}:operator-grammar-verification-1` ||
+          !(await validateBagsGrammarVerification(
+            ctx,
+            grammarVerification!.sourceRunKey,
+            grammarVerification!.sourceJobId,
+            now,
+          ))
+        )
+          return null;
+        recoveryKind = "grammar-verification";
       }
     }
     const runKey =
@@ -494,7 +514,9 @@ export const claimRun = internalMutation({
           ? retry!.runKey
           : recoveryKind === "data-recovery"
             ? dataRecovery!.runKey
-            : validationVerification!.runKey;
+            : recoveryKind === "validation-verification"
+              ? validationVerification!.runKey
+              : grammarVerification!.runKey;
     const existing = await ctx.db
       .query("tokenAlphaRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -602,6 +624,14 @@ export const claimRun = internalMutation({
       await ctx.db.patch("tokenAlphaControl", control._id, {
         operatorBagsValidationVerification: {
           ...validationVerification!,
+          claimedAt: now,
+        },
+        updatedAt: now,
+      });
+    } else if (recoveryKind === "grammar-verification") {
+      await ctx.db.patch("tokenAlphaControl", control._id, {
+        operatorBagsGrammarVerification: {
+          ...grammarVerification!,
           claimedAt: now,
         },
         updatedAt: now,

@@ -7,7 +7,11 @@ import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
 import type { Doc } from "./_generated/dataModel";
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import schema from "./schema";
-import { validateBagsRetry } from "./tokenAlphaRecoveryData";
+import {
+  validateBagsGrammarVerification,
+  validateBagsRetry,
+  validateBagsValidationVerification,
+} from "./tokenAlphaRecoveryData";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -1762,4 +1766,357 @@ describe("one approved completed-draft Bags validation verification", () => {
       ).toBeUndefined();
     },
   );
+});
+
+const GRAMMAR_NOW = VALIDATION_NOW + 3_600_000;
+const GRAMMAR_SOURCE_KEY = "bags:2026-10-21T23";
+const GRAMMAR_JOB_ID = "eliza-04798be0-d6fd-466c-a778-cba2e3f35e2f";
+const GRAMMAR_HASH =
+  "a6ec4441fba550b9c1149c0af04a17d4272c416e3cc8d539b07f1db8ba3f7404";
+const GRAMMAR_RUN_KEY = `${GRAMMAR_SOURCE_KEY}:operator-grammar-verification-1`;
+const GRAMMAR_FAILURE = "token-pilot-model-draft-failed:analysis-policy-phrase";
+const OLD_CONSUMED_VALIDATION = {
+  sourceRunKey: VALIDATION_SOURCE_KEY,
+  sourceJobId: VALIDATION_JOB_ID,
+  runKey: VALIDATION_RUN_KEY,
+  authorizedAt: VALIDATION_NOW,
+  claimedAt: VALIDATION_NOW,
+};
+
+async function grammarFixture(t: ReturnType<typeof setup>) {
+  const ids = await validationFixture(t);
+  vi.setSystemTime(GRAMMAR_NOW);
+  await t.run(async (ctx) => {
+    await ctx.db.patch("tokenAlphaRuns", ids.sourceId, {
+      runKey: GRAMMAR_SOURCE_KEY,
+      reason: GRAMMAR_FAILURE,
+      snapshot: {
+        ...SNAPSHOT,
+        observedAt: GRAMMAR_NOW,
+        metricsAsOf: GRAMMAR_NOW,
+      },
+    });
+    await ctx.db.patch("forumAgentRuns", ids.forumRunId, {
+      runKey: GRAMMAR_SOURCE_KEY,
+      slot: 23,
+      errorMessage: GRAMMAR_FAILURE,
+    });
+    await ctx.db.patch("elizaRuntimeCalls", ids.callId, {
+      jobId: GRAMMAR_JOB_ID,
+      operationKey: GRAMMAR_SOURCE_KEY,
+      inputHash: GRAMMAR_HASH,
+    });
+    await ctx.db.patch("elizaRuntimeOperations", ids.operationId, {
+      operationKey: GRAMMAR_SOURCE_KEY,
+      jobId: GRAMMAR_JOB_ID,
+      inputHash: GRAMMAR_HASH,
+    });
+    await ctx.db.patch("aiOperationalStates", ids.canaryId, {
+      checkedAt: GRAMMAR_NOW,
+    });
+    await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+      operatorBagsValidationVerification: OLD_CONSUMED_VALIDATION,
+    });
+  });
+  return ids;
+}
+
+async function queueGrammar(t: ReturnType<typeof setup>) {
+  return await t.mutation(
+    internal.tokenAlphaRecoveryData.queueBagsGrammarVerification,
+    {
+      failedRunKey: GRAMMAR_SOURCE_KEY,
+      jobId: GRAMMAR_JOB_ID,
+    },
+  );
+}
+
+async function claimGrammar(t: ReturnType<typeof setup>) {
+  return await t.mutation(internal.tokenAlphaData.claimRun, {
+    platform: "bags",
+    claimToken: "grammar-verification-claim",
+    operatorRetryOf: GRAMMAR_SOURCE_KEY,
+  });
+}
+
+describe("one separately approved Bags grammar verification", () => {
+  const invalidGrammarSources: Array<[string, SourcePatch]> = [
+    ...invalidSources,
+    ["missing snapshot", { snapshot: undefined }],
+    ["true first-post flag", { operatorFirstPost: true }],
+    ["false first-post flag", { operatorFirstPost: false }],
+    ["previous hour", { runKey: VALIDATION_SOURCE_KEY }],
+    ["old generic failure", { reason: VALIDATION_FAILURE }],
+    [
+      "another grammar reason",
+      { reason: "token-pilot-model-draft-failed:analysis-policy-target" },
+    ],
+  ];
+  test.each(invalidGrammarSources)("rejects %s", async (_name, patch) => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    await t.run(
+      async (ctx) => await ctx.db.patch("tokenAlphaRuns", ids.sourceId, patch),
+    );
+    expect(await queueGrammar(t)).toEqual({ queued: false });
+  });
+
+  test("keeps old and new completed-draft wrappers bound to different exact reasons", async () => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    expect(
+      await t.run(
+        async (ctx) =>
+          await validateBagsValidationVerification(
+            ctx,
+            GRAMMAR_SOURCE_KEY,
+            GRAMMAR_JOB_ID,
+            GRAMMAR_NOW,
+          ),
+      ),
+    ).toBe(false);
+    expect(
+      await t.run(
+        async (ctx) =>
+          await validateBagsGrammarVerification(
+            ctx,
+            GRAMMAR_SOURCE_KEY,
+            GRAMMAR_JOB_ID,
+            GRAMMAR_NOW,
+          ),
+      ),
+    ).toBe(true);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("tokenAlphaRuns", ids.sourceId, {
+        reason: VALIDATION_FAILURE,
+      });
+      await ctx.db.patch("forumAgentRuns", ids.forumRunId, {
+        errorMessage: VALIDATION_FAILURE,
+      });
+    });
+    expect(
+      await t.run(
+        async (ctx) =>
+          await validateBagsValidationVerification(
+            ctx,
+            GRAMMAR_SOURCE_KEY,
+            GRAMMAR_JOB_ID,
+            GRAMMAR_NOW,
+          ),
+      ),
+    ).toBe(true);
+    expect(
+      await t.run(
+        async (ctx) =>
+          await validateBagsGrammarVerification(
+            ctx,
+            GRAMMAR_SOURCE_KEY,
+            GRAMMAR_JOB_ID,
+            GRAMMAR_NOW,
+          ),
+      ),
+    ).toBe(false);
+  });
+
+  test.each(preservedClaimGates)(
+    "retains $name without spending grammar authority",
+    async ({ block }) => {
+      const t = setup();
+      const ids = await grammarFixture(t);
+      expect((await queueGrammar(t)).queued).toBe(true);
+      await block(t, ids);
+      expect(await claimGrammar(t)).toBeNull();
+      const control = await t.run(
+        async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+      );
+      expect(
+        control?.operatorBagsGrammarVerification?.claimedAt,
+      ).toBeUndefined();
+    },
+  );
+
+  test("requires a single completed draft receipt and no review receipt", async () => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    for (const patch of [
+      { status: "failed" as const },
+      { stage: "bags-scout:forum-evidence-review" },
+      { inputHash: HASH },
+      { model: "openrouter/free" },
+    ]) {
+      const original = await t.run(
+        async (ctx) => await ctx.db.get("elizaRuntimeCalls", ids.callId),
+      );
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("elizaRuntimeCalls", ids.callId, patch),
+      );
+      expect(await queueGrammar(t)).toEqual({ queued: false });
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("elizaRuntimeCalls", ids.callId, {
+            status: original!.status,
+            stage: original!.stage,
+            inputHash: original!.inputHash,
+            model: original!.model,
+          }),
+      );
+    }
+    await t.run(
+      async (ctx) =>
+        await ctx.db.insert("elizaRuntimeCalls", {
+          jobId: "unexpected-grammar-review",
+          operationKey: GRAMMAR_SOURCE_KEY,
+          inputHash: GRAMMAR_HASH,
+          agentSlug: "bags-scout",
+          stage: "bags-scout:forum-evidence-review",
+          model: OPENROUTER_TOKEN_SCOUT_MODEL,
+          status: "completed",
+          createdAt: GRAMMAR_NOW,
+          updatedAt: GRAMMAR_NOW,
+          expiresAt: GRAMMAR_NOW,
+        }),
+    );
+    expect(await queueGrammar(t)).toEqual({ queued: false });
+  });
+
+  test("queues and claims once concurrently, fetches fresh state, and preserves every old marker and source record", async () => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    const readSource = async () =>
+      await t.run(async (ctx) => ({
+        source: await ctx.db.get("tokenAlphaRuns", ids.sourceId),
+        forum: await ctx.db.get("forumAgentRuns", ids.forumRunId),
+        call: await ctx.db.get("elizaRuntimeCalls", ids.callId),
+        operation: await ctx.db.get("elizaRuntimeOperations", ids.operationId),
+      }));
+    const before = await readSource();
+    const queued = await Promise.all(
+      Array.from({ length: 12 }, () => queueGrammar(t)),
+    );
+    expect(queued.filter((result) => result.queued)).toEqual([
+      { queued: true, runKey: GRAMMAR_RUN_KEY },
+    ]);
+    const scheduled = await t.run(
+      async (ctx) => await ctx.db.system.query("_scheduled_functions").take(3),
+    );
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].args).toEqual([
+      { platform: "bags", operatorRetryOf: GRAMMAR_SOURCE_KEY },
+    ]);
+    const claims = await Promise.all(
+      Array.from({ length: 12 }, () => claimGrammar(t)),
+    );
+    const accepted = claims.filter((claim) => claim !== null);
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]).toMatchObject({
+      runKey: GRAMMAR_RUN_KEY,
+      status: "running",
+    });
+    expect(accepted[0]?.snapshot).toBeUndefined();
+    expect(accepted[0]?.analysis).toBeUndefined();
+    expect(accepted[0]?.body).toBeUndefined();
+    await t.mutation(internal.tokenAlphaData.finishRun, {
+      runKey: GRAMMAR_RUN_KEY,
+      claimToken: "grammar-verification-claim",
+      status: "held",
+      reason: "Review held, never retry",
+    });
+    expect(await claimGrammar(t)).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "bags",
+        claimToken: "ordinary-same-hour",
+      }),
+    ).toBeNull();
+    await t.mutation(internal.tokenAlphaData.ensureInfrastructure, {});
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: false });
+    await t.mutation(internal.tokenAlphaData.setEnabled, { enabled: true });
+    vi.setSystemTime(GRAMMAR_NOW + 3_600_000);
+    expect(await queueGrammar(t)).toEqual({ queued: false });
+    expect(await claimGrammar(t)).toBeNull();
+    const control = await t.run(
+      async (ctx) => await ctx.db.get("tokenAlphaControl", ids.controlId),
+    );
+    expect(control?.operatorBagsRetry).toEqual(OLD_CONSUMED_RETRY);
+    expect(control?.operatorBagsDataRecovery).toEqual(
+      OLD_CONSUMED_DATA_RECOVERY,
+    );
+    expect(control?.operatorBagsValidationVerification).toEqual(
+      OLD_CONSUMED_VALIDATION,
+    );
+    expect(control?.operatorBagsGrammarVerification).toEqual({
+      sourceRunKey: GRAMMAR_SOURCE_KEY,
+      sourceJobId: GRAMMAR_JOB_ID,
+      runKey: GRAMMAR_RUN_KEY,
+      authorizedAt: GRAMMAR_NOW,
+      claimedAt: GRAMMAR_NOW,
+    });
+    expect(await readSource()).toEqual(before);
+  });
+
+  test.each([
+    "operatorBagsRetry",
+    "operatorBagsDataRecovery",
+    "operatorBagsValidationVerification",
+  ] as const)("rejects ambiguous authority with consumed %s", async (field) => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    expect((await queueGrammar(t)).queued).toBe(true);
+    await t.run(async (ctx) => {
+      const control = await ctx.db.get("tokenAlphaControl", ids.controlId);
+      await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+        [field]: { ...control![field]!, sourceRunKey: GRAMMAR_SOURCE_KEY },
+      });
+    });
+    expect(await claimGrammar(t)).toBeNull();
+  });
+
+  test("rejects forged marker, wrong lane and any first-post flag", async () => {
+    const t = setup();
+    const ids = await grammarFixture(t);
+    expect(await claimGrammar(t)).toBeNull();
+    expect((await queueGrammar(t)).queued).toBe(true);
+    const marker = {
+      sourceRunKey: GRAMMAR_SOURCE_KEY,
+      sourceJobId: GRAMMAR_JOB_ID,
+      runKey: GRAMMAR_RUN_KEY,
+      authorizedAt: GRAMMAR_NOW,
+    };
+    for (const patch of [
+      { runKey: VALIDATION_RUN_KEY },
+      { sourceJobId: "wrong-job" },
+      { claimedAt: GRAMMAR_NOW },
+    ]) {
+      await t.run(
+        async (ctx) =>
+          await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+            operatorBagsGrammarVerification: { ...marker, ...patch },
+          }),
+      );
+      expect(await claimGrammar(t)).toBeNull();
+    }
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("tokenAlphaControl", ids.controlId, {
+          operatorBagsGrammarVerification: marker,
+        }),
+    );
+    for (const operatorFirstPost of [true, false])
+      expect(
+        await t.mutation(internal.tokenAlphaData.claimRun, {
+          platform: "bags",
+          claimToken: "mixed-authority",
+          operatorRetryOf: GRAMMAR_SOURCE_KEY,
+          operatorFirstPost,
+        }),
+      ).toBeNull();
+    expect(
+      await t.mutation(internal.tokenAlphaData.claimRun, {
+        platform: "pumpfun",
+        claimToken: "wrong-lane",
+        operatorRetryOf: GRAMMAR_SOURCE_KEY,
+      }),
+    ).toBeNull();
+  });
 });

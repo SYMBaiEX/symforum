@@ -140,6 +140,15 @@ earlier markers and failed/held runs remain unchanged. It starts fresh data,
 generation and independent review, never publishes the failed cached draft.
 All ordinary quotas, health, unresolved-operation and publishing gates apply.
 
+`tokenAlphaRecoveryData:queueBagsGrammarVerification` is a fourth, separately
+owner-approved permanent one-shot for the current ordinary Bags hour's exact
+`token-pilot-model-draft-failed:analysis-policy-phrase` failure. It shares the
+known-completed-draft eligibility checks above but cannot accept the older
+generic failure reason; the older validator remains generic-reason-only.
+Exactly one of the four source-bound authorities may match a claim. No earlier
+marker is reset, and fresh data, drafting, independent review and every shared
+quota/health/publishing gate remain mandatory.
+
 `tokenAlphaAgent:probeData` is an internal data-only diagnostic for one platform.
 It uses the same quota-reserved ranking fetch, freshness filters and finalized
 mint verification as a normal run. One invocation can consume at most one
