@@ -19,7 +19,10 @@ import {
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
-import { openRouterStructuredOutputBudget } from "../lib/ai-models";
+import {
+  OPENROUTER_NEWSLETTER_MODEL,
+  openRouterStructuredOutputBudget,
+} from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
@@ -34,6 +37,20 @@ const canaryOutputSchema = z.object({
   draft: z.string().min(80).max(1_200),
   sourceUrls: z.array(z.string().url()).min(1).max(3),
   message: z.literal(CANARY_MESSAGE),
+});
+// OpenAI's strict structured-output subset accepts enum and plain strings,
+// while Zod's literal/url helpers emit `const` and `format: "uri"`. Keep the
+// Luna wire schema within that provider subset and apply the complete schema
+// locally after generation.
+const lunaCanaryWireSchema = z.object({
+  topic: z.string().min(12).max(120),
+  title: z.string().min(12).max(120),
+  draft: z.string().min(80).max(1_200),
+  sourceUrls: z
+    .array(z.string().regex(/^https:\/\/.*$/))
+    .min(1)
+    .max(3),
+  message: z.enum([CANARY_MESSAGE]),
 });
 
 export async function convexModelRoutingConfig(
@@ -265,7 +282,12 @@ export async function runStructuredProbe(
       const result = await generateText({
         model: candidate.model,
         prompt: canaryPrompt,
-        output: Output.object({ schema: canaryOutputSchema }),
+        output: Output.object({
+          schema:
+            candidate.persistedModel === OPENROUTER_NEWSLETTER_MODEL
+              ? lunaCanaryWireSchema
+              : canaryOutputSchema,
+        }),
         maxOutputTokens: openRouterStructuredOutputBudget(
           candidate.modelId,
           4_000,
@@ -277,7 +299,7 @@ export async function runStructuredProbe(
         providerOptions: candidate.providerOptions,
         abortSignal: signal,
       });
-      const output = result.output;
+      const output = canaryOutputSchema.parse(result.output);
       if (
         output.message !== CANARY_MESSAGE ||
         output.topic.trim().length < 12 ||

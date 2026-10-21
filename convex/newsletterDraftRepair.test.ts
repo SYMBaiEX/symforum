@@ -185,6 +185,11 @@ function expectStrictReviewObjects(value: unknown): void {
   if (value === null || typeof value !== "object") return;
   const node = value as Record<string, unknown>;
   expect(node).not.toHaveProperty("oneOf");
+  expect(node).not.toHaveProperty("const");
+  if (node.format !== undefined) {
+    expect(["date-time", "time", "date", "duration", "email", "hostname", "ipv4", "ipv6", "uuid"])
+      .toContain(node.format);
+  }
   if (node.type === "object") {
     const properties = node.properties as Record<string, unknown>;
     expect(node.additionalProperties).toBe(false);
@@ -710,6 +715,15 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     expect(responseFormat.json_schema.strict).toBe(true);
     expectStrictReviewObjects(responseFormat.json_schema.schema);
     return responseFormat.json_schema.schema;
+  });
+  const writerProperties = schemas[0]!.properties as Record<string, {
+    items?: { properties?: Record<string, unknown> };
+  }>;
+  expect(writerProperties.stories.items?.properties?.hnItemId).toMatchObject({
+    type: "integer", exclusiveMinimum: 0,
+  });
+  expect(writerProperties.stories.items?.properties?.signalScore).toMatchObject({
+    type: "integer", minimum: 0, maximum: 100,
   });
   const reviewSchema = schemas[2]!;
   const reviewProperties = reviewSchema.properties as Record<string, {

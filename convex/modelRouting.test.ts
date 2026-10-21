@@ -204,6 +204,20 @@ describe("free-only structured operator probe", () => {
     });
     expect(bodies[0].reasoning).toEqual({ enabled: false });
     expect(bodies[0].reasoning_effort).toBeUndefined();
+    const wireSchema = (
+      bodies[0].response_format as {
+        json_schema: { schema: Record<string, unknown> };
+      }
+    ).json_schema.schema;
+    const serializedSchema = JSON.stringify(wireSchema);
+    expect(serializedSchema).not.toContain('"const"');
+    expect(serializedSchema).not.toContain('"format"');
+    expect(wireSchema.properties).toMatchObject({
+      message: { enum: ["SYMBiEX structured model route healthy"] },
+      sourceUrls: {
+        items: { pattern: String.raw`^https:\/\/.*$` },
+      },
+    });
 
     const reservation = runMutation.mock.calls.find(
       ([reference]) =>
@@ -220,6 +234,60 @@ describe("free-only structured operator probe", () => {
       model: "openai/gpt-6-luna",
       servedModel: "openai/gpt-6-luna",
     });
+  });
+
+  test("retains full URL validation after the Luna-compatible wire schema", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: "synthetic-invalid-url-probe",
+              object: "chat.completion",
+              created: 1_760_000_000,
+              model: "openai/gpt-6-luna",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: JSON.stringify({
+                      topic: "Structured routing health check",
+                      title: "Structured routing health check passed",
+                      draft:
+                        "This synthetic payload validates the complete URL schema after the provider-compatible wire schema has accepted the generated object.",
+                      sourceUrls: ["https://%"],
+                      message: "SYMBiEX structured model route healthy",
+                    }),
+                  },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 100,
+                completion_tokens: 100,
+                total_tokens: 200,
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+    const ctx = {
+      runQuery: vi.fn(async () => ({ disabledModelIds: [] })),
+      runMutation: vi.fn(async () => ({
+        accepted: true,
+        reservationKey: "invalid-url",
+      })),
+    } as unknown as ActionCtx;
+
+    await expect(
+      runStructuredProbe(ctx, undefined, false, {
+        model: "openai/gpt-6-luna",
+      }),
+    ).rejects.toThrow(/Invalid URL/);
   });
 
   test("default live canary stays on the health-canary worker route through a model fallback", async () => {
