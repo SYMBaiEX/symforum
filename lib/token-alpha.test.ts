@@ -138,6 +138,26 @@ describe("token candidate rotation", () => {
 });
 
 describe("deterministic token post rendering", () => {
+  test("preserves legitimate emoji/script joiners but strips directional controls", () => {
+    const name = "Developer 👩\u200d💻 توکن\u200cفارسی";
+    const { title, body } = renderTokenPost({
+      snapshot: snapshot({ name, symbol: "FAMILY👨\u200d👩\u200d👧" }),
+      analysis: "Source-reported metrics do not establish lasting demand.",
+      isFollowUp: false,
+    });
+    expect(title).toContain(name);
+    expect(body).toContain(name);
+    expect(title).toContain("FAMILY👨\u200d👩\u200d👧");
+    const unsafe = renderTokenPost({
+      snapshot: snapshot({ name: "\u202eHidden\u2069", symbol: "\u200fSAFE" }),
+      analysis: "Source-reported metrics do not establish lasting demand.",
+      isFollowUp: false,
+    });
+    expect(`${unsafe.title}${unsafe.body}`).not.toMatch(
+      /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/u,
+    );
+  });
+
   test("renders real source rank, exact mint, UTC times, metrics and safe image", () => {
     const { title, body } = renderTokenPost({
       snapshot: snapshot({ sourceRank: 3 }),
@@ -145,7 +165,9 @@ describe("deterministic token post rendering", () => {
       isFollowUp: false,
     });
     expect(title).toContain("Example token ($EXAMPLE)");
-    expect(body).toContain("eligible indexed rank #3");
+    expect(body).toContain(
+      "rank #3 by rolling one-hour trading volume within this scan's eligible indexed sample",
+    );
     expect(body).toContain("Limited-coverage pilot");
     expect(body).toContain("not the platform-wide top five");
     expect(body).toContain("Original Bags graduates may be missing");

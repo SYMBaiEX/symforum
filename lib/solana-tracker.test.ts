@@ -170,6 +170,56 @@ describe("Solana Tracker eligible indexed rankings", () => {
     ).toEqual([NOW - 900_000, NOW + 60_000]);
   });
 
+  test.each([
+    { name: "\u202ehctilG yenoM etinifnI" },
+    { name: "Infinite \u202eMoney" },
+    { symbol: "\u202eHCTILG" },
+    { name: "Token\u2067RTL\u2069" },
+    { symbol: "T\u2066KN\u2069" },
+    { name: "\tToken" },
+    { name: "Token\nName" },
+    { symbol: "T\u0000KN" },
+    { name: "Token\u0085Name" },
+    { symbol: "T\u009fKN" },
+    { name: "\u061cToken" },
+    { name: "Token\u200eName" },
+    { symbol: "T\u200fKN" },
+    { name: "Token\u202aName" },
+    { symbol: "T\u202bKN" },
+    { name: "Token\u202cName" },
+    { symbol: "T\u202dKN" },
+    { name: "Token\u2068Name" },
+  ])(
+    "rejects unsafe identity metadata without rewriting a valid mint: %#",
+    async (identity) => {
+      const unsafeMint = "EBku5v4TnkDTDwidxQzaBMRzkGNqoLhCwSaYjDBeMvCo";
+      const options = setup([
+        row({ mint: unsafeMint, volume_1h: 99_999, ...identity }),
+        row({ mint: SYMF }),
+      ]);
+      const candidates = await fetchTokenRankings(options);
+      expect(candidates.map((candidate) => candidate.mint)).toEqual([SYMF]);
+      expect(candidates[0].sourceRank).toBe(1);
+      expect(options.fetch).toHaveBeenCalledOnce();
+      expect(options.reserveRequest).toHaveBeenCalledOnce();
+    },
+  );
+
+  test.each([
+    { name: "👩‍💻 Builders", symbol: "DEV" },
+    { name: "Family 👨‍👩‍👧‍👦", symbol: "FAM" },
+    { name: "قمر عربي", symbol: "قمر" },
+    { name: "月亮 币", symbol: "月" },
+    { name: "Ordinary Token Name", symbol: "TOKEN" },
+  ])(
+    "preserves legible Unicode, composed emoji and ordinary spaces: %#",
+    async (identity) => {
+      const [candidate] = await fetchTokenRankings(setup([row(identity)]));
+      expect(candidate.name).toBe(identity.name);
+      expect(candidate.symbol).toBe(identity.symbol);
+    },
+  );
+
   test("requires explicit Bags origin rather than suffix, current market, or server filter alone", async () => {
     const options = setup([
       row({ mint: mint(1), launchpad: null }),
@@ -276,6 +326,41 @@ describe("Solana Tracker eligible indexed rankings", () => {
       `https://www.solanatracker.io/token/${SYMF}`,
     );
   });
+
+  test.each([
+    ["https://t.me/", "https://x.com/"],
+    ["https://telegram.me", "https://twitter.com"],
+    ["https://www.t.me/?lang=en", "https://www.x.com/#home"],
+    ["https://www.telegram.me////", "https://www.twitter.com/?lang=en"],
+    ["https://t.me/%2F", "https://x.com/%20"],
+  ])(
+    "maps bare social platform roots to unknown: Telegram=%s X=%s",
+    async (telegram, twitter) => {
+      const [candidate] = await fetchTokenRankings(
+        setup([row({ socials: { telegram, twitter } })]),
+      );
+      expect(candidate.telegram).toBeNull();
+      expect(candidate.twitter).toBeNull();
+    },
+  );
+
+  test.each([
+    ["https://t.me/project_channel", "https://x.com/project"],
+    [
+      "https://t.me/+ProjectInvite",
+      "https://twitter.com/project/status/123456",
+    ],
+    ["https://telegram.me/s/project", "https://x.com/i/communities/123456"],
+  ])(
+    "retains real channel, profile, invite and post links: Telegram=%s X=%s",
+    async (telegram, twitter) => {
+      const [candidate] = await fetchTokenRankings(
+        setup([row({ socials: { telegram, twitter } })]),
+      );
+      expect(candidate.telegram).toBe(telegram);
+      expect(candidate.twitter).toBe(twitter);
+    },
+  );
 
   test.each([
     null,
@@ -470,6 +555,30 @@ describe("Solana Tracker eligible indexed rankings", () => {
 });
 
 describe("optional token metadata enrichment", () => {
+  test("metadata enrichment cannot replace unknown socials with bare platform homepages", async () => {
+    const options = setup([row({ socials: {} })]);
+    const [snapshot] = await fetchTokenRankings(options);
+    options.fetch.mockResolvedValueOnce(
+      Response.json({
+        token: {
+          mint: SYMF,
+          twitter: "https://x.com/",
+          telegram: "https://t.me/",
+          socials: {
+            twitter: "https://twitter.com/",
+            telegram: "https://telegram.me/",
+          },
+          strictSocials: {
+            twitter: "https://www.x.com/",
+            telegram: "https://www.t.me/",
+          },
+        },
+      }),
+    );
+    const enriched = await enrichTokenSnapshot({ ...options, snapshot });
+    expect(enriched.twitter).toBeNull();
+    expect(enriched.telegram).toBeNull();
+  });
   test("optional metadata remains single-attempt even on a transient failure", async () => {
     const options = setup();
     const [snapshot] = await fetchTokenRankings(options);

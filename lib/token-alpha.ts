@@ -49,8 +49,9 @@ export const TOKEN_ALPHA_AGENTS = {
 >;
 
 const SOLANA_MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// Preserve script/emoji joiners U+200C/U+200D, never directional overrides.
 const INVISIBLE_TEXT =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gu;
+  /[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gu;
 const UNSAFE_URL_CHARACTERS =
   /[\s\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\[\]<>"'\\]/u;
 const SOURCE_HOSTS = new Set([
@@ -272,7 +273,7 @@ export function renderTokenPost({
   );
   const lines = [
     `[h2]${label} — ${isFollowUp ? "trend update" : "token watch"}[/h2]`,
-    `${agent.name}: eligible indexed rank ${rank} by rolling one-hour trading volume, not an investment rating.`,
+    `${agent.name}: rank ${rank} by rolling one-hour trading volume within this scan's eligible indexed sample, not an investment rating.`,
     "[b]Limited-coverage pilot[/b]: eligible tokens in Solana Tracker's index, not the platform-wide top five.",
     ...(snapshot.platform === "bags"
       ? ["Original Bags graduates may be missing from this index."]

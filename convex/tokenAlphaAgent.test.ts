@@ -77,6 +77,7 @@ function context(
     claimed?: boolean;
     existing?: boolean;
     previous?: TokenSnapshot;
+    tracked?: { mint: string; lastUpdatedAt: number; threadId: string }[];
   } = {},
 ) {
   const state: {
@@ -112,7 +113,7 @@ function context(
   );
   const runQuery = vi.fn(async (ref: Parameters<typeof getFunctionName>[0]) => {
     if (getFunctionName(ref) === "tokenAlphaData:getContext")
-      return { tracked: [], metadata: [] };
+      return { tracked: options.tracked ?? [], metadata: [] };
     return state;
   });
   return {
@@ -250,6 +251,107 @@ describe("token pilot orchestration", () => {
     expect(mocks.generate).not.toHaveBeenCalled();
     expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
   });
+  test("final mint filtering reindexes ranking proof without changing volume order", async () => {
+    const highest = {
+      ...snapshot,
+      mint: "A".repeat(44),
+      sourceRank: 1,
+      volume1hUsd: 5_000,
+    };
+    const excluded = {
+      ...snapshot,
+      mint: "B".repeat(44),
+      sourceRank: 2,
+      volume1hUsd: 3_000,
+    };
+    const selected = { ...snapshot, sourceRank: 3, volume1hUsd: 2_000 };
+    mocks.rankings.mockResolvedValue([highest, excluded, selected]);
+    mocks.verify.mockResolvedValue(new Set([highest.mint, selected.mint]));
+    mocks.enrich.mockImplementation(async ({ snapshot: fresh }) => ({
+      ...fresh,
+      description: "Additional project metadata.",
+      imageUrl: "https://example.com/token.png",
+    }));
+    const ctx = context({
+      tracked: [
+        { mint: highest.mint, lastUpdatedAt: NOW, threadId: "highest-thread" },
+      ],
+    });
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "published",
+    );
+    const reviewed = JSON.parse(
+      mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
+    );
+    expect(reviewed.rankingEvidence).toEqual([
+      {
+        mint: highest.mint,
+        volume1hUsd: 5_000,
+        sourceRank: 1,
+        metricsAsOf: NOW,
+      },
+      {
+        mint: selected.mint,
+        volume1hUsd: 2_000,
+        sourceRank: 2,
+        metricsAsOf: NOW,
+      },
+    ]);
+    expect(reviewed.snapshot).toMatchObject({
+      mint: MINT,
+      sourceRank: 2,
+      volume1hUsd: 2_000,
+      description: "Additional project metadata.",
+    });
+    expect(reviewed.rankingEvidence).not.toContainEqual(
+      expect.objectContaining({ mint: excluded.mint }),
+    );
+    expect(mocks.rankings).toHaveBeenCalledTimes(1);
+    expect(mocks.verify).toHaveBeenCalledTimes(1);
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+  });
+  test.each([
+    ["mint", "A".repeat(44)],
+    ["platform", "pumpfun"],
+    ["name", "Other identity\u202e"],
+    ["symbol", "OTHER\u202e"],
+    ["sourceRank", 2],
+    ["volume1hUsd", 999],
+    ["metricsAsOf", NOW + 1],
+    ["observedAt", NOW + 1],
+    ["priceUsd", 2],
+    ["marketCapUsd", 2],
+    ["holders", 2],
+    ["liquidityUsd", 2],
+    ["priceChange1hPercent", 3],
+    ["sourceUrl", "https://www.solanatracker.io/token/other"],
+  ] as const)(
+    "metadata cannot overwrite ranked snapshot field %s",
+    async (field, value) => {
+      mocks.enrich.mockResolvedValue({ ...snapshot, [field]: value });
+      const ctx = context();
+      expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+        status: "failed",
+        reason: "token-pilot-metadata-failed",
+      });
+      expect(calls(ctx, "tokenAlphaData:saveSnapshot")).toHaveLength(0);
+      expect(mocks.generate).not.toHaveBeenCalled();
+      expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+    },
+  );
+  test("in-place enrichment mutation cannot rewrite the captured ranking facts", async () => {
+    mocks.enrich.mockImplementation(async ({ snapshot: fresh }) => {
+      fresh.volume1hUsd = 999;
+      return fresh;
+    });
+    const ctx = context();
+    expect(await runTokenPilot(ctx.ctx, { platform: "bags" })).toEqual({
+      status: "failed",
+      reason: "token-pilot-metadata-failed",
+    });
+    expect(mocks.generate).not.toHaveBeenCalled();
+    expect(calls(ctx, "tokenAlphaData:saveSnapshot")).toHaveLength(0);
+  });
   test("RPC failure is fail-closed, without model work or publication", async () => {
     mocks.verify.mockRejectedValue(new Error("synthetic RPC failure"));
     const ctx = context();
@@ -301,6 +403,24 @@ describe("token pilot orchestration", () => {
     const reviewed = JSON.parse(prompt.split("\n").at(-1));
     expect(reviewed.snapshot).toEqual(snapshot);
     expect(reviewed.previous).toBeNull();
+    expect(reviewed.rankingEvidence).toEqual([
+      { mint: MINT, volume1hUsd: 2_000, sourceRank: 1, metricsAsOf: NOW },
+    ]);
+    expect(prompt).toContain(
+      "final bounded scan sample of at most five eligible tokens returned by Solana Tracker",
+    );
+    expect(prompt).toContain(
+      "sorted by rolling one-hour USD volume in non-increasing order and reindexed after finalized Solana mint validation",
+    );
+    expect(prompt).toContain(
+      "Rank applies only within this validated scan cohort, not the complete Solana Tracker index",
+    );
+    expect(prompt).toContain(
+      "sourceRank must equal each row's ordinal position starting at one",
+    );
+    expect(prompt).toContain(
+      "selected snapshot must match its exact case-sensitive mint row's volume1hUsd, sourceRank and metricsAsOf",
+    );
     expect(reviewed.body).toContain("1h price change: +2%");
     expect(reviewed.body).not.toContain("Change from the previous snapshot");
     expect(prompt).toContain(
@@ -352,6 +472,12 @@ describe("token pilot orchestration", () => {
       mocks.generate.mock.calls[1][0].prompt.split("\n").at(-1),
     );
     expect(reviewed.previous).toEqual(previous);
+    expect(reviewed.rankingEvidence).toEqual([
+      { mint: MINT, volume1hUsd: 2_000, sourceRank: 1, metricsAsOf: NOW },
+    ]);
+    expect(mocks.generate.mock.calls[1][0].prompt).toContain(
+      "Rank applies only within this validated scan cohort",
+    );
     expect(reviewed.body).toContain("Price: +$0.0005 (+100%)");
     expect(reviewed.body).toContain(
       "Rolling 1h volume window difference: +$1,000.00 (+100%)",

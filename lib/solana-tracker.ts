@@ -17,6 +17,8 @@ const PROGRAM_ADDRESSES = new Set([
 ]);
 const UNSAFE_URL =
   /[\s\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\[\]<>"'\\]/u;
+const UNSAFE_IDENTITY_CONTROLS =
+  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 
 export const TOKEN_INDEX_COVERAGE_WARNING =
   "Limited-coverage pilot: eligible tokens in Solana Tracker's index, not the platform-wide top five.";
@@ -110,6 +112,15 @@ function text(value: unknown, maxLength = 2_048): string | null {
   return result && result.length <= maxLength ? result : null;
 }
 
+function identityText(value: unknown, maxLength: number): string | null {
+  // This rejects unsafe identity metadata, not the on-chain mint itself.
+  // Never strip directional/control characters into a different public name.
+  // ZWJ and variation selectors remain allowed for ordinary composed emoji.
+  if (typeof value !== "string" || UNSAFE_IDENTITY_CONTROLS.test(value))
+    return null;
+  return text(value, maxLength);
+}
+
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -184,12 +195,22 @@ function socialUrl(
 ): string | null {
   const result = safeUrl(value, apiKey);
   if (!result) return null;
-  const hostname = new URL(result).hostname.toLowerCase();
+  const url = new URL(result);
+  const hostname = url.hostname.toLowerCase();
   const hosts =
     kind === "twitter"
       ? ["x.com", "www.x.com", "twitter.com", "www.twitter.com"]
       : ["t.me", "www.t.me", "telegram.me", "www.telegram.me"];
-  return hosts.includes(hostname) ? result : null;
+  if (!hosts.includes(hostname)) return null;
+  try {
+    // A platform homepage (even with query/fragment or encoded empty path)
+    // identifies no project profile, channel, community or post.
+    return decodeURIComponent(url.pathname).replace(/\//g, "").trim()
+      ? result
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function sourcePlatform(
@@ -340,8 +361,8 @@ function rankedSnapshot(
 ): TokenSnapshot | null {
   const row = object(value);
   if (!row || !eligibleMint(row.mint)) return null;
-  const name = text(row.name, 200);
-  const symbol = text(row.symbol, 80);
+  const name = identityText(row.name, 200);
+  const symbol = identityText(row.symbol, 80);
   const visible = (value: string | null) =>
     value?.replace(
       /[\s\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gu,

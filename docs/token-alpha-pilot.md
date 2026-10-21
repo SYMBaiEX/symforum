@@ -357,3 +357,21 @@ exceptions, ambiguous tails and mixed promises remain blocked. Both observed
 warnings are covered; original text still reaches independent review unchanged.
 Draft instructions also prefer direct uncertainty wording without that keyword.
 The ordinary failed run is preserved and no retry is implied by this fix.
+
+The owner separately approved one fresh grammar verification. Commit `76cf6f73`
+deployed its fourth permanent authorization. Fresh data and both Luna steps
+completed; the local validator passed. Independent review held the draft
+because it lacked concrete evidence for the ranking basis and its token name
+contained a bidirectional override that was stripped for display. No Bags post
+was published, and the fourth marker remains consumed. No further immediate
+verification is authorized or queued.
+
+The follow-up accuracy repair rejects unsafe control/directional identity
+metadata before selection while preserving normal Unicode and script/emoji
+joiners. Bare Telegram/X roots become Unknown, not purported project accounts.
+Review now receives the actual detached post-RPC candidate cohort (at most five
+rows, with exact mints, volumes, ranks and metric timestamps) and checks the
+selected snapshot against it. Metadata enrichment cannot alter ranked identity,
+market fields or source evidence. The public rank label explicitly refers to
+this scan's eligible indexed sample, never a complete index/platform ranking.
+Prior failed/held records and published posts are not rewritten.
