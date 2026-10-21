@@ -678,6 +678,8 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A field that names a source version or release remains a fact");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("numericSupportCandidates");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("non-exhaustive search hints, not evidence verdicts or automatic citations");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("select 1–4 distinct exact quoteIds");
+  expect(JSON.stringify(requestBodies[2]?.messages)).toContain("never repeat an ID within a field");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("If no four-quote set supports every clause, mark the field unsupported or unknown");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain("A later caveat does not repair an earlier categorical assertion");
   expect(JSON.stringify(requestBodies[2]?.messages)).toContain('issueDate\\\":\\\"2026-10-21');

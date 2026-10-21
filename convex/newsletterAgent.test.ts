@@ -368,15 +368,42 @@ describe("Belle blind evidence review validation", () => {
     expect(() => hydrateEditorialEvidenceReview({
       fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q999"] }], coherence: "clear",
     }, catalog)).toThrow("unknown quote ID");
+    expect(evidenceReviewWireSchema.safeParse({
+      ...base, fields: [{ path: "lead", verdict: "fact", quoteIds: Array(5).fill("1:q0") }],
+    }).success).toBe(false);
     expect(() => hydrateEditorialEvidenceReview({
-      fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q0", "1:q0"] }], coherence: "clear",
-    }, catalog)).toThrow("duplicated a quote ID");
+      fields: [{ path: "lead", verdict: "fact", quoteIds: Array(5).fill("1:q0") }], coherence: "clear",
+    }, catalog)).toThrow();
     expect(evidenceReviewWireSchema.safeParse({
       ...base, fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q0"], quote: "injected" }],
     }).success).toBe(false);
     expect(evidenceReviewWireSchema.safeParse({
       ...base, fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q999"] }],
     }).success).toBe(true);
+  });
+
+  test("deduplicates bounded quote IDs without inflating support or waiving evidence checks", () => {
+    const review = hydrateEditorialEvidenceReview({
+      fields: [
+        { path: "lead", verdict: "fact", quoteIds: ["1:q0", "1:q0", "2:q0", "2:q0"] },
+        { path: "stories.0.summary", verdict: "fact", quoteIds: ["1:q0", "1:q0"] },
+      ],
+      coherence: "clear",
+    }, catalog);
+    expect(review.fields[0]).toMatchObject({
+      sourceId: 1, quote: catalog.byId.get("1:q0")!.quote,
+      additionalSupports: [{ sourceId: 2, quote: catalog.byId.get("2:q0")!.quote }],
+    });
+    expect(review.fields[1]?.additionalSupports).toEqual([]);
+    const draft = dailyDraft();
+    draft.stories[0]!.summary = long("40 models is the reported change.", 180);
+    const issues = validateEditorialEvidenceReview(draft, sources, review).join(" ");
+    expect(issues).toContain("lacks cited numeric support at stories.0.summary: 40 models");
+    expect(issues).toContain("Evidence review omitted");
+    expect(() => hydrateEditorialEvidenceReview({
+      fields: [{ path: "lead", verdict: "fact", quoteIds: ["1:q999", "1:q999"] }],
+      coherence: "clear",
+    }, catalog)).toThrow("unknown quote ID");
   });
 
   test("compact review retains duplicate and wrong-source blockers", () => {
