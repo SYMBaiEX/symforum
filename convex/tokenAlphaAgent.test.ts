@@ -296,10 +296,26 @@ describe("token pilot orchestration", () => {
       "Do not add numerals, spelled-out numbers or counts",
     );
     expect(prompt).toContain(
-      "modest, high, low, strong, weak, deep, thin or healthy",
+      "small, large, substantial, tiny, huge, modest, high, low, strong, weak, deep, thin or healthy",
+    );
+    expect(prompt).toContain(
+      "including phrases such as a small amount of trading",
     );
     expect(prompt).toContain(
       "explicitly name its benchmark from the supplied within-snapshot metrics",
+    );
+    expect(prompt).toContain(
+      "comparison of rolling-hour trading volume in USD with reported liquidity in USD",
+    );
+    expect(prompt).toContain(
+      "if volume is below liquidity, say rolling-hour volume is below reported liquidity, not trading volume is small",
+    );
+    expect(prompt).toContain("omit it if either value is unavailable");
+    expect(prompt).toContain(
+      "not strength, quality, lasting demand or an investment opportunity",
+    );
+    expect(prompt).toContain(
+      "Do not turn lower trading volume into a favorable or unfavorable rating or suggest a trade",
     );
     expect(prompt).toContain(
       "brief conditional interpretation and uncertainty",
@@ -308,6 +324,10 @@ describe("token pilot orchestration", () => {
       "Do not repeat promotional claims from the project description",
     );
     expect(mocks.generate).toHaveBeenCalledTimes(2);
+    expect(mocks.generate.mock.calls[0][0]).toMatchObject({
+      maxOutputTokens: 4_000,
+      maxRetries: 0,
+    });
   });
   test("an explicit retry preserves the source key and still uses only the forced Eliza bounded scout route", async () => {
     const ctx = context();

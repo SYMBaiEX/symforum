@@ -300,3 +300,26 @@ negatives, ambiguous variants and other policy phrases remain blocked. New
 local failures retain only fixed length/character/policy codes, never raw model
 text. The owner approved one separate fresh guarded verification, with no
 review waiver or increase to any limit.
+
+Commit `c1c58d31` deployed the fix and separate one-shot gate to production
+`strong-bee-384`. The approved fresh verification fetched Haskell data and
+completed both Luna calls, but independent review held its unbenchmarked
+"small amount" description of one-hour volume. No Bags post was published;
+the verification marker remains consumed. The source metrics and timestamps
+matched the snapshot. This was a quality rejection, not another provider,
+RPC, truncation or local-validator failure. The next attempt must use an
+ordinary future hourly slot; no additional operator replay is authorized.
+Draft instructions now explicitly forbid "small amount" and similar unsupported
+size labels and teach a named, directionally correct comparison of reported
+rolling-hour USD volume with reported USD liquidity. That relation must not
+become a quality, demand or trading recommendation. Independent review, limits
+and one-call/no-retry generation remain unchanged; live adherence still needs
+an ordinary future run.
+
+The normal Pump 22:00 UTC slot also published
+[Clayton Kim's token watch](https://forum.symbaiex.com/crypto-pumpfun/clayton-kim-kimchi-one-hour-volume-watch).
+Its public/saved/deterministic/private bodies matched exactly, all four metric
+claims were supported, quality passed without flags, and metrics were 14.438
+seconds old at publication. Both completed Luna calls cost $0.000509 total.
+This token's mint is distinct from the earlier human-authored Kimchi lore
+thread; the post makes no connection or shared-identity claim.
