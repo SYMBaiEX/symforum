@@ -23420,7 +23420,11 @@ const getMyForumExperienceOperation = defineForumQuery({
     const [settings, boards, members] = await Promise.all([
       loadForumExperience(ctx, viewer._id),
       listMyCategorySubscriptionsOperation.handler(ctx, { limit: 100 }),
-      listMyForumRelationshipsOperation.handler(ctx, {}),
+      // Feed preferences are available to every signed-in member. The
+      // relationship-management endpoint deliberately requires approved trust.
+      isTrustedForumUser(viewer)
+        ? listMyForumRelationshipsOperation.handler(ctx, {})
+        : Promise.resolve({ buddies: [] }),
     ]);
     return {
       defaultFeed: settings?.defaultFeed ?? ("discover" as const),
