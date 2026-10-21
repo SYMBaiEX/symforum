@@ -18,6 +18,7 @@ import {
   evidenceReviewSchema,
   evidenceReviewWireSchema,
   hydrateEditorialEvidenceReview,
+  materializeEditorialChart,
   NEWSLETTER_MODEL_IDS,
   newsletterModelsForRoutingConfig,
   reusableDailyDigestStories,
@@ -395,6 +396,32 @@ describe("Belle blind evidence review validation", () => {
 });
 
 describe("Belle editorial scoring", () => {
+  test("binds a complete editorial-priority chart caption before review", () => {
+    const generated = dailyDraft();
+    generated.chart.title = "How independently checkable is each claim?";
+    generated.chart.subtitle =
+      "Editorial score, 0–100: measured checkability of each source claim. The 0–50";
+    generated.stories[0]!.signalScore = 88;
+    generated.stories[1]!.signalScore = 74;
+
+    const draft = materializeEditorialChart(generated, new Map([
+      [1, { title: "Source one" }],
+      [2, { title: "Source two" }],
+      [3, { title: "Source three" }],
+    ]));
+
+    expect(draft.chart.title).toBe("Belle's editorial priorities");
+    expect(draft.chart.subtitle).toBe(
+      "Editorial score, 0–100: Belle's judgment of each story's practical importance to readers, not a measured result.",
+    );
+    expect(draft.chart.subtitle.length).toBeLessThan(240);
+    expect(draft.chart.subtitle).toMatch(/\.$/);
+    expect(draft.chart.items.map(item => item.value)).toEqual([88, 74, 80]);
+    expect(editorialEvidenceFields(draft).find(field => field.path === "chart.subtitle")?.text)
+      .toBe(draft.chart.subtitle);
+    expect(JSON.stringify(draft.chart)).not.toContain("checkability");
+  });
+
   test("limits daily handoff to the stories Belle reads and retains weekly candidates", () => {
     const snapshots = Array.from({ length: 28 }, (_, index) => ({
       id: `story-${index + 1}`,

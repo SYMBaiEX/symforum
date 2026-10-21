@@ -641,6 +641,13 @@ test("Belle's fixed-model SDK requests use the pinned price ceiling without reas
     expect(JSON.stringify(body.messages)).toContain("at most four short original source passages");
     expect(JSON.stringify(body.messages)).toContain("prefer three genuinely connected source anchors");
     expect(JSON.stringify(body.messages)).toContain("remove a factual premise from an unselected source");
+    expect(JSON.stringify(body.messages)).toContain("at most one figure or version overall");
+    expect(JSON.stringify(body.messages)).toContain("at most one figure or version rather than enumerating metrics");
+    expect(JSON.stringify(body.messages)).toContain('Name the exact supported model from a source list instead of inferring a count such as \\"one model\\"');
+    expect(JSON.stringify(body.messages)).toContain("Do not force unrelated reports into a shared observed failure");
+    expect(JSON.stringify(body.messages)).toContain("Source-specific assertions in whyItMatters are facts requiring citations");
+    expect(JSON.stringify(body.messages)).toContain("Belle's editorial priorities");
+    expect(JSON.stringify(body.messages)).toContain("not a measured result.");
   }
   expect(requestBodies[2]).toMatchObject({
     model: NEWSLETTER_MODEL_IDS[0], max_tokens: 4_000,
