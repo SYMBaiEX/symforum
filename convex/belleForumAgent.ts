@@ -186,7 +186,7 @@ export function belleDigestOutputSchema(
   }
   const fact = digestDraftSchema.shape.claims.element
     .omit({ sourceCandidateId: true })
-    .extend({ kind: z.literal("fact") })
+    .extend({ kind: z.enum(["fact"]) })
     .strict();
   const claimsBySource = z.strictObject(
     Object.fromEntries(
@@ -208,7 +208,7 @@ export function belleDigestOutputSchema(
           digestDraftSchema.shape.claims.element
             .extend({
               sourceCandidateId: z.enum(sourceIds as [string, ...string[]]),
-              kind: z.literal("analysis"),
+              kind: z.enum(["analysis"]),
             })
             .strict(),
         )
@@ -591,7 +591,7 @@ export const runDailyHackerNewsDigest = internalAction({
               };
             },
           },
-          ["openrouter/free"],
+          [OPENROUTER_FORUM_MODEL],
         );
         const result = generation.value.result;
         await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
@@ -727,7 +727,7 @@ export const runDailyHackerNewsDigest = internalAction({
               estimatedInputTokens:
                 estimatePromptInputTokens(evidenceReviewPrompt),
               maxOutputTokens: openRouterStructuredOutputBudget(
-                "openrouter/free",
+                OPENROUTER_FORUM_MODEL,
                 2000,
               ),
               run: async (candidate, signal) =>
@@ -750,7 +750,7 @@ export const runDailyHackerNewsDigest = internalAction({
                   abortSignal: signal,
                 }),
             },
-            ["openrouter/free"],
+            [OPENROUTER_FORUM_MODEL],
           );
           await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
             runKey: claim.runKey,

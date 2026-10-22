@@ -8,7 +8,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
-import { openRouterStructuredOutputBudget } from "../lib/ai-models";
+import { OPENROUTER_FORUM_GENERATION_MODELS, openRouterStructuredOutputBudget } from "../lib/ai-models";
 import { shadowInputHash } from "../lib/eliza-shadow-contract";
 import { modelGenerationSettings, modelInstructions } from "../lib/openrouter-model-profile";
 import { convexModelRoutingConfig } from "./modelRouting";
@@ -19,10 +19,10 @@ import {
   fetchForumReplyEvidence,
   replyInstructions,
   reviewForumReplyEvidence,
-  sukiReplyDecisionSchema,
+  forumReplyWireSchema,
+  parseGeneratedForumReply,
   sukiReplyPrompt,
   validateForumReplyEvidence,
-  validateSukiReplyDecision,
   type ForumReplyPromptCandidate,
 } from "./sukiForumReplyAgent";
 
@@ -102,14 +102,14 @@ export const validateSuki = internalAction({
           model: route.model,
           system: modelInstructions(route.provider, "reply", replyInstructions("suki")),
           prompt,
-          output: Output.object({ schema: sukiReplyDecisionSchema }),
+          output: Output.object({ schema: forumReplyWireSchema }),
           maxOutputTokens: openRouterStructuredOutputBudget(route.modelId, 1_400),
           abortSignal: signal,
           providerOptions: route.providerOptions,
           ...modelGenerationSettings(route.provider, "reply"),
           maxRetries: 0,
         }),
-      });
+      }, OPENROUTER_FORUM_GENERATION_MODELS);
       const generated = generation.value;
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
         runKey: `pilot:suki:${args.nonce}`,
@@ -125,7 +125,7 @@ export const validateSuki = internalAction({
         durationMs: Date.now() - started,
       });
       let decision = validateForumReplyEvidence(
-        validateSukiReplyDecision(generated.output), evidence,
+        parseGeneratedForumReply(generated.output), evidence,
       );
       if (candidate.authorIsAgent && decision.decision === "reply")
         assertAiSourceReplyGrounding(decision.body, candidate.sourceBody, evidence);
@@ -162,6 +162,24 @@ export const validateSuki = internalAction({
           outputTokens: reviewed.value.usage.outputTokens,
           durationMs: Date.now() - reviewStarted,
         };
+      }
+      if (args.useElizaRuntime) {
+        // Retain the exact live result without enabling shadow capture or
+        // scheduling another model purchase, reply, or publication.
+        await ctx.runMutation(internal.elizaPilotValidationData.recordArtifact, {
+          nonce: args.nonce, sourceKey: reserved.run.sourceKey,
+          baselineJson: JSON.stringify({ candidate, evidence, decision, review,
+            model: generation.route.persistedModel, servedModel: generated.response.modelId }),
+          evaluationJson: JSON.stringify({ sourceHash, decision: decision.decision,
+            reviewApproved: review?.approved ?? null, issues: review?.issues ?? [] }),
+          artifactStatus: decision.decision === "reply" && review?.approved !== true
+            ? "review_failed" : "accepted",
+        });
+        const run = await ctx.runMutation(finishRef, {
+          nonce: args.nonce, status: "completed", sourceHash, sourceCount: 1,
+          shadowStatus: "not_requested", baselineDecision: decision.decision,
+        });
+        return { duplicate: false, run };
       }
       const shadow = await enqueueSukiShadowComparison(ctx, {
         agentSlug: "suki", sourceRunKey: `pilot:suki:${args.nonce}`, attempt: 0,

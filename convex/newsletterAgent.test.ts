@@ -684,7 +684,7 @@ describe("Belle editorial scoring", () => {
 
   test("routes Belle drafts and reviews to the bounded fixed newsletter alias", () => {
     expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_NEWSLETTER_MODEL]);
-    expect(NEWSLETTER_MODEL_IDS).not.toContain(OPENROUTER_FORUM_MODEL);
+    expect(NEWSLETTER_MODEL_IDS).toContain(OPENROUTER_FORUM_MODEL);
     expect(newsletterModelsForRoutingConfig({ elizaRuntime: undefined })).toEqual([OPENROUTER_PAID_FALLBACK_MODEL]);
     expect(newsletterModelsForRoutingConfig({ elizaRuntime: {} as NonNullable<Parameters<typeof newsletterModelsForRoutingConfig>[0]["elizaRuntime"]> })).toEqual([OPENROUTER_NEWSLETTER_MODEL]);
     expect(openRouterStructuredOutputBudget(NEWSLETTER_MODEL_IDS[0], 4_000)).toBe(8_000);

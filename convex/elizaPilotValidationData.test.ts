@@ -177,7 +177,7 @@ describe("private Belle pilot artifacts", () => {
         evaluationJson,
         artifactStatus: "accepted",
       }),
-    ).rejects.toThrow("pilot_artifact_run_invalid");
+    ).rejects.toThrow("pilot_artifact_source_invalid");
 
     await reserveBelle(t);
     await expect(

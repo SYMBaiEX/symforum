@@ -4,6 +4,8 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { ELIZA_EDITORIAL_PERSONAS } from "../lib/eliza-runtime-personas";
+import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
@@ -33,6 +35,35 @@ function setup() {
 }
 
 describe("dormant forum agent roster", () => {
+  test("Luna migration covers exactly 33 editorial identities and preserves other settings", async () => {
+    expect([...ELIZA_EDITORIAL_PERSONAS].sort()).toEqual(
+      [...FORUM_AGENT_ROSTER.map(x => x.slug), "suki", "belle", "nyx"].sort(),
+    );
+    const t = setup();
+    const before = await t.run(async ctx => {
+      const userId = await ctx.db.insert("users", { name: "Migration fixture" });
+      for (const [i, slug] of [...ELIZA_EDITORIAL_PERSONAS, "bags-scout", "pumpfun-scout", "custom-agent"].entries()) {
+        await ctx.db.insert("forumAgents", { slug, userId, name: slug,
+          persona: "Preserve voice", model: "openrouter/free", enabled: i % 2 === 0,
+          dailyPostTarget: i % 4, createdAt: 100, updatedAt: 100 });
+      }
+      return ctx.db.query("forumAgents").take(40);
+    });
+    expect(await t.mutation(internal.forumAgentRoster.migratePostingModels, { dryRun: true }))
+      .toMatchObject({ scanned: 33, wouldUpdate: 33, updated: 0 });
+    expect(await t.mutation(internal.forumAgentRoster.migratePostingModels, { dryRun: false }))
+      .toMatchObject({ scanned: 33, wouldUpdate: 33, updated: 33 });
+    const after = await t.run(ctx => ctx.db.query("forumAgents").take(40));
+    for (const old of before) {
+      const next = after.find(x => x._id === old._id)!;
+      const editorial = ELIZA_EDITORIAL_PERSONAS.some(slug => slug === old.slug);
+      expect(next).toEqual({ ...old, model: editorial ? OPENROUTER_FORUM_MODEL : old.model,
+        updatedAt: editorial ? expect.any(Number) : old.updatedAt });
+    }
+    expect(await t.mutation(internal.forumAgentRoster.migratePostingModels, { dryRun: false }))
+      .toMatchObject({ scanned: 33, wouldUpdate: 0, updated: 0 });
+  });
+
   test("creates 30 tagged, visible, disabled forum agents idempotently", async () => {
     const t = setup();
 

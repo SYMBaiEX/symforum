@@ -5,6 +5,7 @@ import {
   OPENROUTER_PAID_FALLBACK_MODEL,
   OPENROUTER_NEWSLETTER_MODEL,
 } from "./ai-models";
+import { permitsLunaRuntimeStage } from "./eliza-runtime-personas";
 
 export type ElizaRuntimeReceipt = {
   jobId: string;
@@ -310,12 +311,7 @@ export function elizaRuntimeFetch(
     if (
       !LIVE_MODELS.has(body.model) ||
       (body.model === OPENROUTER_NEWSLETTER_MODEL &&
-        !["belle", "system"].includes(context.agentSlug) &&
-        !(
-          ["bags-scout", "pumpfun-scout"].includes(context.agentSlug) &&
-          (stage === `${context.agentSlug}:forum-draft` ||
-            stage === `${context.agentSlug}:forum-evidence-review`)
-        ))
+        !permitsLunaRuntimeStage(context.agentSlug, stage))
     )
       throw new ElizaRuntimeTransportError("model_not_allowed");
     const outputLimit = body.max_tokens ?? body.max_completion_tokens;
