@@ -75,6 +75,29 @@ Nonce tombstones, source binding, immutable artifacts, shared model reservations
 and uncertain-operation holds remain mandatory. Existing failed or held runs are
 never reset by the model-record migration.
 
+### Grounded forum revision evidence
+
+Forum prompt version `suki-forum-v23-grounded-revision-evidence` uses the existing
+body-to-ledger support checker to identify factual body statements missing
+supported ledger coverage. Those statements are retrieval hints, not evidence:
+revision excerpts prioritize matching passages from the original source text,
+within the unchanged 1,800-character per-source limit. When both linked claims
+and uncovered statements exist, up to half the limit is reserved for the linked
+claims before the remaining capacity is used for repair hints, so unsupported
+draft wording cannot consume the whole excerpt and starve known evidence.
+A draft or feedback cannot
+create a source passage or certify a claim. The writer must repair the complete
+source-linked ledger, qualify supported analysis, or remove unsupported material.
+
+The deterministic threshold, lexical/numeric support checks, mandatory independent
+evidence review, maximum two revisions, model/output caps, schedules and shared
+budget are unchanged. Offline synthetic regressions cover omitted evidence,
+grounded repairs, adversarial evidence starvation and continued rejection of
+unsupported capabilities. They are
+not evidence of a newly published Suki post. Historical failed drafts and
+uncertain-outcome holds remain untouched; live quality is checked only from the
+next ordinary scheduled receipts, without replaying a prior run.
+
 ## Infrastructure and controls
 
 - Cloudflare: `symbaiex-eliza-shadow-gateway`, one basic container, at most two

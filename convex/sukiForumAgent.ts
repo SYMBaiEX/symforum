@@ -81,7 +81,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v22-reader-value";
+const PROMPT_VERSION = "suki-forum-v23-grounded-revision-evidence";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // Two bounded corrections can repair distinct issues; the shared action deadline
 // reserves time for the mandatory independent review and commit.
@@ -1902,18 +1902,31 @@ export function forumDraftPrompt(args: {
   previousDraft?: z.infer<typeof forumDraftSchema>;
   followUp?: boolean;
 }) {
-  const structuredFieldInstructions =
-    `Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The complete claim ledger permits 1-${MAX_FORUM_AGENT_CLAIMS} entries and must cover every factual body claim and source-bound analysis. Preserve evidence coverage: if needed, rewrite and consolidate the body into at most ${MAX_FORUM_AGENT_CLAIMS} clear, source-supported statements without omitting facts, caveats, or reasoning; never exceed ${MAX_FORUM_AGENT_CLAIMS} entries or leave a body claim unledgered. Label source-bound interpretation as analysis. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).`;
+  const structuredFieldInstructions = `Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The complete claim ledger permits 1-${MAX_FORUM_AGENT_CLAIMS} entries and must cover every factual body claim and source-bound analysis. For each factual body sentence, write a precise ledger claim covering the same details and cite the snapshot that actually supports them; a related but broader claim is not enough. Preserve evidence coverage: if needed, rewrite and consolidate the body into at most ${MAX_FORUM_AGENT_CLAIMS} clear, source-supported statements without omitting facts, caveats, or reasoning; never exceed ${MAX_FORUM_AGENT_CLAIMS} entries or leave a body claim unledgered. Label source-bound interpretation as analysis and keep an independently supported factual premise from that same source; rewrite or remove any inference whose premise is not supported. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).`;
   if (args.revisionFeedback !== undefined && args.previousDraft !== undefined) {
+    const previousDraft = args.previousDraft;
     const claimsBySource = new Map<string, string[]>();
-    for (const claim of args.previousDraft.claims) {
+    const snapshotsById = new Map(
+      args.snapshots.map((snapshot) => [snapshot.id, snapshot]),
+    );
+    const uncoveredBodyStatements = forumBodyFactualStatements(
+      previousDraft.body,
+    ).filter(
+      (statement) =>
+        !forumBodyStatementHasSupportedClaim(
+          statement,
+          previousDraft.claims,
+          snapshotsById,
+        ),
+    );
+    for (const claim of previousDraft.claims) {
       const sourceClaims = claimsBySource.get(claim.sourceCandidateId) ?? [];
       sourceClaims.push(claim.claim);
       claimsBySource.set(claim.sourceCandidateId, sourceClaims);
     }
     return [
       "Revise the supplied forum draft. Return one complete replacement matching the structured output schema.",
-      "Fix every deterministic gate failure. Preserve supported facts and source IDs; delete any unsupported number or claim rather than improvising evidence.",
+      "Fix every deterministic gate failure. Give each factual body sentence a precise source-bound ledger claim. Preserve supported facts and source IDs; rewrite or delete any unsupported number, capability, or inference rather than improvising evidence.",
       FORUM_EDITORIAL_CONTRACT,
       structuredFieldInstructions,
       "Selected board and angle:",
@@ -1931,12 +1944,21 @@ export function forumDraftPrompt(args: {
           evidence: forumRevisionEvidenceExcerpt(
             snapshot.articleText,
             claimsBySource.get(snapshot.id) ?? [],
+            1_800,
+            uncoveredBodyStatements.filter(
+              (statement) =>
+                args.snapshots.length === 1 ||
+                lexicalEvidenceCoverage(
+                  statement,
+                  forumSnapshotText(snapshot),
+                ) >= 0.3,
+            ),
           ),
           hasCacheableImage: Boolean(snapshot.imageUrl),
         })),
       ),
       "Previous structured draft:",
-      JSON.stringify(args.previousDraft),
+      JSON.stringify(previousDraft),
       "Submit the corrected replacement now. Do not explain the revision.",
     ].join("\n\n");
   }
@@ -1983,18 +2005,52 @@ export function forumDraftPrompt(args: {
 
 /**
  * Source excerpts are repeated in the revision request alongside the complete
- * first-pass draft. Keep the smallest source passages that cover its linked
- * claims; the deterministic quality gate still validates against the complete
- * snapshots after generation.
+ * first-pass draft. Reserve half the excerpt for its linked ledger claims so
+ * uncovered (possibly unsupported) body statements cannot hide that evidence.
+ * The remaining space targets uncovered statements. The deterministic gate
+ * still validates against complete snapshots after generation.
  */
 export function forumRevisionEvidenceExcerpt(
   sourceText: string,
   claims: readonly string[],
   maximumCharacters = 1_800,
+  uncoveredBodyStatements: readonly string[] = [],
 ) {
   const limit = Number.isSafeInteger(maximumCharacters)
     ? Math.max(1, maximumCharacters)
     : 1_800;
+  if (claims.length === 0 || uncoveredBodyStatements.length === 0) {
+    return selectForumRevisionEvidenceExcerpt(
+      sourceText,
+      claims.length === 0 ? uncoveredBodyStatements : claims,
+      limit,
+    );
+  }
+  const linkedEvidence = selectForumRevisionEvidenceExcerpt(
+    sourceText,
+    claims,
+    Math.max(1, Math.floor(limit / 2)),
+  );
+  const remaining = limit - linkedEvidence.length - (linkedEvidence ? 1 : 0);
+  const uncoveredEvidence =
+    remaining > 0
+      ? selectForumRevisionEvidenceExcerpt(
+          sourceText,
+          uncoveredBodyStatements,
+          remaining,
+        )
+      : "";
+  return compactText(
+    [linkedEvidence, uncoveredEvidence].filter(Boolean).join(" "),
+    limit,
+  );
+}
+
+function selectForumRevisionEvidenceExcerpt(
+  sourceText: string,
+  claims: readonly string[],
+  limit: number,
+) {
   const normalized = sourceText.replace(/\s+/g, " ").trim();
   if (!normalized) return "";
 
