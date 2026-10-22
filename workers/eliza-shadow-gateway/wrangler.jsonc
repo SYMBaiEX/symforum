@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "symbaiex-eliza-shadow-gateway",
+  "account_id": "c2fadb05722ca3df6528265a674ca69e",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "containers": [
+    {
+      "class_name": "ElizaShadowContainer",
+      "scheduling_policy": "default",
+      "image": "../eliza-shadow/Dockerfile",
+      "image_build_context": "../eliza-shadow",
+      "instance_type": "basic",
+      "max_instances": 1,
+      "observability": { "enabled": false }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ELIZA_SHADOW_CONTAINER", "class_name": "ElizaShadowContainer" }
+    ]
+  },
+  "exports": {
+    "ElizaShadowContainer": { "type": "durable-object", "storage": "sqlite" }
+  }
+}

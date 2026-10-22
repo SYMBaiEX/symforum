@@ -31,6 +31,7 @@ import {
 } from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
+import { isElizaRuntimeTransportError } from "../lib/eliza-runtime-transport";
 import {
   AgentPublicationQualityError,
   assertAgentPublicationHygiene,
@@ -513,7 +514,7 @@ export const runDailyHackerNewsDigest = internalAction({
         Awaited<ReturnType<typeof convexModelRoutingConfig>>,
         ArticleSnapshot[],
       ] = await Promise.all([
-        convexModelRoutingConfig(ctx, { correlationId: claim.runKey }),
+        convexModelRoutingConfig(ctx, { correlationId: claim.runKey, runtimeScope: "forum-newsletter" }),
         fetchArticleSnapshots(candidates, args.reusableArticleSnapshots),
       ]);
       if (
@@ -1291,7 +1292,8 @@ export function belleErrorMessage(
     : "Belle's Hacker News digest failed.";
 }
 
-function isRetryableBelleError(error: unknown) {
+export function isRetryableBelleError(error: unknown) {
+  if (isElizaRuntimeTransportError(error)) return false;
   if (error instanceof AgentPublicationQualityError) return false;
   if (!APICallError.isInstance(error)) {
     return true;

@@ -37,15 +37,15 @@ const TASK_PROFILES = {
     openrouter: structuredOpenRouterProfile(0.2),
   },
   "newsletter-daily": {
-    reasoning: "xhigh",
+    reasoning: "none",
     openrouter: structuredOpenRouterProfile(0.35),
   },
   "newsletter-weekly": {
-    reasoning: "xhigh",
+    reasoning: "none",
     openrouter: structuredOpenRouterProfile(0.45),
   },
   "newsletter-revision": {
-    reasoning: "high",
+    reasoning: "none",
     openrouter: structuredOpenRouterProfile(0.35),
   },
   digest: {
@@ -79,7 +79,9 @@ export function modelInstructions(
   const reasoning = TASK_PROFILES[task].reasoning;
   return [
     `Reasoning strength: ${reasoning}`,
-    "Reason through the task privately. Return only the requested answer or structured submission, never hidden reasoning.",
+    reasoning === "none"
+      ? "Return the requested structured submission directly, without a separate reasoning phase."
+      : "Reason through the task privately. Return only the requested answer or structured submission, never hidden reasoning.",
     instructions.trim(),
   ].join("\n\n");
 }

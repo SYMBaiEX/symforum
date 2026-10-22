@@ -12,6 +12,7 @@ import {
   openRouterReportedCostMicroUsd,
   openRouterReservationModel,
 } from "./ai-model-costs";
+import { formatAISchemaDiagnostics } from "./ai-schema-diagnostics";
 export {
   openRouterBillingModel,
   openRouterReservationModel,
@@ -23,7 +24,21 @@ import {
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
   OPENROUTER_TOPIC_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_NEWSLETTER_PRICE_CEILING,
 } from "./ai-models";
+import {
+  elizaRuntimeFetch,
+  isElizaRuntimeTransportError,
+  type ElizaRuntimeConfig,
+  type ElizaRuntimeContext,
+} from "./eliza-runtime-transport";
+export type {
+  ElizaRuntimeConfig,
+  ElizaRuntimeContext,
+  ElizaRuntimeRequest,
+  ElizaRuntimeReceipt,
+} from "./eliza-runtime-transport";
 
 export type ModelRoute = {
   provider: "openrouter";
@@ -57,6 +72,7 @@ export type RoutedModel = ModelRoute & {
 
 export type ModelRoutingConfig = {
   openRouterApiKey?: string;
+  elizaRuntime?: ElizaRuntimeConfig;
   disabledModelIds?: readonly string[];
   beforeAttempt?: (
     candidate: RoutedModel,
@@ -132,6 +148,32 @@ function openRouterRequestBody(body: Record<string, unknown>) {
       ? plugins
       : [...plugins, { id: "response-healing" }];
   }
+  if (request.model === OPENROUTER_NEWSLETTER_MODEL) {
+    // Pin low-effort reasoning and exclude its private tokens from the reply.
+    request.reasoning = { effort: "low", exclude: true };
+    delete request.reasoning_effort;
+    // The selected OpenAI endpoint does not advertise sampling controls.
+    // Omit them so require_parameters can fail closed on the exact endpoint.
+    delete request.temperature;
+    delete request.top_p;
+    delete request.top_k;
+    request.provider = {
+      ...(request.provider as Record<string, unknown> | undefined),
+      allow_fallbacks: false,
+      // Pin the standard endpoint and exclude OpenAI's other service tiers.
+      only: ["openai"],
+      ignore: ["openai/fast", "openai/flex"],
+      require_parameters: true,
+      // The current ProviderPreferences OpenAPI contract uses decimal strings,
+      // unlike older guide examples. Numeric policy values stay in accounting.
+      // https://openrouter.ai/openapi.json (verified 2026-10-20)
+      max_price: {
+        prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
+        completion: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.completion),
+      },
+    };
+    return request;
+  }
   // The compatible SDK emits the legacy reasoning_effort field. OpenRouter's
   // native reasoning object controls the budget across its different providers.
   // Free routing can select a thinking model that ignores a low effort hint.
@@ -196,6 +238,7 @@ function clean(value: string | undefined) {
 function openRouterModel(
   config: ModelRoutingConfig,
   modelId: string,
+  context?: ElizaRuntimeContext,
 ): RoutedModel | undefined {
   const apiKey = clean(config.openRouterApiKey);
   if (!apiKey) return undefined;
@@ -206,6 +249,14 @@ function openRouterModel(
     includeUsage: true,
     supportsStructuredOutputs: true,
     transformRequestBody: openRouterRequestBody,
+    ...(config.elizaRuntime
+      ? {
+          fetch: elizaRuntimeFetch(
+            config.elizaRuntime,
+            context ?? { agentSlug: "system", stage: "invalid" },
+          ),
+        }
+      : {}),
     headers: {
       "HTTP-Referer": OPENROUTER_SITE_URL,
       "X-OpenRouter-Title": OPENROUTER_APP_NAME,
@@ -301,13 +352,17 @@ function isLowStakesIdeationStage(stage: string) {
 export async function routedModelCandidates(
   config: ModelRoutingConfig,
   openRouterModelIds: readonly string[] = OPENROUTER_GENERATION_MODELS,
+  context?: ElizaRuntimeContext,
 ) {
+  if (config.elizaRuntime && !context) {
+    throw new Error("Eliza runtime route requires agent and stage context.");
+  }
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
   const modelIds = [...new Set(openRouterModelIds)];
   for (const modelId of modelIds) {
     if (disabled.has(modelId)) continue;
-    const primary = openRouterModel(config, modelId);
+    const primary = openRouterModel(config, modelId, context);
     if (primary) candidates.push(primary);
   }
   if (!clean(config.openRouterApiKey)) {
@@ -325,7 +380,7 @@ export async function routedModelCandidates(
     const emergency =
       emergencyModelId === undefined
         ? undefined
-        : openRouterModel(config, emergencyModelId);
+        : openRouterModel(config, emergencyModelId, context);
     if (emergency) return [emergency];
     throw new Error("No enabled AI model route is available.");
   }
@@ -333,16 +388,39 @@ export async function routedModelCandidates(
 }
 
 function safeError(error: unknown) {
+  if (isElizaRuntimeTransportError(error))
+    return "Eliza runtime transport failed";
   const message = error instanceof Error ? error.message : String(error);
   if (NoObjectGeneratedError.isInstance(error)) {
-    // Record enough to distinguish malformed JSON from exhausted output,
-    // without logging prompts, generated private content, or reasoning text.
+    const schemaDiagnostics = formatAISchemaDiagnostics(error.cause);
+    const classification = schemaDiagnostics
+      ? "structured output schema validation failed"
+      : error.finishReason === "length" && !error.text
+        ? "empty structured output"
+        : "structured output unavailable";
+    const finishReasons = [
+      "stop",
+      "length",
+      "content-filter",
+      "tool-calls",
+      "error",
+      "other",
+      "unknown",
+    ];
+    const safeFinishReason = finishReasons.includes(error.finishReason ?? "")
+      ? error.finishReason
+      : "unknown";
+    const safeMetric = (value: number | undefined) =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? Math.min(value, 1_000_000_000)
+        : 0;
     const diagnostic =
-      `finish=${error.finishReason ?? "unknown"}, ` +
-      `outputTokens=${error.usage?.outputTokens ?? 0}, ` +
-      `reasoningTokens=${error.usage?.outputTokenDetails.reasoningTokens ?? 0}, ` +
-      `textChars=${error.text?.length ?? 0}`;
-    return `${message.replace(/\s+/g, " ").slice(0, 120)} (${diagnostic})`;
+      `finish=${safeFinishReason}, ` +
+      `outputTokens=${safeMetric(error.usage?.outputTokens)}, ` +
+      `reasoningTokens=${safeMetric(error.usage?.outputTokenDetails.reasoningTokens)}, ` +
+      `textChars=${safeMetric(error.text?.length)}`;
+    const schemaDetails = schemaDiagnostics ? `, ${schemaDiagnostics}` : "";
+    return `${classification} (${diagnostic}${schemaDetails})`.slice(0, 440);
   }
   if (APICallError.isInstance(error)) {
     const category = isMandatoryThinkingRejection(error)
@@ -355,6 +433,7 @@ function safeError(error: unknown) {
 }
 
 function shouldAttemptModelFallback(error: unknown) {
+  if (isElizaRuntimeTransportError(error)) return false;
   // These OpenRouter responses are account-level failures. Sending the same
   // request to another model with the same credentials cannot repair invalid
   // authentication or missing payment, and can turn one failure into a paid
@@ -560,6 +639,11 @@ export async function runWithModelFallback<T>(
   const candidates = await routedModelCandidates(
     config,
     fallbackModelIds ?? openRouterModelsForStage(args.stage),
+    {
+      agentSlug: args.agent ?? "system",
+      stage: args.stage,
+      correlationId: args.correlationId,
+    },
   );
   return runRoutedCandidates(candidates, {
     ...args,
@@ -569,6 +653,8 @@ export async function runWithModelFallback<T>(
 }
 
 export async function selectStreamingModel(config: ModelRoutingConfig) {
+  if (config.elizaRuntime)
+    throw new Error("Eliza runtime streaming is unsupported.");
   const [candidate, ...fallbacks] = await routedModelCandidates(
     config,
     OPENROUTER_IDEATION_MODELS,

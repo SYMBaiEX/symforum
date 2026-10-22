@@ -2,6 +2,8 @@ import {
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
+  OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_NEWSLETTER_PRICE_CEILING,
 } from "./ai-models";
 import type { OwnerConsoleSettlementRoute } from "./ai-usage-settlement";
 
@@ -42,6 +44,10 @@ export function openRouterBillingModel(
   responseModelId?: string,
   requestedModelId?: string,
 ) {
+  // This fixed route has an upstream enforced ceiling. Do not settle it at the
+  // unrelated DeepSeek alias price when no provider dollar receipt is present.
+  if (requestedModelId === OPENROUTER_NEWSLETTER_MODEL)
+    return OPENROUTER_NEWSLETTER_MODEL;
   if (
     requestedModelId !== undefined &&
     OPENROUTER_FREE_GENERATION_MODELS.includes(
@@ -72,6 +78,11 @@ const MODEL_PRICES: Record<string, TokenPrice> = {
   [OPENROUTER_PAID_FALLBACK_MODEL]: {
     inputUsdPerMillion: 0.005775,
     outputUsdPerMillion: 1.6,
+  },
+  // Reserve at the enforced provider ceiling, not the catalog's cheapest tier.
+  [OPENROUTER_NEWSLETTER_MODEL]: {
+    inputUsdPerMillion: OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt,
+    outputUsdPerMillion: OPENROUTER_NEWSLETTER_PRICE_CEILING.completion,
   },
   // OpenRouter price snapshot, checked 2026-10-02:
   // https://openrouter.ai/openai/text-embedding-3-small/api ($0.02 / M tokens).

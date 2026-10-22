@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { LanguageModel } from "ai";
 import { z } from "zod";
+import { formatAISchemaDiagnostics } from "./ai-schema-diagnostics";
 import {
   openRouterModelForStage,
   openRouterModelsForStage,
@@ -21,6 +22,8 @@ import {
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
+  OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_NEWSLETTER_PRICE_CEILING,
   OPENROUTER_PAID_FALLBACK_MODEL,
   openRouterStructuredOutputBudget,
 } from "./ai-models";
@@ -33,6 +36,69 @@ function candidate(persistedModel: string): RoutedModel {
     model: {} as LanguageModel,
   };
 }
+
+describe("AI schema diagnostics", () => {
+  test("formats only known issue metadata and redacts unknown path keys", () => {
+    const diagnostics = formatAISchemaDiagnostics({
+      issues: [
+        {
+          code: "invalid_value",
+          values: ["private-enum-value"],
+          path: ["claims", 0, "kind"],
+          message: "private generated value",
+        },
+        {
+          code: "too_big",
+          maximum: 12,
+          path: ["claims"],
+          message: "private generated value",
+        },
+        {
+          code: "invalid_type",
+          expected: "string",
+          path: ["private-prompt-field"],
+          message: "private generated value",
+        },
+      ],
+    });
+
+    expect(diagnostics).toBe(
+      "schemaIssues=enum@claims[0].kind, too_big@claims(max=12), invalid_type@[field](expected=string)",
+    );
+    expect(diagnostics).not.toContain("private");
+  });
+
+  test("bounds issue count and output length across cyclic or malformed cause chains", () => {
+    const nested: { issues?: unknown[]; cause?: unknown } = {
+      issues: Array.from({ length: 12 }, () => ({
+        code: "invalid_value",
+        path: ["status"],
+        values: ["private"],
+      })),
+    };
+    nested.cause = nested;
+
+    const diagnostics = formatAISchemaDiagnostics({ cause: nested });
+    expect(diagnostics?.match(/enum@status/g)).toHaveLength(4);
+    expect(diagnostics?.length).toBeLessThanOrEqual(300);
+    expect(diagnostics).not.toContain("private");
+    expect(formatAISchemaDiagnostics(new Error("private cause message"))).toBe(
+      undefined,
+    );
+    expect(
+      formatAISchemaDiagnostics(
+        new Proxy(
+          {},
+          {
+            getOwnPropertyDescriptor: () => {
+              throw new Error("bad descriptor");
+            },
+          },
+        ),
+      ),
+    ).toBeUndefined();
+  });
+});
 
 describe("OpenRouter-only model routing", () => {
   test("settles only explicitly resolved free variants at zero-cost", () => {
@@ -117,6 +183,96 @@ describe("OpenRouter-only model routing", () => {
     expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual(
       OPENROUTER_GENERATION_MODELS,
     );
+  });
+
+  test("keeps the fixed newsletter route separately priced and preserves token limits", () => {
+    expect(openRouterReservationModel(OPENROUTER_NEWSLETTER_MODEL)).toBe(
+      OPENROUTER_NEWSLETTER_MODEL,
+    );
+    expect(
+      openRouterStructuredOutputBudget(OPENROUTER_NEWSLETTER_MODEL, 4_000),
+    ).toBe(8_000);
+    expect(
+      openRouterStructuredOutputBudget(OPENROUTER_NEWSLETTER_MODEL, 6_000),
+    ).toBe(12_000);
+    expect(OPENROUTER_GENERATION_MODELS).not.toContain(
+      OPENROUTER_NEWSLETTER_MODEL,
+    );
+  });
+
+  test("pins the fixed newsletter route and disables unsupported controls on the wire", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            id: "newsletter-price-test",
+            object: "chat.completion",
+            created: 1_760_000_000,
+            model: OPENROUTER_NEWSLETTER_MODEL,
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "ok" },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    try {
+      const [route] = await routedModelCandidates(
+        { openRouterApiKey: "synthetic-key" },
+        [OPENROUTER_NEWSLETTER_MODEL],
+      );
+      await generateText({
+        model: route.model,
+        prompt: "Return ok.",
+        maxOutputTokens: 4_000,
+        maxRetries: 0,
+        temperature: 0.2,
+        topP: 0.8,
+        topK: 10,
+        reasoning: "low",
+        providerOptions: {
+          openrouter: {
+            reasoning: { enabled: true },
+            provider: {
+              allow_fallbacks: true,
+              only: ["another-provider"],
+              max_price: { prompt: 100, completion: 100 },
+            },
+          },
+        },
+      });
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toMatchObject({
+        model: OPENROUTER_NEWSLETTER_MODEL,
+        max_tokens: 4_000,
+        provider: {
+          allow_fallbacks: false,
+          only: ["openai"],
+          ignore: ["openai/fast", "openai/flex"],
+          require_parameters: true,
+          max_price: {
+            prompt: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.prompt),
+            completion: String(OPENROUTER_NEWSLETTER_PRICE_CEILING.completion),
+          },
+        },
+      });
+      expect(bodies[0].reasoning).toEqual({ effort: "low", exclude: true });
+      expect(bodies[0].reasoning_effort).toBeUndefined();
+      expect(bodies[0].temperature).toBeUndefined();
+      expect(bodies[0].top_p).toBeUndefined();
+      expect(bodies[0].top_k).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("sends structured object generation as strict JSON Schema", async () => {
@@ -711,22 +867,21 @@ describe("OpenRouter transport safeguards", () => {
     {
       content: null,
       finish: "length",
-      message:
-        "empty structured output (finish=length, outputTokens=1500, reasoningTokens=1499)",
+      diagnostic: "empty structured output",
     },
     {
       content: '{"status":',
       finish: "length",
-      message: "could not parse the response",
+      diagnostic: "structured output unavailable",
     },
     {
       content: '{"status":"wrong"}',
       finish: "stop",
-      message: "did not match schema",
+      diagnostic: "structured output schema validation failed",
     },
   ])(
     "rejects $content and reports $finish without leaking generated content",
-    async ({ content, finish, message }) => {
+    async ({ content, finish, diagnostic }) => {
       await withResponse(
         content,
         async () => {
@@ -752,12 +907,17 @@ describe("OpenRouter transport safeguards", () => {
                 return result.output;
               },
             }),
-          ).rejects.toThrow(message);
+          ).rejects.toThrow("AI generation failed for synthetic");
           const event = onAttempt.mock.calls[0][0];
           expect(event.outcome).toBe("failed");
           expect(event.errorMessage).toContain(`finish=${finish}`);
+          expect(event.errorMessage).toContain(diagnostic);
           expect(event.errorMessage).toContain("reasoningTokens=1499");
           expect(event.errorMessage).not.toContain('"wrong"');
+          if (diagnostic === "structured output schema validation failed") {
+            expect(event.errorMessage).toContain("schemaIssues=enum@status");
+            expect(event.errorMessage).not.toContain("Synthetic probe");
+          }
         },
         finish,
       );

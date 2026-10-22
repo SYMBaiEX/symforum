@@ -3,6 +3,7 @@ import {
   estimatedModelCostMicroUsd,
   forumDayKey,
   hasModelPrice,
+  openRouterBillingModel,
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
@@ -10,10 +11,15 @@ import {
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_GENERATION_MODELS,
+  OPENROUTER_NEWSLETTER_MODEL,
   OPENROUTER_PAID_FALLBACK_MODEL,
 } from "./ai-models";
 
 describe("AI model cost controls", () => {
+  test("the retired GPT pilot has no allowed price or configured generation route", () => {
+    expect(hasModelPrice("openai/gpt-4.1-mini")).toBe(false);
+    expect(OPENROUTER_GENERATION_MODELS).not.toContain("openai/gpt-4.1-mini");
+  });
   test("prices free generation at zero and rejects unknown models", () => {
     for (const model of OPENROUTER_FREE_GENERATION_MODELS) {
       expect(estimatedModelCostMicroUsd(model, 1_000_000, 1_000_000)).toBe(0);
@@ -26,6 +32,7 @@ describe("AI model cost controls", () => {
   test("every configured generation and embedding route has explicit pricing", () => {
     for (const model of [
       ...OPENROUTER_GENERATION_MODELS,
+      OPENROUTER_NEWSLETTER_MODEL,
       OPENROUTER_EMBEDDING_MODEL,
     ]) {
       expect(hasModelPrice(model), `${model} must have a price policy`).toBe(
@@ -76,6 +83,32 @@ describe("AI model cost controls", () => {
       spendBucketForKey("suki:2026-08-12:1"),
     );
     expect(spendBucketForKey("suki:2026-08-12:1")).toBeLessThan(8);
+  });
+
+  test("reserves and settles the fixed newsletter route at its upstream ceilings", () => {
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_NEWSLETTER_MODEL, 1_000_000, 0),
+    ).toBe(200_000);
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_NEWSLETTER_MODEL, 0, 1_000_000),
+    ).toBe(500_000);
+    expect(
+      estimatedModelCostMicroUsd(
+        OPENROUTER_NEWSLETTER_MODEL,
+        1_000_000,
+        1_000_000,
+      ),
+    ).toBe(700_000);
+    for (const responseModel of [
+      undefined,
+      OPENROUTER_NEWSLETTER_MODEL,
+      "unknown-provider-id",
+      "vendor/model:free",
+    ]) {
+      expect(
+        openRouterBillingModel(responseModel, OPENROUTER_NEWSLETTER_MODEL),
+      ).toBe(OPENROUTER_NEWSLETTER_MODEL);
+    }
   });
 
   test("uses the forum's Chicago operating day", () => {

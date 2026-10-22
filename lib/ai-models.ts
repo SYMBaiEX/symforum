@@ -8,6 +8,14 @@ export const OPENROUTER_FREE_GENERATION_MODELS = ["openrouter/free"] as const;
 export const OPENROUTER_PAID_FALLBACK_MODEL =
   "~deepseek/deepseek-v4-flash-latest";
 
+/** Fixed, non-thinking long-form route; never inherit a floating model price. */
+export const OPENROUTER_NEWSLETTER_MODEL = "openai/gpt-6-luna";
+/** USD per million tokens, enforced upstream and used for conservative reserves. */
+export const OPENROUTER_NEWSLETTER_PRICE_CEILING = {
+  prompt: 0.2,
+  completion: 0.5,
+} as const;
+
 export const OPENROUTER_GENERATION_MODELS = [
   ...OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
@@ -30,6 +38,7 @@ export function openRouterStructuredOutputBudget(
   baseTokens: number,
 ) {
   return modelId === OPENROUTER_PAID_FALLBACK_MODEL ||
+    modelId === OPENROUTER_NEWSLETTER_MODEL ||
     modelId === OPENROUTER_TOPIC_MODEL
     ? baseTokens * 2
     : Math.ceil(baseTokens * 1.5);
@@ -38,6 +47,7 @@ export function openRouterStructuredOutputBudget(
 export type SymbaiexModelId =
   | (typeof OPENROUTER_FREE_GENERATION_MODELS)[number]
   | typeof OPENROUTER_PAID_FALLBACK_MODEL
+  | typeof OPENROUTER_NEWSLETTER_MODEL
   | typeof OPENROUTER_TOPIC_MODEL
   | typeof OPENROUTER_FORUM_MODEL
   | typeof NYX_RESEARCH_MODEL

@@ -22,6 +22,7 @@ import {
   sukiReplyPrompt,
   validateSukiReplyDecision,
 } from "./sukiForumReplyAgent";
+import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 
 describe("Suki forum reply helpers", () => {
   test("holds dense reply prose even when a reviewer approves it", () => {
@@ -158,6 +159,9 @@ describe("Suki forum reply helpers", () => {
     expect(prompt).toContain("never an AI-to-AI reply chain");
     expect(prompt).not.toContain("deterministic editorial lens");
     expect(prompt).toContain("Never infer that a method lacks a test");
+    expect(prompt).toContain("If originalSourceEvidence is empty");
+    expect(prompt).toContain("Prefer a useful, conversation-grounded next step");
+    expect(prompt).toContain("Do not rely on personal habits");
   });
 
   test("roster reply instructions agree with generateObject and allow concise member help", () => {
@@ -166,6 +170,9 @@ describe("Suki forum reply helpers", () => {
     expect(instructions).not.toContain("<decision>");
     expect(instructions).toContain("No minimum word count");
     expect(instructions).toContain("Never claim personal testing");
+    expect(instructions).toContain("personal reruns");
+    expect(instructions).toContain("do not present a model, preprocessing, or environment change as causal without evidence");
+    expect(instructions).toContain("Prefer that concrete check over abstaining");
     expect(validateSukiReplyDecision({ decision: "reply", reason: "answer",
       contribution: "answer", evidenceSourceUrls: [], evidenceExcerpt: "",
       body: "Compare the request IDs before changing the retry configuration.",
@@ -174,6 +181,43 @@ describe("Suki forum reply helpers", () => {
       contribution: "answer", evidenceSourceUrls: [], evidenceExcerpt: "",
       body: "I tested this in my lab and the retry configuration solved it.",
     })).toThrow(/experience/);
+  });
+
+  test("keeps reply content complete, reasons brief, and firsthand-observation claims grounded", () => {
+    const instructions = replyInstructions("suki");
+    expect(instructions).toContain("brief internal label of a few words");
+    expect(instructions).toContain("ends at a complete thought");
+    expect(instructions).toContain("recurring personal observations");
+    expect(instructions).toContain("personal habits such as what you usually forget or lose");
+
+    const reply = { decision: "reply" as const, reason: "answer", contribution: "answer" as const, evidenceSourceUrls: [], evidenceExcerpt: "" };
+    expect(() => validateSukiReplyDecision({
+      ...reply,
+      body: "The fields I see disappear most often are the sampling seed and item IDs.",
+    })).toThrow(/experience/i);
+    expect(() => assertAiSourceReplyGrounding(
+      "The fields I see disappear most often are the sampling seed and item IDs.",
+      "The post mentions a schema-constrained response.",
+    )).toThrow(/experience/i);
+    const recurringHabit = "I lose tokenizer version and quantization settings most often, especially when switching inference backends months later.";
+    expect(() => validateSukiReplyDecision({ ...reply, body: recurringHabit })).toThrow(/experience/i);
+    expect(() => assertAiSourceReplyGrounding(recurringHabit, "The post compares two inference backends.")).toThrow(/experience/i);
+    expect(() => validateSukiReplyDecision({
+      ...reply,
+      body: "I usually forget the tokenizer version, so compare it alongside quantization settings.",
+    })).toThrow(/experience/i);
+    expect(() => validateSukiReplyDecision({
+      ...reply,
+      body: "My reruns often differ when quantization settings are omitted from the comparison.",
+    })).toThrow(/experience/i);
+    expect(validateSukiReplyDecision({
+      ...reply,
+      body: "I see what you mean. Compare the sampling seed and item IDs in both runs.",
+    }).decision).toBe("reply");
+    expect(validateSukiReplyDecision({
+      ...reply,
+      body: "I would suggest comparing the tokenizer version and quantization settings.",
+    }).decision).toBe("reply");
   });
 
   test("abstains from corrections without an original supporting excerpt and visible citation", () => {
@@ -263,6 +307,8 @@ describe("Suki forum reply helpers", () => {
       threadBody: "Teacher stability is discussed here.", threadTitle: "Evaluation scope",
     }, decision, evidence));
     expect(prompt.task).toContain("negation");
+    expect(prompt.task).toContain("personal reruns");
+    expect(prompt.task).toContain("what 'I usually forget'");
     expect(prompt.evidenceBoundary).toContain("not primary evidence");
     expect(prompt.sourcePost.body).toBe("Does this evaluate the target model?");
     expect(prompt.originalSourceEvidence).toEqual(evidence);
@@ -271,7 +317,7 @@ describe("Suki forum reply helpers", () => {
       .toEqual({ decision: "ignore", reason: "original-evidence-review-rejected" });
     expect(applyForumReplyEvidenceReview(decision, { approved: true, issues: ["Unsupported correction"] }).decision).toBe("ignore");
     expect(() => applyForumReplyEvidenceReview(decision, undefined)).toThrow();
-    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 4_000 });
+    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: OPENROUTER_GENERATION_MODELS, totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 4_000 });
   });
 
   test("rechecks final BBCode completeness before accepting a reviewer approval", () => {

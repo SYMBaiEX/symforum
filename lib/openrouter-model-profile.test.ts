@@ -20,10 +20,15 @@ describe("OpenRouter model profiles", () => {
     });
   });
 
-  test("adds bounded reasoning guidance to hosted prompts", () => {
+  test("does not request a separate reasoning phase for Belle's long structured drafts", () => {
     expect(
       modelInstructions("openrouter", "newsletter-weekly", "Write it."),
-    ).toMatch(/^Reasoning strength: xhigh\n\n/);
+    ).toMatch(
+      /^Reasoning strength: none\n\nReturn the requested structured submission directly/,
+    );
+    expect(
+      modelInstructions("openrouter", "newsletter-revision", "Write it."),
+    ).not.toContain("Reason through the task privately");
   });
 
   test("lets the explicit route own retries and preserves submission tokens", () => {

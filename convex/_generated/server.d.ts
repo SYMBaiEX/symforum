@@ -40,6 +40,13 @@ type Env = {
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
   readonly CRON_WATCHDOG_ENABLED: string | undefined;
+  readonly ELIZA_RUNTIME_MODE: string | undefined;
+  readonly ELIZA_RUNTIME_WORKER_SECRET: string | undefined;
+  readonly ELIZA_RUNTIME_WORKER_URL: string | undefined;
+  readonly ELIZA_SHADOW_DAILY_BUDGET_USD: string | undefined;
+  readonly ELIZA_SHADOW_MODE: string | undefined;
+  readonly ELIZA_SHADOW_WORKER_SECRET: string | undefined;
+  readonly ELIZA_SHADOW_WORKER_URL: string | undefined;
   readonly EVIDENCE_WEBHOOK_ALLOWED_HOSTS: string | undefined;
   readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
   readonly EVIDENCE_WEBHOOK_SIGNING_SECRET: string | undefined;
