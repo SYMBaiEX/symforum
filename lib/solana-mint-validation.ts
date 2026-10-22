@@ -35,15 +35,15 @@ function object(value: unknown): Record<string, unknown> | null {
 function address(value: unknown): value is string {
   if (typeof value !== "string" || value.length < 32 || value.length > 44)
     return false;
-  let decoded = 0n;
+  let decoded = BigInt(0);
   for (const character of value) {
     const digit = BASE58.indexOf(character);
     if (digit < 0) return false;
-    decoded = decoded * 58n + BigInt(digit);
+    decoded = decoded * BigInt(58) + BigInt(digit);
   }
   let bytes = 0;
   while (decoded) {
-    decoded >>= 8n;
+    decoded >>= BigInt(8);
     bytes++;
   }
   for (const character of value) {
@@ -80,7 +80,7 @@ function initializedMint(value: unknown): boolean {
     !/^(?:0|[1-9]\d{0,19})$/.test(info.supply)
   )
     return false;
-  return BigInt(info.supply) <= 18_446_744_073_709_551_615n;
+  return BigInt(info.supply) <= BigInt("18446744073709551615");
 }
 
 /**

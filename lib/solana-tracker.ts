@@ -138,15 +138,15 @@ function eligibleMint(value: unknown): value is string {
     PROGRAM_ADDRESSES.has(value)
   )
     return false;
-  let decoded = 0n;
+  let decoded = BigInt(0);
   for (const character of value) {
     const digit = BASE58.indexOf(character);
     if (digit < 0) return false;
-    decoded = decoded * 58n + BigInt(digit);
+    decoded = decoded * BigInt(58) + BigInt(digit);
   }
   let bytes = 0;
-  while (decoded > 0n) {
-    decoded >>= 8n;
+  while (decoded > BigInt(0)) {
+    decoded >>= BigInt(8);
     bytes++;
   }
   for (const character of value) {
