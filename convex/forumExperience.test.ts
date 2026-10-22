@@ -207,6 +207,38 @@ describe("shared forum experience", () => {
     });
     expect(unanswered.page.map((p) => p._id)).toEqual([s.question]);
   });
+  test.each([false, true])("signed-in members without current trust can load feed preferences (revoked=%s)", async (revoked) => {
+    const t = setup();
+    const s = await fixture(t);
+    const userId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", {
+        name: "New Reader",
+        ...(revoked ? { forumTrustedAt: 1, forumTrustRevokedAt: 2 } : {}),
+      });
+      await ctx.db.insert("forumUserRelationships", {
+        userId: id,
+        targetUserId: s.other,
+        kind: "buddy",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return id;
+    });
+    const viewer = t.withIdentity({ subject: userId });
+    expect(await viewer.query(api.forum.getMyForumExperience, {})).toMatchObject({
+      defaultFeed: "discover",
+      authorFilter: "all",
+      mutedWords: [],
+      onboardingCompleted: false,
+      followingBoards: [],
+      followingMembers: [],
+    });
+    await expect(viewer.query(api.forum.listMyForumRelationships, {}))
+      .rejects.toThrow("approve your forum access");
+    await expect(t.query(api.forum.getMyForumExperience, {}))
+      .rejects.toThrow("Sign in to personalize your forum");
+  });
+
   test("mute expiry and preferences are private to the acting user", async () => {
     const t = setup(),
       s = await fixture(t),
