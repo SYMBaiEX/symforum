@@ -34,6 +34,7 @@ import {
   forumReplySourceUrls,
 } from "../lib/forum-reply-policy";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { renderTokenPost, TOKEN_ALPHA_AGENTS } from "../lib/token-alpha";
 import { extractForumMentionUsernames } from "../lib/forum-mentions";
 import {
   validateForumAgentMarkup,
@@ -66,6 +67,7 @@ import { bumpEvidencePublicationEpoch } from "./evidencePublicationEpoch";
 import { NYX_PROFILE } from "./nyxProfile";
 import {
   invalidateResearchQualityForThread,
+  recordAutomatedResearchContribution,
   recordAutomatedResearchPublication,
   requireAutomatedResearchPublication,
 } from "./researchQuality";
@@ -12569,6 +12571,466 @@ export const publishForumAgentFollowUp = internalMutation({
     }
     return {
       categorySlug: category.slug,
+      threadSlug: thread.slug,
+      title: thread.title,
+      postId,
+      postNumber,
+    };
+  },
+});
+
+/**
+ * Token watches have one permanent Solana-mint thread, including adopted human
+ * openers. Publication takes only a fenced private run, never a caller-selected
+ * board, author, body or reply target. All receipts and public writes commit in
+ * this mutation so retries cannot create a second thread or duplicate reply.
+ */
+type TokenForumContributionReceipt = {
+  status: "published" | "held";
+  threadId?: Id<"forumThreads">;
+  postId?: Id<"forumPosts">;
+  postNumber?: number;
+  categorySlug: string;
+  threadSlug?: string;
+  title: string;
+  assessmentId?: Id<"researchQualityAssessments">;
+};
+
+export const publishTokenForumContribution = internalMutation({
+  args: {
+    runKey: v.string(),
+    claimToken: v.string(),
+    claimCitations: v.array(forumAgentClaimCitationValidator),
+    groundingScore: v.optional(v.number()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+  },
+  returns: v.object({
+    status: v.union(v.literal("published"), v.literal("held")),
+    threadId: v.optional(v.id("forumThreads")),
+    postId: v.optional(v.id("forumPosts")),
+    postNumber: v.optional(v.number()),
+    categorySlug: v.string(),
+    threadSlug: v.optional(v.string()),
+    title: v.string(),
+    assessmentId: v.optional(v.id("researchQualityAssessments")),
+  }),
+  handler: async (ctx, args): Promise<TokenForumContributionReceipt> => {
+    const tokenRun = await ctx.db
+      .query("tokenAlphaRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (tokenRun === null || tokenRun.claimToken !== args.claimToken) {
+      throw new Error("Token publication lease does not match its run");
+    }
+    const config = TOKEN_ALPHA_AGENTS[tokenRun.platform];
+    if (tokenRun.status === "published") {
+      if (tokenRun.threadId === undefined) {
+        throw new Error("Token publication receipt is incomplete");
+      }
+      const thread = await ctx.db.get("forumThreads", tokenRun.threadId);
+      const post =
+        tokenRun.postId === undefined
+          ? null
+          : await ctx.db.get("forumPosts", tokenRun.postId);
+      if (thread === null || (tokenRun.postId !== undefined && post === null)) {
+        throw new Error("Token publication receipt target is unavailable");
+      }
+      return {
+        status: "published" as const,
+        threadId: thread._id,
+        postId: tokenRun.postId,
+        postNumber: post?.postNumber,
+        categorySlug: thread.categorySlug,
+        threadSlug: thread.slug,
+        title: thread.title,
+      };
+    }
+    const now = Date.now();
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    if (control?.enabled !== true || env.ELIZA_RUNTIME_MODE !== "live") {
+      throw new Error("Token publication pilot or ElizaOS generation is disabled");
+    }
+    if (tokenRun.status !== "drafted" || tokenRun.expiresAt <= now) {
+      throw new Error("Token publication run is not drafted with an active lease");
+    }
+    const snapshot = tokenRun.snapshot;
+    if (
+      snapshot === undefined ||
+      snapshot.platform !== tokenRun.platform ||
+      !Number.isFinite(snapshot.metricsAsOf) ||
+      !Number.isFinite(snapshot.observedAt) ||
+      snapshot.metricsAsOf > now + 60_000 ||
+      snapshot.observedAt > now + 60_000 ||
+      now - snapshot.metricsAsOf > 30 * 60_000 ||
+      now - snapshot.observedAt > 30 * 60_000 ||
+      tokenRun.analysis === undefined ||
+      tokenRun.title === undefined ||
+      tokenRun.body === undefined
+    ) {
+      throw new Error("Token publication requires a fresh complete stored snapshot");
+    }
+    const [run, agent, category, canonical] = await Promise.all([
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .unique(),
+      ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", config.slug))
+        .unique(),
+      ctx.db
+        .query("forumCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", config.categorySlug))
+        .unique(),
+      ctx.db
+        .query("tokenAlphaTrackedTokens")
+        .withIndex("by_chain_and_mint", (q) =>
+          q.eq("chain", "solana").eq("mint", snapshot.mint),
+        )
+        .unique(),
+    ]);
+    if (
+      run === null ||
+      run.status !== "running" ||
+      run.agentSlug !== config.slug ||
+      agent === null ||
+      !agent.enabled
+    ) {
+      throw new Error("Token forum agent or matching publication run is unavailable");
+    }
+    const user = await ctx.db.get("users", agent.userId);
+    if (
+      user === null ||
+      user.isAgent !== true ||
+      user.agentSlug !== config.slug ||
+      user.role !== "reader" ||
+      user.forumTrustedAt === undefined ||
+      user.forumTrustRevokedAt !== undefined ||
+      user.agentRevokedAt !== undefined ||
+      user.agentStatus === "revoked" ||
+      user.forumBannedAt !== undefined ||
+      (user.forumSuspendedUntil ?? 0) > now ||
+      category === null ||
+      !isBoardCategory(category) ||
+      category.status !== "active" ||
+      categoryViewAccess(category) !== "public" ||
+      !(await canViewCategoryWithAncestors(ctx, null, category))
+    ) {
+      throw new Error("Token forum identity or public board is unavailable");
+    }
+    if ((canonical?.threadId ?? undefined) !== tokenRun.threadId) {
+      throw new Error("Token canonical target changed after the private draft");
+    }
+    const rendered = renderTokenPost({
+      snapshot,
+      previous: tokenRun.previous,
+      analysis: tokenRun.analysis,
+      isFollowUp: canonical !== null,
+    });
+    if (canonical?.latestSnapshot !== undefined) {
+      const currentBaseline = renderTokenPost({
+        snapshot,
+        previous: canonical.latestSnapshot,
+        analysis: tokenRun.analysis,
+        isFollowUp: true,
+      });
+      if (
+        snapshot.metricsAsOf <= canonical.latestSnapshot.metricsAsOf ||
+        currentBaseline.body !== rendered.body
+      ) {
+        throw new Error(
+          "Token snapshot is superseded or its comparison baseline changed",
+        );
+      }
+    }
+    if (rendered.title !== tokenRun.title || rendered.body !== tokenRun.body) {
+      throw new Error("Token publication does not match its deterministic stored facts");
+    }
+    const sources = [
+      {
+        sourceKey: `token:solana:${snapshot.mint}`,
+        sourceUrl: snapshot.sourceUrl,
+      },
+    ];
+
+    if (canonical === null) {
+      if (!canStartThreadInCategory(user, category, false)) {
+        throw new Error("Token agent cannot start threads in this board");
+      }
+      const published:
+        | {
+            held: true;
+            categorySlug: string;
+            title: string;
+            assessmentId: Id<"researchQualityAssessments">;
+          }
+        | {
+            categorySlug: string;
+            threadId: Id<"forumThreads">;
+            threadSlug: string;
+            title: string;
+          } = await ctx.runMutation(internal.forum.publishSukiForumThread, {
+        agentSlug: config.slug,
+        runKey: args.runKey,
+        categorySlug: config.categorySlug,
+        title: rendered.title,
+        body: rendered.body,
+        sources,
+        claimCitations: args.claimCitations,
+        candidateCount: 5,
+        contentFormat: "token-watch",
+        groundingScore: args.groundingScore,
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+      });
+      if ("held" in published) {
+        await ctx.db.patch("tokenAlphaRuns", tokenRun._id, {
+          status: "held",
+          reason: "research-quality-review",
+          updatedAt: now,
+        });
+        await ctx.db.patch("forumAgentRuns", run._id, {
+          status: "skipped",
+          errorMessage: "research-quality-review",
+          completedAt: now,
+          updatedAt: now,
+        });
+        return {
+          status: "held" as const,
+          categorySlug: published.categorySlug,
+          title: published.title,
+          assessmentId: published.assessmentId,
+        };
+      }
+      await ctx.db.insert("tokenAlphaTrackedTokens", {
+        chain: "solana",
+        mint: snapshot.mint,
+        threadId: published.threadId,
+        latestSnapshot: snapshot,
+        lastUpdatedAt: now,
+        createdAt: now,
+      });
+      await ctx.db.patch("tokenAlphaRuns", tokenRun._id, {
+        status: "published",
+        threadId: published.threadId,
+        updatedAt: now,
+      });
+      await ensureThreadParticipantSubscription(ctx, {
+        userId: user._id,
+        threadId: published.threadId,
+        categoryId: category._id,
+        now,
+      });
+      return { status: "published" as const, ...published };
+    }
+
+    const thread = await ctx.db.get("forumThreads", canonical.threadId);
+    if (
+      thread === null ||
+      thread.status !== "active" ||
+      thread.categoryId !== category._id ||
+      thread.categorySlug !== config.categorySlug ||
+      !canReplyInCategory(user, category, false)
+    ) {
+      throw new Error("Token canonical thread is locked, moved or unavailable");
+    }
+    assertAgentPublicationHygiene([rendered.title, rendered.body]);
+    const body = normalizeReplyBody(rendered.body);
+    const readability = assessForumReadability(body, {
+      trustedSourceFooter: true,
+    });
+    const markup = validateForumAgentMarkup(body, {
+      trustedSourceFooter: true,
+    });
+    const completeness = validateForumContentCompleteness(body, {
+      title: rendered.title,
+      trustedSourceFooter: true,
+    });
+    if (!readability.valid || !markup.valid || !completeness.valid) {
+      throw new Error(
+        `Token follow-up is incomplete or too dense: ${[...new Set([...readability.feedback, ...markup.feedback, ...completeness.feedback])].join("; ")}`,
+      );
+    }
+    const privateDraft = await verifyPrivateForumAgentDraft(ctx, {
+      runKey: args.runKey,
+      agentSlug: config.slug,
+      title: rendered.title,
+      body: rendered.body,
+      claimHashes: args.claimCitations.map((citation) => citation.claimHash),
+    });
+    const claimCitations = prepareForumAgentClaimCitations({
+      body,
+      citations: args.claimCitations,
+      sources,
+    });
+    const qualityCandidate = {
+      categoryId: category._id,
+      authorUserId: user._id,
+      runKey: args.runKey,
+      title: rendered.title,
+      body,
+      sourceUrls: sources.map((source) => source.sourceUrl),
+      validatedCitationCoverageScore: args.groundingScore,
+      agentSlug: config.slug,
+      model: agent.model,
+      promptVersion: run.promptVersion,
+      contentFormat: "token-watch-follow-up",
+    };
+    const qualityGate = await requireAutomatedResearchPublication(
+      ctx,
+      qualityCandidate,
+    );
+    if (!qualityGate.allowed) {
+      await markPrivateForumAgentDraftHeld(
+        ctx,
+        privateDraft.draft._id,
+        "research-quality-review",
+      );
+      await ctx.db.patch("tokenAlphaRuns", tokenRun._id, {
+        status: "held",
+        reason: "research-quality-review",
+        updatedAt: now,
+      });
+      await ctx.db.patch("forumAgentRuns", run._id, {
+        status: "skipped",
+        errorMessage: "research-quality-review",
+        completedAt: now,
+        updatedAt: now,
+      });
+      return {
+        status: "held" as const,
+        categorySlug: category.slug,
+        title: rendered.title,
+        assessmentId: qualityGate.assessmentId,
+      };
+    }
+    const assessmentId = await recordAutomatedResearchContribution(
+      ctx,
+      qualityCandidate,
+      qualityGate.score,
+    );
+    const postNumber = await nextPostNumberForThread(ctx, thread);
+    const postId = await ctx.db.insert("forumPosts", {
+      threadId: thread._id,
+      categoryId: category._id,
+      authorId: user._id,
+      body,
+      postNumber,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await syncForumPostSearchProjection(ctx, postId);
+    await persistForumAgentClaimCitations(ctx, {
+      citations: claimCitations,
+      runKey: args.runKey,
+      threadId: thread._id,
+      postId,
+      agentSlug: config.slug,
+      model: agent.model,
+      promptVersion: run.promptVersion,
+      assessmentId,
+      now,
+    });
+    await ctx.db.patch("forumThreads", thread._id, {
+      replyCount: thread.replyCount + 1,
+      lastAssignedPostNumber: postNumber,
+      lastPostId: postId,
+      lastPostAt: now,
+      lastPostUserId: user._id,
+      updatedAt: now,
+    });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
+    await ctx.db.patch("forumCategories", category._id, {
+      postCount: category.postCount + 1,
+      lastThreadId: thread._id,
+      lastPostId: postId,
+      lastPostAt: now,
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, user._id, { postDelta: 1, now });
+    await ensureThreadParticipantSubscription(ctx, {
+      userId: user._id,
+      threadId: thread._id,
+      categoryId: category._id,
+      now,
+    });
+    await createReplyNotifications(ctx, {
+      actorUserId: user._id,
+      categoryId: category._id,
+      postId,
+      threadId: thread._id,
+      now,
+    });
+    await scheduleForumAgentReview(ctx, {
+      sourceKind: "reply",
+      sourcePostId: postId,
+      threadId: thread._id,
+      categoryId: category._id,
+      authorId: user._id,
+      now,
+    });
+    const sourceUse = await ctx.db
+      .query("forumAgentSourceUses")
+      .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sources[0].sourceKey))
+      .unique();
+    if (sourceUse !== null && sourceUse.threadId !== thread._id) {
+      throw new Error("Token source ledger conflicts with its canonical thread");
+    }
+    if (sourceUse === null) {
+      await ctx.db.insert("forumAgentSourceUses", {
+        ...sources[0],
+        agentSlug: config.slug,
+        categoryId: category._id,
+        threadId: thread._id,
+        usedAt: now,
+      });
+    } else {
+      await ctx.db.patch("forumAgentSourceUses", sourceUse._id, {
+        sourceUrl: snapshot.sourceUrl,
+        agentSlug: config.slug,
+        usedAt: now,
+      });
+    }
+    await ctx.db.patch("forumAgentRuns", run._id, {
+      status: "published",
+      candidateCount: 5,
+      categoryId: category._id,
+      categorySlug: category.slug,
+      threadId: thread._id,
+      title: thread.title,
+      sourceUrls: sources.map((source) => source.sourceUrl),
+      contentFormat: "token-watch-follow-up",
+      groundingScore: args.groundingScore,
+      sourceCount: sources.length,
+      followUpPostId: postId,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      completedAt: now,
+      updatedAt: now,
+      errorMessage: undefined,
+    });
+    await markPrivateForumAgentDraftPublished(ctx, privateDraft.draft._id);
+    await ctx.db.patch("tokenAlphaTrackedTokens", canonical._id, {
+      latestSnapshot: snapshot,
+      lastUpdatedAt: now,
+    });
+    await ctx.db.patch("tokenAlphaRuns", tokenRun._id, {
+      status: "published",
+      threadId: thread._id,
+      postId,
+      updatedAt: now,
+    });
+    await enqueueForumAgentMemoryIndex(ctx.scheduler, thread._id);
+    return {
+      status: "published" as const,
+      categorySlug: category.slug,
+      threadId: thread._id,
       threadSlug: thread.slug,
       title: thread.title,
       postId,

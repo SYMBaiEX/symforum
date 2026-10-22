@@ -511,6 +511,19 @@ export async function recordAutomatedResearchPublication(
   return assessmentId;
 }
 
+/**
+ * A reply has its own private run assessment. Never attach it to the thread's
+ * opening assessment: the opener may belong to a human or a different agent.
+ * The claim ledger links this assessment to the actual contribution post.
+ */
+export async function recordAutomatedResearchContribution(
+  ctx: MutationCtx,
+  candidate: AutomatedResearchCandidate,
+  score: AutomatedResearchScore,
+) {
+  return await upsertAssessment(ctx, candidate, score, "passed");
+}
+
 /** Any edit makes an earlier automated pass stale until a new assessment. */
 export async function invalidateResearchQualityForThread(
   ctx: MutationCtx,

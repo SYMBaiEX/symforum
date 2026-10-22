@@ -244,7 +244,7 @@ test("HTTP classified rejection exposes only fixed code, provider status and kno
   }
 });
 
-test("allowlist covers exactly roster 30 plus Suki, Belle and Nyx", async () => {
+test("allowlist covers exactly roster 30 plus Suki, Belle, Nyx and the two token scouts", async () => {
   const roster = await readFile(
     new URL("../../../convex/forumAgentRoster.ts", import.meta.url),
     "utf8",
@@ -256,10 +256,156 @@ test("allowlist covers exactly roster 30 plus Suki, Belle and Nyx", async () => 
   ].map((match) => match[1]);
   assert.equal(slugs.length, 30);
   assert.deepEqual(
-    new Set([...slugs, "suki", "belle", "nyx", "system"]),
+    new Set([
+      ...slugs,
+      "suki",
+      "belle",
+      "nyx",
+      "bags-scout",
+      "pumpfun-scout",
+      "system",
+    ]),
     LIVE_AGENTS,
   );
 });
+
+for (const agentSlug of ["bags-scout", "pumpfun-scout"]) {
+  test(`${agentSlug} uses existing forum draft and review stages without accepting foreign or unknown stages`, () => {
+    for (const suffix of ["draft", "evidence-review"]) {
+      const stage = `${agentSlug}:forum-${suffix}`;
+      const validated = validateLiveRequest(request({ agentSlug, stage }));
+      assert.equal(validated.agentSlug, agentSlug);
+      assert.equal(validated.stage, stage);
+      assert.equal(validated.body, body);
+    }
+    for (const stage of [
+      `${agentSlug}:forum-publish`,
+      `${agentSlug}:forum-evidence-review-extra`,
+      `${agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout"}:forum-draft`,
+      "belle:daily-signal:draft",
+      "health-canary",
+    ])
+      assert.throws(
+        () => validateLiveRequest(request({ agentSlug, stage })),
+        /invalid_request/,
+      );
+    const unknownSlug = `${agentSlug}-extra`;
+    assert.throws(
+      () =>
+        validateLiveRequest(
+          request({ agentSlug: unknownSlug, stage: `${unknownSlug}:forum-draft` }),
+        ),
+      /invalid_request/,
+    );
+  });
+
+  test(`${agentSlug} admits Luna only for bounded draft and evidence review`, () => {
+    const lunaBody = {
+      ...body,
+      model: "openai/gpt-6-luna",
+      reasoning: { effort: "low", exclude: true },
+      provider: {
+        allow_fallbacks: false,
+        require_parameters: true,
+        only: ["openai"],
+        ignore: ["openai/fast", "openai/flex"],
+        max_price: { prompt: "0.2", completion: "0.5" },
+      },
+    };
+    const lunaRequest = (stage, nextBody = lunaBody, nextAgent = agentSlug) =>
+      request({
+        agentSlug: nextAgent,
+        stage,
+        body: nextBody,
+        inputHash: liveInputHash(nextBody),
+      });
+    for (const suffix of ["draft", "evidence-review"]) {
+      const stage = `${agentSlug}:forum-${suffix}`;
+      assert.equal(validateLiveRequest(lunaRequest(stage)).body, lunaBody);
+      for (const invalidBody of [
+        { ...lunaBody, reasoning: { effort: "medium", exclude: true } },
+        { ...lunaBody, reasoning: { effort: "low", exclude: false } },
+        {
+          ...lunaBody,
+          provider: { ...lunaBody.provider, allow_fallbacks: true },
+        },
+        {
+          ...lunaBody,
+          provider: { ...lunaBody.provider, require_parameters: false },
+        },
+        { ...lunaBody, provider: { ...lunaBody.provider, only: ["other"] } },
+        {
+          ...lunaBody,
+          provider: { ...lunaBody.provider, ignore: ["openai/flex"] },
+        },
+        {
+          ...lunaBody,
+          provider: {
+            ...lunaBody.provider,
+            max_price: { prompt: "0.2000000000000001", completion: "0.5" },
+          },
+        },
+        {
+          ...lunaBody,
+          provider: {
+            ...lunaBody.provider,
+            max_price: { prompt: "0.2", completion: "0.5000000000000001" },
+          },
+        },
+        {
+          ...lunaBody,
+          provider: {
+            ...lunaBody.provider,
+            max_price: { prompt: 0.2, completion: 0.5 },
+          },
+        },
+        { ...lunaBody, temperature: 0.1 },
+        { ...lunaBody, top_p: 0.9 },
+        { ...lunaBody, top_k: 10 },
+        {
+          ...lunaBody,
+          tools: [{ type: "function", function: { name: "lookup" } }],
+        },
+        { ...lunaBody, tool_choice: "none" },
+        {
+          ...lunaBody,
+          messages: [{ role: "tool", tool_call_id: "call-1", content: "result" }],
+        },
+        {
+          ...lunaBody,
+          messages: [
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [{ id: "call-1", type: "function" }],
+            },
+          ],
+        },
+      ])
+        assert.throws(() => validateLiveRequest(lunaRequest(stage, invalidBody)));
+    }
+    const otherScout = agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout";
+    for (const stage of [
+      `${agentSlug}:forum-topic`,
+      `${agentSlug}:forum-revision`,
+      `${agentSlug}:forum-reply`,
+      `${agentSlug}:forum-evidence-review-extra`,
+      `${otherScout}:forum-draft`,
+      `${otherScout}:forum-evidence-review`,
+      "belle:daily-signal:draft",
+      "health-canary",
+    ])
+      assert.throws(() => validateLiveRequest(lunaRequest(stage)), /invalid_request/);
+    for (const wrongAgent of ["suki", "mara-venn", `${agentSlug}-extra`])
+      assert.throws(
+        () =>
+          validateLiveRequest(
+            lunaRequest(`${wrongAgent}:forum-draft`, lunaBody, wrongAgent),
+          ),
+        /invalid_request/,
+      );
+  });
+}
 
 test("live request preserves SDK body, bounds fields, and verifies canonical input hash", () => {
   assert.equal(validateLiveRequest(request()).body, body);
