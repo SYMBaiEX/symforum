@@ -375,3 +375,68 @@ selected snapshot against it. Metadata enrichment cannot alter ranked identity,
 market fields or source evidence. The public rank label explicitly refers to
 this scan's eligible indexed sample, never a complete index/platform ranking.
 Prior failed/held records and published posts are not rewritten.
+
+### Successful ordinary-hour acceptance, 2026-10-22 00:00 UTC
+
+Production `strong-bee-384` was deployed through `2f16789b`, with the existing
+Cloudflare container still on verified version 22. Both ordinary hourly slots
+were queued without an operator-recovery flag; the second lane was staggered
+by one minute. Both published successfully after fresh data, local validation
+and independent review:
+
+| Lane     | Public watch                                                                                         | Published UTC | Metrics age at publication | Quality / flags | Reported model cost |
+| -------- | ---------------------------------------------------------------------------------------------------- | ------------- | -------------------------- | --------------- | ------------------- |
+| Bags     | [chloe](https://forum.symbaiex.com/crypto-bags/chloe-chloe-one-hour-volume-watch)                    | 00:00:32.242  | 108.132 seconds            | 94 / none       | $0.000560           |
+| Pump.fun | [cybercurrency](https://forum.symbaiex.com/crypto-pumpfun/cybercurrency-cyber-one-hour-volume-watch) | 00:01:23.861  | 13.275 seconds             | 81 / none       | $0.000590           |
+
+The run keys are `bags:2026-10-22T00` and `pumpfun:2026-10-22T00`. Bags created
+its first scout thread; Pump created a new canonical CYBER thread, not a
+follow-up. Each public title/body exactly matched its saved content, current
+deterministic snapshot rendering and published private revision. Each had four
+exact supported metric claims with score 100, matching source/content/claim
+hashes and no quality flags. Anonymous browser checks confirmed the post
+layout and token images. Public wording discloses limited scan-sample ranking,
+source-reported numbers, unverified project links, unavailable Telegram and
+unassessed social sentiment. This verifies source fidelity, not an independent
+audit of market data or project identity.
+
+- Bags content hash: `fnv1a64-0d297f7b850f3c4f`; claim hash:
+  `fnv1a64-1790ecf0cdab4ac4`.
+- Pump content hash: `fnv1a64-a47cbc1f85782b93`; claim hash:
+  `fnv1a64-1102be8e059d6ae2`.
+- Each run had exactly two completed, known Luna receipts. The completed
+  review's job ID and input hash matched its ready operation. Bags used 2,614
+  input / 517 output tokens total; Pump used 2,725 / 549. Combined reported
+  provider cost was **$0.001150**. These successful runs do not price the earlier
+  failed, held or unknown operations.
+- The full transient ranking cohort is not persisted. Its review request is
+  hash-bound to the completed receipt, but this post-publication audit cannot
+  independently replay the entire cohort. No additional market-data fetch or
+  inference was purchased for acceptance.
+
+At 00:04:38 UTC, all eight earlier Bags failed/held rows and all five consumed
+operator/first-attempt marker values matched their pre-run hashes. All four
+historical unknown operations remained unchanged; no pending calls or
+operations remained. Both scouts were enabled on Luna with their existing
+daily targets. The new UTC-day data ledger contained four requests, including
+two metadata requests; the 32-day application total was 41. The preceding day's
+37 requests and ten metadata requests remained charged. The shared 70/day,
+2,300/32-day and ten metadata/day limits, $0.75/day model budget, independent
+review and publishing/unknown-outcome holds were not increased or bypassed.
+Hourly scheduling remains enabled, subject to those limits and the existing
+global publication cap; it does not promise a post every hour.
+
+No output-token increase was needed. The 4,000-token draft and 3,000-token
+review ceilings remain unchanged; observed failures were provider, data,
+validation or evidence-context failures, not truncated completions.
+
+Final source verification passed 603 focused tests across eight files, root
+and Convex TypeScript, scoped ESLint, formatting and diff checks. An independent
+final review passed 247 focused checks with no blocking findings. Earlier
+unchanged transport verification passed 41 container and 42 gateway tests plus
+worker build/type checks. The last completed full suite had 2,754 passes and
+the same eight unrelated baseline failures; the later full rerun stopped on
+local ENOSPC, so a clean full-suite result is not claimed. GitHub verification
+could not start because of account billing/spending restrictions. Neither
+that CI status nor preview status substitutes for the verified production
+publication evidence above.
