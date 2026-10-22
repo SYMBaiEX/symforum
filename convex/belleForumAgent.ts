@@ -68,7 +68,7 @@ import {
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v16-reader-value";
+const BELLE_PROMPT_VERSION = "belle-forum-v17-qualified-grounded-analysis";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -514,7 +514,10 @@ export const runDailyHackerNewsDigest = internalAction({
         Awaited<ReturnType<typeof convexModelRoutingConfig>>,
         ArticleSnapshot[],
       ] = await Promise.all([
-        convexModelRoutingConfig(ctx, { correlationId: claim.runKey, runtimeScope: "forum-newsletter" }),
+        convexModelRoutingConfig(ctx, {
+          correlationId: claim.runKey,
+          runtimeScope: "forum-newsletter",
+        }),
         fetchArticleSnapshots(candidates, args.reusableArticleSnapshots),
       ]);
       if (
