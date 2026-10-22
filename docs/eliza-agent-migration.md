@@ -77,7 +77,8 @@ never reset by the model-record migration.
 
 ### Grounded forum revision evidence
 
-Forum prompt version `suki-forum-v23-grounded-revision-evidence` uses the existing
+Forum prompt versions `suki-forum-v24-qualified-grounded-analysis` and
+`belle-forum-v17-qualified-grounded-analysis` share the existing
 body-to-ledger support checker to identify factual body statements missing
 supported ledger coverage. Those statements are retrieval hints, not evidence:
 revision excerpts prioritize matching passages from the original source text,
@@ -89,11 +90,27 @@ A draft or feedback cannot
 create a source passage or certify a claim. The writer must repair the complete
 source-linked ledger, qualify supported analysis, or remove unsupported material.
 
+The next ordinary v23 Suki and v16 Belle forum runs still stopped at 77: their
+writers labeled interpretations as analysis in the ledger without qualifying
+the visible prose. Labeling the ledger alone is not sufficient. The shared
+writing contract now requires a relevant, visible, source-supported premise and
+explicit interpretation framing. Revision feedback lists at most four uncovered
+statement snippets (240 characters each) as unverified rewrite/delete targets,
+not qualification candidates or approved claims. Prefixing alone is never a
+repair; the writer must recheck each complete claim against the original evidence.
+No output is automatically prefixed, relabeled, or otherwise made publishable.
+The unchanged checker and independent review still decide whether the replacement
+is supported. Offline saved-result diagnosis reproduced Suki's exact source hash;
+Belle's refetched source differed, so it is not an exact historical-source replay.
+
 The deterministic threshold, lexical/numeric support checks, mandatory independent
 evidence review, maximum two revisions, model/output caps, schedules and shared
 budget are unchanged. Offline synthetic regressions cover omitted evidence,
 grounded repairs, adversarial evidence starvation and continued rejection of
-unsupported capabilities. They are
+unsupported capabilities. A nonnumeric invented capability can still pass the
+pre-existing lexical triage when prefixed as interpretation; that is why
+independent original-evidence review is mandatory. The offline rejection test
+exercises the review gate, not the live review model's judgment. These tests are
 not evidence of a newly published Suki post. Historical failed drafts and
 uncertain-outcome holds remain untouched; live quality is checked only from the
 next ordinary scheduled receipts, without replaying a prior run.

@@ -1540,6 +1540,207 @@ What would you verify first?`,
     ).not.toThrow();
   });
 
+  test("revision lists uncovered statements as unverified targets, never qualifier-only repairs", () => {
+    const fact =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
+    const analysis =
+      "The operational handoff is a better place to test than the weekly deployment report.";
+    const qualified = `This suggests ${analysis.charAt(0).toLowerCase()}${analysis.slice(1)}`;
+    const snapshots = [checkpointSnapshot()];
+    const draft = {
+      title: "Checkpoint recovery deserves an operational test",
+      body: `${fact}\n\n${analysis}`,
+      poll: null,
+      imageCandidateId: null,
+      claims: [
+        {
+          claim: fact,
+          sourceCandidateId: "source-a",
+          confidence: "high" as const,
+          kind: "fact" as const,
+        },
+        {
+          claim: analysis,
+          sourceCandidateId: "source-a",
+          confidence: "medium" as const,
+          kind: "analysis" as const,
+        },
+      ],
+      originalValue: [analysis],
+      discussionQuestion: "",
+    };
+    const args: Parameters<typeof forumDraftPrompt>[0] = {
+      category: {
+        slug: "ai-frameworks",
+        name: "AI Frameworks",
+        description: "Tools and implementations",
+      },
+      selection: discoverySelection(),
+      snapshots,
+      config: {
+        dailySlots: 1,
+        name: "Test",
+        promptVersion: "test",
+        slug: "test",
+        topicInstructions: "Select supported changes.",
+        writerInstructions: "Write concise discoveries.",
+        deskDescription: "Practical tooling",
+      },
+    };
+    const evaluate = (candidate: typeof draft) =>
+      evaluateForumDraft({
+        draft: candidate,
+        selection: discoverySelection(),
+        snapshots,
+        recentThreadTitles: [],
+      });
+    const held = evaluate(draft);
+    expect(held.blockingIssues.join(" ")).toContain(analysis);
+    expect(forumDraftPassesGate(held)).toBe(false);
+    const initialPrompt = forumDraftPrompt(args);
+    expect(initialPrompt).toContain('kind:"analysis" ledger label alone');
+    expect(initialPrompt).toContain('"This suggests..."');
+
+    const revisionPrompt = forumDraftPrompt({
+      ...args,
+      previousDraft: draft,
+      revisionFeedback: held.blockingIssues,
+    });
+    expect(revisionPrompt).toContain("Unverified body statements to recheck");
+    expect(revisionPrompt).toContain(JSON.stringify([analysis]));
+    expect(revisionPrompt).toContain("not approved claims");
+    expect(revisionPrompt).toContain("Prefixing alone is never a repair");
+    expect(revisionPrompt).toContain("relevant, supported factual premise");
+
+    const repaired = evaluate({
+      ...draft,
+      body: `${fact}\n\n${qualified}`,
+      originalValue: [qualified],
+    });
+    expect(repaired.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(repaired)).toBe(true);
+    // A lexical pass only admits a replacement to independent evidence review.
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: ["The inference does not follow from the cited evidence."],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+
+    const unsupported = "Version 9.9 adds autonomous encryption to every job.";
+    const unsupportedPrompt = forumDraftPrompt({
+      ...args,
+      previousDraft: {
+        ...draft,
+        body: `${fact}\n\n${unsupported}`,
+        claims: [draft.claims[0], { ...draft.claims[1], claim: unsupported }],
+      },
+      revisionFeedback: held.blockingIssues,
+    });
+    expect(unsupportedPrompt).not.toContain(
+      "Analysis qualification diagnostics",
+    );
+    expect(
+      forumDraftPassesGate(
+        evaluate({
+          ...draft,
+          body: `${fact}\n\nThis suggests version 9.9 adds autonomous encryption to every job.`,
+          claims: [draft.claims[0], { ...draft.claims[1], claim: unsupported }],
+        }),
+      ),
+    ).toBe(false);
+
+    const wrongSourcePrompt = forumDraftPrompt({
+      ...args,
+      snapshots: [
+        ...snapshots,
+        {
+          ...checkpointSnapshot(),
+          id: "source-b",
+          articleTitle: "Unrelated release",
+          articleDescription: "Different release notes",
+          articleText: "An unrelated service changed its dashboard layout.",
+        },
+      ],
+      previousDraft: {
+        ...draft,
+        claims: [
+          draft.claims[0],
+          { ...draft.claims[1], sourceCandidateId: "source-b" },
+        ],
+      },
+      revisionFeedback: held.blockingIssues,
+    });
+    expect(wrongSourcePrompt).not.toContain(
+      "Analysis qualification diagnostics",
+    );
+
+    const noPremisePrompt = forumDraftPrompt({
+      ...args,
+      previousDraft: {
+        ...draft,
+        claims: [{ ...draft.claims[0], kind: "analysis" }, draft.claims[1]],
+      },
+      revisionFeedback: held.blockingIssues,
+    });
+    expect(noPremisePrompt).not.toContain("Analysis qualification diagnostics");
+
+    const inventedCapability =
+      "The tool can autonomously encrypt all deployments with no operator review.";
+    const capabilityDraft = {
+      ...draft,
+      body: `${fact}\n\n${inventedCapability}`,
+      claims: [
+        draft.claims[0],
+        { ...draft.claims[1], claim: inventedCapability },
+      ],
+      originalValue: [inventedCapability],
+    };
+    expect(forumDraftPassesGate(evaluate(capabilityDraft))).toBe(false);
+    const capabilityPrompt = forumDraftPrompt({
+      ...args,
+      previousDraft: capabilityDraft,
+      revisionFeedback: evaluate(capabilityDraft).blockingIssues,
+    });
+    expect(capabilityPrompt).toContain(JSON.stringify([inventedCapability]));
+    expect(capabilityPrompt).not.toContain(
+      "Analysis qualification diagnostics",
+    );
+    expect(capabilityPrompt).toContain(
+      "Delete or rewrite unsupported capability, availability, performance, or causal claims",
+    );
+    expect(capabilityPrompt).toContain(
+      "even if an interpretation prefix would pass lexical triage",
+    );
+    const boundedPrompt = forumDraftPrompt({
+      ...args,
+      previousDraft: {
+        ...capabilityDraft,
+        body: Array.from(
+          { length: 8 },
+          (_, index) =>
+            `The tool can deploy ${index + 10} autonomous replicas ${"without any operator authorization ".repeat(12)}.`,
+        ).join("\n\n"),
+      },
+      revisionFeedback: held.blockingIssues,
+    });
+    const snippets = JSON.parse(
+      boundedPrompt
+        .split("(snippets, not approved claims):\n\n")[1]
+        .split("\n\n")[0],
+    ) as string[];
+    expect(snippets).toHaveLength(4);
+    expect(snippets.every((snippet) => snippet.length <= 240)).toBe(true);
+    // The pre-existing lexical analysis path is not a truth oracle. Even a
+    // syntactically qualified capability must be rejected by semantic review.
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: ["The source does not document autonomous encryption."],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+  });
+
   test("rejects short factual claims omitted from the ledger or falsely labeled analysis", () => {
     const fact =
       "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
