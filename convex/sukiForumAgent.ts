@@ -81,7 +81,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v24-qualified-grounded-analysis";
+const PROMPT_VERSION = "suki-forum-v25-latest-revision-base";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // Two bounded corrections can repair distinct issues; the shared action deadline
 // reserves time for the mandatory independent review and commit.
@@ -878,6 +878,11 @@ export async function runForumResearchSlot(
         qualityScore: quality.qualityScore,
       },
     );
+    // A tied or worse correction must not replace the best publication candidate,
+    // but its actual output and feedback are still the next correction's input.
+    // Otherwise a capped grounding score can send the original draft twice.
+    let latestAttemptDraft = draft;
+    let latestAttemptQuality = quality;
     for (
       let revisionPass = 1;
       revisionPass <= MAX_FORUM_EDITORIAL_REVISION_PASSES &&
@@ -885,7 +890,7 @@ export async function runForumResearchSlot(
       revisionPass += 1
     ) {
       const revisionStartedAt = Date.now();
-      const qualityBefore = quality.qualityScore;
+      const qualityBefore = latestAttemptQuality.qualityScore;
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -894,9 +899,12 @@ export async function runForumResearchSlot(
           snapshots,
           config,
           revisionFeedback: [
-            ...new Set([...quality.blockingIssues, ...quality.feedback]),
+            ...new Set([
+              ...latestAttemptQuality.blockingIssues,
+              ...latestAttemptQuality.feedback,
+            ]),
           ],
-          previousDraft: draft,
+          previousDraft: latestAttemptDraft,
           followUp: followUpThreadId !== undefined,
         }),
         {
@@ -940,6 +948,8 @@ export async function runForumResearchSlot(
         qualityAfter: revisionQuality.qualityScore,
         durationMs: Date.now() - revisionStartedAt,
       });
+      latestAttemptDraft = revisedDraft;
+      latestAttemptQuality = revisionQuality;
       if (
         forumDraftRevisionImproves(
           revisionQuality,

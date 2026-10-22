@@ -77,8 +77,8 @@ never reset by the model-record migration.
 
 ### Grounded forum revision evidence
 
-Forum prompt versions `suki-forum-v24-qualified-grounded-analysis` and
-`belle-forum-v17-qualified-grounded-analysis` share the existing
+Forum prompt versions `suki-forum-v25-latest-revision-base` and
+`belle-forum-v18-latest-revision-base` share the existing
 body-to-ledger support checker to identify factual body statements missing
 supported ledger coverage. Those statements are retrieval hints, not evidence:
 revision excerpts prioritize matching passages from the original source text,
@@ -102,6 +102,18 @@ No output is automatically prefixed, relabeled, or otherwise made publishable.
 The unchanged checker and independent review still decide whether the replacement
 is supported. Offline saved-result diagnosis reproduced Suki's exact source hash;
 Belle's refetched source differed, so it is not an exact historical-source replay.
+
+Suki's next ordinary v24 run also stopped at 77. Saved completions and its exact
+source hash exposed a separate orchestration defect: the first correction changed
+the draft but tied the capped quality score and blocker-category count, so it was
+not selected as best. The second correction then received the original draft and
+feedback again. Corrections now carry forward the latest completed attempt and
+its own feedback, while the unchanged comparator retains a separate best candidate
+for the final gate, provenance, independent review and publication/hold. Rejected
+attempts never replace that selected private draft. Revision usage reports the
+quality of the actual input attempt. There is no increase to the two-correction
+limit or configured model-call budget, and no recovery of historical runs. A
+passing correction must still undergo the existing mandatory independent review.
 
 The deterministic threshold, lexical/numeric support checks, mandatory independent
 evidence review, maximum two revisions, model/output caps, schedules and shared
