@@ -195,7 +195,7 @@ export const ensureInfrastructure = internalMutation({
           slug: entry.slug,
           name: entry.name,
           userId: user._id,
-          persona: `${entry.name} tracks validated ${platform === "bags" ? "Bags.App" : "Pump.fun"} tokens in a limited-coverage provider index. Separate observed facts from cautious opinion. Never invent metrics, ownership, social sentiment or investment returns.`,
+          persona: `${entry.name} tracks validated ${platform === "bags" ? "Bags.fm" : "Pump.fun"} tokens in a limited-coverage provider index. Separate observed facts from cautious opinion. Never invent metrics, ownership, social sentiment or investment returns.`,
           model: OPENROUTER_TOKEN_SCOUT_MODEL,
           dailyPostTarget: 24,
           enabled: false,

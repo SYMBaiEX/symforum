@@ -7,6 +7,7 @@ import {
 } from "./ai-model-routing";
 import { elizaRuntimeFetch } from "./eliza-runtime-transport";
 import { OPENROUTER_NEWSLETTER_MODEL } from "./ai-models";
+import { ELIZA_EDITORIAL_PERSONAS } from "./eliza-runtime-personas";
 
 const origin = "https://eliza-worker.example";
 const workerSecret = "private-worker-secret-32-characters-long";
@@ -110,14 +111,14 @@ describe("Eliza live compatible transport", () => {
     },
   );
 
-  test("does not admit a bounded newsletter model request for other personas", async () => {
+  test("does not admit a bounded model request for unknown personas", async () => {
     const workerFetch = vi.fn();
     const onRequest = vi.fn();
     vi.stubGlobal("fetch", workerFetch);
     const [route] = await routedModelCandidates(
       { ...config, elizaRuntime: { ...config.elizaRuntime, onRequest } },
       [OPENROUTER_NEWSLETTER_MODEL],
-      context,
+      { ...context, agentSlug: "unknown-persona", stage: "unknown-persona:forum-draft" },
     );
     await expect(
       generateText({
@@ -131,6 +132,8 @@ describe("Eliza live compatible transport", () => {
   });
 
   test.each([
+    ...ELIZA_EDITORIAL_PERSONAS.flatMap(slug =>
+      ["topic", "draft", "revision", "revision-light", "evidence-review", "reply", "reply-evidence-review"].map(stage => [slug, stage])),
     ["bags-scout", "draft"],
     ["bags-scout", "evidence-review"],
     ["pumpfun-scout", "draft"],

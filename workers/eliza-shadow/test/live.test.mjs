@@ -396,7 +396,7 @@ for (const agentSlug of ["bags-scout", "pumpfun-scout"]) {
       "health-canary",
     ])
       assert.throws(() => validateLiveRequest(lunaRequest(stage)), /invalid_request/);
-    for (const wrongAgent of ["suki", "mara-venn", `${agentSlug}-extra`])
+    for (const wrongAgent of [`${agentSlug}-extra`])
       assert.throws(
         () =>
           validateLiveRequest(
@@ -534,7 +534,7 @@ test("live request preserves SDK body, bounds fields, and verifies canonical inp
   );
 });
 
-test("Bounded newsletter live requests require a Belle or system stage and bounded provider prices", () => {
+test("Bounded Luna requests require an enrolled persona stage and bounded provider prices", () => {
   const newsletterBody = {
     ...body,
     model: "openai/gpt-6-luna",
@@ -557,6 +557,8 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
   for (const [agentSlug, stage] of [
     ["belle", "belle:daily-signal:draft"],
     ["system", "health-canary"],
+    ["suki", "suki:forum-reply"],
+    ["mara-venn", "mara-venn:forum-draft"],
   ]) {
     assert.equal(
       validateLiveRequest(newsletterRequest(agentSlug, stage)).body,
@@ -653,8 +655,8 @@ test("Bounded newsletter live requests require a Belle or system stage and bound
       ...newsletterBody,
       model: "deepseek/deepseek-v4-flash-0731",
     }),
-    newsletterRequest("suki", "suki:forum-reply"),
-    newsletterRequest("mara-venn", "mara-venn:forum-draft"),
+    newsletterRequest("suki", "belle:forum-reply"),
+    newsletterRequest("mara-venn", "mara-venn:arbitrary-stage"),
     newsletterRequest("belle", "belle:daily-signal:draft", {
       ...newsletterBody,
       provider: { ...newsletterBody.provider, require_parameters: false },

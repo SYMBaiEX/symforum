@@ -442,7 +442,7 @@ export async function runForumResearchSlot(
       correlationId: claim.runKey,
       runtimeScope: "forum-newsletter",
     });
-    // Editorial generation explicitly selects openrouter/free; routing controls
+    // Editorial generation selects the fixed price-capped Luna route; controls
     // still enforce provider health and the account's request budget.
     const effectiveRoutingConfig = routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
@@ -595,7 +595,7 @@ export async function runForumResearchSlot(
           return { result, selection: result.output };
         },
       },
-      ["openrouter/free"],
+      [OPENROUTER_FORUM_MODEL],
     );
     const selectionResult = selectionGeneration.value.result;
     const selection = {
@@ -819,7 +819,7 @@ export async function runForumResearchSlot(
         },
       };
       return await runWithModelFallback(effectiveRoutingConfig, routeArgs, [
-        "openrouter/free",
+        OPENROUTER_FORUM_MODEL,
       ]);
     };
     const draftStartedAt = Date.now();
@@ -1013,7 +1013,7 @@ export async function runForumResearchSlot(
         totalTimeoutMs: forumGenerationStageTimeout(generationDeadline, 90_000),
         estimatedInputTokens: estimatePromptInputTokens(reviewPrompt),
         maxOutputTokens: openRouterStructuredOutputBudget(
-          "openrouter/free",
+          OPENROUTER_FORUM_MODEL,
           2_000,
         ),
         run: async (candidate: RoutedModel, signal: AbortSignal) =>
@@ -1029,14 +1029,14 @@ export async function runForumResearchSlot(
               }),
             }),
             maxOutputTokens: openRouterStructuredOutputBudget(
-              "openrouter/free",
+              OPENROUTER_FORUM_MODEL,
               2_000,
             ),
             maxRetries: 0,
             abortSignal: signal,
           }),
       },
-      ["openrouter/free"],
+      [OPENROUTER_FORUM_MODEL],
     );
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: claim.runKey,

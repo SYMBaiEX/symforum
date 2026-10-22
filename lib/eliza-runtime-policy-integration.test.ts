@@ -8,6 +8,7 @@ import {
   OPENROUTER_NEWSLETTER_PRICE_CEILING,
 } from "./ai-models";
 import { routedModelCandidates } from "./ai-model-routing";
+import { ELIZA_EDITORIAL_PERSONAS, permitsLunaRuntimeStage } from "./eliza-runtime-personas";
 
 type LiveWorkerPolicy = {
   liveInputHash(body: Record<string, unknown>): string;
@@ -114,6 +115,19 @@ describe("newsletter SDK to live worker policy boundary", () => {
         body,
       };
       expect(worker.validateLiveRequest(envelope)).toEqual(envelope);
+      expect(ELIZA_EDITORIAL_PERSONAS).toHaveLength(33);
+      for (const agentSlug of ELIZA_EDITORIAL_PERSONAS) {
+        for (const suffix of ["topic", "draft", "revision", "revision-light", "evidence-review", "reply", "reply-evidence-review"]) {
+          const stage = `${agentSlug}:forum-${suffix}`;
+          expect(permitsLunaRuntimeStage(agentSlug, stage)).toBe(true);
+          const request = { ...envelope, agentSlug, stage };
+          expect(worker.validateLiveRequest(request)).toEqual(request);
+        }
+        for (const stage of ["health-canary", "unknown:forum-draft", `${agentSlug}:forum-draft-extra`]) {
+          expect(permitsLunaRuntimeStage(agentSlug, stage)).toBe(false);
+          expect(() => worker.validateLiveRequest({ ...envelope, agentSlug, stage })).toThrow();
+        }
+      }
     } finally {
       vi.unstubAllGlobals();
     }

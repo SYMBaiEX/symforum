@@ -41,6 +41,7 @@ const BALANCED_FORUM_TAGS = [
   "h2",
   "h3",
   "i",
+  "inlinecode",
   "list",
   "note",
   "quote",
@@ -662,7 +663,7 @@ export function validateForumContentCompleteness(
 
 function maskForumCode(body: string) {
   return body.replace(
-    /\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]|```[\s\S]*?```|`[^`\n]+`/gi,
+    /\[(code|inlinecode)(?:=[^\]]*)?\][\s\S]*?\[\/\1\]|```[\s\S]*?```|`[^`\n]+`/gi,
     "[code]code sample[/code]",
   );
 }
@@ -675,7 +676,7 @@ function hasCompletenessContent(value: string) {
 function plainCompletenessText(value: string) {
   return value
     .replace(
-      /\[\/?(?:b|i|u|s|url|img|video|youtube|size|color|align|center|left|right|h2|h3|code|note|warning|quote|spoiler|list|li|\*|table|thead|tbody|tfoot|tr|th|td|chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]/gi,
+      /\[\/?(?:b|i|u|s|url|img|video|youtube|size|color|align|center|left|right|h2|h3|code|inlinecode|note|warning|quote|spoiler|list|li|\*|table|thead|tbody|tfoot|tr|th|td|chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]/gi,
       " ",
     )
     .replace(/[\t ]+/g, " ")

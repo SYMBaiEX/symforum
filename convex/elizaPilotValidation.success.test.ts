@@ -99,7 +99,7 @@ describe("successful pilot actions stay outside publication state", () => {
 
   test.each([false, true])("public human Suki source uses requested runtime %s without publishing", async useElizaRuntime => {
     routed.mockImplementation(async (_config, options, models) => {
-      expect(models).toBeUndefined();
+      expect(models).toEqual(["openai/gpt-6-luna"]);
       expect(options).toMatchObject({ stage: "suki:forum-reply" });
       return {
         route: { persistedModel: "openrouter/free" },
@@ -136,7 +136,8 @@ describe("successful pilot actions stay outside publication state", () => {
       runtimeScope: "forum-newsletter", elizaRuntime: useElizaRuntime ? "force" : "off",
     }));
     expect(result).toMatchObject({ duplicate: false, run: { status: "completed", baselineDecision: "reply" } });
-    expect(result.run.shadowJobId).toBeDefined();
+    if (useElizaRuntime) expect(result.run.shadowJobId).toBeUndefined();
+    else expect(result.run.shadowJobId).toBeDefined();
     expect(routed).toHaveBeenCalledTimes(1);
     const state = await t.run(async ctx => ({
       posts: await ctx.db.query("forumPosts").take(10),
@@ -147,8 +148,13 @@ describe("successful pilot actions stay outside publication state", () => {
     expect(state.posts).toEqual([]);
     expect(state.replyRuns).toEqual([]);
     expect(state.thread).toMatchObject({ replyCount: 0, status: "active" });
-    expect(state.shadow).toHaveLength(1);
-    expect(state.shadow[0]).toMatchObject({ kind: "suki-reply", status: "queued", isCanary: false });
+    expect(state.shadow).toHaveLength(useElizaRuntime ? 0 : 1);
+    if (!useElizaRuntime) expect(state.shadow[0]).toMatchObject({ kind: "suki-reply", status: "queued", isCanary: false });
+    else {
+      const retained = await t.run(ctx => ctx.db.query("elizaPilotRuns").first());
+      expect(retained).toMatchObject({ artifactStatus: "accepted", shadowStatus: "not_requested" });
+      expect(JSON.parse(retained!.baselineJson!).decision.decision).toBe("reply");
+    }
   });
 
 });

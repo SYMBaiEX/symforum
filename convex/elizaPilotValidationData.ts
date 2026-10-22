@@ -117,7 +117,7 @@ const artifactReceipt = v.object({
   duplicate: v.boolean(),
 });
 
-/** Store one bounded private Belle baseline/evaluation pair for a pilot nonce. */
+/** Store one bounded private pilot baseline/evaluation pair for a reserved nonce. */
 export const recordArtifact = internalMutation({
   args: {
     nonce: v.string(),
@@ -132,16 +132,17 @@ export const recordArtifact = internalMutation({
       .query("elizaPilotRuns")
       .withIndex("by_nonce", (q) => q.eq("nonce", args.nonce))
       .unique();
-    if (!run || run.kind !== "belle-newsletter")
+    if (!run || !["belle-newsletter", "suki-reply"].includes(run.kind))
       throw new Error("pilot_artifact_run_invalid");
     if (run.status !== "reserved")
       throw new Error("pilot_artifact_attempt_closed");
     const sourceKeyMatch = belleArtifactSourceKey.exec(args.sourceKey);
+    const validSource = run.kind === "suki-reply"
+      ? /^thread:[A-Za-z0-9_-]{1,64}:eliza$/.test(args.sourceKey)
+      : !!sourceKeyMatch && isDateKey(sourceKeyMatch[1]!) && isDateKey(sourceKeyMatch[2]!);
     if (
       args.sourceKey.length > 160 ||
-      !sourceKeyMatch ||
-      !isDateKey(sourceKeyMatch[1]!) ||
-      !isDateKey(sourceKeyMatch[2]!)
+      !validSource
     )
       throw new Error("pilot_artifact_source_invalid");
     if (run.sourceKey !== args.sourceKey)
@@ -199,7 +200,7 @@ export const recordArtifact = internalMutation({
   },
 });
 
-/** Read one still-retained private Belle artifact from an internal action. */
+/** Read one still-retained private pilot artifact from an internal action. */
 export const inspectBaseline = internalQuery({
   args: { nonce: v.string() },
   returns: v.union(
@@ -220,7 +221,7 @@ export const inspectBaseline = internalQuery({
       .unique();
     if (
       !run ||
-      run.kind !== "belle-newsletter" ||
+      !["belle-newsletter", "suki-reply"].includes(run.kind) ||
       !run.baselineJson ||
       !run.evaluationJson ||
       !run.artifactStatus ||

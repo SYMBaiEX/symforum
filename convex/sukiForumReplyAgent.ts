@@ -4,7 +4,7 @@ import { Agent } from "@convex-dev/agent";
 import { APICallError, generateText, Output, type LanguageModel } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
-import { OPENROUTER_GENERATION_MODELS, openRouterStructuredOutputBudget } from "../lib/ai-models";
+import { OPENROUTER_GENERATION_MODELS, OPENROUTER_FORUM_MODEL, OPENROUTER_FORUM_GENERATION_MODELS, openRouterStructuredOutputBudget } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { runWithModelFallback, type ModelRoutingConfig, type ModelRouteAttempt } from "../lib/ai-model-routing";
@@ -83,6 +83,23 @@ export const sukiReplyDecisionSchema = z.discriminatedUnion("decision", [
 ]);
 
 export type SukiReplyDecision = z.infer<typeof sukiReplyDecisionSchema>;
+
+/** OpenAI strict output requires a root object rather than a union. The full
+ * discriminated decision and evidence contracts still validate locally. */
+export const forumReplyWireSchema = z.object({
+  decision: z.enum(["ignore", "reply"]),
+  reason: z.string().trim().min(1).max(160),
+  body: z.string().trim().max(6_000),
+  contribution: z.enum(["none", "answer", "clarification", "next-step", "correction", "extension", "question"]),
+  evidenceSourceUrls: z.array(z.string().regex(/^https?:\/\/.*$/)).max(2),
+  evidenceExcerpt: z.string().trim().max(700),
+}).strict();
+
+export function parseGeneratedForumReply(value: unknown): SukiReplyDecision {
+  const decision = value as { decision?: unknown; reason?: unknown } | null;
+  return validateSukiReplyDecision(decision?.decision === "ignore"
+    ? { decision: "ignore", reason: decision.reason } : value);
+}
 
 type SukiReplyRunResult =
   | {
@@ -209,7 +226,7 @@ async function runReplySweepForAgent(
       attemptOffset: replySweepRouteAttemptOffset(attempt),
       totalTimeoutMs: 120_000,
       estimatedInputTokens: estimatePromptInputTokens(prompt),
-      maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
+      maxOutputTokens: openRouterStructuredOutputBudget(OPENROUTER_FORUM_MODEL, 1_400),
       run: async (candidate, signal) => {
         const replyAgent = new Agent(components.agent, {
           name: agentName,
@@ -229,8 +246,8 @@ async function runReplySweepForAgent(
           { threadId: claim.conversationId },
           {
             prompt,
-            schema: sukiReplyDecisionSchema,
-            maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
+            schema: forumReplyWireSchema,
+            maxOutputTokens: openRouterStructuredOutputBudget(OPENROUTER_FORUM_MODEL, 1_400),
             ...modelGenerationSettings(candidate.provider, "reply"),
             providerOptions: candidate.providerOptions,
             abortSignal: signal,
@@ -238,7 +255,7 @@ async function runReplySweepForAgent(
           },
         );
         const decision = validateForumReplyEvidence(
-          validateSukiReplyDecision(result.object), evidence,
+          parseGeneratedForumReply(result.object), evidence,
         );
         if (claim.candidate.authorIsAgent && decision.decision === "reply") {
           assertAiSourceReplyGrounding(
@@ -249,7 +266,7 @@ async function runReplySweepForAgent(
         }
         return { result, decision };
       },
-    }, ["openrouter/free"]);
+    }, OPENROUTER_FORUM_GENERATION_MODELS);
     const { result } = generation.value;
     let { decision } = generation.value;
     let shadowReview: SukiShadowBaseline["review"];
@@ -521,9 +538,9 @@ export function validateSukiReplyDecision(value: unknown): SukiReplyDecision {
 
 export type ForumReplyPromptCandidate = Parameters<typeof sukiReplyPrompt>[0];
 export const FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS = {
-  models: OPENROUTER_GENERATION_MODELS,
+  models: OPENROUTER_FORUM_GENERATION_MODELS,
   totalTimeoutMs: 90_000,
-  maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 2_000),
+  maxOutputTokens: openRouterStructuredOutputBudget(OPENROUTER_FORUM_MODEL, 2_000),
   maxRetries: 0,
 } as const;
 

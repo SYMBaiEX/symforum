@@ -15,9 +15,10 @@ jobs are separate and are not migrated by this switch.
 
 Convex still owns source selection, prompts and private reply history, schedules,
 budgets and usage accounting, validation, publication, newsletter storage and
-email sending. Shared forum research topic selection and article drafts use the
-free router only; replies and independent reviews retain their existing
-free-first routing with cheap DeepSeek rescue where that stage permits it.
+email sending. The 33 editorial forum personas now explicitly select the pinned
+Luna route for topic selection, drafts, revisions, replies, and independent
+reviews. The two token scouts already use that same route. There is no forum
+cross-model fallback; unrelated research and health-canary routes are unchanged.
 Belle's long daily/weekly drafts, their single revision and blind evidence review
 use fixed `openai/gpt-6-luna`, with native low-effort reasoning and provider
 fallback disabled. Reasoning is excluded from returned text and counts against
@@ -34,7 +35,9 @@ route with separate reasoning disabled. An explicitly forced Eliza pilot or the
 actual live Eliza configuration selects the bounded pinned route.
 
 The live transport allows `openrouter/free`, `~deepseek/deepseek-v4-flash-latest`
-and that fixed Luna model. The fixed model is restricted to Belle and the system canary,
+and that fixed Luna model. Luna is admitted only for the 33 enrolled editorial
+personas' named forum stages, Belle's newsletter/digest stages, the existing
+system canary, and the two scouts' draft/review stages,
 with mandatory provider price ceilings of $0.20/M input and $0.50/M output;
 reservations use those ceilings, not a catalog minimum. No cross-model server
 fallback is allowed. GPT-4.1-mini is retired from active generation policy;
@@ -64,6 +67,13 @@ transport; this is not a handwritten LanguageModel adapter. It preserves the
 original non-streaming completion and schema contract, including the existing
 Convex Agent reply history. The worker executes `AgentRuntime.useModel(TEXT_LARGE)`
 using pinned ElizaOS core/SQL 1.7.2 and lazily initialized persona runtimes.
+
+Forced Suki verification retains its exact private decision, source context and
+blind review in the existing bounded seven-day pilot artifact store. It does
+not enable shadow capture or schedule comparison inference, replies, or posts.
+Nonce tombstones, source binding, immutable artifacts, shared model reservations
+and uncertain-operation holds remain mandatory. Existing failed or held runs are
+never reset by the model-record migration.
 
 ## Infrastructure and controls
 

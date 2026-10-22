@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { ELIZA_EDITORIAL_PERSONAS } from "../lib/eliza-runtime-personas";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 import { NYX_PROFILE } from "./nyxProfile";
 
@@ -374,8 +375,14 @@ const POSTING_MODEL = OPENROUTER_FORUM_MODEL;
 
 export const migratePostingModels = internalMutation({
   args: { dryRun: v.boolean() },
+  returns: v.object({ dryRun: v.boolean(), scanned: v.number(), matching: v.number(),
+    updated: v.number(), wouldUpdate: v.number(), targetModel: v.string() }),
   handler: async (ctx, args) => {
-    const agents = await ctx.db.query("forumAgents").take(64);
+    // Update only the 33 explicitly enrolled editorial identities. Do not
+    // reconfigure scouts, other agents, cadence, enabled flags or held work.
+    const agents = (await Promise.all(ELIZA_EDITORIAL_PERSONAS.map((slug) =>
+      ctx.db.query("forumAgents").withIndex("by_slug", q => q.eq("slug", slug)).unique(),
+    ))).filter((agent) => agent !== null);
     const legacy = agents.filter((agent) => agent.model !== POSTING_MODEL);
     if (!args.dryRun) {
       const updatedAt = Date.now();

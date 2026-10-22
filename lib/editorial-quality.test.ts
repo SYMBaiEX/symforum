@@ -286,6 +286,7 @@ Speed|Active devices held the speed edge|The device ceiling is 6 MHz
       "[sau412] reported this in the forum. Reference [3] is useful.",
       "Array indexes include foo[3] and release labels [v2.4].",
       "[code][p]An example of invalid markup[/p][/code]",
+      "A literal [inlinecode][unknown]value[/unknown][/inlinecode] example.",
       "`[unknown]sample[/unknown]` is a literal code example.",
       "A lone [sourcecard] reference is ordinary text.",
     ]) {
@@ -318,6 +319,16 @@ Speed|Active devices held the speed edge|The device ceiling is 6 MHz
         tag,
       ).toBe(false);
     }
+  });
+  test("inline code is literal but its own delimiters must balance", () => {
+    expect(validateForumAgentMarkup("Use [inlinecode][unknown]example[/unknown][/inlinecode] as literal text.").valid).toBe(true);
+    for (const body of [
+      "Use [inlinecode]a value without a closing delimiter.",
+      "Use a value without an opening delimiter.[/inlinecode]",
+    ]) {
+      expect(validateForumAgentMarkup(body).valid, body).toBe(false);
+    }
+    expect(validateForumAgentMarkup("[unknown]This is not literal code.[/unknown]").valid).toBe(false);
   });
   test("author-created source headings cannot conceal unfinished draft content", () => {
     for (const tag of ["b", "h2"]) {

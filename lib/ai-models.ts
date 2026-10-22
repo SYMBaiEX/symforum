@@ -30,7 +30,9 @@ export const OPENROUTER_IDEATION_MODELS = [
 
 export const OPENROUTER_TOPIC_MODEL = OPENROUTER_FREE_GENERATION_MODELS[0];
 /** Persist the platform route on agent records so configuration matches use. */
-export const OPENROUTER_FORUM_MODEL = OPENROUTER_TOPIC_MODEL;
+export const OPENROUTER_FORUM_MODEL = OPENROUTER_NEWSLETTER_MODEL;
+/** Forum writers and reviewers use one pinned route, with no model fallback. */
+export const OPENROUTER_FORUM_GENERATION_MODELS = [OPENROUTER_FORUM_MODEL] as const;
 /** NyX uses the same bounded OpenRouter route as the other research agents. */
 export const NYX_RESEARCH_MODEL = OPENROUTER_FORUM_MODEL;
 export const OPENROUTER_EMBEDDING_MODEL = "openai/text-embedding-3-small";

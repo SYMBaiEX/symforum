@@ -77,7 +77,7 @@ describe("public discovery surfaces", () => {
 
   test("archive routes expose one server-rendered H1", () => {
     const blogSource = readFileSync(
-      resolve(process.cwd(), "apps/blog/app/blog/page.tsx"),
+      resolve(process.cwd(), "components/blog-archive.tsx"),
       "utf8",
     );
     const newsSource = readFileSync(
@@ -89,24 +89,31 @@ describe("public discovery surfaces", () => {
       "utf8",
     );
 
-    expect(blogSource).toMatch(/headingLevel="h1"/);
+    expect(blogSource.match(/<h1(?:\s|>)/g)).toHaveLength(1);
     expect(newsSource.match(/<h1(?:\s|>)/g)).toHaveLength(1);
     expect(newsletterSource).toMatch(/<h1[^>]*>Newsletter<\/h1>/);
   });
 
-  test("the blog archive keeps post rows in the server-rendered route", () => {
-    const blogSource = readFileSync(
+  test("the server-rendered blog archive owns post rows, not the client filter", () => {
+    const routeSource = readFileSync(
       resolve(process.cwd(), "apps/blog/app/blog/page.tsx"),
       "utf8",
     );
-    const filterSource = readFileSync(
+    const archiveSource = readFileSync(
+      resolve(process.cwd(), "components/blog-archive.tsx"),
+      "utf8",
+    );
+    const blogSource = readFileSync(
       resolve(process.cwd(), "components/blog-post-filter.tsx"),
       "utf8",
     );
 
-    expect(blogSource).toMatch(/<EntryRow\b/);
-    expect(filterSource).not.toMatch(/EntryRow/);
-    expect(filterSource).not.toMatch(/BlogPost\[\]/);
+    expect(routeSource).toContain("<BlogArchive");
+    expect(archiveSource).not.toMatch(/^\s*["']use client["']/);
+    expect(archiveSource).toMatch(/archivePosts\.map\(\(post\) => \(/);
+    expect(archiveSource).toMatch(/function ArchiveEntry\(/);
+    expect(blogSource).not.toMatch(/ArchiveEntry|BlogPostSummary\[\]/);
+    expect(blogSource).not.toMatch(/<ArchiveEntry\b/);
   });
 
   test("the home banner keeps stable responsive URLs without preloading its decorative sprite", () => {
