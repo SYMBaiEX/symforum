@@ -620,6 +620,7 @@ describe("forum notification preferences", () => {
     "thread hidden",
     "board restricted",
     "thread moved to restricted board",
+    "approved thread stays visible",
   ] as const)(
     "deferred approval notifications recheck visibility when %s",
     async (change) => {
@@ -640,13 +641,24 @@ describe("forum notification preferences", () => {
             updatedAt: Date.now(),
           });
         });
-        const pending = await t
-          .withIdentity({ subject: seed.untrustedUserId })
-          .mutation(api.forum.createThread, {
+        const pendingCreatedAt = Date.now();
+        const pendingThreadId = await t.run((ctx) =>
+          insertThread(ctx, {
+            categoryId: seed.publicCategoryId,
             categorySlug: "public-square",
+            slug: "delayed-visibility",
             title: "Delayed visibility",
             body: "@trustedauthor this content needs moderation.",
-          });
+            authorId: seed.untrustedUserId,
+            now: pendingCreatedAt,
+            status: "pending",
+            replyCount: 0,
+          }),
+        );
+        const pending = {
+          threadId: pendingThreadId,
+          createdAt: pendingCreatedAt,
+        };
         await asOwner.mutation(api.forum.updateForumThreadModeration, {
           threadId: pending.threadId,
           status: "active",
@@ -666,7 +678,7 @@ describe("forum notification preferences", () => {
               viewAccess: "staff",
             });
           });
-        } else
+        } else if (change === "board restricted")
           await t.run(async (ctx) => {
             await ctx.db.patch("forumCategories", seed.publicCategoryId, {
               viewAccess: "staff",
@@ -678,9 +690,19 @@ describe("forum notification preferences", () => {
           threadId: pending.threadId,
           now: pending.createdAt,
         });
-        expect(
-          await t.run((ctx) => ctx.db.query("forumNotifications").collect()),
-        ).toEqual([]);
+        const notifications = await t.run((ctx) =>
+          ctx.db.query("forumNotifications").collect(),
+        );
+        if (change === "approved thread stays visible") {
+          expect(notifications).toHaveLength(1);
+          expect(notifications[0]).toMatchObject({
+            recipientUserId: seed.trustedUserId,
+            type: "mention",
+            threadId: pending.threadId,
+          });
+        } else {
+          expect(notifications).toEqual([]);
+        }
       } finally {
         vi.useRealTimers();
       }

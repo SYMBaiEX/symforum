@@ -1,10 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
-
-vi.mock("next/navigation", () => ({
-  notFound: () => {
-    throw new Error("NEXT_HTTP_ERROR_FALLBACK;404");
-  },
-}));
+import { describe, expect, test } from "vitest";
 
 import { GET, HEAD } from "./route";
 
@@ -26,15 +20,24 @@ describe("unmatched route response negotiation", () => {
     expect(body).toContain("https://www.symbaiex.com/sitemap.xml");
   });
 
-  test("keeps HTML and refused Markdown requests on Next's branded 404", () => {
+  test("returns a branded, non-indexable HTML 404 when Markdown is not accepted", async () => {
     for (const accept of ["text/html", "text/markdown;q=0, text/html"]) {
-      expect(() =>
-        GET(
-          new Request("https://www.symbaiex.com/__ora-404-probe", {
-            headers: { accept },
-          }),
-        ),
-      ).toThrow("NEXT_HTTP_ERROR_FALLBACK;404");
+      const response = GET(
+        new Request("https://www.symbaiex.com/__ora-404-probe", {
+          headers: { accept },
+        }),
+      );
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get("content-type")).toContain("text/html");
+      expect(response.headers.get("x-robots-tag")).toContain("noindex");
+      const body = await response.text();
+      expect(body).toContain("Page not found | SYMBaiEX");
+      expect(body).toContain('href="/blog"');
+      expect(body).toContain('href="/news"');
+      expect(body).toContain('href="/developers"');
+      expect(body).toContain('href="/llms.txt"');
+      expect(body).toContain('href="/sitemap.xml"');
     }
   });
 

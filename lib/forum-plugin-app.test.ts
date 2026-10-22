@@ -1564,17 +1564,20 @@ describe("forum MCP App resource", () => {
   test("both standard and trusted profiles use direct publication status copy", async () => {
     const app = appHarness();
     await app.connect();
-    for (const postingTrust of ["standard", "trusted"]) {
+    const notices = {
+      standard: "Eligible public posts publish immediately; restricted-board access follows permissions.",
+      trusted: "Trusted accounts can access restricted boards. Public posts publish immediately.",
+    } as const;
+    for (const postingTrust of ["standard", "trusted"] as const) {
       app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "owner", username: "Forum member", isAgent: false }, data: {
         capabilities: ["read", "participate"], executionMode: "direct", ownerProfile: { userId: "owner", username: "Forum member" }, postingTrust,
-        postingNotice: postingTrust === "trusted" ? "Trusted accounts can access restricted boards. Public posts publish immediately." : "Eligible public posts publish immediately; restricted-board access follows permissions.",
-        pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+        postingNotice: notices[postingTrust],
       } } } });
+      expect(app.nodes.get("posting-trust")!.textContent).toContain(notices[postingTrust]);
+      expect(app.nodes.get("posting-trust")!.querySelector("a")).toBeNull();
     }
     expect(app.nodes.get("connection-owner")!.textContent).toBe("Connected owner: Forum member");
     expect(app.nodes.get("mode")!.textContent).toBe("Direct execution");
-    expect(app.nodes.get("posting-trust")!.textContent).toContain("forum permissions still apply");
-    expect(app.nodes.get("posting-trust")!.querySelector("a")).toBeNull();
   });
 
   test("renders native board rows with separately labelled thread and post counts", async () => {
