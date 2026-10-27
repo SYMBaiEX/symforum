@@ -13,6 +13,8 @@ import { telegramWorkflow } from "./telegramAgentWorkflow";
 import { telegramRequestKind } from "./telegramAgentSchema";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 import type { MenuAgent } from "../lib/telegram-community";
+import { validYap } from "./telegramYappers";
+import { YAPPERS_FOLLOWUP_DELAY_MS } from "../lib/telegram-yappers";
 
 function specialty(slug: string) {
   return (
@@ -77,6 +79,7 @@ export const accept = internalMutation({
     if (
       env.TELEGRAM_AGENTS_ENABLED !== "true" ||
       env.ELIZA_RUNTIME_MODE !== "live" ||
+      args.kind === "yap" ||
       !bot ||
       bot.id !== args.botId ||
       !Number.isSafeInteger(args.updateId) ||
@@ -213,6 +216,7 @@ export const claim = internalMutation({
       env.ELIZA_RUNTIME_MODE !== "live"
     )
       return false;
+    if (row.kind === "yap" && !validYap(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "generating",
       updatedAt: Date.now(),
@@ -261,16 +265,15 @@ export const context = internalQuery({
           });
       }
     }
-    const posts =
-      request.kind === "ask"
-        ? await ctx.db
-            .query("forumThreads")
-            .withIndex("by_authorId_and_status_and_createdAt", (q) =>
-              q.eq("authorId", agent.userId).eq("status", "active"),
-            )
-            .order("desc")
-            .take(3)
-        : [];
+    const posts = ["ask", "yap"].includes(request.kind)
+      ? await ctx.db
+          .query("forumThreads")
+          .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+            q.eq("authorId", agent.userId).eq("status", "active"),
+          )
+          .order("desc")
+          .take(3)
+      : [];
     // Existing visibility gate rechecks private ancestors and moderation state.
     const visible: Array<{
       threadId: Id<"forumThreads">;
@@ -311,7 +314,7 @@ export const ready = internalMutation({
       !row ||
       row.status !== "generating" ||
       !args.text.trim() ||
-      args.text.length > 3000
+      args.text.length > (row.kind === "yap" ? 1200 : 3000)
     )
       return false;
     if (row.kind === "ask")
@@ -351,6 +354,7 @@ export const claimDelivery = internalMutation({
       env.TELEGRAM_AGENTS_ENABLED !== "true"
     )
       return false;
+    if (row.kind === "yap" && !validYap(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "sending",
       updatedAt: Date.now(),
@@ -369,11 +373,34 @@ export const finish = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("telegramAgentRequests", args.requestId);
     if (!row || row.status === "sent" || row.status === "held") return null;
+    const sent = args.messageId !== undefined && row.status === "sending";
+    // Only confirmed autonomous posts enter the shared public-round context.
+    // Human conversations continue to use their isolated member threads.
+    if (sent && row.kind === "yap" && row.reply) {
+      const agent = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", row.agentSlug))
+        .unique();
+      await saveMessages(ctx, components.agent, {
+        threadId: row.conversationId,
+        agentName: agent?.name ?? row.agentSlug,
+        messages: [
+          { role: "user", content: row.prompt ?? "" },
+          {
+            role: "assistant",
+            content: `${agent?.name ?? row.agentSlug}: ${row.reply}`,
+          },
+        ],
+      });
+      if (row.yapTurn === 0)
+        await ctx.scheduler.runAfter(
+          YAPPERS_FOLLOWUP_DELAY_MS,
+          internal.telegramYappers.followup,
+          { requestId: row._id },
+        );
+    }
     await ctx.db.patch("telegramAgentRequests", row._id, {
-      status:
-        args.messageId !== undefined && row.status === "sending"
-          ? "sent"
-          : "held",
+      status: sent ? "sent" : "held",
       sentMessageId: args.messageId,
       reason: args.reason?.slice(0, 80),
       prompt: undefined,

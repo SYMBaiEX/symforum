@@ -36,6 +36,8 @@ const app = defineApp({
     TELEGRAM_AGENT_BOTS: v.optional(v.string()),
     TELEGRAM_DIGEST_ENABLED: v.optional(v.string()),
     TELEGRAM_DIGEST_TOPIC_ID: v.optional(v.string()),
+    TELEGRAM_YAPPERS_ENABLED: v.optional(v.string()),
+    TELEGRAM_YAPPERS_TOPIC_ID: v.optional(v.string()),
     // Semantic retrieval is intentionally opt-in. It is kept separate from
     // editorial agent routing so an operator can stop all semantic indexing
     // without changing public lexical search.

@@ -6,6 +6,7 @@ export const telegramRequestKind = v.union(
   v.literal("help"),
   v.literal("menu"),
   v.literal("prompt"),
+  v.literal("yap"),
 );
 
 export const telegramAgentTables = {
@@ -49,6 +50,9 @@ export const telegramAgentTables = {
     conversationId: v.string(),
     kind: telegramRequestKind,
     sourceAgentSlug: v.optional(v.string()),
+    yapDay: v.optional(v.string()),
+    yapRound: v.optional(v.number()),
+    yapTurn: v.optional(v.number()),
     prompt: v.optional(v.string()),
     reply: v.optional(v.string()),
     status: v.union(
@@ -65,5 +69,6 @@ export const telegramAgentTables = {
     updatedAt: v.number(),
   })
     .index("by_key", ["key"])
+    .index("by_kind_and_createdAt", ["kind", "createdAt"])
     .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"]),
 };

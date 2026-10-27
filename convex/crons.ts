@@ -3,6 +3,13 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+// Local-time admission follows Chicago daylight saving; only two rounds/day.
+crons.cron(
+  "bounded Forum Telegram Yappers",
+  "10 16,17,22,23 * * *",
+  internal.telegramYappers.start,
+  {},
+);
 // Chicago noon is 17:00 UTC in summer and 18:00 UTC in winter. Admission is
 // gated by the local time and a durable weekly delivery key.
 crons.cron(

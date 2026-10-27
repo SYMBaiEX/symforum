@@ -76,6 +76,8 @@ type Env = {
   readonly TELEGRAM_AGENT_BOTS: string | undefined;
   readonly TELEGRAM_DIGEST_ENABLED: string | undefined;
   readonly TELEGRAM_DIGEST_TOPIC_ID: string | undefined;
+  readonly TELEGRAM_YAPPERS_ENABLED: string | undefined;
+  readonly TELEGRAM_YAPPERS_TOPIC_ID: string | undefined;
   readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
   readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
   readonly WEB_VITALS_SLO_ENABLED: string | undefined;
