@@ -19,8 +19,10 @@ import {
   yapFollowupDelay,
   yapPrompt,
   yapSlot,
+  researchPrompt,
 } from "../lib/telegram-yappers";
 import { telegramWorkflow } from "./telegramAgentWorkflow";
+import { selectResearchTopic, requestResearch } from "./telegramYapResearch";
 
 const cadence = new RateLimiter(components.rateLimiter, {
   yappersRounds: {
@@ -49,15 +51,17 @@ export function validYap(row: Doc<"telegramAgentRequests">, now: number) {
     !Number.isSafeInteger(row.yapRound) ||
     !Number.isInteger(row.yapTurn) ||
     row.yapTurn! < 0 ||
-    row.yapTurn! >= (row.yapVersion === 3 ? YAPPERS_MAX_TURNS : 2) ||
+    row.yapTurn! >=
+      ([3, 4].includes(row.yapVersion ?? 0) ? YAPPERS_MAX_TURNS : 2) ||
     now < row.createdAt ||
     now - row.createdAt >= 8 * 60_000
   )
     return false;
-  if (row.yapVersion === 3) {
+  if (row.yapVersion === 3 || row.yapVersion === 4) {
     return (
       row.yapRound! >= 0 &&
-      row.key === `yap3:${row.yapRound}:${row.yapTurn}` &&
+      row.key === `yap${row.yapVersion}:${row.yapRound}:${row.yapTurn}` &&
+      (row.yapVersion !== 4 || !!row.yapResearchTopicId) &&
       row.yapRoundStartedAt !== undefined &&
       row.createdAt >= row.yapRoundStartedAt &&
       now - row.yapRoundStartedAt < YAPPERS_ROUND_WINDOW_MS &&
@@ -90,12 +94,12 @@ async function enqueue(
 ) {
   if (!yappersEnabled()) return null;
   const now = Date.now();
-  const version = parent?.yapVersion ?? 3;
+  const version = parent?.yapVersion ?? 4;
   const turn = parent ? parent.yapTurn! + 1 : 0;
   const startedAt =
-    version === 3 ? (parent?.yapRoundStartedAt ?? now) : undefined;
+    version >= 3 ? (parent?.yapRoundStartedAt ?? now) : undefined;
   if (
-    version === 3 &&
+    version >= 3 &&
     (turn >= YAPPERS_MAX_TURNS || now - startedAt! >= YAPPERS_ROUND_WINDOW_MS)
   )
     return null;
@@ -124,6 +128,13 @@ async function enqueue(
     !(await cadence.limit(ctx, "yappersRounds", { key: "community:296" })).ok
   )
     return null;
+  const research =
+    version === 4
+      ? parent
+        ? await requestResearch(ctx, parent)
+        : await selectResearchTopic(ctx, round)
+      : null;
+  if (version === 4 && !research) return null;
   const rotation = round;
   // Prefer the speaker from two turns ago: a real A/B/A/B exchange.
   const earlier =
@@ -138,9 +149,33 @@ async function enqueue(
     earlier.conversationId === parent?.conversationId
       ? agents.find((a) => a.slug === earlier.agentSlug)
       : undefined;
-  const agent = returning ?? agents[rotation % agents.length];
+  const prior =
+    version === 4 && parent
+      ? await Promise.all(
+          Array.from({ length: turn }, (_, n) =>
+            ctx.db
+              .query("telegramAgentRequests")
+              .withIndex("by_key", (q) => q.eq("key", `yap4:${round}:${n}`))
+              .unique(),
+          ),
+        )
+      : [];
+  const used = new Set(
+    prior.filter((r) => r?.status === "sent").map((r) => r!.agentSlug),
+  );
+  const freshSpeakers = agents.filter((a) => !used.has(a.slug));
+  const preferred =
+    version === 4
+      ? turn === 3
+        ? agents.find((a) => a.slug === prior[0]?.agentSlug)
+        : turn === 0
+          ? agents.find((a) => a.slug === research?.source.authorAgentSlug)
+          : freshSpeakers[rotation % Math.max(1, freshSpeakers.length)]
+      : returning;
+  const agent = preferred ?? agents[rotation % agents.length];
   const bot = registry.get(agent.slug)!;
   const conversationId =
+    research?.topic.conversationId ??
     parent?.conversationId ??
     (await createThread(ctx, components.agent, {
       title: `Yappers ${day} round ${round + 1}`,
@@ -157,16 +192,38 @@ async function enqueue(
     senderId: "autonomous-yappers",
     conversationId,
     kind: "yap",
-    yapVersion: version as 2 | 3,
+    yapVersion: version as 2 | 3 | 4,
     ...(startedAt !== undefined ? { yapRoundStartedAt: startedAt } : {}),
+    ...(research
+      ? {
+          yapResearchTopicId: research.topic._id,
+          yapPreviousMessageId:
+            parent?.sentMessageId ?? research.topic.lastMessageId,
+          yapPreviousAgentSlug: parent?.agentSlug,
+          yapRevisit:
+            parent?.yapRevisit ??
+            ("revisit" in research && research.revisit === true),
+        }
+      : {}),
     yapDay: day,
     yapRound: round,
     yapTurn: turn,
-    prompt: yapPrompt(day, round, turn, version === 3 ? YAPPERS_MAX_TURNS : 2),
+    prompt: research
+      ? researchPrompt(
+          research.source.title,
+          turn,
+          parent?.yapRevisit ??
+            ("revisit" in research && research.revisit === true),
+        )
+      : yapPrompt(day, round, turn, version === 3 ? YAPPERS_MAX_TURNS : 2),
     status: "queued",
     createdAt: now,
     updatedAt: now,
   });
+  if (research && !parent)
+    await ctx.db.patch("telegramYapResearchTopics", research.topic._id, {
+      lastStartedAt: now,
+    });
   await telegramWorkflow.start(ctx, internal.telegramAgentWorkflow.reply, {
     requestId,
   });
@@ -194,6 +251,7 @@ export const followup = internalMutation({
     const delay = row ? yapFollowupDelay(row) : null;
     if (
       !row ||
+      row.yapVersion === 3 || // Owner replaced generic v3 chats; do not extend them.
       row.kind !== "yap" ||
       row.status !== "sent" ||
       !row.yapDay ||
@@ -202,19 +260,20 @@ export const followup = internalMutation({
       row.key !== `yap${row.yapVersion}:${row.yapRound}:${row.yapTurn}` ||
       Date.now() - row.updatedAt < delay ||
       Date.now() - row.updatedAt >
-        delay + (row.yapVersion === 3 ? 3 : 5) * 60_000
+        delay + ((row.yapVersion ?? 0) >= 3 ? 3 : 5) * 60_000
     )
       return null;
-    if (row.yapVersion === 3) {
+    if (row.yapVersion === 4) {
       const opener = await ctx.db
         .query("telegramAgentRequests")
-        .withIndex("by_key", (q) => q.eq("key", `yap3:${row.yapRound}:0`))
+        .withIndex("by_key", (q) => q.eq("key", `yap4:${row.yapRound}:0`))
         .unique();
       if (
         !opener ||
         opener.status !== "sent" ||
         opener.conversationId !== row.conversationId ||
         opener.yapRoundStartedAt !== row.yapRoundStartedAt ||
+        opener.yapResearchTopicId !== row.yapResearchTopicId ||
         row.yapRoundStartedAt === undefined ||
         Date.now() - row.yapRoundStartedAt >= YAPPERS_ROUND_WINDOW_MS
       )

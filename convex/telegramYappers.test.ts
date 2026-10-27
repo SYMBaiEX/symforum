@@ -14,6 +14,8 @@ import {
   legacyYapSlot,
   YAPPERS_INTERVAL_MS,
   YAPPERS_FOLLOWUP_DELAY_MS,
+  researchTag,
+  researchMessage,
 } from "../lib/telegram-yappers";
 const modules = import.meta.glob("./**/*.ts");
 
@@ -38,6 +40,10 @@ beforeEach(() => {
         token: `123456789:${"a".repeat(35)}`,
         username: "symbaiex_suki_bot",
       },
+      belle: {
+        token: `555555555:${"c".repeat(35)}`,
+        username: "symbaiex_belle_bot",
+      },
       nyx: {
         token: `987654321:${"b".repeat(35)}`,
         username: "symbaiex_nyx_bot",
@@ -57,7 +63,7 @@ async function setup() {
   workflowTest.register(t);
   registerLimiter(t);
   await t.run(async (ctx) => {
-    for (const slug of ["suki", "nyx"]) {
+    for (const slug of ["suki", "nyx", "belle"]) {
       const userId = await ctx.db.insert("users", {
         name: slug,
         isAgent: true,
@@ -72,6 +78,46 @@ async function setup() {
         enabled: true,
         dailyPostTarget: 1,
         createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+    const author = (await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "nyx"))
+      .unique())!;
+    for (const [n, categorySlug] of [
+      "research",
+      "ai-models",
+      "projects",
+      "gaming",
+    ].entries()) {
+      const categoryId = await ctx.db.insert("forumCategories", {
+        slug: categorySlug,
+        name: categorySlug,
+        description: "",
+        status: "active",
+        viewAccess: "public",
+        position: n,
+        threadCount: 1,
+        postCount: 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await ctx.db.insert("forumThreads", {
+        categoryId,
+        categorySlug,
+        slug: `memory-provenance-${n}`,
+        title: `Agent memory provenance and retrieval ${n}`,
+        body: "A local retrieval cache retained passages after source visibility changed. The author proposes rechecking access at retrieval; no benchmark results are provided.",
+        authorId: author.userId,
+        lastPostUserId: author.userId,
+        status: "active",
+        pinned: false,
+        replyCount: 0,
+        viewCount: 1,
+        searchText: "memory provenance",
+        lastPostAt: Date.now() - n,
+        createdAt: Date.now() - n,
         updatedAt: Date.now(),
       });
     }
@@ -90,7 +136,7 @@ function transport(timeout = false) {
         return Response.json({
           ok: true,
           result: {
-            url: `https://strong-bee-384.convex.site/telegram/agents/${url.includes("123456789") ? "suki" : "nyx"}`,
+            url: `https://strong-bee-384.convex.site/telegram/agents/${url.includes("123456789") ? "suki" : url.includes("555555555") ? "belle" : "nyx"}`,
           },
         });
       if (url.endsWith("getChatMember"))
@@ -99,7 +145,11 @@ function transport(timeout = false) {
         return Response.json({
           ok: true,
           result: {
-            id: url.includes("123456789") ? 123456789 : 987654321,
+            id: url.includes("123456789")
+              ? 123456789
+              : url.includes("555555555")
+                ? 555555555
+                : 987654321,
             can_join_groups: true,
             can_read_all_group_messages: false,
           },
@@ -122,9 +172,11 @@ function transport(timeout = false) {
         const output = e.stage.endsWith("evidence-review")
           ? { approved: true, issues: [] }
           : {
-              text: sends.length
-                ? "A minimal reproduction makes that easier to verify."
-                : "A useful bug report includes the expected result. What helps you reproduce a bug?",
+              text: !JSON.stringify(e.body).includes(
+                "Open with ONE specific research question",
+              )
+                ? "Retrieval-time access checks only cover newly fetched passages, not material already in the prompt. Tagging cached passages with source versions would let us test whether revoked text is removed before generation."
+                : "Does rechecking source access at retrieval prevent an agent quoting revoked passages already in conversation history? The Forum proposal covers retrieval, but its cache invalidation boundary remains untested.",
             };
         return Response.json({
           version: 2,
@@ -171,6 +223,24 @@ test("half-hour slots run all night and survive Chicago DST repeats", () => {
   expect(after.day).toBe(before.day);
   expect(after.round).toBe(before.round + 2);
   expect(legacyYapSlot(start)?.round).toBe(0);
+});
+
+test("stable research tags and backlinks cannot inject arbitrary handles or formatting", () => {
+  const tag = researchTag(
+    "<script> AI memory / benchmarks? @everyone",
+    "some-id-12345",
+  );
+  expect(tag).toMatch(/^#[A-Za-z0-9_]+_12345$/);
+  const body = researchMessage("Could we isolate cache invalidation?", {
+    tag,
+    sourceUrl: "https://forum.symbaiex.com/research/memory",
+    turn: 0,
+    revisit: true,
+    previousMessageId: 410,
+  });
+  expect(body).toContain(tag);
+  expect(body).toContain("/296/410");
+  expect(body).not.toContain("@everyone");
 });
 
 test("four short turns alternate speakers, share confirmed context and stop without a fifth reply", async () => {
@@ -222,15 +292,15 @@ test("four short turns alternate speakers, share confirmed context and stop with
       ),
   );
   expect(rows.map((r) => r?.status)).toEqual(["sent", "sent", "sent", "sent"]);
-  expect(rows[0]?.agentSlug).toBe(rows[2]?.agentSlug);
-  expect(rows[1]?.agentSlug).toBe(rows[3]?.agentSlug);
+  expect(new Set(rows.slice(0, 3).map((r) => r?.agentSlug)).size).toBe(3);
+  expect(rows[0]?.agentSlug).toBe(rows[3]?.agentSlug);
   expect(rows[0]?.agentSlug).not.toBe(rows[1]?.agentSlug);
   expect(new Set(rows.map((r) => r?.conversationId)).size).toBe(1);
   expect(sends).toHaveLength(4);
   expect(envelopes).toHaveLength(8);
   expect(JSON.stringify(envelopes[3])).toContain("confirmedPublicRound");
   expect(JSON.stringify(envelopes[3])).toContain(
-    "A useful bug report includes the expected result",
+    "Does rechecking source access at retrieval",
   );
   expect(JSON.stringify(envelopes[6])).toContain("final turn");
   expect(JSON.stringify(envelopes)).not.toContain("PRIVATE_");
@@ -436,4 +506,165 @@ test("an in-flight v2 round keeps its original single 20-minute follow-up", asyn
     await t.mutation(internal.telegramYappers.followup, { requestId: child }),
   ).toBeNull();
   expect(sends).toHaveLength(2);
+});
+
+test("superseded generic v3 conversations cannot schedule another reply", async () => {
+  const t = await setup();
+  const id = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.run(async (ctx) => {
+    const row = (await ctx.db.get("telegramAgentRequests", id))!;
+    await ctx.db.patch("telegramAgentRequests", id, {
+      key: `yap3:${row.yapRound}:0`,
+      yapVersion: 3,
+      status: "sent",
+      sentMessageId: 410,
+    });
+  });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: id }),
+  ).toBeNull();
+});
+
+test("research topics rotate and revisits reuse only confirmed topic history with stable tags and a backlink", async () => {
+  const t = await setup();
+  const { envelopes, sends } = transport();
+  const started = Date.now();
+  const first = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: first });
+  const a = (await t.run((ctx) => ctx.db.get("telegramAgentRequests", first)))!;
+  expect(a.yapVersion).toBe(4);
+  expect(a.yapRevisit).toBe(false);
+  vi.setSystemTime(started + YAPPERS_INTERVAL_MS + 1);
+  const second = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: second });
+  const b = (await t.run((ctx) =>
+    ctx.db.get("telegramAgentRequests", second),
+  ))!;
+  expect(b.yapResearchTopicId).not.toBe(a.yapResearchTopicId);
+  expect(b.conversationId).not.toBe(a.conversationId);
+  let later = started + 3 * 60 * 60_000;
+  while (yapSlot(later).round % 3 !== 2) later += YAPPERS_INTERVAL_MS;
+  vi.setSystemTime(later);
+  const resumed = (await t.mutation(internal.telegramYappers.start, {}))!;
+  const c = (await t.run((ctx) =>
+    ctx.db.get("telegramAgentRequests", resumed),
+  ))!;
+  expect(c.yapResearchTopicId).toBe(a.yapResearchTopicId);
+  expect(c.conversationId).toBe(a.conversationId);
+  expect(c.yapRevisit).toBe(true);
+  expect(c.yapPreviousMessageId).toBe(101);
+  await t.action(internal.telegramAgentReply.respond, { requestId: resumed });
+  expect(sends).toHaveLength(3);
+  expect(String(sends[2].text).split("\n")[0]).toBe(
+    String(sends[0].text).split("\n")[0],
+  );
+  expect(sends[2].text).toContain(
+    "Earlier discussion: https://t.me/c/4387387301/296/101",
+  );
+  expect(JSON.stringify(envelopes[4])).toContain(
+    "Does rechecking source access",
+  );
+  expect(JSON.stringify(envelopes[4])).toContain("unresolved point");
+});
+
+test("revoking a research source's public ancestor blocks generation and delivery", async () => {
+  const t = await setup();
+  const { envelopes, sends } = transport();
+  const id = (await t.mutation(internal.telegramYappers.start, {}))!;
+  const categoryId = await t.run(async (ctx) => {
+    const row = (await ctx.db.get("telegramAgentRequests", id))!;
+    const topic = (await ctx.db.get(
+      "telegramYapResearchTopics",
+      row.yapResearchTopicId!,
+    ))!;
+    const thread = (await ctx.db.get("forumThreads", topic.sourceThreadId))!;
+    const parentId = await ctx.db.insert("forumCategories", {
+      slug: "private-research",
+      name: "Private",
+      description: "",
+      status: "active",
+      viewAccess: "staff",
+      position: 20,
+      threadCount: 0,
+      postCount: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch("forumCategories", thread.categoryId, {
+      parentCategoryId: parentId,
+    });
+    return thread.categoryId;
+  });
+  await t.action(internal.telegramAgentReply.respond, { requestId: id });
+  expect(envelopes).toHaveLength(0);
+  expect(sends).toHaveLength(0);
+  await t.run((ctx) =>
+    ctx.db.patch("forumCategories", categoryId, {
+      parentCategoryId: undefined,
+    }),
+  );
+  expect(
+    await t.mutation(internal.telegramAgents.claim, { requestId: id }),
+  ).toBe(true);
+  await t.mutation(internal.telegramAgents.ready, {
+    requestId: id,
+    text: "Could provenance invalidation cover existing history?",
+    name: "nyx",
+  });
+  await t.run((ctx) =>
+    ctx.db.patch("forumCategories", categoryId, { viewAccess: "staff" }),
+  );
+  expect(
+    await t.mutation(internal.telegramAgents.claimDelivery, { requestId: id }),
+  ).toBe(false);
+  expect(sends).toHaveLength(0);
+});
+
+test("research review receives the shared source and actual debate, with participant mentions added after approval", async () => {
+  const t = await setup();
+  const { envelopes, sends } = transport();
+  const first = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: first });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  const next = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: first,
+  }))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: next });
+  expect(sends).toHaveLength(2);
+  expect(String(sends[0].text)).toMatch(/^#Research #[A-Za-z0-9_]+/);
+  expect(sends[0].text).toContain("Forum source: https://forum.symbaiex.com/");
+  expect(sends[1].text).toContain("@symbaiex_nyx_bot");
+  expect(JSON.stringify(envelopes[2])).toContain(
+    "no benchmark results are provided",
+  );
+  expect(JSON.stringify(envelopes[3])).toContain(
+    "reject generic builder/productivity advice",
+  );
+  expect(JSON.stringify(envelopes[3])).toContain("confirmedPublicRound");
+});
+
+test("no eligible public source creates no filler, and failed sends cannot seed recalled research", async () => {
+  const t = await setup();
+  const { sends } = transport(true);
+  const id = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: id });
+  const topic = await t.run(async (ctx) => {
+    const row = (await ctx.db.get("telegramAgentRequests", id))!;
+    return await ctx.db.get(
+      "telegramYapResearchTopics",
+      row.yapResearchTopicId!,
+    );
+  });
+  expect(topic?.lastConfirmedAt).toBe(0);
+  expect(topic?.lastMessageId).toBeUndefined();
+  await t.run(async (ctx) => {
+    for (const category of await ctx.db.query("forumCategories").take(10))
+      await ctx.db.patch("forumCategories", category._id, {
+        viewAccess: "staff",
+      });
+  });
+  vi.setSystemTime(Date.now() + 3 * 60 * 60_000);
+  expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
+  expect(sends).toHaveLength(1);
 });

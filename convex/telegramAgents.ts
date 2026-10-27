@@ -16,6 +16,7 @@ import type { MenuAgent } from "../lib/telegram-community";
 import { validMeme } from "./telegramMemes";
 import { validYap } from "./telegramYappers";
 import { yapFollowupDelay } from "../lib/telegram-yappers";
+import { requestResearch } from "./telegramYapResearch";
 
 function specialty(slug: string) {
   return (
@@ -204,6 +205,13 @@ type TelegramContext = {
   sources: Array<{ title: string; url: string; text: string }>;
   specialty: string;
   menuAgents: MenuAgent[];
+  research: null | {
+    tag: string;
+    sourceUrl: string;
+    previousUsername?: string;
+    previousMessageId?: number;
+    revisit: boolean;
+  };
 };
 export const claim = internalMutation({
   args: requestIdArgs,
@@ -218,6 +226,8 @@ export const claim = internalMutation({
     )
       return false;
     if (row.kind === "yap" && !validYap(row, Date.now())) return false;
+    if (row.yapVersion === 4 && !(await requestResearch(ctx, row)))
+      return false;
     if (row.kind === "meme" && !validMeme(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "generating",
@@ -236,6 +246,16 @@ export const context = internalQuery({
       name: v.string(),
       persona: v.string(),
       specialty: v.string(),
+      research: v.union(
+        v.null(),
+        v.object({
+          tag: v.string(),
+          sourceUrl: v.string(),
+          previousUsername: v.optional(v.string()),
+          previousMessageId: v.optional(v.number()),
+          revisit: v.boolean(),
+        }),
+      ),
       menuAgents: v.array(
         v.object({ slug: v.string(), name: v.string(), specialty: v.string() }),
       ),
@@ -252,6 +272,9 @@ export const context = internalQuery({
       .withIndex("by_slug", (q) => q.eq("slug", request.agentSlug))
       .unique();
     if (!agent?.enabled) return null;
+    const research =
+      request.yapVersion === 4 ? await requestResearch(ctx, request) : null;
+    if (request.yapVersion === 4 && !research) return null;
     const menuAgents: MenuAgent[] = [];
     if (request.kind === "menu") {
       for (const slug of telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).keys()) {
@@ -267,15 +290,16 @@ export const context = internalQuery({
           });
       }
     }
-    const posts = ["ask", "yap"].includes(request.kind)
-      ? await ctx.db
-          .query("forumThreads")
-          .withIndex("by_authorId_and_status_and_createdAt", (q) =>
-            q.eq("authorId", agent.userId).eq("status", "active"),
-          )
-          .order("desc")
-          .take(3)
-      : [];
+    const posts =
+      !research && ["ask", "yap"].includes(request.kind)
+        ? await ctx.db
+            .query("forumThreads")
+            .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+              q.eq("authorId", agent.userId).eq("status", "active"),
+            )
+            .order("desc")
+            .take(3)
+        : [];
     // Existing visibility gate rechecks private ancestors and moderation state.
     const visible: Array<{
       threadId: Id<"forumThreads">;
@@ -292,17 +316,38 @@ export const context = internalQuery({
       specialty: specialty(request.agentSlug),
       menuAgents,
       persona: agent.persona.slice(0, 4000),
-      sources: visible.flatMap((p) =>
-        p
-          ? [
-              {
-                title: p.title.slice(0, 180),
-                url: `https://forum.symbaiex.com/${p.categorySlug}/${posts.find((t) => t._id === p.threadId)?.slug ?? ""}`,
-                text: p.body.slice(0, 2400),
-              },
-            ]
-          : [],
-      ),
+      research: research
+        ? {
+            tag: research.topic.tag,
+            sourceUrl: research.source.url,
+            previousUsername: request.yapPreviousAgentSlug
+              ? telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).get(
+                  request.yapPreviousAgentSlug,
+                )?.username
+              : undefined,
+            previousMessageId: request.yapPreviousMessageId,
+            revisit: request.yapRevisit === true,
+          }
+        : null,
+      sources: research
+        ? [
+            {
+              title: research.source.title,
+              url: research.source.url,
+              text: research.source.text,
+            },
+          ]
+        : visible.flatMap((p) =>
+            p
+              ? [
+                  {
+                    title: p.title.slice(0, 180),
+                    url: `https://forum.symbaiex.com/${p.categorySlug}/${posts.find((t) => t._id === p.threadId)?.slug ?? ""}`,
+                    text: p.body.slice(0, 2400),
+                  },
+                ]
+              : [],
+          ),
     };
   },
 });
@@ -317,7 +362,13 @@ export const ready = internalMutation({
       row.status !== "generating" ||
       !args.text.trim() ||
       args.text.length >
-        (row.kind === "yap" ? (row.yapVersion === 3 ? 800 : 1200) : 3000)
+        (row.kind === "yap"
+          ? row.yapVersion === 4
+            ? 1900
+            : row.yapVersion === 3
+              ? 800
+              : 1200
+          : 3000)
     )
       return false;
     if (row.kind === "ask")
@@ -358,6 +409,8 @@ export const claimDelivery = internalMutation({
     )
       return false;
     if (row.kind === "yap" && !validYap(row, Date.now())) return false;
+    if (row.yapVersion === 4 && !(await requestResearch(ctx, row)))
+      return false;
     if (row.kind === "meme" && !validMeme(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "sending",
@@ -403,6 +456,21 @@ export const finish = internalMutation({
           },
         ],
       });
+      if (row.yapVersion === 4 && row.yapResearchTopicId) {
+        const topic = await ctx.db.get(
+          "telegramYapResearchTopics",
+          row.yapResearchTopicId,
+        );
+        if (topic?.conversationId === row.conversationId)
+          await ctx.db.patch("telegramYapResearchTopics", topic._id, {
+            lastConfirmedAt: Date.now(),
+            hasConfirmed: true,
+            lastMessageId: args.messageId,
+            ...(row.yapTurn === 0
+              ? { lastOpenerMessageId: args.messageId }
+              : {}),
+          });
+      }
       const delay = yapFollowupDelay(row);
       if (delay !== null)
         await ctx.scheduler.runAfter(delay, internal.telegramYappers.followup, {

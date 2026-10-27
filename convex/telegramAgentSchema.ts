@@ -11,6 +11,24 @@ export const telegramRequestKind = v.union(
 );
 
 export const telegramAgentTables = {
+  // Research topic metadata only. Confirmed discussion lives in Agent threads.
+  telegramYapResearchTopics: defineTable({
+    sourceThreadId: v.id("forumThreads"),
+    conversationId: v.string(),
+    tag: v.string(),
+    createdAt: v.number(),
+    lastStartedAt: v.number(),
+    lastConfirmedAt: v.number(),
+    hasConfirmed: v.boolean(),
+    lastMessageId: v.optional(v.number()),
+    lastOpenerMessageId: v.optional(v.number()),
+  })
+    .index("by_sourceThreadId", ["sourceThreadId"])
+    .index("by_lastStartedAt", ["lastStartedAt"])
+    .index("by_hasConfirmed_and_lastStartedAt", [
+      "hasConfirmed",
+      "lastStartedAt",
+    ]),
   telegramMemeTemplates: defineTable({
     key: v.string(),
     name: v.string(),
@@ -111,7 +129,11 @@ export const telegramAgentTables = {
     memeFallbackReason: v.optional(v.string()),
     memeDeliveryAttempts: v.optional(v.number()),
     memeRetryAt: v.optional(v.number()),
-    yapVersion: v.optional(v.union(v.literal(2), v.literal(3))),
+    yapVersion: v.optional(v.union(v.literal(2), v.literal(3), v.literal(4))),
+    yapResearchTopicId: v.optional(v.id("telegramYapResearchTopics")),
+    yapPreviousMessageId: v.optional(v.number()),
+    yapPreviousAgentSlug: v.optional(v.string()),
+    yapRevisit: v.optional(v.boolean()),
     yapRoundStartedAt: v.optional(v.number()),
     yapDay: v.optional(v.string()),
     yapRound: v.optional(v.number()),
