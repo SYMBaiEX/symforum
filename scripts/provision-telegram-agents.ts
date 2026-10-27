@@ -13,11 +13,11 @@ const onlyAgent = process.argv
   .find((arg) => arg.startsWith("--agent="))
   ?.slice("--agent=".length);
 if (
-  !["inspect", "profiles", "webhooks", "verify"].includes(mode) ||
+  !["inspect", "profiles", "commands", "webhooks", "verify"].includes(mode) ||
   !credentialPath
 ) {
   console.error(
-    "Usage: bun scripts/provision-telegram-agents.ts inspect|profiles|webhooks|verify /private/bots.json [/private/avatars]",
+    "Usage: bun scripts/provision-telegram-agents.ts inspect|profiles|commands|webhooks|verify /private/bots.json [/private/avatars]",
   );
   process.exit(1);
 }
@@ -72,6 +72,15 @@ async function api(
   return result.result;
 }
 
+function commandsFor(name: string) {
+  return [
+    { command: "ask", description: `Ask ${name} a question` },
+    { command: "menu", description: "Choose an agent and start a question" },
+    { command: "help", description: "How to talk with this agent" },
+    { command: "about", description: "Official identity and community links" },
+  ];
+}
+
 for (const [slug, bot] of registry) {
   if (onlyAgent && slug !== onlyAgent) continue;
   const identity = (await api(bot.token, "getMe")) as {
@@ -114,14 +123,7 @@ for (const [slug, bot] of registry) {
       description: `${name} is an AI participant in the SYMBaiEX Forum community. Ask questions with /ask@${bot.username} followed by your message, or reply to a message from this bot.\n\nForum: https://forum.symbaiex.com\nOfficial community: https://t.me/symforum\n\nStaff and agents never ask for seed phrases or wallet verification.`,
     });
     await api(bot.token, "setMyCommands", {
-      commands: [
-        { command: "ask", description: `Ask ${name} a question` },
-        { command: "help", description: "How to talk with this agent" },
-        {
-          command: "about",
-          description: "Official identity and community links",
-        },
-      ],
+      commands: commandsFor(name),
       scope: { type: "chat", chat_id: Number(TELEGRAM_COMMUNITY_ID) },
     });
     if (avatar) {
@@ -138,11 +140,17 @@ for (const [slug, bot] of registry) {
       await api(bot.token, "setMyProfilePhoto", form);
     }
   }
+  if (mode === "commands") {
+    await api(bot.token, "setMyCommands", {
+      commands: commandsFor(name),
+      scope: { type: "chat", chat_id: Number(TELEGRAM_COMMUNITY_ID) },
+    });
+  }
   if (mode === "webhooks") {
     await api(bot.token, "setWebhook", {
       url: webhookUrl,
       secret_token: await telegramWebhookSecret(bot.token),
-      allowed_updates: ["message"],
+      allowed_updates: ["message", "callback_query"],
       max_connections: 1,
       drop_pending_updates: false,
     });
@@ -151,6 +159,7 @@ for (const [slug, bot] of registry) {
     url?: string;
     pending_update_count?: number;
     last_error_message?: string;
+    allowed_updates?: string[];
   };
   let membership = "not_joined";
   try {
@@ -171,6 +180,8 @@ for (const [slug, bot] of registry) {
       webhookMatches: hook.url === webhookUrl,
       pendingUpdates: hook.pending_update_count ?? 0,
       webhookError: !!hook.last_error_message,
+      callbacksEnabled:
+        hook.allowed_updates?.includes("callback_query") === true,
       membership,
       canJoinGroups: identity.can_join_groups === true,
       privacyEnabled: identity.can_read_all_group_messages !== true,
@@ -180,6 +191,7 @@ for (const [slug, bot] of registry) {
     mode === "verify" &&
     (hook.url !== webhookUrl ||
       hook.last_error_message ||
+      !hook.allowed_updates?.includes("callback_query") ||
       membership !== "member" ||
       identity.can_join_groups !== true ||
       identity.can_read_all_group_messages === true)

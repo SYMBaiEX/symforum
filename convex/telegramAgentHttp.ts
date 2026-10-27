@@ -5,6 +5,7 @@ import {
   secretEqual,
   telegramBotRegistry,
   telegramRequest,
+  telegramMenuCallback,
   telegramWebhookSecret,
 } from "../lib/telegram-agent-policy";
 
@@ -18,7 +19,8 @@ export function addTelegramAgentRoutes(http: HttpRouter) {
       const slug = new URL(request.url).pathname.slice(
         "/telegram/agents/".length,
       );
-      const bot = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).get(slug);
+      const registry = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS);
+      const bot = registry.get(slug);
       if (
         env.TELEGRAM_AGENTS_ENABLED !== "true" ||
         !bot ||
@@ -60,6 +62,27 @@ export function addTelegramAgentRoutes(http: HttpRouter) {
         input = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
         return response(400);
+      }
+      const choice = telegramMenuCallback(input, bot, registry);
+      if (choice) {
+        const target = registry.get(choice.agentSlug)!;
+        const accepted = await ctx.runMutation(internal.telegramAgents.accept, {
+          agentSlug: choice.agentSlug,
+          botId: target.id,
+          sourceAgentSlug: slug,
+          ...choice.request,
+        });
+        // Telegram supports answering a callback in the webhook response.
+        return Response.json(
+          {
+            method: "answerCallbackQuery",
+            callback_query_id: choice.callbackId,
+            text: accepted
+              ? "Reply to the selected agent’s prompt in this topic."
+              : "This selection is already handled or temporarily unavailable.",
+          },
+          { headers: { "Cache-Control": "no-store" } },
+        );
       }
       const message = telegramRequest(input, bot, Date.now());
       if (message)

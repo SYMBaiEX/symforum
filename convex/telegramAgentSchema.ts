@@ -1,7 +1,35 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
+export const telegramRequestKind = v.union(
+  v.literal("ask"),
+  v.literal("help"),
+  v.literal("menu"),
+  v.literal("prompt"),
+);
+
 export const telegramAgentTables = {
+  telegramForumDigests: defineTable({
+    key: v.string(),
+    topicId: v.number(),
+    from: v.number(),
+    to: v.number(),
+    preview: v.boolean(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("held"),
+      v.literal("skipped"),
+    ),
+    threadIds: v.array(v.id("forumThreads")),
+    sentMessageId: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_createdAt", ["createdAt"]),
   telegramAgentConversations: defineTable({
     key: v.string(),
     agentSlug: v.string(),
@@ -19,7 +47,8 @@ export const telegramAgentTables = {
     topicId: v.number(),
     senderId: v.string(),
     conversationId: v.string(),
-    kind: v.union(v.literal("ask"), v.literal("help")),
+    kind: telegramRequestKind,
+    sourceAgentSlug: v.optional(v.string()),
     prompt: v.optional(v.string()),
     reply: v.optional(v.string()),
     status: v.union(

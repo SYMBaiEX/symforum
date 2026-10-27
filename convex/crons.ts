@@ -3,6 +3,14 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+// Chicago noon is 17:00 UTC in summer and 18:00 UTC in winter. Admission is
+// gated by the local time and a durable weekly delivery key.
+crons.cron(
+  "weekly Forum Telegram digest",
+  "0 17,18 * * 5",
+  internal.telegramForumDigest.queueWeekly,
+  {},
+);
 crons.cron(
   "hourly limited-coverage token scouts",
   "12 * * * *",

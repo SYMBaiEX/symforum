@@ -56,7 +56,7 @@ export type TelegramRequest = {
   topicId: number;
   senderId: string;
   text: string;
-  kind: "ask" | "help";
+  kind: "ask" | "help" | "menu" | "prompt";
 };
 
 /** Only explicit human requests in our community can purchase generation. */
@@ -87,15 +87,23 @@ export function telegramRequest(
   const topicId = (m.message_thread_id as number | undefined) ?? 0;
   if (topicId === 7) return null; // Closed Start Here & Rules topic.
   let text = m.text.trim();
-  let kind: "ask" | "help" = "ask";
+  let kind: TelegramRequest["kind"] = "ask";
   const command = /^\/([a-z]+)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i.exec(text);
   if (command) {
     if (
       command[2]?.toLowerCase() !== bot.username ||
-      !["ask", "help", "start", "about"].includes(command[1].toLowerCase())
+      !["ask", "help", "start", "about", "menu", "agents"].includes(
+        command[1].toLowerCase(),
+      )
     )
       return null;
-    kind = command[1].toLowerCase() === "ask" ? "ask" : "help";
+    const verb = command[1].toLowerCase();
+    kind =
+      verb === "ask"
+        ? "ask"
+        : ["menu", "agents"].includes(verb)
+          ? "menu"
+          : "help";
     text = text.slice(command[0].length).trim();
   } else {
     if (
@@ -113,6 +121,63 @@ export function telegramRequest(
     senderId: String(m.from.id),
     text: text.slice(0, 1400),
     kind,
+  };
+}
+
+/** A pinned menu may be old; the authenticated callback itself is the new event. */
+export function telegramMenuCallback(
+  input: unknown,
+  bot: TelegramBot,
+  registry: Map<string, TelegramBot>,
+) {
+  if (
+    !record(input) ||
+    !integer(input.update_id) ||
+    !record(input.callback_query)
+  )
+    return null;
+  const c = input.callback_query;
+  if (
+    typeof c.id !== "string" ||
+    !c.id.length ||
+    c.id.length > 128 ||
+    typeof c.data !== "string" ||
+    !record(c.from) ||
+    c.from.is_bot !== false ||
+    !integer(c.from.id) ||
+    !record(c.message)
+  )
+    return null;
+  const m = c.message;
+  const choice = /^agent:([a-z0-9-]{1,40})$/.exec(c.data)?.[1];
+  if (
+    !choice ||
+    !registry.has(choice) ||
+    !record(m.chat) ||
+    String(m.chat.id) !== TELEGRAM_COMMUNITY_ID ||
+    m.chat.type !== "supergroup" ||
+    !record(m.from) ||
+    String(m.from.id) !== bot.id ||
+    m.from.is_bot !== true ||
+    !integer(m.message_id) ||
+    !integer(m.date) ||
+    m.date === 0 ||
+    (m.message_thread_id !== undefined && !integer(m.message_thread_id))
+  )
+    return null;
+  const topicId = (m.message_thread_id as number | undefined) ?? 0;
+  if (topicId === 7) return null;
+  return {
+    callbackId: c.id,
+    agentSlug: choice,
+    request: {
+      updateId: input.update_id,
+      messageId: m.message_id,
+      topicId,
+      senderId: String(c.from.id),
+      text: "",
+      kind: "prompt" as const,
+    },
   };
 }
 

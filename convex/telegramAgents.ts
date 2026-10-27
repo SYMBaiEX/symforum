@@ -10,8 +10,38 @@ import { env, internalMutation, internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { telegramWorkflow } from "./telegramAgentWorkflow";
+import { telegramRequestKind } from "./telegramAgentSchema";
+import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
+import type { MenuAgent } from "../lib/telegram-community";
+
+function specialty(slug: string) {
+  return (
+    FORUM_AGENT_ROSTER.find((a) => a.slug === slug)?.title.replace(
+      /^AI Agent · /,
+      "",
+    ) ??
+    {
+      suki: "Community guide",
+      belle: "News & explainers",
+      nyx: "Research synthesis",
+    }[slug] ??
+    "Forum agent"
+  );
+}
 
 const limiter = new RateLimiter(components.rateLimiter, {
+  telegramMenuSender: {
+    kind: "token bucket",
+    rate: 4,
+    period: MINUTE,
+    capacity: 3,
+  },
+  telegramMenuCommunity: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 5,
+  },
   telegramSender: { kind: "token bucket", rate: 5, period: HOUR, capacity: 3 },
   telegramCommunity: {
     kind: "token bucket",
@@ -34,16 +64,16 @@ const requestArgs = {
   topicId: v.number(),
   senderId: v.string(),
   text: v.string(),
-  kind: v.union(v.literal("ask"), v.literal("help")),
+  kind: telegramRequestKind,
+  sourceAgentSlug: v.optional(v.string()),
 };
 
 export const accept = internalMutation({
   args: requestArgs,
   returns: v.boolean(),
   handler: async (ctx, args): Promise<boolean> => {
-    const bot = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).get(
-      args.agentSlug,
-    );
+    const registry = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS);
+    const bot = registry.get(args.agentSlug);
     if (
       env.TELEGRAM_AGENTS_ENABLED !== "true" ||
       env.ELIZA_RUNTIME_MODE !== "live" ||
@@ -51,10 +81,24 @@ export const accept = internalMutation({
       bot.id !== args.botId ||
       !Number.isSafeInteger(args.updateId) ||
       args.updateId < 0 ||
-      args.text.length > 1400
+      args.text.length > 1400 ||
+      !Number.isSafeInteger(args.topicId) ||
+      args.topicId < 0 ||
+      args.topicId === 7 ||
+      !Number.isSafeInteger(args.messageId) ||
+      args.messageId < 1 ||
+      !/^\d{1,16}$/.test(args.senderId) ||
+      (args.kind === "prompt"
+        ? !args.sourceAgentSlug ||
+          !registry.has(args.sourceAgentSlug) ||
+          args.text !== ""
+        : args.sourceAgentSlug !== undefined)
     )
       return false;
-    const key = `${bot.id}:${args.updateId}`;
+    const source = args.sourceAgentSlug
+      ? registry.get(args.sourceAgentSlug)!
+      : bot;
+    const key = `${source.id}:${args.updateId}`;
     if (
       await ctx.db
         .query("telegramAgentRequests")
@@ -67,6 +111,27 @@ export const accept = internalMutation({
       .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
       .unique();
     if (!agent?.enabled) return false;
+    if (
+      args.sourceAgentSlug &&
+      !(
+        await ctx.db
+          .query("forumAgents")
+          .withIndex("by_slug", (q) => q.eq("slug", args.sourceAgentSlug!))
+          .unique()
+      )?.enabled
+    )
+      return false;
+    if (
+      ["menu", "prompt"].includes(args.kind) &&
+      (!(await limiter.limit(ctx, "telegramMenuSender", { key: args.senderId }))
+        .ok ||
+        !(
+          await limiter.limit(ctx, "telegramMenuCommunity", {
+            key: TELEGRAM_COMMUNITY_ID,
+          })
+        ).ok)
+    )
+      return false;
     // Shared across identities: switching bots cannot bypass the member limit.
     if (
       args.kind === "ask" &&
@@ -80,7 +145,7 @@ export const accept = internalMutation({
     )
       return false;
     if (
-      args.kind === "help" &&
+      args.kind !== "ask" &&
       !(await limiter.limit(ctx, "telegramHelp", { key: args.senderId })).ok
     )
       return false;
@@ -133,6 +198,8 @@ type TelegramContext = {
   name: string;
   persona: string;
   sources: Array<{ title: string; url: string; text: string }>;
+  specialty: string;
+  menuAgents: MenuAgent[];
 };
 export const claim = internalMutation({
   args: requestIdArgs,
@@ -162,6 +229,10 @@ export const context = internalQuery({
       request: schema.doc("telegramAgentRequests"),
       name: v.string(),
       persona: v.string(),
+      specialty: v.string(),
+      menuAgents: v.array(
+        v.object({ slug: v.string(), name: v.string(), specialty: v.string() }),
+      ),
       sources: v.array(
         v.object({ title: v.string(), url: v.string(), text: v.string() }),
       ),
@@ -175,13 +246,31 @@ export const context = internalQuery({
       .withIndex("by_slug", (q) => q.eq("slug", request.agentSlug))
       .unique();
     if (!agent?.enabled) return null;
-    const posts = await ctx.db
-      .query("forumThreads")
-      .withIndex("by_authorId_and_status_and_createdAt", (q) =>
-        q.eq("authorId", agent.userId).eq("status", "active"),
-      )
-      .order("desc")
-      .take(3);
+    const menuAgents: MenuAgent[] = [];
+    if (request.kind === "menu") {
+      for (const slug of telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).keys()) {
+        const entry = await ctx.db
+          .query("forumAgents")
+          .withIndex("by_slug", (q) => q.eq("slug", slug))
+          .unique();
+        if (entry?.enabled)
+          menuAgents.push({
+            slug,
+            name: entry.name,
+            specialty: specialty(slug),
+          });
+      }
+    }
+    const posts =
+      request.kind === "ask"
+        ? await ctx.db
+            .query("forumThreads")
+            .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+              q.eq("authorId", agent.userId).eq("status", "active"),
+            )
+            .order("desc")
+            .take(3)
+        : [];
     // Existing visibility gate rechecks private ancestors and moderation state.
     const visible: Array<{
       threadId: Id<"forumThreads">;
@@ -195,6 +284,8 @@ export const context = internalQuery({
     return {
       request,
       name: agent.name,
+      specialty: specialty(request.agentSlug),
+      menuAgents,
       persona: agent.persona.slice(0, 4000),
       sources: visible.flatMap((p) =>
         p

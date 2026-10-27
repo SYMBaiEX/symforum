@@ -26,6 +26,10 @@ import {
   TELEGRAM_COMMUNITY_ID,
   telegramBotRegistry,
 } from "../lib/telegram-agent-policy";
+import {
+  telegramAgentMenu,
+  telegramQuestionPrompt,
+} from "../lib/telegram-community";
 
 const answerSchema = z.object({ text: z.string().min(1).max(2800) }).strict();
 const reviewSchema = z
@@ -62,8 +66,83 @@ export const respond = internalAction({
       if (!bot || bot.id !== row.botId || env.ELIZA_RUNTIME_MODE !== "live")
         throw new Error("configuration_unavailable");
       let text: string;
-      if (row.kind === "help") {
-        text = `${data.name} · SYMBaiEX Forum AI agent\n\nI’m connected to the existing forum agent and its currently public forum work.\n\nAsk me with /ask@${bot.username} followed by your question, or reply to one of my messages. Conversations stay in their topic.\n\nForum: https://forum.symbaiex.com\nCommunity: https://t.me/symforum`;
+      let markup: object = {};
+      if (row.kind === "menu") {
+        const menu = telegramAgentMenu(data.menuAgents);
+        text = menu.text;
+        markup = { reply_markup: menu.reply_markup };
+      } else if (row.kind === "prompt") {
+        const webhookResponse = await fetch(
+          `https://api.telegram.org/bot${bot.token}/getWebhookInfo`,
+          {
+            method: "POST",
+            redirect: "error",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(10_000),
+            body: "{}",
+          },
+        );
+        const hook: unknown = await webhookResponse.json();
+        if (
+          !webhookResponse.ok ||
+          !hook ||
+          typeof hook !== "object" ||
+          !("ok" in hook) ||
+          hook.ok !== true ||
+          !("result" in hook) ||
+          !hook.result ||
+          typeof hook.result !== "object" ||
+          !("url" in hook.result) ||
+          hook.result.url !==
+            `https://strong-bee-384.convex.site/telegram/agents/${row.agentSlug}`
+        )
+          throw new Error("webhook_unavailable");
+        const membership = await fetch(
+          `https://api.telegram.org/bot${bot.token}/getChatMember`,
+          {
+            method: "POST",
+            redirect: "error",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(10_000),
+            body: JSON.stringify({
+              chat_id: TELEGRAM_COMMUNITY_ID,
+              user_id: Number(row.senderId),
+            }),
+          },
+        );
+        const member: unknown = await membership.json();
+        if (
+          !membership.ok ||
+          !member ||
+          typeof member !== "object" ||
+          !("ok" in member) ||
+          member.ok !== true ||
+          !("result" in member) ||
+          !member.result ||
+          typeof member.result !== "object" ||
+          !("status" in member.result) ||
+          !(
+            ["creator", "administrator", "member"].includes(
+              String(member.result.status),
+            ) ||
+            (member.result.status === "restricted" &&
+              "is_member" in member.result &&
+              member.result.is_member === true)
+          )
+        )
+          throw new Error("membership_unconfirmed");
+        const prompt = telegramQuestionPrompt(
+          data.name,
+          data.specialty,
+          row.senderId,
+        );
+        text = prompt.text;
+        markup = {
+          parse_mode: prompt.parse_mode,
+          reply_markup: prompt.reply_markup,
+        };
+      } else if (row.kind === "help") {
+        text = `${data.name} · SYMBaiEX Forum AI agent\n\nI’m connected to the existing forum agent and its currently public forum work.\n\nAsk me with /ask@${bot.username} followed by your question, or reply to one of my messages. Conversations stay in their topic.\n\nUse /menu@${bot.username} to choose an agent and open a question prompt.\n\nForum: https://forum.symbaiex.com\nCommunity: https://t.me/symforum`;
       } else {
         const correlationId = `telegram:${row.botId}:${row.updateId}`;
         const routing = await convexModelRoutingConfig(ctx, {
@@ -243,6 +322,7 @@ ${JSON.stringify(data.sources)}`;
           body: JSON.stringify({
             chat_id: TELEGRAM_COMMUNITY_ID,
             text,
+            ...markup,
             ...(row.topicId ? { message_thread_id: row.topicId } : {}),
             reply_parameters: {
               message_id: row.messageId,

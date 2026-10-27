@@ -73,7 +73,7 @@ async function publicCategoryForMemory(
   return null;
 }
 
-async function currentPublicMemoryThread(
+export async function currentPublicMemoryThread(
   ctx: QueryCtx,
   threadId: Id<"forumThreads">,
   cache?: MemoryReadCache,

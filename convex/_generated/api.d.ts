@@ -150,6 +150,7 @@ import type * as telegramAgentReply from "../telegramAgentReply.js";
 import type * as telegramAgentSchema from "../telegramAgentSchema.js";
 import type * as telegramAgentWorkflow from "../telegramAgentWorkflow.js";
 import type * as telegramAgents from "../telegramAgents.js";
+import type * as telegramForumDigest from "../telegramForumDigest.js";
 import type * as tokenAlphaAgent from "../tokenAlphaAgent.js";
 import type * as tokenAlphaData from "../tokenAlphaData.js";
 import type * as tokenAlphaRecoveryData from "../tokenAlphaRecoveryData.js";
@@ -309,6 +310,7 @@ declare const fullApi: ApiFromModules<{
   telegramAgentSchema: typeof telegramAgentSchema;
   telegramAgentWorkflow: typeof telegramAgentWorkflow;
   telegramAgents: typeof telegramAgents;
+  telegramForumDigest: typeof telegramForumDigest;
   tokenAlphaAgent: typeof tokenAlphaAgent;
   tokenAlphaData: typeof tokenAlphaData;
   tokenAlphaRecoveryData: typeof tokenAlphaRecoveryData;
