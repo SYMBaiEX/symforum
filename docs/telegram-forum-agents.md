@@ -87,7 +87,7 @@ generation; a confirmed opener schedules at most one bounded follow-up.
 Each selected identity must pass live webhook, ordinary membership and privacy
 checks before inference. Existing ElizaOS identities, generation/review stages,
 shared budget and receipts are reused. Posts are brief, reviewed, sent quietly
-with previews disabled, and never routed to General. Expired work and ambiguous
+with previews disabled, and never routed to Main Chat or Buy Highlights. Expired work and ambiguous
 sends remain held; held openers cannot trigger a follow-up. Inspect metadata with
 `telegramYappers:inspect {}`. No Cloudflare gateway change is needed.
 
@@ -291,7 +291,7 @@ were tested in the metrics topic. Blacklist configuration was read back, but a
 non-admin phishing-message deletion test has not been performed.
 
 Buy alerts are handled by the existing third-party `@buytech` bot (ID
-`5336320447`) in General. Its SYMF configuration uses the exact mint, automatic
+`5336320447`) in **Buy Highlights** (renamed native General, topic `1`). Its SYMF configuration uses the exact mint, automatic
 pool detection, butterfly emoji, a $10 minimum, and the official Forum website,
 `@symforum` Telegram entrance and X profile. Its only administrator capability is
 basic `can_manage_chat`; deletion, banning, invitations, topic management, stories
@@ -315,6 +315,69 @@ fresh Solana `getTokenSupply` read at slot `462132947` returned
 `953208249.461597` SYMF; this is outstanding minted supply, not proof that no
 tokens are locked. No manual supply override was applied. `/price` and `/mc`
 continue to direct members to live sources.
+
+## Community refinement and Belle memes — October 27
+
+The owner chose a clean human hangout: **Main Chat** is topic `9`, pinned at the
+top with welcome `36`; it remains open. **Buy Highlights** is renamed native
+General (`1`), so BuyTech retains its existing supported destination and $10
+minimum. The owner-approved cinematic signal-moth GIF was confirmed by BuyTech
+in message `325` and appeared on real buy `326`. Media and editable HyperFrames
+sources are in `assets/telegram/`.
+
+**$SYMF Feed** is topic `310`, intro `330`; confirmed summaries `328` and `329`
+include buys below $10. `TELEGRAM_TRADE_FEED_ENABLED=true` and
+`TELEGRAM_TRADE_FEED_TOPIC_ID=310` enable its one-minute backend poll. Suki posts
+quiet deterministic summaries, at most eight buys per message. The Node action
+`telegramTradeFeedPoll:poll` uses GeckoTerminal public data, validates pool mint
+relationships and exact received SYMF mint, and applies no USD or anomaly filter.
+It discovers at most six monitored pools (currently two), staying below the
+public request allowance. Provider 429 responses honor Retry-After with at least
+five minutes of backoff. A V8 shared-egress rate limit was resolved by moving the
+single poller to the existing Node runtime; no proxy rotation, API key, paid plan
+or additional bot was introduced.
+
+The public endpoint exposes a bounded recent trade window, not a historical
+ledger. Tracking began October 27 with a short recent catch-up. Indexed data may
+lag, and coverage gaps are disclosed when detected. Durable event keys suppress
+duplicates. A Telegram delivery intent is claimed before its side effect; an
+ambiguous send is held forever, not retried. Confirmed receipts expire after
+seven days, while held deliveries remain. Inspect `telegramTradeFeed:inspect {}`.
+Set the feed flag false to stop polling and sends without touching BuyTech.
+
+Safeguard's separate **Join Captcha** was disabled after the owner's second-account
+join required verification both before entry and before speaking. A fresh settings
+readback confirmed Disabled. Portal verification, Standard anti-raid, Light flood
+protection and Rose remain. No fresh never-verified account has retested entry
+since the change; do not claim that check passed.
+
+The former Memes & Media topic `13` is now **Dank Memes**. The owner assigned
+Belle and chose an 18-minute schedule around the clock. Enable with
+`TELEGRAM_MEMES_ENABLED=true` and `TELEGRAM_MEMES_TOPIC_ID=13`; no Codex automation
+is needed. The first actual generated/reviewed image was sent as Belle in message
+`340`, request `meme:1660306`. The topic introduction is `40`.
+
+Each slot reuses Belle's existing identity, ElizaOS generation, independent
+review, usage accounting and shared daily budget. It creates a fresh caption pair
+and renders one of four approved original signal-moth reactions with Sharp and
+outlined Geist glyphs. The approved atlas lives in Convex Storage; source and
+prompt are in `assets/telegram/README.md`. Recurring posts do not call an image
+model. Sharp is the only external Node package. The font is bundled as outlines,
+so server font availability cannot silently break text.
+
+All meme sends are silent and restricted to topic `13`; Main Chat and Buy Highlights
+receive none. Durable slot keys, an 18-minute minimum spacing, caption fingerprints,
+8-minute expiry and sending intent prevent duplicates or catch-up bursts. A held
+meme is never replayed. Cadence is subject to the existing model budget and review;
+failed slots are skipped, not promised delivery. Only confirmed public meme captions
+enter Belle's dedicated Agent thread; member histories and the private Mod Log
+remain outside it. Inspect `telegramMemes:inspect {}`. Turning the meme flag off
+stops new admission and delivery without changing addressed replies or Yappers.
+
+Yappers keeps its separate four-post/day cap. Damon opener `299` was confirmed;
+the NyX follow-up was held with `review_rejected` and was not replayed. Preserve
+that hold, the held Lena prompt, all original 21 unknown Eliza operations, and
+all other uncertain deliveries. Do not rerun kickoff during provisioning.
 
 ## Verification and rollback
 
