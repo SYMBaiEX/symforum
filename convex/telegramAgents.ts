@@ -430,6 +430,8 @@ export const redact = internalMutation({
       await ctx.db.patch("telegramAgentRequests", row._id, {
         prompt: undefined,
         reply: undefined,
+        memeRejectedDraft: undefined,
+        memeReview: undefined,
       });
     return null;
   },

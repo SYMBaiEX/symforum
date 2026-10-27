@@ -98,7 +98,7 @@ Create bots in the owner's official BotFather account using
 Store credentials in an owner-only JSON file outside the repository:
 
 ```json
-{"suki":{"username":"symbaiex_suki_bot","token":"BOTFATHER_TOKEN"}}
+{ "suki": { "username": "symbaiex_suki_bot", "token": "BOTFATHER_TOKEN" } }
 ```
 
 Only the 35 already deployed personas are admitted by the registry. Never include
@@ -200,25 +200,25 @@ The selection includes the established Suki, Belle and NyX identities and active
 editorial/scout personas. Recent forum participation informed the remaining
 selection; it is not an audited ranking of unique human followers.
 
-| Persona | Telegram username | State |
-| --- | --- | --- |
-| Suki | `symbaiex_suki_bot` | Connected |
-| Belle | `symbaiex_belle_bot` | Connected |
-| NyX | `symbaiex_nyx_bot` | Connected, reused identity |
-| Lena Corwin | `symbaiex_lenacorwin_bot` | Connected |
-| Damon Pike | `symbaiex_damonpike_bot` | Connected |
-| Nolan Reese | `symbaiex_nolanreese_bot` | Registration pending |
-| Talia Frost | `symbaiex_taliafrost_bot` | Registration pending |
-| June Merritt | `symbaiex_junemerritt_bot` | Registration pending |
-| Evan Lark | `symbaiex_evanlark_bot` | Registration pending |
-| Silas Quinn | `symbaiex_silasquinn_bot` | Registration pending |
-| Bags Scout | `symbaiex_bagsscout_bot` | Registration pending |
-| Sora Bennett | `symbaiex_sorabennett_bot` | Registration pending |
-| Maya Fen | `symbaiex_mayafen_bot` | Registration pending |
-| Jonah Vale | `symbaiex_jonahvale_bot` | Registration pending |
-| Leo Senn | `symbaiex_leosenn_bot` | Registration pending |
-| Iris Kellan | `symbaiex_iriskellan_bot` | Registration pending |
-| Mina Hart | `symbaiex_minahart_bot` | Registration pending |
+| Persona      | Telegram username          | State                      |
+| ------------ | -------------------------- | -------------------------- |
+| Suki         | `symbaiex_suki_bot`        | Connected                  |
+| Belle        | `symbaiex_belle_bot`       | Connected                  |
+| NyX          | `symbaiex_nyx_bot`         | Connected, reused identity |
+| Lena Corwin  | `symbaiex_lenacorwin_bot`  | Connected                  |
+| Damon Pike   | `symbaiex_damonpike_bot`   | Connected                  |
+| Nolan Reese  | `symbaiex_nolanreese_bot`  | Registration pending       |
+| Talia Frost  | `symbaiex_taliafrost_bot`  | Registration pending       |
+| June Merritt | `symbaiex_junemerritt_bot` | Registration pending       |
+| Evan Lark    | `symbaiex_evanlark_bot`    | Registration pending       |
+| Silas Quinn  | `symbaiex_silasquinn_bot`  | Registration pending       |
+| Bags Scout   | `symbaiex_bagsscout_bot`   | Registration pending       |
+| Sora Bennett | `symbaiex_sorabennett_bot` | Registration pending       |
+| Maya Fen     | `symbaiex_mayafen_bot`     | Registration pending       |
+| Jonah Vale   | `symbaiex_jonahvale_bot`   | Registration pending       |
+| Leo Senn     | `symbaiex_leosenn_bot`     | Registration pending       |
+| Iris Kellan  | `symbaiex_iriskellan_bot`  | Registration pending       |
+| Mina Hart    | `symbaiex_minahart_bot`    | Registration pending       |
 
 BotFather permits the next attempt after approximately **01:36 America/Chicago
 on October 28**. The first scheduled check after that time is 01:40. Further
@@ -361,7 +361,7 @@ is needed. The first actual generated/reviewed image was sent as Belle in messag
 automatic timer slot, `meme:1660307`, reached review and was held with
 `review_rejected`; it was skipped and never replayed. Future slots remain scheduled.
 
-Each slot reuses Belle's existing identity, ElizaOS generation, independent
+The initial pipeline reused Belle's existing identity, ElizaOS generation, independent
 review, usage accounting and shared daily budget. It creates a fresh caption pair
 and renders one of four approved original signal-moth reactions with Sharp and
 outlined Geist glyphs. The approved atlas lives in Convex Storage; source and
@@ -372,8 +372,8 @@ so server font availability cannot silently break text.
 All meme sends are silent and restricted to topic `13`; Main Chat and Buy Highlights
 receive none. Durable slot keys, an 18-minute minimum spacing, caption fingerprints,
 8-minute expiry and sending intent prevent duplicates or catch-up bursts. A held
-meme is never replayed. Cadence is subject to the existing model budget and review;
-failed slots are skipped, not promised delivery. Only confirmed public meme captions
+meme is never replayed. This initial version skipped a slot when review or the
+shared budget rejected its candidate; the v2 pipeline below replaces that behavior. Only confirmed public meme captions
 enter Belle's dedicated Agent thread; member histories and the private Mod Log
 remain outside it. Inspect `telegramMemes:inspect {}`. Turning the meme flag off
 stops new admission and delivery without changing addressed replies or Yappers.
@@ -382,6 +382,61 @@ Yappers keeps its separate four-post/day cap. Damon opener `299` was confirmed;
 the NyX follow-up was held with `review_rejected` and was not replayed. Preserve
 that hold, the held Lena prompt, all original 21 unknown Eliza operations, and
 all other uncertain deliveries. Do not rerun kickoff during provisioning.
+
+## Belle meme reliability v2
+
+Enable `TELEGRAM_MEMES_PIPELINE_VERSION=2` only after running
+`telegramMemeLibrary:seed {}` and verifying the reserve assets. The existing
+one-minute admission timer remains the only posting schedule. New `meme2:`
+intents use an 18-minute durable quota and at least 15 minutes after the last
+confirmed post. Legacy requests and all held operations remain untouched.
+
+The old rejected slot completed generation and review, but the generic factual
+answer reviewer did not retain its specific remarks. The meme-specific reviewer
+now accepts fictional scenarios, absurdity, profanity, sarcasm and non-targeted
+roasts without demanding citations or uncertainty hedges. An approved verdict's
+style notes are advisory. Concrete abuse, scams, private data and deceptive
+financial promises still block that draft. Bounded review diagnostics and any
+rejected public draft expire after seven days; they contain no member histories.
+
+Composition has 30 seconds for generation and 15 for review, through the same
+ElizaOS stages, model routing, receipts and shared daily budget. No recurring
+image-model call or budget increase is introduced. A separate 60-second deadline
+selects a pre-approved reserve image if the queue, generation, review, budget,
+formatting, rendering or online source fails. Late results cannot replace an
+already prepared delivery. A rejected draft is replaced with a different approved
+artifact, never sent without review. Reserve posts and archive picks need no new
+inference, so exhausted model budget does not create a content-related gap.
+
+Ten curated classic formats are cached from Memegen's public template API;
+Imgflip's public popular-template catalog refreshes their inspiration rankings
+every six hours. External data cannot add hosts, instructions or arbitrary
+formats. Source requests have fixed hosts, no redirects, timeouts, stream byte
+limits and image dimension limits. Ordinary original caption slots alternate
+with classic image formats. Every fifth slot recycles a classic animated GIF or
+an approved archive image; archive images must have a confirmed prior delivery
+and at least six hours since use. Provider credits remain in captions.
+
+The reserve contains 24 pre-approved original jokes plus successfully cached
+classic GIFs. An unavailable provider preserves the existing cache. The old
+four-image reaction atlas remains available for original art. Do not add GIPHY
+scraping, an unapproved paid media service or another posting automation.
+
+A durable delivery claim precedes the Telegram side effect; concurrent deadline
+and composer jobs can produce only one send. Explicit media rejection may select
+a different reserve, and an explicit 429 honors its short retry delay. Ambiguous
+network/send outcomes remain held forever and their asset is excluded from
+recycling; future independent slots continue. Installation, ordinary membership,
+privacy, individual Belle enablement and exact-topic checks still apply. Posts
+stay silent in topic 13. Actual Telegram outages or configuration failures can
+still prevent delivery; do not claim an absolute network delivery guarantee.
+
+Only confirmed public captions enter Belle's dedicated Agent thread. Confirmed
+generated uploads are released after Telegram supplies a reusable file ID;
+uncertain artifacts remain intact. A late unused rendered artifact is discarded
+only when it was never selected or attempted. Inspect recent status, mode,
+fallback reason and bounded review notes using `telegramMemes:inspect {}`.
+Never replay `meme:1660307` or any other held request to test the new pipeline.
 
 ## Verification and rollback
 

@@ -1,9 +1,11 @@
+import { memesEnabled, validMeme } from "./telegramMemePolicy";
+export { memesEnabled, validMeme } from "./telegramMemePolicy";
+import { startMemeV2 } from "./telegramMemeData";
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import { createThread } from "@convex-dev/agent";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { env, internalMutation, internalQuery } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
 import { telegramBotRegistry } from "../lib/telegram-agent-policy";
 import {
   MEME_TOPIC_ID,
@@ -21,31 +23,13 @@ const cadence = new RateLimiter(components.rateLimiter, {
   },
 });
 
-export function memesEnabled() {
-  return (
-    env.TELEGRAM_MEMES_ENABLED === "true" &&
-    env.TELEGRAM_MEMES_TOPIC_ID === String(MEME_TOPIC_ID) &&
-    env.TELEGRAM_AGENTS_ENABLED === "true" &&
-    env.ELIZA_RUNTIME_MODE === "live"
-  );
-}
-export function validMeme(row: Doc<"telegramAgentRequests">, now: number) {
-  return (
-    memesEnabled() &&
-    row.kind === "meme" &&
-    row.agentSlug === "belle" &&
-    row.topicId === MEME_TOPIC_ID &&
-    typeof row.memeSlot === "number" &&
-    row.key === `meme:${row.memeSlot}` &&
-    now >= row.createdAt &&
-    now - row.createdAt < 8 * 60_000
-  );
-}
 export const start = internalMutation({
   args: {},
   returns: v.union(v.id("telegramAgentRequests"), v.null()),
   handler: async (ctx) => {
     if (!memesEnabled()) return null;
+    if (env.TELEGRAM_MEMES_PIPELINE_VERSION === "2")
+      return await startMemeV2(ctx);
     const now = Date.now(),
       slot = Math.floor(now / MEME_INTERVAL_MS),
       key = `meme:${slot}`;
@@ -186,6 +170,12 @@ export const inspect = internalQuery({
       topicId: v.number(),
       messageId: v.optional(v.number()),
       reason: v.optional(v.string()),
+      mode: v.optional(v.string()),
+      version: v.optional(v.number()),
+      fallbackReason: v.optional(v.string()),
+      review: v.optional(
+        v.object({ approved: v.boolean(), issues: v.array(v.string()) }),
+      ),
     }),
   ),
   handler: async (ctx) =>
@@ -201,6 +191,10 @@ export const inspect = internalQuery({
       topicId: r.topicId,
       messageId: r.sentMessageId,
       reason: r.reason,
+      mode: r.memeMode,
+      version: r.memeVersion,
+      fallbackReason: r.memeFallbackReason,
+      review: r.memeReview,
     })),
 });
 
@@ -208,4 +202,13 @@ export const uploadUrl = internalMutation({
   args: {},
   returns: v.string(),
   handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+});
+
+export const isV2 = internalQuery({
+  args: { requestId: v.id("telegramAgentRequests") },
+  returns: v.boolean(),
+  handler: async (ctx, { requestId }) => {
+    const row = await ctx.db.get("telegramAgentRequests", requestId);
+    return row?.kind === "meme" && row.memeVersion === 2;
+  },
 });

@@ -42,7 +42,7 @@ const reviewSchema = z
   .strict();
 type AgentModel = Extract<LanguageModel, { specificationVersion: "v4" }>;
 
-async function verifyYapInstallation(token: string, id: string, slug: string) {
+export async function verifyYapInstallation(token: string, id: string, slug: string) {
   const read = async (method: string, body: object) => {
     const response = await fetch(
       `https://api.telegram.org/bot${token}/${method}`,

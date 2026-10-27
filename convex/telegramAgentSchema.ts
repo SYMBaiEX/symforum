@@ -11,11 +11,42 @@ export const telegramRequestKind = v.union(
 );
 
 export const telegramAgentTables = {
+  telegramMemeTemplates: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.string(),
+    storageId: v.id("_storage"),
+    sourceUrl: v.string(),
+    rank: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_rank", ["rank"]),
+  telegramMemeAssets: defineTable({
+    key: v.string(),
+    kind: v.union(v.literal("reserve"), v.literal("generated")),
+    media: v.union(v.literal("photo"), v.literal("animation")),
+    storageId: v.optional(v.id("_storage")),
+    telegramFileId: v.optional(v.string()),
+    text: v.string(),
+    sourceUrl: v.optional(v.string()),
+    sourceName: v.optional(v.string()),
+    lastUsedAt: v.number(),
+    lastAttemptedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_kind_and_lastUsedAt", ["kind", "lastUsedAt"])
+    .index("by_createdAt", ["createdAt"]),
   telegramMemeConfig: defineTable({
     key: v.literal("belle"),
     storageId: v.id("_storage"),
     threadId: v.optional(v.string()),
     lastQueuedAt: v.optional(v.number()),
+    lastConfirmedAt: v.optional(v.number()),
+    lastAssetId: v.optional(v.id("telegramMemeAssets")),
+    sourceRefreshedAt: v.optional(v.number()),
+    sourceError: v.optional(v.string()),
   }).index("by_key", ["key"]),
   telegramMemeFingerprints: defineTable({
     key: v.string(),
@@ -62,6 +93,24 @@ export const telegramAgentTables = {
     kind: telegramRequestKind,
     sourceAgentSlug: v.optional(v.string()),
     memeSlot: v.optional(v.number()),
+    memeVersion: v.optional(v.number()),
+    memeAssetId: v.optional(v.id("telegramMemeAssets")),
+    memeTemplateId: v.optional(v.id("telegramMemeTemplates")),
+    memeMode: v.optional(
+      v.union(
+        v.literal("original"),
+        v.literal("template"),
+        v.literal("recycle"),
+        v.literal("fallback"),
+      ),
+    ),
+    memeReview: v.optional(
+      v.object({ approved: v.boolean(), issues: v.array(v.string()) }),
+    ),
+    memeRejectedDraft: v.optional(v.string()),
+    memeFallbackReason: v.optional(v.string()),
+    memeDeliveryAttempts: v.optional(v.number()),
+    memeRetryAt: v.optional(v.number()),
     yapDay: v.optional(v.string()),
     yapRound: v.optional(v.number()),
     yapTurn: v.optional(v.number()),

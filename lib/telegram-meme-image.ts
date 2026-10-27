@@ -121,3 +121,26 @@ export async function renderMeme(
     .png()
     .toBuffer();
 }
+
+export async function renderClassicMeme(
+  image: Uint8Array,
+  top: string,
+  bottom: string,
+) {
+  const art = await sharp(image, { limitInputPixels: 20_000_000 })
+    .resize(640, 640, { fit: "contain", background: "#090a0e" })
+    .png()
+    .toBuffer();
+  const caption = Buffer.from(
+    `<svg width="640" height="920" xmlns="http://www.w3.org/2000/svg">${captionPaths(top, 0)}${captionPaths(bottom, 764)}</svg>`,
+  );
+  return await sharp({
+    create: { width: 640, height: 920, channels: 3, background: "#090a0e" },
+  })
+    .composite([
+      { input: art, left: 0, top: 124 },
+      { input: caption, left: 0, top: 0 },
+    ])
+    .png()
+    .toBuffer();
+}

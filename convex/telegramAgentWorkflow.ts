@@ -10,6 +10,13 @@ export const reply = telegramWorkflow.define({
   args: { requestId: v.id("telegramAgentRequests") },
   returns: v.null(),
   handler: async (step, args): Promise<null> => {
+    const meme = await step.runQuery(internal.telegramMemes.isV2, args);
+    if (meme) {
+      await step.runAction(internal.telegramMemeComposer.prepare, args, {
+        retry: false,
+      });
+      return null;
+    }
     await step.runAction(internal.telegramAgentReply.respond, args, {
       retry: false,
     });

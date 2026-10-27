@@ -38,6 +38,7 @@ const app = defineApp({
     TELEGRAM_DIGEST_TOPIC_ID: v.optional(v.string()),
     TELEGRAM_TRADE_FEED_ENABLED: v.optional(v.string()),
     TELEGRAM_TRADE_FEED_TOPIC_ID: v.optional(v.string()),
+    TELEGRAM_MEMES_PIPELINE_VERSION: v.optional(v.string()),
     TELEGRAM_MEMES_ENABLED: v.optional(v.string()),
     TELEGRAM_MEMES_TOPIC_ID: v.optional(v.string()),
     TELEGRAM_YAPPERS_ENABLED: v.optional(v.string()),

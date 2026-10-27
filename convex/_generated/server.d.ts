@@ -77,6 +77,7 @@ type Env = {
   readonly TELEGRAM_DIGEST_ENABLED: string | undefined;
   readonly TELEGRAM_DIGEST_TOPIC_ID: string | undefined;
   readonly TELEGRAM_MEMES_ENABLED: string | undefined;
+  readonly TELEGRAM_MEMES_PIPELINE_VERSION: string | undefined;
   readonly TELEGRAM_MEMES_TOPIC_ID: string | undefined;
   readonly TELEGRAM_TRADE_FEED_ENABLED: string | undefined;
   readonly TELEGRAM_TRADE_FEED_TOPIC_ID: string | undefined;
