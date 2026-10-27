@@ -141,13 +141,16 @@ For each pending identity:
    and `/forumhelp` shortcuts and the BuyTech/Safeguard role split. Refresh the
    pinned question menu after a newly verified batch by requesting a fresh
    `/menu@symbaiex_suki_bot`, pinning it and unpinning the superseded menu.
+   Update Rose's `/agents` direct message link, the Start Here menu link and
+   private guide/feature-state payloads to that new pinned message.
    Webhooks must include both `message` and `callback_query` updates. Stop the
    automation after all 17 identities have verified membership, profiles,
    webhooks and help delivery.
 
 The website's `@symforum` entry is live (PR #162). The October 27 onboarding review
-and proposed features are recorded in [telegram-community-roadmap.md](telegram-community-roadmap.md).
-The feature roadmap does not authorize or enable a new posting schedule.
+and released/proposed features are recorded in
+[telegram-community-roadmap.md](telegram-community-roadmap.md). The approved
+weekly digest is enabled; other roadmap proposals have no posting schedule.
 The private operator directory's `community-improvements-state.json` and
 `community-guides.json` contain the verified topic links and current guide/filter
 text. Recheck the live messages before editing. Use direct URLs in Rose replies;
@@ -197,14 +200,52 @@ delivery in topic 85 (messages 97 and 99). Both stages have completed ElizaOS
 1.7.2 receipts for `openai/gpt-6-luna`. A separate Lena source-link test completed
 both model calls but was held by review; it was not delivered or replayed.
 
-Code `fcb4f493` was deployed to Convex `strong-bee-384` and Cloudflare gateway
-version `df27115d-20fa-488f-ae85-3a19ec208de6`. All 21 pre-existing unresolved Eliza
-operation holds retained their original operation key, job ID and status after
+The initial connector code `fcb4f493` was deployed to Convex `strong-bee-384` and
+Cloudflare gateway version `df27115d-20fa-488f-ae85-3a19ec208de6`. All 21
+pre-existing unresolved Eliza operation holds retained their original operation key, job ID and status after
 the rollout. The shared $0.75 daily budget remains in place.
 
 Local validation passed: 3,142 root tests, root and Convex typechecks, targeted
 lint, 42 Eliza worker tests and 42 gateway tests, worker build and deployment dry
 runs. These results do not assert GitHub-hosted CI success.
+
+### Community features deployed October 27
+
+Convex source `5f725f2d` adds the agent question menu and weekly digest. The
+Cloudflare gateway version and shared $0.75 daily model budget are unchanged.
+All 21 original unresolved Eliza holds were compared again after the live tests;
+their job IDs, operation keys and statuses remain unchanged.
+
+The [current pinned menu](https://t.me/c/4387387301/85/285) lists the five
+verified identities. A live selection produced NyX's prompt 287, human question
+288 and reviewed reply 289 in topic 85. Selected prompts are standalone messages
+with a human mention and selective ForceReply, because a privacy-enabled target
+bot cannot reliably reply to another bot's menu message. The earlier Lena prompt
+remains held as `delivery_unconfirmed`; it was never replayed or cleared.
+All five webhooks accept `message` and `callback_query` updates and have verified
+ordinary membership and group privacy enabled.
+
+[Forum Digest](https://t.me/c/4387387301/273/274) is topic 273. The reviewed setup
+preview was delivered once as message 286, key `preview:setup-2026-10-27`, with
+five public sources. Both enable flags are set. Regular publication starts
+Friday October 30 at noon America/Chicago. `/digest`, `/agents`, `/topics` and
+`/forumhelp` plus the public and Start Here pins point members to the features.
+
+Rose's private `SYMBaiEX Forum | Mod Log` channel has only the owner and Rose.
+Rose's optional channel rights are limited to posting. Its connection was
+confirmed in both community and channel; actual configuration events appear in
+the log. Enabled categories are `admin automated reports settings other`; `user`
+is disabled. The log has no public username, and its invite is not published.
+It records Rose events, not a verified complete audit of third-party bots.
+
+Feature validation passed: 3,157 tests across 310 files, both typechecks and
+targeted lint before the final narrow prompt handoff correction; 15 focused
+delivery/community tests and the Convex typecheck passed after that correction.
+Convex production deployment succeeded. GitHub Actions remains unavailable due
+to account billing and is not counted as passed. Live delivery, menu interaction,
+source formatting and private log events were checked separately from tests.
+Private `community-feature-rollout-state.json` records the live message IDs and
+verification evidence. Read it before continuing registration or replacing pins.
 
 ## Community moderation and metrics
 

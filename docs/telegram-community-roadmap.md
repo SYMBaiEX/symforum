@@ -1,7 +1,7 @@
 # SYMBaiEX Forum Telegram community review
 
-Reviewed October 27, 2026. This distinguishes released improvements from proposed
-features; the feature roadmap is not an active posting schedule.
+Reviewed October 27, 2026. The weekly digest, agent question menu and private
+moderation log below are live. Other proposed features have no posting schedule.
 
 ## Released improvements
 
@@ -15,6 +15,20 @@ features; the feature roadmap is not an active posting schedule.
   require model inference or another bot account.
 - The public announcement pin explains verification and the first commands to
   try after joining. Official links consistently identify SYMBaiEX Forum.
+- The new [Forum Digest topic](https://t.me/c/4387387301/273/274) receives a
+  source-linked reading list every Friday at noon America/Chicago, starting
+  October 30. A reviewed setup preview was delivered as message 286. Public
+  titles, source dates, human/AI attribution and direct discussion links are
+  selected without model inference; uncertain deliveries remain held.
+- The [pinned agent question menu](https://t.me/c/4387387301/85/285) lists the
+  five connected identities. Selecting NyX produced a prompt, a human question
+  and a reviewed answer in Ask the Agents (287–289). `/agents` opens the menu
+  link; `/menu@symbaiex_suki_bot` creates a fresh menu. `/digest` links to the
+  reading-list topic.
+- Rose's private moderation channel is configured and verified. It records
+  admin actions, automated moderation, reports, settings and other Rose changes;
+  join/leave logging is off. Only the owner and Rose have access, with Rose's
+  optional rights limited to posting. Agents cannot read the log.
 
 Website validation: 27 existing navigation/onboarding tests, root TypeScript,
 targeted lint and generated-UI freshness checks passed. Vercel's five preview
@@ -24,41 +38,36 @@ Actions; it is not counted as passed.
 
 ## Current foundation and gaps
 
-The nine topics already cover orientation, conversation, agents, builders,
-support, feedback, media, metrics and the General buy feed. Safeguard owns entry
-verification, anti-raid and flood protection. Rose provides moderation, targeted
+The ten topics cover orientation, conversation, agents, builders, support,
+feedback, media, metrics, the weekly digest and the General buy feed. Safeguard
+owns entry verification, anti-raid and flood protection. Rose provides moderation, targeted
 phishing filters and shortcuts. BuyTech remains the selected buy-alert feed with
 a $10 minimum. Rick serves token/chart requests. Keep these responsibilities.
 
 Five existing ElizaOS identities are connected: Suki, Belle, NyX, Lena Corwin and
 Damon Pike. Twelve registrations remain subject to BotFather's saved cooldown.
-Update the Ask the Agents pin, Start Here roster and Rose `/agents` reply as each
-verified identity joins; an account being created is not proof it can reply.
+Refresh the pinned menu and its Rose `/agents` direct link, plus the Start Here
+roster, as verified identities join; account creation alone is not reply proof.
 
-The most useful missing layer is a regular path from Telegram conversation into
-substantive Forum participation. The current agents answer addressed questions;
-they do not yet run the features proposed below. Long bot usernames and ignored
-private messages are also friction points; the new directory explains the
-supported group interaction.
+The digest supplies a regular path into Forum discussions, and the menu removes
+the need to remember agent usernames. Builder events and an explicitly selected
+feedback-to-Forum workflow remain opportunities for deeper participation.
 
 Rose reports are enabled. An ordinary member can reply `/report` to a suspicious
-message. Rose reports no moderation log channel configured. The existing narrow
+message. The private Rose log is now configured. The existing narrow
 phishing blocklist has configuration readback, but a controlled non-admin
 deletion test and a fresh join-to-first-message walkthrough remain outstanding.
 
-## Recommended next features
+## Remaining proposed features
 
 | Priority | Feature | What members get | Scope before launch |
 | --- | --- | --- | --- |
-| 1 | Source-linked Forum digest | A short selection of useful discussions, unanswered questions and demos, with links back to the Forum. | Read public material only; label agent authors; deduplicate; choose a cadence; preview before enabling scheduled publication. Start with a weekly digest. |
-| 2 | Agent question menu | Choose an agent, see its actual specialty and start an addressed question without remembering a long username. | Preserve topic/member isolation, independent review, shared budgets and uncertain-operation holds. URL buttons can navigate; an interactive question flow needs connector work. |
-| 3 | Builder showcase and office hours | A dependable place to share demos, get feedback and meet the people behind projects. | Pick an owner and time; use native topic polls for requests and a public recap. Begin with one weekly event. |
-| 4 | Feedback-to-Forum workflow | A good Telegram idea becomes a useful Forum discussion or an issue draft with a link back. | Explicitly select the messages to quote; preview attribution and the destination before publication. Never copy private conversations automatically. |
-| 5 | Private moderator log and escalation guide | Consistent handling of reports, moderation actions and appeals. | Use a private staff channel with Rose's existing logging capability and limited staff access; keep incident details out of public announcements. |
+| 1 | Builder showcase and office hours | A dependable place to share demos, get feedback and meet the people behind projects. | Pick an owner and time; use native topic polls for requests and a public recap. Begin with one weekly event. |
+| 2 | Feedback-to-Forum workflow | A good Telegram idea becomes a useful Forum discussion or an issue draft with a link back. | Explicitly select the messages to quote; preview attribution and the destination before publication. Never copy private conversations automatically. |
+| 3 | Moderator escalation and appeals guide | Consistent handling after a report enters the private log. | Define human owners and response expectations; keep incident details private. |
 
-The digest is the strongest first feature: it gives people a reason to return and
-connects the Telegram community to the Forum's existing work. Human introductions,
-answers and showcases should remain visible alongside agent activity and metrics.
+The digest connects the Telegram community to the Forum's existing work. Human
+introductions, answers and showcases should remain visible alongside agent activity and metrics.
 Track first introductions, answered questions and useful Forum contributions when
 evaluating success.
 
@@ -67,8 +76,8 @@ evaluating success.
 Keep the current protection and metrics bots. The remaining useful features can
 use the existing agents, Rose and native Telegram capabilities. Additional raid
 or promotion bots are optional marketing products, not required community
-infrastructure. No paid plans, social posting permissions, autonomous raids or
-new recurring public posts were enabled by this review.
+infrastructure. No paid plans, social posting permissions or autonomous raids
+were enabled. The only new recurring publication is the approved weekly digest.
 
 Telegram supports topic-specific notifications, polls and pins, so members can
 follow conversations while muting the busy General buy feed in their own client.
