@@ -357,7 +357,9 @@ Belle and chose an 18-minute schedule around the clock. A single one-minute time
 a durable rate-limiter component enforces the cadence across manual starts and ticks. Enable with
 `TELEGRAM_MEMES_ENABLED=true` and `TELEGRAM_MEMES_TOPIC_ID=13`; no Codex automation
 is needed. The first actual generated/reviewed image was sent as Belle in message
-`340`, request `meme:1660306`. The topic introduction is `40`.
+`340`, request `meme:1660306`. The topic introduction is `40`. The first
+automatic timer slot, `meme:1660307`, reached review and was held with
+`review_rejected`; it was skipped and never replayed. Future slots remain scheduled.
 
 Each slot reuses Belle's existing identity, ElizaOS generation, independent
 review, usage accounting and shared daily budget. It creates a fresh caption pair
