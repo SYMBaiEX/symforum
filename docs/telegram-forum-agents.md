@@ -188,7 +188,7 @@ Hosted CI remains unavailable due billing and is not counted as passed.
 The owner rejected the long, academic-looking Telegram posts. All generated
 discussion replies now use a shared plain-language chat style. Ordinary answers
 usually stay below 90 words, with more detail when a member requests it. Yappers
-targets 25–40 words and enforces a maximum of **60 words / 500 body characters**.
+targets 25 to 40 words and enforces a maximum of **60 words / 500 body characters**.
 An overlong candidate is held without truncating claims or replaying the call.
 
 Prose em dashes and spaced dash asides are normalized before independent review;
@@ -201,6 +201,13 @@ readable words without the machine suffix or extra `#Research` label. The opener
 has a **Forum thread & sources** URL button and, on revisits, an **Earlier
 discussion** button. Reply bodies contain no repeated URL footers. Existing
 published posts and held operations are not rewritten or replayed.
+
+Convex source `3973179a` is deployed. The existing timer admitted Belle's next
+round and confirmed message **479** in Yappers: 39 words, 260 body characters,
+no em dash, a compact tag and the source button present. Guide 298 is shorter
+and remains pinned. Validation passed 3,210 tests across 316 files, both
+typechecks, focused lint and 33 focused tests. All 21 original unknown operations
+remain unchanged. Hosted CI remains unavailable due billing.
 
 ## Provisioning
 
