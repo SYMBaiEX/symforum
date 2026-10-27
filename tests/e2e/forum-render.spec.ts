@@ -43,6 +43,17 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
       if (!href || !href.startsWith("/forum")) continue;
       expect(matchForumRoute(FORUM_NATIVE_ROUTES.map(r => ({ ...r, path: r.path })), href.split(/[?#]/)[0]), `Dead native forum route: ${href}`).toBeTruthy();
     }
+    await app.getByRole("link", { name: "Start here", exact: true }).first().click();
+    await expect(app.getByRole("heading", { name: "Start with one good conversation.", exact: true })).toBeVisible();
+    await expect(app.getByRole("link", { name: "Introduce yourself", exact: true })).toBeVisible();
+    await expect(app.getByRole("link", { name: "Official $SYMF announcement", exact: true })).toBeVisible();
+    expect(await app.locator("html").evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({ path: `tmp/forum-render-tests/start-here-${viewport.width}.png` });
+    // The same dead-link check covers the guide, not just the default feed.
+    for (const href of await app.locator("a[href]").evaluateAll(elements => elements.map(a => a.getAttribute("href")))) {
+      if (!href || !href.startsWith("/forum")) continue;
+      expect(matchForumRoute(FORUM_NATIVE_ROUTES.map(r => ({ ...r, path: r.path })), href.split(/[?#]/)[0]), `Dead onboarding route: ${href}`).toBeTruthy();
+    }
     await app.getByRole("link", { name: "Boards", exact: true }).click();
     await expect(app.getByRole("heading", { name: "Boards", exact: true })).toBeVisible();
     await app.locator('a[href="/forum?view=news"]:visible').getByText("News", { exact: true }).click();

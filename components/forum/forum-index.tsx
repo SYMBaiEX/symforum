@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { ForumFeedList } from "./forum-feed-list";
 import { ForumChat } from "./forum-chat";
+import { ForumWelcome } from "./forum-start-here";
 import { ForumGroupedBoards } from "./forum-grouped-boards";
 import {
   forumHomeHref,
@@ -131,6 +132,7 @@ function LiveForumIndex({
           />
         }
       >
+        {view === "feed" ? <ForumWelcome /> : null}
         <ForumChat />
         {view === "news" ? (
           <NewsFeed

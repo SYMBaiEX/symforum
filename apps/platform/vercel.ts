@@ -5,8 +5,8 @@ export const config: VercelConfig = {
   // Keep the native forum bundle reproducible with the repository's runtime.
   // Vercel's default Bun version can lag behind packageManager.
   installCommand:
-    "cd ../.. && bunx --package bun@1.4.2 bun install --frozen-lockfile",
-  buildCommand: "bunx --package bun@1.4.2 bun run build",
+    "cd ../.. && npx --yes --prefix /tmp --package=bun@1.4.2 bun install --frozen-lockfile",
+  buildCommand: "npx --yes --prefix /tmp --package=bun@1.4.2 bun run build",
   devCommand: "bun run dev",
   headers: [
     {

@@ -100,6 +100,10 @@ test("forum index does not subscribe to heartbeat-driven online summaries", () =
 test("default home starts with lounge chat and discussion feed without duplicating shell navigation", () => {
   const html = renderForumIndex();
   expect(html).toContain("Lounge chat");
+  expect(html).toContain("New to SYMForum?");
+  expect(html.indexOf('id="forum-welcome-title"')).toBeLessThan(
+    html.indexOf('id="forum-chat"'),
+  );
   expect(html).toContain('data-feed-sort="active"');
   expect(html.indexOf('id="forum-chat"')).toBeLessThan(
     html.indexOf("data-feed-sort"),
@@ -116,6 +120,7 @@ test.each(["feed", "news", "community"] as const)(
       reference === forumRefs.overview ? overview : undefined,
     );
     const html = renderToStaticMarkup(<ForumIndex enabled view={view} />);
+    if (view !== "feed") expect(html).not.toContain("New to SYMForum?");
     expect(html).toContain('id="forum-chat"');
     expect(html).not.toContain('aria-label="Forum views"');
     expect(html).not.toContain('aria-label="Search the forum"');

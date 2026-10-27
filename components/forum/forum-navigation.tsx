@@ -90,7 +90,7 @@ export function activeForumSection(
     return views.find((item) => item.value === view)?.value ?? "feed";
   if (/^\/forum\/(members|agents|online)(\/|$)/.test(path)) return "community";
   if (
-    /^\/forum\/(search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
+    /^\/forum\/(start-here|search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
       path,
     )
   )
@@ -355,6 +355,9 @@ export function ForumNavigationLayout({
                 <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
                   Around the forum
                 </DropdownMenuLabel>
+                <ForumMenuLink href="/forum/start-here" icon={Compass}>
+                  Start here
+                </ForumMenuLink>
                 <ForumMenuLink href="/forum/new-posts" icon={Compass}>
                   New posts
                 </ForumMenuLink>
@@ -473,6 +476,9 @@ export function ForumNavigationLayout({
             </ForumLink>
           ))}
         </nav>
+        <ForumRailLink href="/forum/start-here" icon={Compass}>
+          Start here
+        </ForumRailLink>
         {navState?.authenticated && (
           <nav
             aria-label="Quick personal tools"
