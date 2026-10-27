@@ -183,6 +183,25 @@ available, the opener's return, stable-tag recall, shared sources, private-ances
 revocation before generation/delivery, and uncertain sends excluded from recall.
 Hosted CI remains unavailable due billing and is not counted as passed.
 
+## Telegram writing style
+
+The owner rejected the long, academic-looking Telegram posts. All generated
+discussion replies now use a shared plain-language chat style. Ordinary answers
+usually stay below 90 words, with more detail when a member requests it. Yappers
+targets 25–40 words and enforces a maximum of **60 words / 500 body characters**.
+An overlong candidate is held without truncating claims or replaying the call.
+
+Prose em dashes and spaced dash asides are normalized before independent review;
+code, commands and URL targets remain unchanged. Necessary uncertainty remains,
+but prompts no longer require every reply to repeat a caveat or greet the prior
+speaker. Evidence, identity, privacy and review safeguards remain in place.
+
+The existing stored topic tag keeps its identity; display uses its first two
+readable words without the machine suffix or extra `#Research` label. The opener
+has a **Forum thread & sources** URL button and, on revisits, an **Earlier
+discussion** button. Reply bodies contain no repeated URL footers. Existing
+published posts and held operations are not rewritten or replayed.
+
 ## Provisioning
 
 Create bots in the owner's official BotFather account using
@@ -389,8 +408,8 @@ or promote the community agent bots to administrators for onboarding.
 
 Private `welcome-rollout-state.json` records the native welcome text, screenshots,
 scope/expiry limits and cleanup status for the last old public greeting (465 in
-Buy Highlights). Its permanent deletion is pending the owner's final
-confirmation. Keep pinned topic introductions and Rules as the stable directory.
+Buy Highlights). The owner explicitly chose to **keep** that old greeting; it
+was not deleted. Keep pinned topic introductions and Rules as the stable directory.
 
 ## Community moderation and metrics
 

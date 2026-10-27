@@ -38,14 +38,21 @@ export function researchTag(title: string, id: string) {
   return `#${label || "Research"}_${id.replace(/[^a-z0-9]/gi, "").slice(-5)}`;
 }
 
+/** Keep stored topic identity stable while removing machine suffixes from display. */
+export function researchDisplayTag(tag: string) {
+  const label = tag.replace(/^#/, "").replace(/_[a-z0-9]{5}$/i, "");
+  const words = label.match(/[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z0-9]+/g) ?? [];
+  return `#${words.slice(0, 2).join("").slice(0, 22) || "Research"}`;
+}
+
 export function researchPrompt(title: string, turn: number, revisit: boolean) {
   const roles = [
     `Open with ONE specific research question arising from a tension, disputed claim, limitation or unanswered mechanism in the supplied Forum source. Name the actual system, result or trade-off, then ask something that could be investigated with evidence or a test. ${revisit ? "This returns to an earlier topic: read its confirmed discussion, identify the unresolved point and ask a sharper next question; do not restart or pretend new evidence arrived." : "Briefly explain why this particular question is unresolved, without summarizing the entire article."} Do not answer your whole question.`,
-    "Address the opener's actual research question. Offer one tentative answer with a concrete mechanism, example or source passage and a limitation. Do not simply agree or redirect the discussion into generic advice.",
+    "Answer the actual question with one specific mechanism, source detail or example. Add a caveat only if it changes your answer. Do not repeat an uncertainty the opener already stated, simply agree, or redirect into generic advice.",
     "Join the actual exchange as a different researcher. Challenge one specific assumption, add a competing explanation or propose a discriminating experiment. Be fair: if there is no justified disagreement, add a missing variable or useful measurement rather than inventing a debate.",
-    "Return to the question you opened. Respond to the other agents' actual arguments: revise or defend a specific position, and identify what evidence or test would resolve the remaining uncertainty. This is the final turn; leave the issue open for humans without promising more bot replies. Avoid a generic summary or forced consensus.",
+    "Respond to the other agents' actual arguments. Revise or defend a specific point, or pick the next useful test. This is the final turn; do not summarize the whole discussion, force consensus or add a ceremonial closing question.",
   ];
-  return `Research discussion, turn ${turn + 1} of at most four. Focus: ${title.slice(0, 180)}. ${roles[turn] ?? roles[3]} Write naturally in your own voice, in 2-5 short sentences and at most 120 words / 1200 characters. Mention the previous speaker by name when useful. Use a precise source detail, not vague builder motivation, productivity tips, "great point" filler or a canned question to the audience. Distinguish a Forum author's claim, your hypothesis and established evidence. You have no live web browsing or experiment tools: never pretend you searched, tested, measured or found new results. Cite only URLs supplied in the public source or confirmed discussion. Return body text only: topic tags, participant handles and source/backlinks are added by the service.`;
+  return `Research discussion, turn ${turn + 1} of at most four. Focus: ${title.slice(0, 180)}. ${roles[turn] ?? roles[3]} Write a short chat reply in your own voice: usually 25-40 words, 1-3 sentences, maximum 60 words / 500 characters. One useful point is enough. Use plain language and contractions; no em dashes, semicolon chains, abstract-style paragraphs, empty agreement or repeated caveats. Do not address the previous speaker by name: the service tags them. Keep source claims, your hypotheses and established evidence distinct using brief wording. Never pretend you browsed or ran an experiment. Return only body text with no URLs, hashtags, headings or sign-off. The shared Forum source and original references are available through the source button; do not paste a citation into every reply.`;
 }
 
 export function researchMessage(
@@ -59,12 +66,24 @@ export function researchMessage(
     revisit?: boolean;
   },
 ) {
-  const header = `${data.turn === 0 ? "#Research " : ""}${data.tag}${data.previousUsername ? ` @${data.previousUsername}` : ""}`;
-  const previous =
-    data.turn === 0 && data.revisit && data.previousMessageId
-      ? `\nEarlier discussion: https://t.me/c/4387387301/296/${data.previousMessageId}`
-      : "";
-  return `${header}\n\n${body.trim()}${data.turn === 0 ? `\n\nForum source: ${data.sourceUrl}${previous}` : ""}`;
+  const header = `${researchDisplayTag(data.tag)}${data.previousUsername ? ` @${data.previousUsername}` : ""}`;
+  return `${header}\n\n${body.trim()}`;
+}
+
+export function researchMarkup(data: {
+  sourceUrl: string;
+  turn: number;
+  revisit?: boolean;
+  previousMessageId?: number;
+}) {
+  if (data.turn !== 0) return {};
+  const row = [{ text: "Forum thread & sources", url: data.sourceUrl }];
+  if (data.revisit && data.previousMessageId)
+    row.push({
+      text: "Earlier discussion",
+      url: `https://t.me/c/4387387301/296/${data.previousMessageId}`,
+    });
+  return { reply_markup: { inline_keyboard: [row] } };
 }
 
 export function legacyYapSlot(now: number, kickoff = false) {

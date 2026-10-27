@@ -16,6 +16,8 @@ import {
   YAPPERS_FOLLOWUP_DELAY_MS,
   researchTag,
   researchMessage,
+  researchMarkup,
+  researchDisplayTag,
 } from "../lib/telegram-yappers";
 const modules = import.meta.glob("./**/*.ts");
 
@@ -125,7 +127,7 @@ async function setup() {
   return t;
 }
 
-function transport(timeout = false) {
+function transport(timeout = false, draftText?: string) {
   const envelopes: Array<{ stage: string; body: unknown }> = [];
   const sends: Record<string, unknown>[] = [];
   vi.stubGlobal(
@@ -172,11 +174,13 @@ function transport(timeout = false) {
         const output = e.stage.endsWith("evidence-review")
           ? { approved: true, issues: [] }
           : {
-              text: !JSON.stringify(e.body).includes(
-                "Open with ONE specific research question",
-              )
-                ? "Retrieval-time access checks only cover newly fetched passages, not material already in the prompt. Tagging cached passages with source versions would let us test whether revoked text is removed before generation."
-                : "Does rechecking source access at retrieval prevent an agent quoting revoked passages already in conversation history? The Forum proposal covers retrieval, but its cache invalidation boundary remains untested.",
+              text:
+                draftText ??
+                (!JSON.stringify(e.body).includes(
+                  "Open with ONE specific research question",
+                )
+                  ? "Retrieval-time access checks only cover newly fetched passages, not material already in the prompt. Tagging cached passages with source versions would let us test whether revoked text is removed before generation."
+                  : "Does rechecking source access at retrieval prevent an agent quoting revoked passages already in conversation history? The Forum proposal covers retrieval, but its cache invalidation boundary remains untested."),
             };
         return Response.json({
           version: 2,
@@ -238,8 +242,17 @@ test("stable research tags and backlinks cannot inject arbitrary handles or form
     revisit: true,
     previousMessageId: 410,
   });
-  expect(body).toContain(tag);
-  expect(body).toContain("/296/410");
+  expect(body).toContain(researchDisplayTag(tag));
+  expect(
+    JSON.stringify(
+      researchMarkup({
+        sourceUrl: "https://forum.symbaiex.com/research/memory",
+        turn: 0,
+        revisit: true,
+        previousMessageId: 410,
+      }),
+    ),
+  ).toContain("/296/410");
   expect(body).not.toContain("@everyone");
 });
 
@@ -559,8 +572,8 @@ test("research topics rotate and revisits reuse only confirmed topic history wit
   expect(String(sends[2].text).split("\n")[0]).toBe(
     String(sends[0].text).split("\n")[0],
   );
-  expect(sends[2].text).toContain(
-    "Earlier discussion: https://t.me/c/4387387301/296/101",
+  expect(JSON.stringify(sends[2].reply_markup)).toContain(
+    "https://t.me/c/4387387301/296/101",
   );
   expect(JSON.stringify(envelopes[4])).toContain(
     "Does rechecking source access",
@@ -632,8 +645,14 @@ test("research review receives the shared source and actual debate, with partici
   }))!;
   await t.action(internal.telegramAgentReply.respond, { requestId: next });
   expect(sends).toHaveLength(2);
-  expect(String(sends[0].text)).toMatch(/^#Research #[A-Za-z0-9_]+/);
-  expect(sends[0].text).toContain("Forum source: https://forum.symbaiex.com/");
+  expect(String(sends[0].text)).toMatch(/^#[A-Za-z0-9]+\n/);
+  expect(String(sends[0].text)).not.toContain("https://");
+  expect(JSON.stringify(sends[0].reply_markup)).toContain(
+    "https://forum.symbaiex.com/",
+  );
+  expect(JSON.stringify(sends[0].reply_markup)).toContain(
+    "Forum thread & sources",
+  );
   expect(sends[1].text).toContain("@symbaiex_nyx_bot");
   expect(JSON.stringify(envelopes[2])).toContain(
     "no benchmark results are provided",
@@ -667,4 +686,27 @@ test("no eligible public source creates no filler, and failed sends cannot seed 
   vi.setSystemTime(Date.now() + 3 * 60 * 60_000);
   expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
   expect(sends).toHaveLength(1);
+});
+
+test("punctuation is normalized before review and a verbose candidate is held without replay", async () => {
+  const t = await setup();
+  const good = transport(
+    false,
+    "Could revoked passages remain in a prompt—after retrieval access checks pass?",
+  );
+  const id = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: id });
+  expect(good.sends).toHaveLength(1);
+  expect(good.sends[0].text).toContain("prompt, after retrieval");
+  expect(JSON.stringify(good.envelopes[1])).not.toContain("prompt—after");
+  vi.setSystemTime(Date.now() + YAPPERS_INTERVAL_MS + 1);
+  const bad = transport(false, "This is a long abstract. ".repeat(25));
+  const next = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: next });
+  await t.action(internal.telegramAgentReply.respond, { requestId: next });
+  expect(bad.sends).toHaveLength(0);
+  expect(bad.envelopes).toHaveLength(1);
+  expect(
+    (await t.query(internal.telegramYappers.inspect, {}))[0],
+  ).toMatchObject({ status: "held", reason: "telegram_style_rejected" });
 });
