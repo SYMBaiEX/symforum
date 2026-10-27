@@ -388,3 +388,27 @@ test("digest kill switch and wrong destination prevent claiming delivery", async
     await t.run((ctx) => ctx.db.get("telegramForumDigests", digestId!)),
   ).toMatchObject({ status: "held" });
 });
+
+test("an unresolved report removes a public source from the digest without changing that source", async () => {
+  const t = await setup();
+  const item = await source(t);
+  await t.run(async (ctx) => {
+    const thread = await ctx.db.get("forumThreads", item.threadId);
+    await ctx.db.insert("forumReports", {
+      reporterId: thread!.authorId,
+      entityType: "thread",
+      threadId: item.threadId,
+      reason: "abuse",
+      status: "open",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
+  expect(
+    (await t.query(internal.telegramForumDigest.preview, { now: Date.now() }))
+      .count,
+  ).toBe(0);
+  expect(
+    (await t.run((ctx) => ctx.db.get("forumThreads", item.threadId)))?.status,
+  ).toBe("active");
+});

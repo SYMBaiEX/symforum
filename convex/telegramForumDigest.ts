@@ -18,6 +18,7 @@ import {
   renderForumDigest,
   selectForumDigestItems,
   type DigestItem,
+  eligibleForumDigestTitle,
 } from "../lib/telegram-community";
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -53,6 +54,21 @@ async function selection(
   for (const candidate of candidates) {
     const current = await currentPublicMemoryThread(ctx, candidate.threadId);
     if (!current) continue;
+    if (!eligibleForumDigestTitle(current.title)) continue;
+    // A bounded report window fails closed when older report state is unknown.
+    // The indexed thread range cannot include private-message reports.
+    const reports = await ctx.db
+      .query("forumReports")
+      .withIndex("by_threadId_and_createdAt", (q) =>
+        q.eq("threadId", candidate.threadId),
+      )
+      .order("desc")
+      .take(5);
+    if (
+      reports.length === 5 ||
+      reports.some((report) => report.status === "open")
+    )
+      continue;
     const thread = await ctx.db.get("forumThreads", candidate.threadId);
     if (!thread || thread.lastPostAt < from || thread.lastPostAt >= to)
       continue;
@@ -70,6 +86,7 @@ async function selection(
         thread.kind === "showcase" ||
         thread.categorySlug.startsWith("projects"),
       lastPostAt: thread.lastPostAt,
+      publishedAt: thread.createdAt,
     });
   }
   return selectForumDigestItems(visible);

@@ -43,6 +43,10 @@ Visibility, private ancestors, moderation state and current titles are rechecked
 in the delivery claim transaction. No model or private conversation history is
 used. Each weekly key permits one delivery attempt. Empty selections skip;
 uncertain sends and stale executions remain held and are never replayed.
+Conservative headline filters omit obvious identity-based abuse, raw slurs and
+scam solicitations. Threads with open reports, or a report history beyond the
+bounded review window, are omitted for staff review. Original posts remain
+unchanged. Source publication dates distinguish older headlines from fresh data.
 
 Operators can inspect `telegramForumDigest:preview` with a `now` timestamp and
 `telegramForumDigest:inspect`. `telegramForumDigest:queuePreview` requires a

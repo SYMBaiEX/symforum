@@ -5,6 +5,7 @@ import {
   selectForumDigestItems,
   telegramAgentMenu,
   telegramQuestionPrompt,
+  eligibleForumDigestTitle,
   type DigestItem,
 } from "./telegram-community";
 import {
@@ -106,6 +107,27 @@ describe("agent question menu boundaries", () => {
 });
 
 describe("weekly digest", () => {
+  test("headline curation rejects identity insults and scam solicitations while retaining legitimate identity-related discussion", () => {
+    expect(
+      eligibleForumDigestTitle("Is that person the world's worst Jew?"),
+    ).toBe(false);
+    expect(eligibleForumDigestTitle("Send me your seed phrase to join")).toBe(
+      false,
+    );
+    expect(
+      eligibleForumDigestTitle("Guaranteed profits for token buyers"),
+    ).toBe(false);
+    expect(
+      eligibleForumDigestTitle(
+        "Jewish researchers build an open-source archive",
+      ),
+    ).toBe(true);
+    expect(
+      eligibleForumDigestTitle(
+        "Critical feedback about a platform's fee policy",
+      ),
+    ).toBe(true);
+  });
   test("Friday Chicago noon follows summer and winter offsets without a second slot", () => {
     expect(forumDigestSlot(Date.parse("2026-10-30T17:00:00Z"))).toBe(
       "2026-10-30",

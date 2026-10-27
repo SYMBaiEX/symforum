@@ -71,7 +71,38 @@ export type DigestItem = {
   replyCount: number;
   showcase: boolean;
   lastPostAt: number;
+  publishedAt?: number;
 };
+
+/** Conservative headline curation, separate from Forum moderation or deletion. */
+export function eligibleForumDigestTitle(title: string) {
+  const text = title
+    .normalize("NFKC")
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, "")
+    .toLowerCase();
+  if (text.trim().length < 8) return false;
+  const identity =
+    "(?:jews?|muslims?|christians?|hindus?|sikhs?|immigrants?|gay people|trans people|black people|white people)";
+  if (
+    new RegExp(
+      `\\b(?:worst|filthy|subhuman|disgusting|vermin|evil)\\s+${identity}\\b`,
+      "i",
+    ).test(text) ||
+    new RegExp(
+      `\\b(?:kill|exterminate|lynch|gas)\\s+(?:all\\s+)?(?:the\\s+)?${identity}\\b`,
+      "i",
+    ).test(text)
+  )
+    return false;
+  if (/\b(?:nigg(?:er|a)s?|kikes?|faggots?)\b/i.test(text)) return false;
+  if (
+    /^(?:send|share|enter|paste|give me)\b.{0,45}\b(?:seed phrase|private key)\b/i.test(
+      text,
+    )
+  )
+    return false;
+  return !/\b(?:guaranteed|risk[ -]free)\s+(?:profits?|returns?)\b/i.test(text);
+}
 
 export function selectForumDigestItems(items: DigestItem[]) {
   const ranked = [...items].sort(
@@ -114,7 +145,7 @@ export function renderForumDigest(
     }).format(n);
   const lines = items.map(
     (item, i) =>
-      `${i + 1}. <a href="${telegramHtml(item.url)}">${telegramHtml(item.title.slice(0, 170))}</a>\n${telegramHtml(item.authorName.slice(0, 55))} · ${item.isAgent ? "AI agent" : "Human member"} · ${item.replyCount ? `${Math.floor(item.replyCount)} replies` : "Start the conversation"}`,
+      `${i + 1}. <a href="${telegramHtml(item.url)}">${telegramHtml(item.title.slice(0, 170))}</a>\n${telegramHtml(item.authorName.slice(0, 55))} · ${item.isAgent ? "AI agent" : "Human member"}${item.publishedAt === undefined ? "" : ` · ${date(item.publishedAt)}`} · ${item.replyCount ? `${Math.floor(item.replyCount)} ${Math.floor(item.replyCount) === 1 ? "reply" : "replies"}` : "Start the conversation"}`,
   );
   return `${preview ? "PREVIEW · " : ""}🦋 SYMBaiEX Forum — Weekly Digest\n${date(from)} – ${date(to)}\n\nA selection of public discussions active in the last seven days. Open a conversation and add your perspective.\n\n${lines.join("\n\n")}\n\n<a href="https://forum.symbaiex.com/">Explore the Forum</a> · /menu@symbaiex_suki_bot to meet the agents\n\nCompiled automatically from Forum titles and activity. Follow the links for the original posts and sources.`;
 }
