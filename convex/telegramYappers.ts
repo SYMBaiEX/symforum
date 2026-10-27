@@ -1,3 +1,4 @@
+import { RateLimiter } from "@convex-dev/rate-limiter";
 import { createThread } from "@convex-dev/agent";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -11,11 +12,22 @@ import type { Doc } from "./_generated/dataModel";
 import { telegramBotRegistry } from "../lib/telegram-agent-policy";
 import {
   YAPPERS_TOPIC_ID,
+  YAPPERS_INTERVAL_MS,
+  legacyYapSlot,
   YAPPERS_FOLLOWUP_DELAY_MS,
   yapPrompt,
   yapSlot,
 } from "../lib/telegram-yappers";
 import { telegramWorkflow } from "./telegramAgentWorkflow";
+
+const cadence = new RateLimiter(components.rateLimiter, {
+  yappersRounds: {
+    kind: "token bucket",
+    rate: 1,
+    period: YAPPERS_INTERVAL_MS,
+    capacity: 1,
+  },
+});
 
 export function yappersEnabled() {
   return (
@@ -27,16 +39,32 @@ export function yappersEnabled() {
 }
 
 export function validYap(row: Doc<"telegramAgentRequests">, now: number) {
+  if (
+    !yappersEnabled() ||
+    row.topicId !== YAPPERS_TOPIC_ID ||
+    row.kind !== "yap" ||
+    typeof row.yapDay !== "string" ||
+    !Number.isSafeInteger(row.yapRound) ||
+    (row.yapTurn !== 0 && row.yapTurn !== 1) ||
+    now < row.createdAt ||
+    now - row.createdAt >= 8 * 60_000
+  )
+    return false;
+  if (row.yapVersion === 2) {
+    const round = row.yapRound!;
+    const offset = row.createdAt - round * YAPPERS_INTERVAL_MS;
+    // A follow-up may follow an 8-minute opener, 20-minute delay and 5-minute grace.
+    return (
+      round >= 0 &&
+      row.key === `yap2:${round}:${row.yapTurn}` &&
+      offset >= 0 &&
+      offset < YAPPERS_INTERVAL_MS + (row.yapTurn === 1 ? 33 * 60_000 : 0)
+    );
+  }
+  // Only in-flight legacy work may finish; old held requests stay untouched.
   return (
-    yappersEnabled() &&
-    row.topicId === YAPPERS_TOPIC_ID &&
-    row.kind === "yap" &&
-    typeof row.yapDay === "string" &&
     (row.yapRound === 0 || row.yapRound === 1) &&
-    (row.yapTurn === 0 || row.yapTurn === 1) &&
-    now >= row.createdAt &&
-    now - row.createdAt < 8 * 60_000 &&
-    yapSlot(now, true)?.day === row.yapDay
+    legacyYapSlot(now, true)?.day === row.yapDay
   );
 }
 
@@ -49,7 +77,7 @@ async function enqueue(
   if (!yappersEnabled()) return null;
   const now = Date.now();
   const turn = parent ? 1 : 0;
-  const key = `yap:${day}:${round}:${turn}`;
+  const key = `yap2:${round}:${turn}`;
   if (
     await ctx.db
       .query("telegramAgentRequests")
@@ -68,8 +96,13 @@ async function enqueue(
       agents.push({ slug, name: agent.name });
   }
   if (!agents.length) return null;
-  const rotation =
-    Math.floor(Date.parse(`${day}T12:00:00Z`) / 86_400_000) * 2 + round;
+  // One community-wide quota, shared across every registered identity and caller.
+  if (
+    !parent &&
+    !(await cadence.limit(ctx, "yappersRounds", { key: "community:296" })).ok
+  )
+    return null;
+  const rotation = round;
   const agent = agents[rotation % agents.length];
   const bot = registry.get(agent.slug)!;
   const conversationId =
@@ -89,6 +122,7 @@ async function enqueue(
     senderId: "autonomous-yappers",
     conversationId,
     kind: "yap",
+    yapVersion: 2,
     yapDay: day,
     yapRound: round,
     yapTurn: turn,
@@ -109,9 +143,10 @@ async function enqueue(
 export const start = internalMutation({
   args: { kickoff: v.optional(v.boolean()) },
   returns: v.union(v.id("telegramAgentRequests"), v.null()),
-  handler: async (ctx, args) => {
-    const slot = yapSlot(Date.now(), args.kickoff === true);
-    return slot ? await enqueue(ctx, slot.day, slot.round) : null;
+  handler: async (ctx) => {
+    const slot = yapSlot(Date.now());
+    // kickoff remains accepted for operator compatibility, with no extra allowance.
+    return await enqueue(ctx, slot.day, slot.round);
   },
 });
 
@@ -123,13 +158,14 @@ export const followup = internalMutation({
     if (
       !row ||
       row.kind !== "yap" ||
+      row.yapVersion !== 2 ||
       row.yapTurn !== 0 ||
       row.status !== "sent" ||
       !row.yapDay ||
       row.yapRound === undefined ||
+      row.key !== `yap2:${row.yapRound}:0` ||
       Date.now() - row.updatedAt < YAPPERS_FOLLOWUP_DELAY_MS ||
-      Date.now() - row.updatedAt > YAPPERS_FOLLOWUP_DELAY_MS + 5 * 60_000 ||
-      yapSlot(Date.now(), true)?.day !== row.yapDay
+      Date.now() - row.updatedAt > YAPPERS_FOLLOWUP_DELAY_MS + 5 * 60_000
     )
       return null;
     return await enqueue(ctx, row.yapDay, row.yapRound, row);

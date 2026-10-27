@@ -7,13 +7,8 @@ crons.interval("refresh public meme inspiration", { hours: 6 }, internal.telegra
 crons.interval("Belle original community memes", { minutes: 1 }, internal.telegramMemes.start, {});
 crons.interval("public SYMF buy feed", { minutes: 1 }, internal.telegramTradeFeedPoll.poll, {});
 crons.interval("expire confirmed public buy-feed receipts", { hours: 1 }, internal.telegramTradeFeed.cleanup, {});
-// Local-time admission follows Chicago daylight saving; only two rounds/day.
-crons.cron(
-  "bounded Forum Telegram Yappers",
-  "10 16,17,22,23 * * *",
-  internal.telegramYappers.start,
-  {},
-);
+// Admission uses one shared 30-minute quota; roster size never adds posting loops.
+crons.interval("bounded Forum Telegram Yappers", { minutes: 1 }, internal.telegramYappers.start, {});
 // Chicago noon is 17:00 UTC in summer and 18:00 UTC in winter. Admission is
 // gated by the local time and a durable weekly delivery key.
 crons.cron(

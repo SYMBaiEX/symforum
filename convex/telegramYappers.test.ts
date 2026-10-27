@@ -7,7 +7,12 @@ import { convexTest } from "convex-test";
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
-import { yapSlot, YAPPERS_FOLLOWUP_DELAY_MS } from "../lib/telegram-yappers";
+import {
+  yapSlot,
+  legacyYapSlot,
+  YAPPERS_INTERVAL_MS,
+  YAPPERS_FOLLOWUP_DELAY_MS,
+} from "../lib/telegram-yappers";
 const modules = import.meta.glob("./**/*.ts");
 
 beforeEach(() => {
@@ -152,21 +157,21 @@ function transport(timeout = false) {
   return { envelopes, sends };
 }
 
-test("Chicago schedule follows DST and rejects night/unscheduled times", () => {
-  expect(yapSlot(Date.parse("2026-10-27T16:10:00Z"))).toEqual({
-    day: "2026-10-27",
-    round: 0,
-  });
-  expect(yapSlot(Date.parse("2026-12-01T17:10:00Z"))).toEqual({
-    day: "2026-12-01",
-    round: 0,
-  });
-  expect(yapSlot(Date.parse("2026-10-27T22:10:00Z"))?.round).toBe(1);
-  expect(yapSlot(Date.parse("2026-10-27T17:10:00Z"))).toBeNull();
-  expect(yapSlot(Date.parse("2026-10-28T04:00:00Z"), true)).toBeNull();
+test("half-hour slots run all night and survive Chicago DST repeats", () => {
+  const start = Date.parse("2026-10-27T16:10:00Z");
+  expect(yapSlot(start).round).toBe(Math.floor(start / YAPPERS_INTERVAL_MS));
+  expect(yapSlot(start + YAPPERS_INTERVAL_MS).round).toBe(
+    yapSlot(start).round + 1,
+  );
+  expect(yapSlot(Date.parse("2026-10-28T04:00:00Z")).day).toBe("2026-10-27");
+  const before = yapSlot(Date.parse("2026-11-01T06:30:00Z"));
+  const after = yapSlot(Date.parse("2026-11-01T07:30:00Z"));
+  expect(after.day).toBe(before.day);
+  expect(after.round).toBe(before.round + 2);
+  expect(legacyYapSlot(start)?.round).toBe(0);
 });
 
-test("two once-only rounds share a four-post cap; only confirmed public posts reach a different agent", async () => {
+test("shared half-hour quota rejects boundary bursts; each round has only one different-agent follow-up", async () => {
   const t = await setup();
   const { envelopes, sends } = transport();
   const opener = await t.mutation(internal.telegramYappers.start, {});
@@ -197,7 +202,9 @@ test("two once-only rounds share a four-post cap; only confirmed public posts re
   expect(
     await t.mutation(internal.telegramYappers.followup, { requestId: opener! }),
   ).toBeNull();
-  vi.setSystemTime(new Date("2026-10-27T22:10:00Z"));
+  vi.setSystemTime(new Date("2026-10-27T16:39:59.999Z"));
+  expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
+  vi.setSystemTime(new Date("2026-10-27T16:40:00.001Z"));
   const second = await t.mutation(internal.telegramYappers.start, {});
   await t.action(internal.telegramAgentReply.respond, { requestId: second! });
   vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
@@ -274,4 +281,68 @@ test("switches, destination changes and expiry block generation; webhook admissi
   vi.stubEnv("TELEGRAM_YAPPERS_ENABLED", "false");
   vi.setSystemTime(new Date("2026-10-27T22:10:00Z"));
   expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
+});
+
+test("a confirmed late-night opener can finish its one follow-up after Chicago midnight", async () => {
+  const t = await setup();
+  const { sends } = transport();
+  vi.setSystemTime(new Date("2026-10-28T04:50:00Z"));
+  const opener = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: opener });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  const followup = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: opener,
+  }))!;
+  expect(followup).not.toBeNull();
+  await t.action(internal.telegramAgentReply.respond, { requestId: followup });
+  expect(sends).toHaveLength(2);
+  const [a, b] = await t.run(async (ctx) => [
+    await ctx.db.get("telegramAgentRequests", opener),
+    await ctx.db.get("telegramAgentRequests", followup),
+  ]);
+  expect(a?.conversationId).toBe(b?.conversationId);
+  expect(a?.yapDay).toBe("2026-10-27");
+  expect(
+    (await t.query(internal.telegramYappers.inspect, {})).every(
+      (r) => r.status === "sent",
+    ),
+  ).toBe(true);
+});
+
+test("a new schedule never reopens or follows a held legacy round", async () => {
+  const t = await setup();
+  const legacy = await t.run((ctx) =>
+    ctx.db.insert("telegramAgentRequests", {
+      key: "yap:2026-10-27:0:1",
+      agentSlug: "nyx",
+      botId: "987654321",
+      updateId: 1,
+      messageId: 0,
+      topicId: 296,
+      senderId: "autonomous-yappers",
+      conversationId: "legacy-held-thread",
+      kind: "yap",
+      yapDay: "2026-10-27",
+      yapRound: 0,
+      yapTurn: 1,
+      status: "held",
+      reason: "review_rejected",
+      createdAt: Date.now() - 60_000,
+      updatedAt: Date.now() - 60_000,
+    }),
+  );
+  const fresh = await t.mutation(internal.telegramYappers.start, {});
+  expect(fresh).not.toBeNull();
+  expect(
+    await t.mutation(internal.telegramAgents.claim, { requestId: legacy }),
+  ).toBe(false);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: legacy }),
+  ).toBeNull();
+  const old = await t.run((ctx) => ctx.db.get("telegramAgentRequests", legacy));
+  expect(old).toMatchObject({
+    key: "yap:2026-10-27:0:1",
+    status: "held",
+    reason: "review_rejected",
+  });
 });

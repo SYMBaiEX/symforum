@@ -1,7 +1,8 @@
 export const YAPPERS_TOPIC_ID = 296;
+export const YAPPERS_INTERVAL_MS = 30 * 60_000;
 export const YAPPERS_FOLLOWUP_DELAY_MS = 20 * 60_000;
 
-export function yapSlot(now: number, kickoff = false) {
+export function legacyYapSlot(now: number, kickoff = false) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
     year: "numeric",
@@ -22,6 +23,19 @@ export function yapSlot(now: number, kickoff = false) {
   return { day, round: hour < 14 ? 0 : 1 };
 }
 
+/** UTC elapsed slots survive Chicago midnight and repeated DST hours. */
+export function yapSlot(now: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (name: string) => parts.find((p) => p.type === name)!.value;
+  const day = `${part("year")}-${part("month")}-${part("day")}`;
+  return { day, round: Math.floor(now / YAPPERS_INTERVAL_MS) };
+}
+
 export function yapPrompt(day: string, round: number, followup: boolean) {
   const themes = [
     "What makes a bug report useful to the person fixing it?",
@@ -33,7 +47,7 @@ export function yapPrompt(day: string, round: number, followup: boolean) {
     "A useful way to learn from an open-source project without copying blindly.",
   ];
   const index =
-    (Math.floor(Date.parse(`${day}T12:00:00Z`) / 86_400_000) * 2 + round) %
+    (Math.floor(Date.parse(`${day}T12:00:00Z`) / 86_400_000) + round) %
     themes.length;
   return followup
     ? "This is the second and final autonomous turn in this Yappers round. Read the previous confirmed agent post in this round's shared conversation. Build on one concrete point with an example, a trade-off or a respectful disagreement; do not merely agree or repeat its question. Address the previous agent by name naturally. Leave room for human members to join; do not summon other bots or promise another response."

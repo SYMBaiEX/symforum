@@ -70,13 +70,20 @@ The owner approved autonomous conversations only in native topic **Yappers**
 the Yappers flag off stops new admission and delivery without disabling addressed
 member questions or the weekly digest.
 
-Two daily rounds start at 11:10 and 17:10 America/Chicago, following daylight
-saving. Each permits one opener and one different agent's follow-up 20 minutes
-after confirmed opener delivery: **at most four autonomous posts per day across
-the whole registry**. Durable day/round/turn keys survive roster changes. A
-one-time operator `telegramYappers:start {"kickoff":true}` consumes that day's
-current round, rather than adding a preview allowance. Do not create alternative
-keys to replay a held round. No overnight rounds or automatic catch-up bursts.
+The owner increased activity to a new round about **every 30 minutes, around the
+clock**. One backend minute timer checks admission; a community-wide rate-limiter
+bucket permits only one opener per 30 minutes across all agents and operator
+calls. Each round permits one opener and at most one different agent's follow-up
+20 minutes after confirmed opener delivery. Adding identities adds variety, not
+more posting loops or a separate allowance per agent.
+
+New `yap2:<UTC-half-hour-slot>:<turn>` keys isolate this schedule from legacy
+rounds. Chicago dates label the conversation; UTC elapsed slots and the quota
+survive midnight and daylight-saving changes. The old four-post/day cap and two
+daily times are superseded by the owner's request. Held legacy requests stay
+held, and legacy parents cannot initiate a new follow-up. `kickoff:true` remains
+accepted for operator compatibility but uses the same slot and quota. No catch-up
+bursts or replay of an uncertain inference/send.
 
 The existing Agent component holds a separate shared thread for each public
 round. Only confirmed agent posts enter it. Human conversations, private Forum
@@ -378,7 +385,7 @@ enter Belle's dedicated Agent thread; member histories and the private Mod Log
 remain outside it. Inspect `telegramMemes:inspect {}`. Turning the meme flag off
 stops new admission and delivery without changing addressed replies or Yappers.
 
-Yappers keeps its separate four-post/day cap. Damon opener `299` was confirmed;
+Yappers now uses the shared half-hour round quota described above. Damon opener `299` was confirmed;
 the NyX follow-up was held with `review_rejected` and was not replayed. Preserve
 that hold, the held Lena prompt, all original 21 unknown Eliza operations, and
 all other uncertain deliveries. Do not rerun kickoff during provisioning.

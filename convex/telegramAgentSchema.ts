@@ -111,6 +111,7 @@ export const telegramAgentTables = {
     memeFallbackReason: v.optional(v.string()),
     memeDeliveryAttempts: v.optional(v.number()),
     memeRetryAt: v.optional(v.number()),
+    yapVersion: v.optional(v.literal(2)),
     yapDay: v.optional(v.string()),
     yapRound: v.optional(v.number()),
     yapTurn: v.optional(v.number()),
