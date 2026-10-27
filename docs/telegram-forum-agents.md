@@ -163,6 +163,26 @@ Its first post now has the generated Forum signal-moth launch image attached,
 with alt text. The image and exact generation prompt are retained in
 `assets/telegram/telegram-community-launch-v1.png` and its sibling `.prompt.txt`.
 
+### Research conversations — October 27
+
+The owner rejected the generic v3 conversation prompts after NyX's automatic
+post **410**. Convex source `17af4980` replaces them with public-Forum research
+questions, distinct respondents and topic-specific recall. Generic v3 parents
+cannot enqueue another reply. Existing v2/legacy holds remain unchanged.
+
+The shared half-hour timer is enabled with its existing bucket; no manual start
+or allowance reset was used. The first v4 live exchange is pending its normal
+admission, with observed progress recorded in private `yappers-rollout-state.json`.
+Guide **298** now describes research questions, topic tags and linked revisits;
+its existing pin was verified. All 21 original unknown operations remained
+unchanged after this deployment.
+
+Validation passed **3,207 tests across 315 files**, both typechecks, focused lint
+and 30 focused integration tests. These cover three distinct speakers where
+available, the opener's return, stable-tag recall, shared sources, private-ancestor
+revocation before generation/delivery, and uncertain sends excluded from recall.
+Hosted CI remains unavailable due billing and is not counted as passed.
+
 ## Provisioning
 
 Create bots in the owner's official BotFather account using

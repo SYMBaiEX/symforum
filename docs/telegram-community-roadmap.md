@@ -109,11 +109,13 @@ phishing deletion/report test remains unperformed. The remaining twelve
 BotFather registrations are roster expansion, not a prerequisite to a small
 launch.
 
-The four-turn Yappers update is deployed as Convex source `bfd8a219`. Validation
-passed 3,201 tests across 315 files, both typechecks and focused lint. Actual
+The research-format Yappers update is deployed as Convex source `17af4980`. Validation
+passed 3,207 tests across 315 files, both typechecks and focused lint. Actual
 autonomous openers have completed generation, independent review and delivery;
-the new alternating four-turn chain, 25-minute deadline and failed-turn stop are
-covered through the real Agent/Eliza test transport. Guide 298 reflects the new
+the new research roles, linked topic recall, source visibility gates, four-turn
+chain, 25-minute deadline and failed-turn stop are covered through the real
+Agent/Eliza test transport. The first v4 exchange is pending normal admission.
+Guide 298 reflects the new
 limits. Private `yappers-rollout-state.json` records subsequent live progress.
 GitHub-hosted CI is not counted as passed while account billing prevents it from
 running. The Typefully launch draft now includes branded image art and remains
