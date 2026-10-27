@@ -1,6 +1,8 @@
 // @vitest-environment node
 /// <reference types="vite/client" />
 import agentTest from "@convex-dev/agent/test";
+import { createThread, saveMessages } from "@convex-dev/agent";
+import { components } from "./_generated/api";
 import workflowTest from "@convex-dev/workflow/test";
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
@@ -171,61 +173,77 @@ test("half-hour slots run all night and survive Chicago DST repeats", () => {
   expect(legacyYapSlot(start)?.round).toBe(0);
 });
 
-test("shared half-hour quota rejects boundary bursts; each round has only one different-agent follow-up", async () => {
+test("four short turns alternate speakers, share confirmed context and stop without a fifth reply", async () => {
   const t = await setup();
   const { envelopes, sends } = transport();
-  const opener = await t.mutation(internal.telegramYappers.start, {});
-  expect(opener).not.toBeNull();
+  await t.run(async (ctx) => {
+    const privateThread = await createThread(ctx, components.agent, {});
+    await saveMessages(ctx, components.agent, {
+      threadId: privateThread,
+      messages: [
+        { role: "user", content: "PRIVATE_MEMBER_HISTORY" },
+        { role: "assistant", content: "PRIVATE_REPLY" },
+      ],
+    });
+  });
+  const started = Date.now();
+  const ids = [(await t.mutation(internal.telegramYappers.start, {}))!];
+  expect(ids[0]).not.toBeNull();
   expect(
     await t.mutation(internal.telegramYappers.start, { kickoff: true }),
   ).toBeNull();
-  await t.action(internal.telegramAgentReply.respond, { requestId: opener! });
-  expect(
-    await t.mutation(internal.telegramYappers.followup, { requestId: opener! }),
-  ).toBeNull();
-  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
-  const follow = await t.mutation(internal.telegramYappers.followup, {
-    requestId: opener!,
-  });
-  expect(follow).not.toBeNull();
-  const a = await t.run((ctx) => ctx.db.get("telegramAgentRequests", opener!));
-  const b = await t.run((ctx) => ctx.db.get("telegramAgentRequests", follow!));
-  expect(a?.agentSlug).not.toBe(b?.agentSlug);
-  expect(a?.conversationId).toBe(b?.conversationId);
-  await t.action(internal.telegramAgentReply.respond, { requestId: follow! });
-  expect(JSON.stringify(envelopes[2].body)).toContain(
-    "A useful bug report includes the expected result",
+  for (let turn = 0; turn < 4; turn++) {
+    await t.action(internal.telegramAgentReply.respond, {
+      requestId: ids[turn],
+    });
+    expect(
+      await t.mutation(internal.telegramYappers.followup, {
+        requestId: ids[turn],
+      }),
+    ).toBeNull();
+    vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+    const next = await t.mutation(internal.telegramYappers.followup, {
+      requestId: ids[turn],
+    });
+    if (turn < 3) {
+      expect(next).not.toBeNull();
+      ids.push(next!);
+    } else expect(next).toBeNull();
+    expect(
+      await t.mutation(internal.telegramYappers.followup, {
+        requestId: ids[turn],
+      }),
+    ).toBeNull();
+  }
+  const rows = await t.run(
+    async (ctx) =>
+      await Promise.all(
+        ids.map((id) => ctx.db.get("telegramAgentRequests", id)),
+      ),
   );
-  expect(
-    await t.mutation(internal.telegramYappers.followup, { requestId: follow! }),
-  ).toBeNull();
-  expect(
-    await t.mutation(internal.telegramYappers.followup, { requestId: opener! }),
-  ).toBeNull();
-  vi.setSystemTime(new Date("2026-10-27T16:39:59.999Z"));
-  expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
-  vi.setSystemTime(new Date("2026-10-27T16:40:00.001Z"));
-  const second = await t.mutation(internal.telegramYappers.start, {});
-  await t.action(internal.telegramAgentReply.respond, { requestId: second! });
-  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
-  const last = await t.mutation(internal.telegramYappers.followup, {
-    requestId: second!,
-  });
-  await t.action(internal.telegramAgentReply.respond, { requestId: last! });
-  await t.action(internal.telegramAgentReply.respond, { requestId: last! });
+  expect(rows.map((r) => r?.status)).toEqual(["sent", "sent", "sent", "sent"]);
+  expect(rows[0]?.agentSlug).toBe(rows[2]?.agentSlug);
+  expect(rows[1]?.agentSlug).toBe(rows[3]?.agentSlug);
+  expect(rows[0]?.agentSlug).not.toBe(rows[1]?.agentSlug);
+  expect(new Set(rows.map((r) => r?.conversationId)).size).toBe(1);
   expect(sends).toHaveLength(4);
   expect(envelopes).toHaveLength(8);
-  for (const send of sends) {
+  expect(JSON.stringify(envelopes[3])).toContain("confirmedPublicRound");
+  expect(JSON.stringify(envelopes[3])).toContain(
+    "A useful bug report includes the expected result",
+  );
+  expect(JSON.stringify(envelopes[6])).toContain("final turn");
+  expect(JSON.stringify(envelopes)).not.toContain("PRIVATE_");
+  for (const send of sends)
     expect(send).toMatchObject({
       chat_id: "-1004387387301",
       message_thread_id: 296,
       disable_notification: true,
     });
-    expect(send).not.toHaveProperty("reply_parameters");
-  }
-  const rows = await t.query(internal.telegramYappers.inspect, {});
-  expect(rows).toHaveLength(4);
-  expect(rows.every((r) => r.status === "sent")).toBe(true);
+  vi.setSystemTime(started + YAPPERS_INTERVAL_MS - 1);
+  expect(await t.mutation(internal.telegramYappers.start, {})).toBeNull();
+  vi.setSystemTime(started + YAPPERS_INTERVAL_MS + 1);
+  expect(await t.mutation(internal.telegramYappers.start, {})).not.toBeNull();
 });
 
 test("uncertain send holds without replay or follow-up", async () => {
@@ -286,7 +304,7 @@ test("switches, destination changes and expiry block generation; webhook admissi
 test("a confirmed late-night opener can finish its one follow-up after Chicago midnight", async () => {
   const t = await setup();
   const { sends } = transport();
-  vi.setSystemTime(new Date("2026-10-28T04:50:00Z"));
+  vi.setSystemTime(new Date("2026-10-28T04:58:00Z"));
   const opener = (await t.mutation(internal.telegramYappers.start, {}))!;
   await t.action(internal.telegramAgentReply.respond, { requestId: opener });
   vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
@@ -345,4 +363,77 @@ test("a new schedule never reopens or follows a held legacy round", async () => 
     status: "held",
     reason: "review_rejected",
   });
+});
+
+test("slow turns cannot extend a conversation beyond its 25-minute window", async () => {
+  const t = await setup();
+  const { sends } = transport();
+  const start = Date.now();
+  const opener = (await t.mutation(internal.telegramYappers.start, {}))!;
+  vi.setSystemTime(start + 7 * 60_000);
+  await t.action(internal.telegramAgentReply.respond, { requestId: opener });
+  vi.setSystemTime(start + 13 * 60_000);
+  const child = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: opener,
+  }))!;
+  expect(child).not.toBeNull();
+  vi.setSystemTime(start + 20 * 60_000);
+  await t.action(internal.telegramAgentReply.respond, { requestId: child });
+  vi.setSystemTime(start + 26 * 60_000);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: child }),
+  ).toBeNull();
+  expect(sends).toHaveLength(2);
+});
+
+test("a held middle reply stops the chain and cannot be skipped or resent", async () => {
+  const t = await setup();
+  transport();
+  const opener = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: opener });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  const child = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: opener,
+  }))!;
+  const { sends } = transport(true);
+  await t.action(internal.telegramAgentReply.respond, { requestId: child });
+  await t.action(internal.telegramAgentReply.respond, { requestId: child });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: child }),
+  ).toBeNull();
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: opener }),
+  ).toBeNull();
+  expect(sends).toHaveLength(1);
+});
+
+test("an in-flight v2 round keeps its original single 20-minute follow-up", async () => {
+  const t = await setup();
+  const { sends } = transport();
+  const opener = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.run(async (ctx) => {
+    const row = (await ctx.db.get("telegramAgentRequests", opener))!;
+    await ctx.db.patch("telegramAgentRequests", opener, {
+      key: `yap2:${row.yapRound}:0`,
+      yapVersion: 2,
+      yapRoundStartedAt: undefined,
+    });
+  });
+  await t.action(internal.telegramAgentReply.respond, { requestId: opener });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: opener }),
+  ).toBeNull();
+  vi.setSystemTime(Date.now() + 14 * 60_000);
+  const child = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: opener,
+  }))!;
+  expect(child).not.toBeNull();
+  await t.action(internal.telegramAgentReply.respond, { requestId: child });
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  expect(
+    await t.mutation(internal.telegramYappers.followup, { requestId: child }),
+  ).toBeNull();
+  expect(sends).toHaveLength(2);
 });

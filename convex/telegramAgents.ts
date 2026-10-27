@@ -15,7 +15,7 @@ import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 import type { MenuAgent } from "../lib/telegram-community";
 import { validMeme } from "./telegramMemes";
 import { validYap } from "./telegramYappers";
-import { YAPPERS_FOLLOWUP_DELAY_MS } from "../lib/telegram-yappers";
+import { yapFollowupDelay } from "../lib/telegram-yappers";
 
 function specialty(slug: string) {
   return (
@@ -316,7 +316,8 @@ export const ready = internalMutation({
       !row ||
       row.status !== "generating" ||
       !args.text.trim() ||
-      args.text.length > (row.kind === "yap" ? 1200 : 3000)
+      args.text.length >
+        (row.kind === "yap" ? (row.yapVersion === 3 ? 800 : 1200) : 3000)
     )
       return false;
     if (row.kind === "ask")
@@ -402,12 +403,11 @@ export const finish = internalMutation({
           },
         ],
       });
-      if (row.yapTurn === 0)
-        await ctx.scheduler.runAfter(
-          YAPPERS_FOLLOWUP_DELAY_MS,
-          internal.telegramYappers.followup,
-          { requestId: row._id },
-        );
+      const delay = yapFollowupDelay(row);
+      if (delay !== null)
+        await ctx.scheduler.runAfter(delay, internal.telegramYappers.followup, {
+          requestId: row._id,
+        });
     }
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: sent ? "sent" : "held",

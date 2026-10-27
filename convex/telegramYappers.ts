@@ -14,7 +14,9 @@ import {
   YAPPERS_TOPIC_ID,
   YAPPERS_INTERVAL_MS,
   legacyYapSlot,
-  YAPPERS_FOLLOWUP_DELAY_MS,
+  YAPPERS_MAX_TURNS,
+  YAPPERS_ROUND_WINDOW_MS,
+  yapFollowupDelay,
   yapPrompt,
   yapSlot,
 } from "../lib/telegram-yappers";
@@ -45,11 +47,23 @@ export function validYap(row: Doc<"telegramAgentRequests">, now: number) {
     row.kind !== "yap" ||
     typeof row.yapDay !== "string" ||
     !Number.isSafeInteger(row.yapRound) ||
-    (row.yapTurn !== 0 && row.yapTurn !== 1) ||
+    !Number.isInteger(row.yapTurn) ||
+    row.yapTurn! < 0 ||
+    row.yapTurn! >= (row.yapVersion === 3 ? YAPPERS_MAX_TURNS : 2) ||
     now < row.createdAt ||
     now - row.createdAt >= 8 * 60_000
   )
     return false;
+  if (row.yapVersion === 3) {
+    return (
+      row.yapRound! >= 0 &&
+      row.key === `yap3:${row.yapRound}:${row.yapTurn}` &&
+      row.yapRoundStartedAt !== undefined &&
+      row.createdAt >= row.yapRoundStartedAt &&
+      now - row.yapRoundStartedAt < YAPPERS_ROUND_WINDOW_MS &&
+      yapSlot(row.yapRoundStartedAt).round === row.yapRound
+    );
+  }
   if (row.yapVersion === 2) {
     const round = row.yapRound!;
     const offset = row.createdAt - round * YAPPERS_INTERVAL_MS;
@@ -76,8 +90,16 @@ async function enqueue(
 ) {
   if (!yappersEnabled()) return null;
   const now = Date.now();
-  const turn = parent ? 1 : 0;
-  const key = `yap2:${round}:${turn}`;
+  const version = parent?.yapVersion ?? 3;
+  const turn = parent ? parent.yapTurn! + 1 : 0;
+  const startedAt =
+    version === 3 ? (parent?.yapRoundStartedAt ?? now) : undefined;
+  if (
+    version === 3 &&
+    (turn >= YAPPERS_MAX_TURNS || now - startedAt! >= YAPPERS_ROUND_WINDOW_MS)
+  )
+    return null;
+  const key = `yap${version}:${round}:${turn}`;
   if (
     await ctx.db
       .query("telegramAgentRequests")
@@ -103,7 +125,20 @@ async function enqueue(
   )
     return null;
   const rotation = round;
-  const agent = agents[rotation % agents.length];
+  // Prefer the speaker from two turns ago: a real A/B/A/B exchange.
+  const earlier =
+    version === 3 && turn >= 2
+      ? await ctx.db
+          .query("telegramAgentRequests")
+          .withIndex("by_key", (q) => q.eq("key", `yap3:${round}:${turn - 2}`))
+          .unique()
+      : null;
+  const returning =
+    earlier?.status === "sent" &&
+    earlier.conversationId === parent?.conversationId
+      ? agents.find((a) => a.slug === earlier.agentSlug)
+      : undefined;
+  const agent = returning ?? agents[rotation % agents.length];
   const bot = registry.get(agent.slug)!;
   const conversationId =
     parent?.conversationId ??
@@ -122,11 +157,12 @@ async function enqueue(
     senderId: "autonomous-yappers",
     conversationId,
     kind: "yap",
-    yapVersion: 2,
+    yapVersion: version as 2 | 3,
+    ...(startedAt !== undefined ? { yapRoundStartedAt: startedAt } : {}),
     yapDay: day,
     yapRound: round,
     yapTurn: turn,
-    prompt: yapPrompt(day, round, !!parent),
+    prompt: yapPrompt(day, round, turn, version === 3 ? YAPPERS_MAX_TURNS : 2),
     status: "queued",
     createdAt: now,
     updatedAt: now,
@@ -155,19 +191,35 @@ export const followup = internalMutation({
   returns: v.union(v.id("telegramAgentRequests"), v.null()),
   handler: async (ctx, { requestId }) => {
     const row = await ctx.db.get("telegramAgentRequests", requestId);
+    const delay = row ? yapFollowupDelay(row) : null;
     if (
       !row ||
       row.kind !== "yap" ||
-      row.yapVersion !== 2 ||
-      row.yapTurn !== 0 ||
       row.status !== "sent" ||
       !row.yapDay ||
       row.yapRound === undefined ||
-      row.key !== `yap2:${row.yapRound}:0` ||
-      Date.now() - row.updatedAt < YAPPERS_FOLLOWUP_DELAY_MS ||
-      Date.now() - row.updatedAt > YAPPERS_FOLLOWUP_DELAY_MS + 5 * 60_000
+      delay === null ||
+      row.key !== `yap${row.yapVersion}:${row.yapRound}:${row.yapTurn}` ||
+      Date.now() - row.updatedAt < delay ||
+      Date.now() - row.updatedAt >
+        delay + (row.yapVersion === 3 ? 3 : 5) * 60_000
     )
       return null;
+    if (row.yapVersion === 3) {
+      const opener = await ctx.db
+        .query("telegramAgentRequests")
+        .withIndex("by_key", (q) => q.eq("key", `yap3:${row.yapRound}:0`))
+        .unique();
+      if (
+        !opener ||
+        opener.status !== "sent" ||
+        opener.conversationId !== row.conversationId ||
+        opener.yapRoundStartedAt !== row.yapRoundStartedAt ||
+        row.yapRoundStartedAt === undefined ||
+        Date.now() - row.yapRoundStartedAt >= YAPPERS_ROUND_WINDOW_MS
+      )
+        return null;
+    }
     return await enqueue(ctx, row.yapDay, row.yapRound, row);
   },
 });

@@ -7,6 +7,10 @@
 - `symf-buy-alert.png`: earlier static artwork, retained as an alternate.
 - `meme-reactions.png`: original OpenAI imagegen 2×2 signal-moth reaction atlas.
 - `meme-preview.png`: local caption-rendering preview; it was not an agent post.
+- `telegram-community-launch-v1.png`: mascot-led Telegram launch image attached to
+  the owner’s unscheduled Typefully announcement draft. Built-in image generation
+  used the existing cinematic mascot as reference; the exact prompt is in
+  `telegram-community-launch-v1.prompt.txt`.
 
 Belle generates and independently reviews new caption pairs through the existing
 ElizaOS runtime and shared daily model budget. The backend rasterizes originals

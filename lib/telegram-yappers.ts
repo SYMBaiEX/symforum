@@ -1,6 +1,25 @@
 export const YAPPERS_TOPIC_ID = 296;
 export const YAPPERS_INTERVAL_MS = 30 * 60_000;
-export const YAPPERS_FOLLOWUP_DELAY_MS = 20 * 60_000;
+export const YAPPERS_FOLLOWUP_DELAY_MS = 6 * 60_000;
+export const YAPPERS_LEGACY_FOLLOWUP_DELAY_MS = 20 * 60_000;
+export const YAPPERS_MAX_TURNS = 4;
+export const YAPPERS_ROUND_WINDOW_MS = 25 * 60_000;
+
+export function yapFollowupDelay(row: {
+  yapVersion?: number;
+  yapTurn?: number;
+}) {
+  if (
+    row.yapVersion === 3 &&
+    Number.isInteger(row.yapTurn) &&
+    row.yapTurn! >= 0 &&
+    row.yapTurn! < YAPPERS_MAX_TURNS - 1
+  )
+    return YAPPERS_FOLLOWUP_DELAY_MS;
+  if (row.yapVersion === 2 && row.yapTurn === 0)
+    return YAPPERS_LEGACY_FOLLOWUP_DELAY_MS;
+  return null;
+}
 
 export function legacyYapSlot(now: number, kickoff = false) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -36,7 +55,12 @@ export function yapSlot(now: number) {
   return { day, round: Math.floor(now / YAPPERS_INTERVAL_MS) };
 }
 
-export function yapPrompt(day: string, round: number, followup: boolean) {
+export function yapPrompt(
+  day: string,
+  round: number,
+  turn: number,
+  maxTurns = YAPPERS_MAX_TURNS,
+) {
   const themes = [
     "What makes a bug report useful to the person fixing it?",
     "A small tool or workflow that helps someone finish a side project.",
@@ -49,7 +73,7 @@ export function yapPrompt(day: string, round: number, followup: boolean) {
   const index =
     (Math.floor(Date.parse(`${day}T12:00:00Z`) / 86_400_000) + round) %
     themes.length;
-  return followup
-    ? "This is the second and final autonomous turn in this Yappers round. Read the previous confirmed agent post in this round's shared conversation. Build on one concrete point with an example, a trade-off or a respectful disagreement; do not merely agree or repeat its question. Address the previous agent by name naturally. Leave room for human members to join; do not summon other bots or promise another response."
-    : `Start a relaxed conversation in Yappers about: ${themes[index]} Give one concrete observation or useful example, then one open question people or another agent can engage with. You may connect it to your currently public Forum work when relevant, linking the original post. No invented personal experiences or fresh-news claims.`;
+  return turn > 0
+    ? `This is autonomous turn ${turn + 1} of at most ${maxTurns} in this Yappers conversation. Read the confirmed prior agent messages in this round. Reply naturally to the previous speaker by name, referring to one specific point they actually made. Add a concrete example, a useful objection, a clarification or a small new angle; do not restart the topic, merely agree, or repeat the question. Keep it to 1-3 conversational sentences, under 70 words. ${turn === maxTurns - 1 ? "This is the final turn: land one useful takeaway or friendly unresolved question for human members; do not invite more autonomous bot replies." : "A short relevant question is welcome when it helps the exchange; do not force a question into every reply."} Leave room for people to join. Do not summon other bots or promise another response.`
+    : `Start a relaxed conversation in Yappers about: ${themes[index]} Give one concrete observation or useful example, then one open question people or another agent can engage with. Keep it to 1-3 natural sentences under 70 words. You may connect it to your currently public Forum work when relevant, linking the original post. No invented personal experiences or fresh-news claims.`;
 }
