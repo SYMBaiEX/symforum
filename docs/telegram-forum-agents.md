@@ -369,6 +369,29 @@ source formatting and private log events were checked separately from tests.
 Private `community-feature-rollout-state.json` records the live message IDs and
 verification evidence. Read it before continuing registration or replacing pins.
 
+## Private newcomer welcome — October 27
+
+The owner's native Telegram **Welcome Message** pack now contains one short
+onboarding message. The editor confirms **Only visible to you** and **New
+members will see these messages when they join**. Its first action opens Main
+Chat (`https://t.me/c/4387387301/9`), followed by Rules, Ask the Agents and the
+Forum website. This uses Telegram's native group-wide welcome feature; the
+editor exposes neither a destination-topic selector nor a fixed expiry timer.
+Do not claim that Main-Chat-only placement or a specific timed deletion was
+configured. Telegram documents the private welcome feature at
+<https://telegram.org/blog/welcome-messages-buttons-TG-13>.
+
+Safeguard's **Welcome Status** was changed to **Disabled** and read back in the
+community-linked console. Its separate Join Captcha remains Disabled; portal
+verification, anti-raid and flood protection are preserved. Rose's overlapping
+welcomes remain disabled. Do not restore public greetings during registration
+or promote the community agent bots to administrators for onboarding.
+
+Private `welcome-rollout-state.json` records the native welcome text, screenshots,
+scope/expiry limits and cleanup status for the last old public greeting (465 in
+Buy Highlights). Its permanent deletion is pending the owner's final
+confirmation. Keep pinned topic introductions and Rules as the stable directory.
+
 ## Community moderation and metrics
 
 Safeguard owns join verification, flood protection and raid protection. Rose
