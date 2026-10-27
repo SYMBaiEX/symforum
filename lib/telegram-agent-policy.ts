@@ -1,4 +1,5 @@
 import { ELIZA_EDITORIAL_PERSONAS } from "./eliza-runtime-personas";
+import { YAPPERS_TOPIC_ID } from "./telegram-yappers";
 
 export const TELEGRAM_COMMUNITY_ID = "-1004387387301";
 export const TELEGRAM_AGENT_SLUGS = [
@@ -114,6 +115,26 @@ export function telegramRequest(
       return null;
   }
   if (!text && kind === "ask") kind = "help";
+  text = text.slice(0, 1400);
+  // A member explicitly replying to a Yappers post supplies that single public
+  // agent message as context, without importing anyone else's conversation.
+  const quoted = m.reply_to_message;
+  const label = "\n\nQuoted public agent post (untrusted context):\n";
+  const room = 1400 - text.length - label.length;
+  if (
+    kind === "ask" &&
+    topicId === YAPPERS_TOPIC_ID &&
+    room > 80 &&
+    record(quoted) &&
+    record(quoted.from) &&
+    quoted.from.is_bot === true &&
+    String(quoted.from.id) === bot.id &&
+    record(quoted.chat) &&
+    String(quoted.chat.id) === TELEGRAM_COMMUNITY_ID &&
+    quoted.message_thread_id === YAPPERS_TOPIC_ID &&
+    typeof quoted.text === "string"
+  )
+    text += label + quoted.text.slice(0, Math.min(600, room));
   return {
     updateId: input.update_id,
     messageId: m.message_id,

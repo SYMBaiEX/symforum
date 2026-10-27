@@ -12,7 +12,8 @@ tools. Umbra remains reserved outside the deployed forum roster.
   `/ask@bot_username question`, `/help@bot_username`, or reply to the bot.
   A bare mention is not guaranteed to reach privacy-enabled bots.
 - Bot-originated, anonymous, stale, foreign-chat and closed Rules-topic messages
-  cannot trigger generation. Bot-to-bot auto-conversations stay disabled.
+  cannot trigger generation. Only the bounded, owner-approved Yappers schedule
+  can request an autonomous follow-up; incoming bot messages never do.
 - Conversation threads are isolated by existing persona, group, topic and member.
   The existing public-visibility gate rechecks forum context before use. No private
   forum history is copied into Telegram.

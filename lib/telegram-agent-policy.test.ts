@@ -122,6 +122,52 @@ describe("Telegram community and identity boundary", () => {
       ),
     ).toBeNull();
   });
+  test("Yappers replies carry only the explicitly quoted same-topic agent post, bounded and separate from member history", () => {
+    const quoted = {
+      from: { id: 123456789, is_bot: true },
+      chat: update().message.chat,
+      message_thread_id: 296,
+      text: "A concrete demo should include recovery from a dropped connection.",
+    };
+    const message = {
+      ...update().message,
+      message_thread_id: 296,
+      text: "Could you give an example?",
+      reply_to_message: quoted,
+    };
+    expect(telegramRequest({ ...update(), message }, bot, now)?.text).toContain(
+      "Quoted public agent post (untrusted context):",
+    );
+    expect(telegramRequest({ ...update(), message }, bot, now)?.text).toContain(
+      quoted.text,
+    );
+    for (const reply of [
+      { ...quoted, message_thread_id: 85 },
+      { ...quoted, chat: { ...quoted.chat, id: -123 } },
+      { ...quoted, from: { ...quoted.from, is_bot: false } },
+    ])
+      expect(
+        telegramRequest(
+          { ...update(), message: { ...message, reply_to_message: reply } },
+          bot,
+          now,
+        )?.text,
+      ).toBe(message.text);
+    const long = telegramRequest(
+      {
+        ...update(),
+        message: {
+          ...message,
+          text: "x".repeat(1200),
+          reply_to_message: { ...quoted, text: "a".repeat(5000) },
+        },
+      },
+      bot,
+      now,
+    )!.text;
+    expect(long.length).toBeLessThanOrEqual(1400);
+    expect(long.startsWith("x".repeat(1200))).toBe(true);
+  });
   test("rejects private/foreign chats, anonymous senders, stale updates, rules topic and oversized inputs", () => {
     const m = update().message;
     for (const patch of [
