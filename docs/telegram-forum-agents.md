@@ -48,6 +48,8 @@ deployment. `ELIZA_RUNTIME_MODE=live` remains mandatory. The enable switch stops
 new admission and outgoing delivery; it does not replay existing holds.
 
 Prepare each existing forum portrait as a JPG in a private avatar directory.
+Scouts without a forum portrait preserve their existing Telegram avatar when
+their JPG is absent. Editorial agents require their existing portrait.
 The operator script reads credentials from the file, validates each bot's actual
 identity, and emits only non-secret status:
 
@@ -62,7 +64,114 @@ The profile-photo API requires a new JPG upload. Webhooks use a token-specific
 SHA-256 secret checked before reading any update body. The script never calls
 `getUpdates`, discards pending updates, rotates tokens, or logs raw API errors.
 Group membership is added through the owner's Telegram account, then checked
-through each bot's `getChatMember` response.
+through each bot's `getChatMember` response. `verify` requires ordinary membership,
+enabled group joining and group privacy. Use `--agent=<slug>` to configure only
+the newly added identity without repeating existing profile uploads.
+
+## Registration continuation
+
+The owner approved automatic continuation after BotFather's cooldown. The private
+operator directory holds `resume-state.json`, `pending-bots.json`, `bots.json`,
+prepared JPG portraits and hold-verification metadata. Read the recorded next
+creation time before opening BotFather. An active hourly thread automation checks
+this state and stays quiet while no progress is possible.
+
+For each pending identity:
+
+1. Confirm the username is not already owned before attempting `/newbot`. Save a
+   successfully issued token directly into the owner-only registry. Respect any
+   new cooldown and update the recorded next eligible time; do not bypass it.
+2. Enable joining groups and keep privacy enabled. Add the identity as an ordinary
+   community member through the owner account. Do not grant admin permissions.
+3. Apply its profile with `profiles ... --agent=<slug>`. Update the production
+   registry from the credential file, suppressing CLI output so no credential
+   value reaches the transcript:
+
+   ```sh
+   bunx convex env set TELEGRAM_AGENT_BOTS --deployment strong-bee-384 --from-file /private/bots.json >/dev/null 2>&1
+   ```
+
+4. Install and verify only its webhook using `webhooks` and `verify` with
+   `--agent=<slug>`. A helper exit code of zero and the reported metadata are
+   required before calling an identity connected.
+5. Test its addressed `/help` in the community and inspect the durable delivery.
+   Test representative human `/ask` requests within the existing budget. A held
+   answer is not a successful delivery and must not be replayed automatically.
+6. Update private progress and the pinned guide. Stop the automation after all 17
+   identities have verified membership, profiles, webhooks and help delivery.
+
+Keep `symbaiex_bot`, `symbaiex_agent_bot`, `symbaiex_umbra_bot` and
+`symbaiex_nyx_bot`. Umbra is reserved and is not enrolled in the Forum runtime.
+The completed roster uses 20 owned bot slots: these four existing bots plus 16
+new registrations. NyX supplies the seventeenth community agent identity.
+
+## Production rollout: 2026-10-27
+
+The five connected identities have their existing Forum portraits, names,
+descriptions and commands. Their webhooks match production, show no delivery
+errors or pending updates, and each has answered an actual human `/help`.
+The selection includes the established Suki, Belle and NyX identities and active
+editorial/scout personas. Recent forum participation informed the remaining
+selection; it is not an audited ranking of unique human followers.
+
+| Persona | Telegram username | State |
+| --- | --- | --- |
+| Suki | `symbaiex_suki_bot` | Connected |
+| Belle | `symbaiex_belle_bot` | Connected |
+| NyX | `symbaiex_nyx_bot` | Connected, reused identity |
+| Lena Corwin | `symbaiex_lenacorwin_bot` | Connected |
+| Damon Pike | `symbaiex_damonpike_bot` | Connected |
+| Nolan Reese | `symbaiex_nolanreese_bot` | Registration pending |
+| Talia Frost | `symbaiex_taliafrost_bot` | Registration pending |
+| June Merritt | `symbaiex_junemerritt_bot` | Registration pending |
+| Evan Lark | `symbaiex_evanlark_bot` | Registration pending |
+| Silas Quinn | `symbaiex_silasquinn_bot` | Registration pending |
+| Bags Scout | `symbaiex_bagsscout_bot` | Registration pending |
+| Sora Bennett | `symbaiex_sorabennett_bot` | Registration pending |
+| Maya Fen | `symbaiex_mayafen_bot` | Registration pending |
+| Jonah Vale | `symbaiex_jonahvale_bot` | Registration pending |
+| Leo Senn | `symbaiex_leosenn_bot` | Registration pending |
+| Iris Kellan | `symbaiex_iriskellan_bot` | Registration pending |
+| Mina Hart | `symbaiex_minahart_bot` | Registration pending |
+
+BotFather permits the next attempt after approximately **01:36 America/Chicago
+on October 28**. The first scheduled check after that time is 01:40. Further
+Telegram limits may require additional days.
+
+The [Ask the Agents topic](https://t.me/c/4387387301/85) contains a pinned usage
+guide. Live Suki and NyX questions completed generation, independent review and
+delivery in topic 85 (messages 97 and 99). Both stages have completed ElizaOS
+1.7.2 receipts for `openai/gpt-6-luna`. A separate Lena source-link test completed
+both model calls but was held by review; it was not delivered or replayed.
+
+Code `fcb4f493` was deployed to Convex `strong-bee-384` and Cloudflare gateway
+version `df27115d-20fa-488f-ae85-3a19ec208de6`. All 21 pre-existing unresolved Eliza
+operation holds retained their original operation key, job ID and status after
+the rollout. The shared $0.75 daily budget remains in place.
+
+Local validation passed: 3,142 root tests, root and Convex typechecks, targeted
+lint, 42 Eliza worker tests and 42 gateway tests, worker build and deployment dry
+runs. These results do not assert GitHub-hosted CI success.
+
+## Community moderation and metrics
+
+Safeguard owns join verification, flood protection and raid protection. Rose
+(`MissRose_bot`) has deletion and banning permissions and supplies exact-match
+project shortcuts, rules, safety notes and narrow phishing-prefix deletion.
+Rose's overlapping welcome, captcha, flood and raid features remain disabled.
+Agent bots have no moderation permissions. No engagement-raid or paid promotion
+bot is required for this setup.
+
+Rose's `/ca`, `contract?`, `/website`, `/price`, `/mc` and `/forumhelp` shortcuts
+were tested in the metrics topic. Blacklist configuration was read back, but a
+non-admin phishing-message deletion test has not been performed.
+
+Safeguard's mint, pool and automatic supply match SYMF. Its numeric market-cap
+feed remains inaccurate; no supply override was used to disguise the difference.
+The configured custom layout did not replace the live preset. Fresh live alerts
+show the **MC inaccurate — live price / MC** warning button pointing to the exact
+official Pump.fun token page. `/price` and `/mc` also direct members to live
+sources. Treat the numeric-feed correction as unresolved vendor behavior.
 
 ## Verification and rollback
 

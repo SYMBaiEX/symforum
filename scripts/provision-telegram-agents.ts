@@ -77,6 +77,7 @@ for (const [slug, bot] of registry) {
   const identity = (await api(bot.token, "getMe")) as {
     id: number;
     username: string;
+    can_join_groups?: boolean;
     can_read_all_group_messages?: boolean;
   };
   if (
@@ -87,6 +88,24 @@ for (const [slug, bot] of registry) {
   const name = names.get(slug)!;
   const webhookUrl = `https://strong-bee-384.convex.site/telegram/agents/${slug}`;
   if (mode === "profiles") {
+    if (!avatarDir)
+      throw new Error(
+        "Profiles mode requires the prepared JPG avatar directory",
+      );
+    // Scouts have no existing forum portrait. Preserve their current avatar
+    // when no prepared image exists, rather than inventing a character image.
+    const avatarPath = resolve(avatarDir, `${slug}.jpg`);
+    let avatar: Buffer | undefined;
+    try {
+      avatar = await readFile(avatarPath);
+    } catch (error) {
+      if (
+        !(slug === "bags-scout" || slug === "pumpfun-scout") ||
+        (error as NodeJS.ErrnoException).code !== "ENOENT"
+      )
+        throw new Error(`Prepared JPG avatar unavailable for ${slug}`);
+      console.log(JSON.stringify({ slug, avatar: "existing_preserved" }));
+    }
     await api(bot.token, "setMyName", { name: `${name} | SYMBaiEX Forum` });
     await api(bot.token, "setMyShortDescription", {
       short_description: `${name}, AI participant in SYMBaiEX Forum. Official community: @symforum`,
@@ -105,18 +124,19 @@ for (const [slug, bot] of registry) {
       ],
       scope: { type: "chat", chat_id: Number(TELEGRAM_COMMUNITY_ID) },
     });
-    if (!avatarDir)
-      throw new Error(
-        "Profiles mode requires the prepared JPG avatar directory",
+    if (avatar) {
+      const form = new FormData();
+      form.set(
+        "photo",
+        JSON.stringify({ type: "static", photo: "attach://avatar" }),
       );
-    const file = await readFile(resolve(avatarDir, `${slug}.jpg`));
-    const form = new FormData();
-    form.set(
-      "photo",
-      JSON.stringify({ type: "static", photo: "attach://avatar" }),
-    );
-    form.set("avatar", new Blob([file], { type: "image/jpeg" }), `${slug}.jpg`);
-    await api(bot.token, "setMyProfilePhoto", form);
+      form.set(
+        "avatar",
+        new Blob([new Uint8Array(avatar)], { type: "image/jpeg" }),
+        `${slug}.jpg`,
+      );
+      await api(bot.token, "setMyProfilePhoto", form);
+    }
   }
   if (mode === "webhooks") {
     await api(bot.token, "setWebhook", {
@@ -152,6 +172,7 @@ for (const [slug, bot] of registry) {
       pendingUpdates: hook.pending_update_count ?? 0,
       webhookError: !!hook.last_error_message,
       membership,
+      canJoinGroups: identity.can_join_groups === true,
       privacyEnabled: identity.can_read_all_group_messages !== true,
     }),
   );
@@ -159,7 +180,9 @@ for (const [slug, bot] of registry) {
     mode === "verify" &&
     (hook.url !== webhookUrl ||
       hook.last_error_message ||
-      !["member", "restricted"].includes(membership))
+      membership !== "member" ||
+      identity.can_join_groups !== true ||
+      identity.can_read_all_group_messages === true)
   )
     process.exitCode = 1;
 }
