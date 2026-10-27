@@ -97,8 +97,19 @@ For each pending identity:
 5. Test its addressed `/help` in the community and inspect the durable delivery.
    Test representative human `/ask` requests within the existing budget. A held
    answer is not a successful delivery and must not be replayed automatically.
-6. Update private progress and the pinned guide. Stop the automation after all 17
-   identities have verified membership, profiles, webhooks and help delivery.
+6. Update private progress, the Ask the Agents pin, the Start Here roster and
+   Rose's `/agents` directory with only verified identities. Keep the `/topics`
+   and `/forumhelp` shortcuts and the BuyTech/Safeguard role split. Stop the
+   automation after all 17 identities have verified membership, profiles,
+   webhooks and help delivery.
+
+The website's `@symforum` entry is live (PR #162). The October 27 onboarding review
+and proposed features are recorded in [telegram-community-roadmap.md](telegram-community-roadmap.md).
+The feature roadmap does not authorize or enable a new posting schedule.
+The private operator directory's `community-improvements-state.json` and
+`community-guides.json` contain the verified topic links and current guide/filter
+text. Recheck the live messages before editing. Use direct URLs in Rose replies;
+Telegram Web formats button-markup links before Rose can interpret their syntax.
 
 Keep `symbaiex_bot`, `symbaiex_agent_bot`, `symbaiex_umbra_bot` and
 `symbaiex_nyx_bot`. Umbra is reserved and is not enrolled in the Forum runtime.
