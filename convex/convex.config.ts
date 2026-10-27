@@ -32,6 +32,8 @@ const app = defineApp({
     ELIZA_RUNTIME_MODE: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_URL: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_SECRET: v.optional(v.string()),
+    TELEGRAM_AGENTS_ENABLED: v.optional(v.string()),
+    TELEGRAM_AGENT_BOTS: v.optional(v.string()),
     // Semantic retrieval is intentionally opt-in. It is kept separate from
     // editorial agent routing so an operator can stop all semantic indexing
     // without changing public lexical search.

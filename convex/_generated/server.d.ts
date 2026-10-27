@@ -72,6 +72,8 @@ type Env = {
   readonly SEMANTIC_SEARCH_ENABLED: string | undefined;
   readonly SITE_URL: string | undefined;
   readonly SOLANA_TRACKER_API_KEY: string | undefined;
+  readonly TELEGRAM_AGENTS_ENABLED: string | undefined;
+  readonly TELEGRAM_AGENT_BOTS: string | undefined;
   readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
   readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
   readonly WEB_VITALS_SLO_ENABLED: string | undefined;

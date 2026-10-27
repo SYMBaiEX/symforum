@@ -1,0 +1,40 @@
+import { defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export const telegramAgentTables = {
+  telegramAgentConversations: defineTable({
+    key: v.string(),
+    agentSlug: v.string(),
+    threadId: v.string(),
+    createdAt: v.number(),
+  }).index("by_key", ["key"]),
+  // Delivery intent and deduplication tombstones, not a second chat-history store.
+  // Conversation messages belong to the existing Agent component.
+  telegramAgentRequests: defineTable({
+    key: v.string(),
+    agentSlug: v.string(),
+    botId: v.string(),
+    updateId: v.number(),
+    messageId: v.number(),
+    topicId: v.number(),
+    senderId: v.string(),
+    conversationId: v.string(),
+    kind: v.union(v.literal("ask"), v.literal("help")),
+    prompt: v.optional(v.string()),
+    reply: v.optional(v.string()),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("held"),
+    ),
+    sentMessageId: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"]),
+};

@@ -109,6 +109,7 @@ const FORUM_STAGE_SUFFIXES = new Set([
 
 function validStage(agentSlug, stage) {
   if (agentSlug === "system") return stage === "health-canary";
+  if (stage === `${agentSlug}:telegram-reply` || stage === `${agentSlug}:telegram-evidence-review`) return true;
   if (
     stage.startsWith(`${agentSlug}:forum-`) &&
     FORUM_STAGE_SUFFIXES.has(stage.slice(`${agentSlug}:forum-`.length))
@@ -358,7 +359,9 @@ export function validateLiveRequest(input) {
     if (
       (["bags-scout", "pumpfun-scout"].includes(input.agentSlug) &&
         input.stage !== `${input.agentSlug}:forum-draft` &&
-        input.stage !== `${input.agentSlug}:forum-evidence-review`) ||
+        input.stage !== `${input.agentSlug}:forum-evidence-review` &&
+        input.stage !== `${input.agentSlug}:telegram-reply` &&
+        input.stage !== `${input.agentSlug}:telegram-evidence-review`) ||
       !record(body.reasoning) ||
       Object.keys(body.reasoning).length !== 2 ||
       body.reasoning.effort !== "low" ||

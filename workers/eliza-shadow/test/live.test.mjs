@@ -52,6 +52,17 @@ const request = (extra = {}) => ({
   ...extra,
 });
 
+test("Telegram stages are restricted to the existing persona and cannot publish or cross identities", () => {
+  for (const agentSlug of LIVE_AGENTS) {
+    if (agentSlug === "system") continue;
+    for (const suffix of ["reply", "evidence-review"])
+      assert.equal(validateLiveRequest(request({ agentSlug, stage: `${agentSlug}:telegram-${suffix}` })).agentSlug, agentSlug);
+    assert.throws(() => validateLiveRequest(request({ agentSlug, stage: `${agentSlug}:telegram-publish` })), /invalid_request/);
+  }
+  assert.throws(() => validateLiveRequest(request({ agentSlug: "system", stage: "system:telegram-reply" })), /invalid_request/);
+  assert.throws(() => validateLiveRequest(request({ agentSlug: "suki", stage: "belle:telegram-reply" })), /invalid_request/);
+});
+
 test("status reads only fixed ledger metadata and never invokes inference", async () => {
   const seen = [];
   const row = {
