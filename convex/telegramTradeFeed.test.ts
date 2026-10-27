@@ -143,10 +143,10 @@ test("rejects malformed provider payloads and mismatched pool discovery", () => 
 test("quiet exact-topic delivery is deduplicated across repeated provider polls", async () => {
   const t = setup(),
     sends = transport();
-  await t.action(internal.telegramTradeFeed.poll, {});
-  await t.action(internal.telegramTradeFeed.poll, {});
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
   vi.advanceTimersByTime(60001);
-  await t.action(internal.telegramTradeFeed.poll, {});
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
   expect(sends).toHaveLength(1);
   expect(sends[0]).toMatchObject({
     chat_id: "-1004387387301",
@@ -162,9 +162,9 @@ test.each(["timeout", "wrong-topic"] as const)(
   async (result) => {
     const t = setup(),
       sends = transport(result);
-    await t.action(internal.telegramTradeFeed.poll, {});
+    await t.action(internal.telegramTradeFeedPoll.poll, {});
     vi.advanceTimersByTime(60001);
-    await t.action(internal.telegramTradeFeed.poll, {});
+    await t.action(internal.telegramTradeFeedPoll.poll, {});
     expect(sends).toHaveLength(1);
     expect(
       (await t.query(internal.telegramTradeFeed.inspect, {})).batches[0].status,
@@ -175,12 +175,12 @@ test("wrong topic and disabled switches fail closed", async () => {
   const t = setup(),
     sends = transport();
   vi.stubEnv("TELEGRAM_TRADE_FEED_TOPIC_ID", "9");
-  await t.action(internal.telegramTradeFeed.poll, {});
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
   expect(sends).toEqual([]);
   expect(fetch).not.toHaveBeenCalled();
   vi.stubEnv("TELEGRAM_TRADE_FEED_TOPIC_ID", "310");
   vi.stubEnv("TELEGRAM_TRADE_FEED_ENABLED", "false");
-  await t.action(internal.telegramTradeFeed.poll, {});
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
   expect(fetch).not.toHaveBeenCalled();
 });
 test("history gaps remain visible and do not cause old deliveries to replay", async () => {
@@ -208,4 +208,27 @@ test("history gaps remain visible and do not cause old deliveries to replay", as
   expect(state.state?.coverageWarning).toBe(true);
   const batch = await t.mutation(internal.telegramTradeFeed.claim, {});
   expect(batch?.text).toContain("coverage gap");
+});
+
+test("honors provider 429 backoff before making another data request", async () => {
+  const t = setup();
+  const requests = vi.fn(
+    async () =>
+      new Response("rate limited", {
+        status: 429,
+        headers: { "Retry-After": "600" },
+      }),
+  );
+  vi.stubGlobal("fetch", requests);
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
+  expect(requests).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(5 * 60_000);
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
+  expect(requests).toHaveBeenCalledTimes(1);
+  const state = await t.query(internal.telegramTradeFeed.inspect, {});
+  expect(state.state?.reason).toBe("provider_http_429");
+  expect(state.state?.retryAfterAt).toBe(now + 600_000);
+  vi.advanceTimersByTime(300_001);
+  await t.action(internal.telegramTradeFeedPoll.poll, {});
+  expect(requests).toHaveBeenCalledTimes(2);
 });

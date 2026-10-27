@@ -24,6 +24,7 @@ export const telegramTradeTables = {
     startedAt: v.number(),
     coverageWarning: v.boolean(),
     lastPollAt: v.optional(v.number()),
+    retryAfterAt: v.optional(v.number()),
     reason: v.optional(v.string()),
   }).index("by_key", ["key"]),
   telegramTradeEvents: defineTable({

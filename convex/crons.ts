@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
-crons.interval("public SYMF buy feed", { minutes: 1 }, internal.telegramTradeFeed.poll, {});
+crons.interval("public SYMF buy feed", { minutes: 1 }, internal.telegramTradeFeedPoll.poll, {});
 crons.interval("expire confirmed public buy-feed receipts", { hours: 1 }, internal.telegramTradeFeed.cleanup, {});
 // Local-time admission follows Chicago daylight saving; only two rounds/day.
 crons.cron(

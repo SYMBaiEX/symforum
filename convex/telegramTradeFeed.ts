@@ -1,31 +1,19 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import {
-  env,
-  internalAction,
-  internalMutation,
-  internalQuery,
-} from "./_generated/server";
+import { env, internalMutation, internalQuery } from "./_generated/server";
 import schema from "./schema";
 import { feedBuy } from "./telegramTradeSchema";
-import {
-  GECKO_BASE,
-  SYMF_MINT,
-  SYMF_FEED_TOPIC,
-  symfPools,
-  poolBuys,
-  renderFeedBuys,
-} from "../lib/telegram-trade-feed";
+import { SYMF_FEED_TOPIC, renderFeedBuys } from "../lib/telegram-trade-feed";
 import {
   telegramBotRegistry,
   TELEGRAM_COMMUNITY_ID,
 } from "../lib/telegram-agent-policy";
-import type { Id } from "./_generated/dataModel";
+
 const limiter = new RateLimiter(components.rateLimiter, {
   symfPoll: { kind: "token bucket", rate: 1, period: MINUTE, capacity: 1 },
 });
-function enabled() {
+export function tradeFeedEnabled() {
   return (
     env.TELEGRAM_TRADE_FEED_ENABLED === "true" &&
     env.TELEGRAM_TRADE_FEED_TOPIC_ID === String(SYMF_FEED_TOPIC) &&
@@ -38,8 +26,13 @@ export const begin = internalMutation({
   args: {},
   returns: v.union(v.number(), v.null()),
   handler: async (ctx) => {
+    const current = await ctx.db
+      .query("telegramTradeState")
+      .withIndex("by_key", (q) => q.eq("key", "symf"))
+      .unique();
+    if (current?.retryAfterAt && current.retryAfterAt > Date.now()) return null;
     if (
-      !enabled() ||
+      !tradeFeedEnabled() ||
       !(await limiter.limit(ctx, "symfPoll", { key: TELEGRAM_COMMUNITY_ID })).ok
     )
       return null;
@@ -69,7 +62,7 @@ export const record = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (!enabled()) return null;
+    if (!tradeFeedEnabled()) return null;
     if (args.ids.length > 300 || args.buys.length > 300)
       throw Error("provider_window_exceeded");
     const state = await ctx.db
@@ -131,7 +124,11 @@ export const record = internalMutation({
   },
 });
 export const health = internalMutation({
-  args: { reason: v.optional(v.string()), truncated: v.optional(v.boolean()) },
+  args: {
+    reason: v.optional(v.string()),
+    truncated: v.optional(v.boolean()),
+    retryAfterAt: v.optional(v.number()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const state = await ctx.db
@@ -141,6 +138,7 @@ export const health = internalMutation({
     if (state)
       await ctx.db.patch("telegramTradeState", state._id, {
         lastPollAt: Date.now(),
+        retryAfterAt: args.retryAfterAt,
         ...(args.truncated
           ? { coverageWarning: true, reason: "pool_discovery_limit" }
           : args.reason
@@ -159,7 +157,7 @@ export const claim = internalMutation({
     v.object({ batchId: v.id("telegramTradeBatches"), text: v.string() }),
   ),
   handler: async (ctx) => {
-    if (!enabled()) return null;
+    if (!tradeFeedEnabled()) return null;
     const rows = await ctx.db
       .query("telegramTradeEvents")
       .withIndex("by_status_and_occurredAt", (q) => q.eq("status", "queued"))
@@ -218,108 +216,6 @@ export const expire = internalMutation({
       Date.now() - batch.createdAt >= 3 * MINUTE
     )
       await ctx.runMutation(internal.telegramTradeFeed.finish, args);
-    return null;
-  },
-});
-async function read(path: string): Promise<unknown> {
-  const response = await fetch(`${GECKO_BASE}${path}`, {
-    redirect: "error",
-    signal: AbortSignal.timeout(12_000),
-    headers: { Accept: "application/json;version=20230302" },
-  });
-  if (!response.ok) throw Error(`provider_http_${response.status}`);
-  return (await response.json()) as unknown;
-}
-export const poll = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx): Promise<null> => {
-    const since: number | null = await ctx.runMutation(
-      internal.telegramTradeFeed.begin,
-      {},
-    );
-    if (since === null) return null;
-    try {
-      const discovery = symfPools(await read(`/tokens/${SYMF_MINT}/pools`));
-      if (!discovery.pools.length) throw Error("no_matching_pools");
-      for (const pool of discovery.pools) {
-        const trades = poolBuys(
-          await read(
-            `/pools/${pool}/trades?trade_volume_in_usd_greater_than=0`,
-          ),
-          pool,
-          since,
-          Date.now(),
-        );
-        await ctx.runMutation(internal.telegramTradeFeed.record, {
-          pool,
-          ...trades,
-        });
-      }
-      await ctx.runMutation(internal.telegramTradeFeed.health, {
-        truncated: discovery.truncated,
-      });
-    } catch (error) {
-      const code = error instanceof Error ? error.message : "";
-      await ctx.runMutation(internal.telegramTradeFeed.health, {
-        reason: /^(provider_http_[0-9]{3}|invalid_[a-z_]+|no_matching_pools)$/.test(code) ? code : "provider_poll_unconfirmed",
-      });
-    }
-    const batch: { batchId: Id<"telegramTradeBatches">; text: string } | null =
-      await ctx.runMutation(internal.telegramTradeFeed.claim, {});
-    if (!batch || !enabled()) return null;
-    const bot = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).get("suki")!;
-    let messageId: number | undefined;
-    try {
-      const response = await fetch(
-        `https://api.telegram.org/bot${bot.token}/sendMessage`,
-        {
-          method: "POST",
-          redirect: "error",
-          signal: AbortSignal.timeout(20_000),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: TELEGRAM_COMMUNITY_ID,
-            message_thread_id: SYMF_FEED_TOPIC,
-            text: batch.text,
-            parse_mode: "HTML",
-            disable_notification: true,
-            link_preview_options: { is_disabled: true },
-          }),
-        },
-      );
-      const body: unknown = await response.json();
-      if (
-        response.ok &&
-        body &&
-        typeof body === "object" &&
-        "ok" in body &&
-        body.ok === true &&
-        "result" in body &&
-        body.result &&
-        typeof body.result === "object"
-      ) {
-        const r = body.result;
-        if (
-          "message_id" in r &&
-          typeof r.message_id === "number" &&
-          "message_thread_id" in r &&
-          r.message_thread_id === SYMF_FEED_TOPIC &&
-          "chat" in r &&
-          r.chat &&
-          typeof r.chat === "object" &&
-          "id" in r.chat &&
-          String(r.chat.id) === TELEGRAM_COMMUNITY_ID
-        )
-          messageId = r.message_id;
-      }
-    } catch {
-      /* An uncertain Telegram send stays held. Never replay it. */
-    }
-    await ctx.runMutation(internal.telegramTradeFeed.finish, {
-      batchId: batch.batchId,
-      ...(messageId ? { messageId } : {}),
-    });
     return null;
   },
 });
