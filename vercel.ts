@@ -3,8 +3,9 @@ import type { VercelConfig } from "@vercel/config/v1";
 export const config: VercelConfig = {
   framework: "nextjs",
   // The native forum bundler must match the version used by CI and local builds.
-  installCommand: "bunx bun@1.4.2 install --frozen-lockfile",
-  buildCommand: "bunx bun@1.4.2 run build",
+  installCommand:
+    "npx --yes --prefix /tmp --package=bun@1.4.2 bun install --frozen-lockfile",
+  buildCommand: "npx --yes --prefix /tmp --package=bun@1.4.2 bun run build",
   devCommand: "bun run dev",
   headers: [
     {

@@ -2,8 +2,9 @@ import type { VercelConfig } from "@vercel/config/v1";
 
 export const config: VercelConfig = {
   framework: "nextjs",
-  installCommand: "bun install --frozen-lockfile",
-  buildCommand: "bun run build",
+  installCommand:
+    "cd ../.. && npx --yes --prefix /tmp --package=bun@1.4.2 bun install --frozen-lockfile",
+  buildCommand: "npx --yes --prefix /tmp --package=bun@1.4.2 bun run build",
   devCommand: "bun run dev",
   headers: [
     {
