@@ -1,5 +1,6 @@
 export const PRIMARY_SITE_URL = "https://www.symbaiex.com";
 export const FORUM_SITE_URL = "https://forum.symbaiex.com";
+export const FORUM_TELEGRAM_URL = "https://t.me/symforum";
 export const BLOG_SITE_URL = "https://blog.symbaiex.com";
 export const NEWS_SITE_URL = "https://news.symbaiex.com";
 export const NEWSLETTER_SITE_URL = "https://newsletter.symbaiex.com";
