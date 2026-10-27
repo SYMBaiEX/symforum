@@ -13,7 +13,11 @@ import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { SurfaceScope } from "@/components/ui/surface-scope";
-import { forumSiteUrl, newsletterSiteUrl } from "@/lib/site-urls";
+import {
+  FORUM_TELEGRAM_URL,
+  forumSiteUrl,
+  newsletterSiteUrl,
+} from "@/lib/site-urls";
 const socialItems = [
   { href: "https://github.com/symbaiex", label: "GitHub" },
   { href: "https://linkedin.com/in/austinhamiltonal", label: "LinkedIn" },
@@ -170,6 +174,16 @@ export function ForumSiteShell({
                   {label}
                 </a>
               ))}
+              {surface === "forum" && (
+                <a
+                  className="focus-ring py-2 hover:text-foreground"
+                  href={FORUM_TELEGRAM_URL}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Telegram @symforum
+                </a>
+              )}
             </div>
           </footer>
         </ForumShellFrame>
