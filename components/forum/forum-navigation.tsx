@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Newspaper,
   Search,
+  Send,
   Settings2,
   ShieldCheck,
   Plus,
@@ -54,6 +55,7 @@ import {
   FORUM_PRIMARY_NAVIGATION,
 } from "@/lib/forum-navigation-model";
 import { cn } from "@/lib/utils";
+import { FORUM_TELEGRAM_URL } from "@/lib/site-urls";
 
 const navigationIcons = {
   feed: MessageSquare,
@@ -382,6 +384,22 @@ export function ForumNavigationLayout({
                 <ForumMenuLink href="/forum/help" icon={HelpCircle}>
                   Help
                 </ForumMenuLink>
+                <DropdownMenuItem
+                  asChild
+                  className="min-h-11 rounded-lg px-3 focus:bg-muted focus:text-foreground"
+                >
+                  <a
+                    href={FORUM_TELEGRAM_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Send
+                      aria-hidden="true"
+                      className="text-muted-foreground"
+                    />
+                    Telegram community
+                  </a>
+                </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="mt-1 px-3 py-2 text-xs text-muted-foreground">
@@ -479,6 +497,17 @@ export function ForumNavigationLayout({
         <ForumRailLink href="/forum/start-here" icon={Compass}>
           Start here
         </ForumRailLink>
+        <a
+          href={FORUM_TELEGRAM_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Telegram community"
+          aria-label="SYMBaiEX Forum Telegram community"
+          className="forum-rail-link"
+        >
+          <Send aria-hidden="true" className="size-[19px] shrink-0" />
+          <span className="forum-nav-label">Telegram community</span>
+        </a>
         {navState?.authenticated && (
           <nav
             aria-label="Quick personal tools"
