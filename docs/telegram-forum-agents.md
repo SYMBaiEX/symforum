@@ -348,8 +348,9 @@ Set the feed flag false to stop polling and sends without touching BuyTech.
 Safeguard's separate **Join Captcha** was disabled after the owner's second-account
 join required verification both before entry and before speaking. A fresh settings
 readback confirmed Disabled. Portal verification, Standard anti-raid, Light flood
-protection and Rose remain. No fresh never-verified account has retested entry
-since the change; do not claim that check passed.
+protection and Rose remain. The owner subsequently confirmed the join-and-post check worked. This is an
+owner-reported result; the administrator client did not independently reproduce
+a fresh member entry.
 
 The former Memes & Media topic `13` is now **Dank Memes**. The owner assigned
 Belle and chose an 18-minute schedule around the clock. A single one-minute timer checks admission;
