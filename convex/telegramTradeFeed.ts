@@ -227,7 +227,7 @@ async function read(path: string): Promise<unknown> {
     signal: AbortSignal.timeout(12_000),
     headers: { Accept: "application/json;version=20230302" },
   });
-  if (!response.ok) throw Error("provider_unavailable");
+  if (!response.ok) throw Error(`provider_http_${response.status}`);
   return (await response.json()) as unknown;
 }
 export const poll = internalAction({
@@ -259,9 +259,10 @@ export const poll = internalAction({
       await ctx.runMutation(internal.telegramTradeFeed.health, {
         truncated: discovery.truncated,
       });
-    } catch {
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
       await ctx.runMutation(internal.telegramTradeFeed.health, {
-        reason: "provider_poll_unconfirmed",
+        reason: /^(provider_http_[0-9]{3}|invalid_[a-z_]+|no_matching_pools)$/.test(code) ? code : "provider_poll_unconfirmed",
       });
     }
     const batch: { batchId: Id<"telegramTradeBatches">; text: string } | null =
