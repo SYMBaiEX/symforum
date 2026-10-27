@@ -438,6 +438,22 @@ only when it was never selected or attempted. Inspect recent status, mode,
 fallback reason and bounded review notes using `telegramMemes:inspect {}`.
 Never replay `meme:1660307` or any other held request to test the new pipeline.
 
+### Meme v2 live verification
+
+Convex source `1879402f` is deployed. The reserve readback contains 24 originals,
+four animated GIFs and ten classic templates. The new flags are enabled. Both
+ElizaOS stages completed for `meme2:1660310`; its comedy review approved without
+issues and Telegram confirmed quiet image **368** in topic 13. The legacy
+`meme:1660307` rejection remains held and was never replayed. All 21 original
+unknown operations retained their operation keys, job IDs and statuses.
+
+Local validation passed 3,196 tests across 315 files, both typechecks and focused
+lint. Hosted CI remains unavailable due billing and is not counted as passed.
+The previous pinned guide 40 and Rose `/memes` wording still describe the original
+pipeline. Revised text is saved in the private operator file
+`meme-v2-guide-update.json`; updating the owner-authored messages is pending restored
+Telegram editing access. Posting and backend schedules do not depend on that edit.
+
 ## Verification and rollback
 
 Run the policy and Convex delivery tests, both typechecks, and the existing Eliza

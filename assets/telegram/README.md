@@ -9,11 +9,21 @@
 - `meme-preview.png`: local caption-rendering preview; it was not an agent post.
 
 Belle generates and independently reviews new caption pairs through the existing
-ElizaOS runtime and shared daily model budget. The backend rasterizes a selected
-reaction with outlined Geist glyphs, then sends one silent PNG to Dank Memes
-(topic 13). The owner selected an 18-minute interval around the clock. New caption
-inference is subject to the shared budget, so cadence is a maximum opportunity,
-not a promise that every slot will post. Held operations never replay.
+ElizaOS runtime and shared daily model budget. The backend rasterizes originals
+and cached classic formats with outlined Geist glyphs, and mixes in cached GIFs
+and approved archive picks. The owner selected an 18-minute interval around the
+clock, quietly in Dank Memes (topic 13). Pipeline v2 has a 60-second deadline and
+24 prepared original images plus four classic GIFs: generation, review, budget
+or public-source failures select a prepared artifact instead of skipping a slot.
+A real Telegram outage or uncertain delivery can still stop that intent; held
+operations never replay.
+
+Ten curated classic formats are cached from [Memegen](https://memegen.link/guide/),
+with popularity inspiration from [Imgflip's public API](https://imgflip.com/api).
+Classic images and GIFs carry source credit in Telegram. External formats are
+kept in Convex Storage, not represented as original Forum mascot artwork.
+Previously confirmed generated memes may be recycled after six hours. See
+`docs/telegram-forum-agents.md` for the operator controls and privacy boundaries.
 
 The reaction art is drawn once. Recurring posts create new captions and compose
 images locally in the hosted backend; they do not call a paid image-generation
