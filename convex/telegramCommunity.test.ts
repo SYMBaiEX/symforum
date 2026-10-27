@@ -177,6 +177,10 @@ test("authenticated callbacks deduplicate by source bot and prompt from the sele
   });
   expect(String(sent[0].text)).toContain('href="tg://user?id=101"');
   expect(String(sent[0].text)).toContain("NyX");
+  expect(sent[0]).not.toHaveProperty("reply_parameters");
+  expect(
+    await t.run((ctx) => ctx.db.get("telegramAgentRequests", rows[0]._id)),
+  ).toMatchObject({ status: "sent" });
   // The target bot's independently numbered updates must not collide with the source callback.
   expect(
     await t.mutation(internal.telegramAgents.accept, {

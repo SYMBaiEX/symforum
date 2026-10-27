@@ -317,6 +317,7 @@ ${JSON.stringify(data.sources)}`;
         `https://api.telegram.org/bot${bot.token}/sendMessage`,
         {
           method: "POST",
+          redirect: "error",
           headers: { "Content-Type": "application/json" },
           signal: AbortSignal.timeout(20_000),
           body: JSON.stringify({
@@ -324,15 +325,30 @@ ${JSON.stringify(data.sources)}`;
             text,
             ...markup,
             ...(row.topicId ? { message_thread_id: row.topicId } : {}),
-            reply_parameters: {
-              message_id: row.messageId,
-              allow_sending_without_reply: false,
-            },
+            // A different privacy-enabled bot may not be able to reply to the
+            // hub's menu message. The targeted mention selects the human reply.
+            ...(row.kind === "prompt"
+              ? {}
+              : {
+                  reply_parameters: {
+                    message_id: row.messageId,
+                    allow_sending_without_reply: false,
+                  },
+                }),
             link_preview_options: { is_disabled: true },
           }),
         },
       );
       const result: unknown = await response.json();
+      if (
+        result &&
+        typeof result === "object" &&
+        "ok" in result &&
+        result.ok === false &&
+        "error_code" in result &&
+        [400, 403, 404, 429].includes(Number(result.error_code))
+      )
+        throw new Error(`telegram_rejected_${Number(result.error_code)}`);
       if (
         !response.ok ||
         !result ||
@@ -357,7 +373,10 @@ ${JSON.stringify(data.sources)}`;
         reason:
           error instanceof Error && error.message === "review_rejected"
             ? "review_rejected"
-            : `${phase}_unconfirmed`,
+            : error instanceof Error &&
+                /^telegram_rejected_\d{3}$/.test(error.message)
+              ? error.message
+              : `${phase}_unconfirmed`,
       });
     }
     return null;
