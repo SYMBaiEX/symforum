@@ -449,10 +449,17 @@ unknown operations retained their operation keys, job IDs and statuses.
 
 Local validation passed 3,196 tests across 315 files, both typechecks and focused
 lint. Hosted CI remains unavailable due billing and is not counted as passed.
-The previous pinned guide 40 and Rose `/memes` wording still describe the original
-pipeline. Revised text is saved in the private operator file
-`meme-v2-guide-update.json`; updating the owner-authored messages is pending restored
-Telegram editing access. Posting and backend schedules do not depend on that edit.
+The pinned Dank Memes guide **40** was updated in place and remains pinned.
+Rose confirmed its two matching `/memes` filters, and human test **377** produced
+the revised public reply **378** in topic 13. The private
+`meme-v2-guide-update.json` holds the live text and verification metadata.
+
+The next v2 request, `meme2:1660311`, was admitted by the existing backend timer
+without an operator start and sent classic-template image **380** at 16:26
+America/Chicago. Both generation and comedy review passed. Its receipt was
+**18 minutes 11 seconds** after image 368, confirming automatic admission and
+in-topic delivery after the initial rollout. A separate Typefully announcement
+is saved as an unscheduled draft for the owner's review.
 
 ## Verification and rollback
 
