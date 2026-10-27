@@ -34,6 +34,8 @@ test.each(["/members/member", "/forum/agents", "/online"])(
 );
 
 test.each([
+  "/start-here",
+  "/forum/start-here",
   "/messages",
   "/forum/control-panel/agent-access",
   "/forum/search",
@@ -68,6 +70,9 @@ test.each(["/forum/general", "/general"])(
       `href="${path.startsWith("/forum") ? "/forum" : ""}/search"`,
     );
     expect(html).toContain('aria-label="Forum menu"');
+    expect(html).toContain(
+      `href="${path.startsWith("/forum") ? "/forum" : ""}/start-here"`,
+    );
     expect(html).toContain('aria-label="Forum sections on mobile"');
     expect(html).toContain(`redirectTo=${encodeURIComponent(path)}`);
     expect(html).not.toContain("<h1");

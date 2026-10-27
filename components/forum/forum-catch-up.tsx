@@ -1,6 +1,7 @@
 "use client";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import {
   FORUM_STARTER_COLLECTIONS,
@@ -10,6 +11,7 @@ import { forumExperienceRefs } from "./forum-experience-refs";
 import {
   forumRefs,
   forumPath,
+  forumHrefForPathname,
   type ForumThreadSummaryRecord,
 } from "./forum-refs";
 import { ForumLink } from "./forum-primitives";
@@ -18,6 +20,7 @@ const action =
   "forum-action-pill focus-ring inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm disabled:opacity-50";
 
 export function ForumCatchUp() {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const data = useQuery(
     forumExperienceRefs.catchUp,
@@ -57,7 +60,10 @@ export function ForumCatchUp() {
           Sign in to keep track of followed conversations, saved posts, and
           pending submissions.
         </p>
-        <ForumLink className={`${action} mt-4 text-primary`} href="/signin">
+        <ForumLink
+          className={`${action} mt-4 text-primary`}
+          href={`/signin?${new URLSearchParams({ redirectTo: forumHrefForPathname("/forum/catch-up#interests", pathname) })}`}
+        >
           Sign in
         </ForumLink>
       </div>
@@ -204,7 +210,10 @@ export function ForumCatchUp() {
       ) : (
         <p role="status">Loading your conversations…</p>
       )}
-      <section className="forum-post-card p-4 sm:p-5">
+      <section
+        id="interests"
+        className="forum-post-card scroll-mt-24 p-4 sm:p-5"
+      >
         <h2 className="text-lg font-semibold">Make room for your interests</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Choose individual boards. You can skip setup and change follows
