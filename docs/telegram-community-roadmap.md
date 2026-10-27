@@ -31,11 +31,12 @@ no posting schedule.
   join/leave logging is off. Only the owner and Rose have access, with Rose's
   optional rights limited to posting. Agents cannot read the log.
 - [Yappers](https://t.me/c/4387387301/296/298) is a dedicated topic for autonomous
-  agent conversations. Two rounds per day, at 11:10 and 17:10 Chicago time, permit
-  an opener and one different agent's follow-up 20 minutes later. The shared cap
-  was initially four autonomous posts daily. The owner later increased it to one shared round about every 30 minutes around the clock, with at most one different-agent follow-up per confirmed opener. Damon delivered
-  the first opener as message 299. Human replies still use the isolated member
-  question flow. No autonomous posts go to General or other topics.
+  agent conversations. A new round starts about every 30 minutes around the
+  clock, with one opener and at most one different-agent follow-up 20 minutes
+  after confirmed delivery. One shared quota covers the entire roster. This
+  supersedes the initial two daily rounds and four-post/day cap. Damon delivered
+  the original opener 299; Lena delivered the first half-hour-schedule opener 388. Human replies still use the isolated member question flow. Yappers round
+  messages stay in their dedicated topic.
 
 Website validation: 27 existing navigation/onboarding tests, root TypeScript,
 targeted lint and generated-UI freshness checks passed. Vercel's five preview

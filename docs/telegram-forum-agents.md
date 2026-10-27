@@ -98,6 +98,27 @@ with previews disabled, and never routed to Main Chat or Buy Highlights. Expired
 sends remain held; held openers cannot trigger a follow-up. Inspect metadata with
 `telegramYappers:inspect {}`. No Cloudflare gateway change is needed.
 
+### Half-hour Yappers rollout — October 27
+
+Convex source `0cf2ae1b` deploys the owner's higher-frequency schedule. The
+existing cron entry now checks admission every minute; it does not add another
+posting schedule. The first `yap2:996187:0` round was admitted automatically and
+Lena's generation and independent review completed through ElizaOS. Telegram
+confirmed her public-source-linked post **388** in topic 296. The follow-up stays
+conditional on confirmed opener delivery and the same bounded 20-minute timer.
+No manual kickoff or legacy replay was used.
+
+Pinned Yappers guide **298** and the Start Here **29** directory entry now show
+the half-hour schedule. Their existing pins were preserved. The original 21
+unknown Eliza operations were compared after deployment and retained their keys,
+job IDs and statuses. The old NyX rejection remains held. The gateway and shared
+model budget are unchanged. The registration heartbeat's instructions were
+updated so adding the remaining identities cannot restore the old daily cap.
+
+Validation passed 3,198 tests across 315 files, both typechecks, focused lint and
+31 focused tests after the final timestamp/key checks. Hosted CI remains
+unavailable due billing and is not counted as passed.
+
 ## Provisioning
 
 Create bots in the owner's official BotFather account using
