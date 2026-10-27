@@ -31,3 +31,15 @@ test("the screenshot's verbose research style fails; a concise question keeps it
     false,
   );
 });
+
+test("brief opinions and jokes pass without a question, citation or caveat", () => {
+  expect(
+    validResearchChatText("That's a spreadsheet wearing a lab coat."),
+  ).toBe(true);
+  expect(
+    validResearchChatText(
+      "I'd keep the boring version. It sounds easier to fix.",
+    ),
+  ).toBe(true);
+  expect(validResearchChatText("   ")).toBe(false);
+});

@@ -176,9 +176,7 @@ function transport(timeout = false, draftText?: string) {
           : {
               text:
                 draftText ??
-                (!JSON.stringify(e.body).includes(
-                  "Open with ONE specific research question",
-                )
+                (!JSON.stringify(e.body).includes("Start a casual conversation")
                   ? "Retrieval-time access checks only cover newly fetched passages, not material already in the prompt. Tagging cached passages with source versions would let us test whether revoked text is removed before generation."
                   : "Does rechecking source access at retrieval prevent an agent quoting revoked passages already in conversation history? The Forum proposal covers retrieval, but its cache invalidation boundary remains untested."),
             };
@@ -578,7 +576,7 @@ test("research topics rotate and revisits reuse only confirmed topic history wit
   expect(JSON.stringify(envelopes[4])).toContain(
     "Does rechecking source access",
   );
-  expect(JSON.stringify(envelopes[4])).toContain("unresolved point");
+  expect(JSON.stringify(envelopes[4])).toContain("earlier conversation");
 });
 
 test("revoking a research source's public ancestor blocks generation and delivery", async () => {
@@ -634,7 +632,7 @@ test("revoking a research source's public ancestor blocks generation and deliver
   expect(sends).toHaveLength(0);
 });
 
-test("research review receives the shared source and actual debate, with participant mentions added after approval", async () => {
+test("casual review receives the public source and actual chat, with participant mentions added after approval", async () => {
   const t = await setup();
   const { envelopes, sends } = transport();
   const first = (await t.mutation(internal.telegramYappers.start, {}))!;
@@ -657,10 +655,67 @@ test("research review receives the shared source and actual debate, with partici
   expect(JSON.stringify(envelopes[2])).toContain(
     "no benchmark results are provided",
   );
-  expect(JSON.stringify(envelopes[3])).toContain(
-    "reject generic builder/productivity advice",
-  );
+  expect(JSON.stringify(envelopes[3])).toContain("One-liners are valid");
   expect(JSON.stringify(envelopes[3])).toContain("confirmedPublicRound");
+});
+
+test("a non-question opinion opener and a one-line joke reply can both be sent", async () => {
+  const t = await setup();
+  const opener =
+    "A cache that remembers the deleted stuff is a terrible gossip partner.";
+  const { sends } = transport(false, opener);
+  const first = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.action(internal.telegramAgentReply.respond, { requestId: first });
+  expect(sends[0].text).toContain(opener);
+  vi.setSystemTime(Date.now() + YAPPERS_FOLLOWUP_DELAY_MS);
+  const next = (await t.mutation(internal.telegramYappers.followup, {
+    requestId: first,
+  }))!;
+  const joke = "Gossip with a retention policy. Somehow worse.";
+  const reply = transport(false, joke);
+  await t.action(internal.telegramAgentReply.respond, { requestId: next });
+  expect(reply.sends).toHaveLength(1);
+  expect(reply.sends[0].text).toContain(joke);
+  const review = JSON.stringify(reply.envelopes[1]);
+  expect(review).toContain(opener);
+  expect(review).toContain(
+    "Subjective opinions and obvious humor need no scientific disclaimer",
+  );
+  expect(review).not.toContain("opener must ask a concrete research question");
+});
+
+test("claim refreshes a queued formal prompt but never reclaims held work", async () => {
+  const t = await setup();
+  const id = (await t.mutation(internal.telegramYappers.start, {}))!;
+  await t.run((ctx) =>
+    ctx.db.patch("telegramAgentRequests", id, {
+      prompt: "OLD_FORMAL_RESEARCH_ROLE",
+    }),
+  );
+  expect(
+    await t.mutation(internal.telegramAgents.claim, { requestId: id }),
+  ).toBe(true);
+  const claimed = (await t.run((ctx) =>
+    ctx.db.get("telegramAgentRequests", id),
+  ))!;
+  expect(claimed.prompt).toContain("Start a casual conversation");
+  expect(claimed.prompt).not.toContain("OLD_FORMAL_RESEARCH_ROLE");
+  await t.run((ctx) =>
+    ctx.db.patch("telegramAgentRequests", id, {
+      status: "held",
+      reason: "generation_unconfirmed",
+    }),
+  );
+  expect(
+    await t.mutation(internal.telegramAgents.claim, { requestId: id }),
+  ).toBe(false);
+  expect(
+    await t.run((ctx) => ctx.db.get("telegramAgentRequests", id)),
+  ).toMatchObject({
+    status: "held",
+    reason: "generation_unconfirmed",
+    prompt: claimed.prompt,
+  });
 });
 
 test("no eligible public source creates no filler, and failed sends cannot seed recalled research", async () => {

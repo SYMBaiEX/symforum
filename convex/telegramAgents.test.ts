@@ -74,6 +74,20 @@ describe("Telegram durable admission and delivery", () => {
       expect(typeof telegramVoice(slug)).toBe("string");
     expect(telegramVoice("nyx")).toContain("evidence-first");
   });
+  test("Yappers personalities have distinct chat voices without article templates", () => {
+    const voices = ["suki", "belle", "nyx", "damon-pike", "lena-corwin"].map(
+      (slug) => telegramVoice(slug, "yap"),
+    );
+    expect(new Set(voices).size).toBe(5);
+    for (const slug of TELEGRAM_AGENT_SLUGS) {
+      const voice = telegramVoice(slug, "yap");
+      expect(voice.length).toBeGreaterThan(30);
+      expect(voice).not.toContain("Signature structure");
+    }
+    expect(telegramVoice("nyx", "yap")).toContain("deadpan");
+    expect(telegramVoice("belle", "yap")).toContain("cheeky");
+    expect(telegramVoice("nyx")).toContain("evidence-first");
+  });
   test("webhook authentication precedes admission and valid duplicate deliveries remain idempotent", async () => {
     const t = await setup();
     const payload = JSON.stringify({

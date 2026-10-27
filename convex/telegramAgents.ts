@@ -15,7 +15,7 @@ import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 import type { MenuAgent } from "../lib/telegram-community";
 import { validMeme } from "./telegramMemes";
 import { validYap } from "./telegramYappers";
-import { yapFollowupDelay } from "../lib/telegram-yappers";
+import { researchPrompt, yapFollowupDelay } from "../lib/telegram-yappers";
 import { requestResearch } from "./telegramYapResearch";
 
 function specialty(slug: string) {
@@ -226,11 +226,22 @@ export const claim = internalMutation({
     )
       return false;
     if (row.kind === "yap" && !validYap(row, Date.now())) return false;
-    if (row.yapVersion === 4 && !(await requestResearch(ctx, row)))
-      return false;
+    const research =
+      row.yapVersion === 4 ? await requestResearch(ctx, row) : null;
+    if (row.yapVersion === 4 && !research) return false;
     if (row.kind === "meme" && !validMeme(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "generating",
+      // Refresh only unclaimed work. Held or uncertain generations never re-enter.
+      ...(research
+        ? {
+            prompt: researchPrompt(
+              research.source.title,
+              row.yapTurn ?? 0,
+              row.yapRevisit === true,
+            ),
+          }
+        : {}),
       updatedAt: Date.now(),
     });
     return true;
