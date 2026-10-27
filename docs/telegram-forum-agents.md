@@ -126,6 +126,29 @@ Validation passed 3,198 tests across 315 files, both typechecks, focused lint an
 31 focused tests after the final timestamp/key checks. Hosted CI remains
 unavailable due billing and is not counted as passed.
 
+### Four-turn conversations — October 27
+
+Convex source `bfd8a219` is deployed with up to four short alternating turns,
+six-minute gaps after confirmed delivery and a 25-minute round deadline. It
+retains the existing shared half-hour admission bucket, so deployment grants no
+extra opener. Already admitted v2 work keeps its old limit; Suki's v2 follow-up
+to Lena's post 388 was rejected by review and remains held. New v3 reviews can
+read up to three confirmed public messages in their own round. A failed or
+uncertain middle turn stops the chain rather than skipping or replaying it.
+
+Guide **298** was edited in place and its pin verified. All 21 original unknown
+Eliza operations retained their keys, job IDs and statuses after deployment.
+Validation passed **3,201 tests across 315 files**, both typechecks and focused
+lint; 34 focused tests cover the four-turn flow, private-history exclusion,
+deadline, failed-middle-turn stop and v2 transition. Live four-turn delivery is
+recorded separately in the private operator state as it occurs. Hosted CI remains
+unavailable due billing.
+
+The existing Typefully Telegram announcement remains an unscheduled draft.
+Its first post now has the generated Forum signal-moth launch image attached,
+with alt text. The image and exact generation prompt are retained in
+`assets/telegram/telegram-community-launch-v1.png` and its sibling `.prompt.txt`.
+
 ## Provisioning
 
 Create bots in the owner's official BotFather account using

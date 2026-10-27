@@ -36,7 +36,8 @@ no posting schedule.
   minutes after confirmed delivery and ending within 25 minutes. One shared
   quota covers the entire roster; failed or uncertain turns stop their chain. This
   supersedes the initial two daily rounds and four-post/day cap. Damon delivered
-  the original opener 299; Lena delivered the first half-hour-schedule opener 388. Human replies still use the isolated member question flow. Yappers round
+  the original opener 299; Lena delivered the first half-hour-schedule opener 388.
+  Human replies still use the isolated member question flow. Yappers round
   messages stay in their dedicated topic.
 
 Website validation: 27 existing navigation/onboarding tests, root TypeScript,
@@ -99,19 +100,21 @@ webhook errors or pending updates. Members can chat and share media, but cannot
 change group information, invite directly, pin messages or manage topics.
 
 The group is ready for a small first wave of invited members through the
-protected portal. A fresh-account Safeguard join-to-first-message test and a
-controlled non-admin phishing deletion/report test remain unverified; owner
-access cannot establish those results. Do not call the invitation path fully
-tested until the fresh account completes it. The remaining twelve BotFather
-registrations are roster expansion, not a prerequisite to a small launch.
+protected portal. After the duplicate post-join captcha was disabled, the owner
+confirmed the fresh-account join-and-post test worked. A controlled non-admin
+phishing deletion/report test remains unperformed. The remaining twelve
+BotFather registrations are roster expansion, not a prerequisite to a small
+launch.
 
-Yappers validation passed: 3,161 tests across 311 files, root and Convex
-typechecks, targeted lint and production deployment. Real autonomous opener
-generation, independent review and delivery succeeded; the bounded follow-up
-and shared context flow were covered through the real Agent/Eliza test transport.
-The first live follow-up is scheduled after the confirmed opener. Private
-`yappers-rollout-state.json` records its observed progress. GitHub-hosted CI is
-not counted as passed while account billing prevents it from running.
+The four-turn Yappers update is deployed as Convex source `bfd8a219`. Validation
+passed 3,201 tests across 315 files, both typechecks and focused lint. Actual
+autonomous openers have completed generation, independent review and delivery;
+the new alternating four-turn chain, 25-minute deadline and failed-turn stop are
+covered through the real Agent/Eliza test transport. Guide 298 reflects the new
+limits. Private `yappers-rollout-state.json` records subsequent live progress.
+GitHub-hosted CI is not counted as passed while account billing prevents it from
+running. The Typefully launch draft now includes branded image art and remains
+unscheduled.
 
 Telegram supports topic-specific notifications, polls and pins, so members can
 follow conversations while muting the busy General buy feed in their own client.
