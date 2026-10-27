@@ -166,12 +166,31 @@ Rose's `/ca`, `contract?`, `/website`, `/price`, `/mc` and `/forumhelp` shortcut
 were tested in the metrics topic. Blacklist configuration was read back, but a
 non-admin phishing-message deletion test has not been performed.
 
-Safeguard's mint, pool and automatic supply match SYMF. Its numeric market-cap
-feed remains inaccurate; no supply override was used to disguise the difference.
-The configured custom layout did not replace the live preset. Fresh live alerts
-show the **MC inaccurate — live price / MC** warning button pointing to the exact
-official Pump.fun token page. `/price` and `/mc` also direct members to live
-sources. Treat the numeric-feed correction as unresolved vendor behavior.
+Buy alerts are handled by the existing third-party `@buytech` bot (ID
+`5336320447`) in General. Its SYMF configuration uses the exact mint, automatic
+pool detection, butterfly emoji, a $10 minimum, and the official Forum website,
+`@symforum` Telegram entrance and X profile. Its only administrator capability is
+basic `can_manage_chat`; deletion, banning, invitations, topic management, stories
+and administrator promotion are disabled. It uses no owned BotFather slot.
+
+Safeguard's SYMF buy monitor was removed through `/reset@safeguard`, selecting
+only **SYMBaiEX Forum (SOL)**. The bot confirmed the token's removal. This stops
+its duplicate buy alerts; Safeguard remains an administrator for the portal,
+join verification, anti-raid and flood protection. Rose's permissions remain in
+place. The unused Peak trial was removed without configuring a token feed.
+
+Evaluate price accuracy using multiple fresh alerts and readings captured at
+matching times. Record notification receipt time, transaction time, displayed
+market cap and any known provider delay. Distinguish a current quote from a
+historical, pre-trade or post-trade value, and market cap from FDV or a different
+supply definition. One isolated comparison is insufficient to reject or replace
+the owner's selected BuyTech feed. Do not adjust supply merely to match a price.
+
+Safeguard showed **Circ Supply Not Set** before its buy monitor was removed. A
+fresh Solana `getTokenSupply` read at slot `462132947` returned
+`953208249.461597` SYMF; this is outstanding minted supply, not proof that no
+tokens are locked. No manual supply override was applied. `/price` and `/mc`
+continue to direct members to live sources.
 
 ## Verification and rollback
 
