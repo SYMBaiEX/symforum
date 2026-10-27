@@ -59,7 +59,11 @@ describe("automatic native forum parity", () => {
     );
     for (const route of FORUM_NATIVE_ROUTES)
       expect(imports).toContain(route.source.replace(".tsx", ""));
-    expect(FORUM_NATIVE_ROUTES).toHaveLength(26);
+    expect(FORUM_NATIVE_ROUTES).toHaveLength(27);
+    expect(FORUM_NATIVE_ROUTES).toContainEqual({
+      path: "/forum/start-here",
+      source: "apps/forum/app/forum/start-here/page.tsx",
+    });
   });
   test("can share a document with host lexical bindings without a startup redeclaration error", () => {
     // A classic script's global var collides with a prior host const even if

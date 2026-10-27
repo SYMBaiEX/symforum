@@ -19,7 +19,7 @@
   "peerDependencies": {
     "convex": "1.46.0",
     "convex-helpers": ">=0.1.124",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "react": "19.2.8"
   }
 }
