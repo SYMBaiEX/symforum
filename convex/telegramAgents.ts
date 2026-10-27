@@ -13,6 +13,7 @@ import { telegramWorkflow } from "./telegramAgentWorkflow";
 import { telegramRequestKind } from "./telegramAgentSchema";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 import type { MenuAgent } from "../lib/telegram-community";
+import { validMeme } from "./telegramMemes";
 import { validYap } from "./telegramYappers";
 import { YAPPERS_FOLLOWUP_DELAY_MS } from "../lib/telegram-yappers";
 
@@ -79,7 +80,7 @@ export const accept = internalMutation({
     if (
       env.TELEGRAM_AGENTS_ENABLED !== "true" ||
       env.ELIZA_RUNTIME_MODE !== "live" ||
-      args.kind === "yap" ||
+      ["yap", "meme"].includes(args.kind) ||
       !bot ||
       bot.id !== args.botId ||
       !Number.isSafeInteger(args.updateId) ||
@@ -217,6 +218,7 @@ export const claim = internalMutation({
     )
       return false;
     if (row.kind === "yap" && !validYap(row, Date.now())) return false;
+    if (row.kind === "meme" && !validMeme(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "generating",
       updatedAt: Date.now(),
@@ -355,6 +357,7 @@ export const claimDelivery = internalMutation({
     )
       return false;
     if (row.kind === "yap" && !validYap(row, Date.now())) return false;
+    if (row.kind === "meme" && !validMeme(row, Date.now())) return false;
     await ctx.db.patch("telegramAgentRequests", row._id, {
       status: "sending",
       updatedAt: Date.now(),
@@ -376,6 +379,13 @@ export const finish = internalMutation({
     const sent = args.messageId !== undefined && row.status === "sending";
     // Only confirmed autonomous posts enter the shared public-round context.
     // Human conversations continue to use their isolated member threads.
+    if (sent && row.kind === "meme" && row.reply) {
+      await saveMessages(ctx, components.agent, {
+        threadId: row.conversationId,
+        agentName: "Belle",
+        messages: [{ role: "assistant", content: row.reply }],
+      });
+    }
     if (sent && row.kind === "yap" && row.reply) {
       const agent = await ctx.db
         .query("forumAgents")

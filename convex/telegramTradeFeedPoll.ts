@@ -46,7 +46,7 @@ export const poll = internalAction({
     try {
       const discovery = symfPools(await read(`/tokens/${SYMF_MINT}/pools`));
       if (!discovery.pools.length) throw Error("no_matching_pools");
-      for (const pool of discovery.pools) {
+      for (const pool of discovery.pools.slice(0, 6)) {
         const trades = poolBuys(
           await read(
             `/pools/${pool}/trades?trade_volume_in_usd_greater_than=0`,
@@ -61,7 +61,7 @@ export const poll = internalAction({
         });
       }
       await ctx.runMutation(internal.telegramTradeFeed.health, {
-        truncated: discovery.truncated,
+        truncated: discovery.truncated || discovery.pools.length > 6,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";

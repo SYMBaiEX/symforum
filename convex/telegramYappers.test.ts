@@ -102,7 +102,11 @@ function transport(timeout = false) {
         if (timeout) throw Error("synthetic timeout");
         return Response.json({
           ok: true,
-          result: { message_id: 100 + sends.length, message_thread_id: 296 },
+          result: {
+            message_id: 100 + sends.length,
+            message_thread_id: 296,
+            chat: { id: -1004387387301 },
+          },
         });
       }
       if (url === "https://eliza-worker.example/complete") {

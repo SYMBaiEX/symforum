@@ -7,9 +7,20 @@ export const telegramRequestKind = v.union(
   v.literal("menu"),
   v.literal("prompt"),
   v.literal("yap"),
+  v.literal("meme"),
 );
 
 export const telegramAgentTables = {
+  telegramMemeConfig: defineTable({
+    key: v.literal("belle"),
+    storageId: v.id("_storage"),
+    threadId: v.optional(v.string()),
+    lastQueuedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
+  telegramMemeFingerprints: defineTable({
+    key: v.string(),
+    requestId: v.id("telegramAgentRequests"),
+  }).index("by_key", ["key"]),
   telegramForumDigests: defineTable({
     key: v.string(),
     topicId: v.number(),
@@ -50,6 +61,7 @@ export const telegramAgentTables = {
     conversationId: v.string(),
     kind: telegramRequestKind,
     sourceAgentSlug: v.optional(v.string()),
+    memeSlot: v.optional(v.number()),
     yapDay: v.optional(v.string()),
     yapRound: v.optional(v.number()),
     yapTurn: v.optional(v.number()),
