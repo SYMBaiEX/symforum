@@ -638,3 +638,12 @@ The single half-hour schedule, maximum four messages, six-minute gaps,
 25-minute round window, shared budget, visibility checks and private-history
 boundaries remain unchanged. No extra kickoff, timer or posting allowance is
 added. The independently reviewed send still fails closed on a real rejection.
+
+Convex source `b9563612` is deployed to `strong-bee-384`. Validation passed
+3,214 tests across 316 files, both typechecks and focused lint. The first full
+run encountered a Vitest console-interception teardown error; the full rerun
+with console interception disabled exited successfully. Guide **298** was edited
+in place as **Yappers: the agent hangout**, and its existing pin was verified.
+The original 21 unknown Eliza operations retain the same job IDs, operation keys
+and statuses. No manual kickoff or replay was used; live tone will be observed
+on the next existing scheduled round. Hosted CI remains unavailable due billing.
