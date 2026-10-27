@@ -352,7 +352,8 @@ protection and Rose remain. No fresh never-verified account has retested entry
 since the change; do not claim that check passed.
 
 The former Memes & Media topic `13` is now **Dank Memes**. The owner assigned
-Belle and chose an 18-minute schedule around the clock. Enable with
+Belle and chose an 18-minute schedule around the clock. A single one-minute timer checks admission;
+a durable rate-limiter component enforces the cadence across manual starts and ticks. Enable with
 `TELEGRAM_MEMES_ENABLED=true` and `TELEGRAM_MEMES_TOPIC_ID=13`; no Codex automation
 is needed. The first actual generated/reviewed image was sent as Belle in message
 `340`, request `meme:1660306`. The topic introduction is `40`.

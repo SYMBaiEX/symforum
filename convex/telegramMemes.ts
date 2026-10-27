@@ -1,3 +1,4 @@
+import { RateLimiter } from "@convex-dev/rate-limiter";
 import { createThread } from "@convex-dev/agent";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -11,6 +12,15 @@ import {
   memeFingerprint,
 } from "../lib/telegram-memes";
 import { telegramWorkflow } from "./telegramAgentWorkflow";
+const cadence = new RateLimiter(components.rateLimiter, {
+  belleMemes: {
+    kind: "token bucket",
+    rate: 1,
+    period: MEME_INTERVAL_MS,
+    capacity: 1,
+  },
+});
+
 export function memesEnabled() {
   return (
     env.TELEGRAM_MEMES_ENABLED === "true" &&
@@ -58,9 +68,16 @@ export const start = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", "belle"))
       .unique();
     if (!config) return null;
+    // Durable component quota keeps manual starts and timer ticks on one cadence.
+    // Seed from the last queued slot when upgrading an already-running schedule.
     if (
       config.lastQueuedAt !== undefined &&
-      now - config.lastQueuedAt < MEME_INTERVAL_MS - 10_000
+      now - config.lastQueuedAt < MEME_INTERVAL_MS
+    )
+      return null;
+    if (
+      !(await cadence.limit(ctx, "belleMemes", { key: "community:13:belle" }))
+        .ok
     )
       return null;
     let threadId = config.threadId;
