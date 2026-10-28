@@ -93,6 +93,7 @@ type Env = {
   readonly X_AGENTS_ENABLED: string | undefined;
   readonly X_AGENT_CLIENT_ID: string | undefined;
   readonly X_AGENT_CLIENT_SECRET: string | undefined;
+  readonly X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED: string | undefined;
   readonly X_AGENT_TOKEN_KEK: string | undefined;
 };
 

@@ -19,6 +19,14 @@ export const xOfficialPost = v.object({
   text: v.string(),
   createdAt: v.number(),
   replyEligible: v.optional(v.boolean()),
+  invitationParent: v.optional(
+    v.object({
+      id: v.string(),
+      authorId: v.string(),
+      text: v.string(),
+      createdAt: v.number(),
+    }),
+  ),
 });
 export const xCursor = v.object({
   userId: v.string(),

@@ -48,6 +48,63 @@ export function xReplySummoned(
     )
   );
 }
+
+/** An explicit first-level self-reply invitation, never a general reply loop. */
+export function xFirstReplyInvitationParent(
+  post: Record<string, unknown>,
+  userId: string,
+  includes?: unknown,
+) {
+  const record = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+  const refs = post.referenced_tweets;
+  if (
+    !Array.isArray(refs) ||
+    refs.length !== 1 ||
+    !record(refs[0]) ||
+    refs[0].type !== "replied_to" ||
+    typeof refs[0].id !== "string" ||
+    !/^\d{1,19}$/.test(refs[0].id) ||
+    !xReplySummoned(post, userId, includes) ||
+    typeof post.author_id !== "string" ||
+    !officialXAuthor(post.author_id)
+  )
+    return null;
+  const tweets =
+    record(includes) && Array.isArray(includes.tweets) ? includes.tweets : [];
+  const parent = tweets.find((t) => record(t) && t.id === refs[0].id);
+  if (
+    !record(parent) ||
+    parent.id === post.id ||
+    parent.author_id !== post.author_id ||
+    typeof parent.id !== "string" ||
+    typeof parent.text !== "string" ||
+    parent.text.length > 25000 ||
+    typeof parent.created_at !== "string" ||
+    typeof post.created_at !== "string" ||
+    !Number.isFinite(Date.parse(parent.created_at)) ||
+    !Number.isFinite(Date.parse(post.created_at)) ||
+    Date.parse(parent.created_at) > Date.parse(post.created_at) ||
+    Date.parse(post.created_at) - Date.parse(parent.created_at) >
+      X_ACTIVITY_TTL_MS ||
+    parent.possibly_sensitive === true ||
+    (post.conversation_id !== undefined &&
+      post.conversation_id !== parent.id) ||
+    (parent.referenced_tweets !== undefined &&
+      (!Array.isArray(parent.referenced_tweets) ||
+        parent.referenced_tweets.some(
+          (r) =>
+            !record(r) || r.type === "replied_to" || r.type === "retweeted",
+        )))
+  )
+    return null;
+  return {
+    id: parent.id,
+    authorId: post.author_id,
+    text: parent.text,
+    createdAt: Date.parse(parent.created_at),
+  };
+}
 export function xOriginalKind(slug: string, ordinal: number) {
   return slug === "nyx" && ordinal % 5 !== 4 ? "mascot" : "forum";
 }

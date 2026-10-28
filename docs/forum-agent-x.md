@@ -51,7 +51,8 @@ The allowlist is pinned to X-verified numeric IDs, not untrusted handle text:
 One backend minute timer checks eligible accounts and processes ready work;
 source polling is separate and checks the two official timelines about every
 15 minutes. Original posts/quotes are eligible;
-replies, reposts and sensitive posts are excluded to prevent feedback loops.
+reposts and sensitive posts are excluded. Replies stay excluded except for the
+narrow first-reply invitation flow below, when its separate switch is enabled.
 Cursors preserve pagination across bounded five-post pages. Each post gets at
 most one repost and one contextual comment per agent, keyed independently of
 reconnections. Comments use the existing Eliza generation and review stages,
@@ -126,6 +127,25 @@ official posts still qualify for reposts. Tag `@symbaiex_nyx` in a new original
 official post to invite NyX's comment. Prior written AI-reply approval does not
 remove this endpoint restriction. See the
 [X integration guide](https://docs.x.com/x-api/posts/manage-tweets/integrate).
+
+### First-reply invitations
+
+`X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED=true` permits an explicit mention in a
+first-level reply by the same official author under its own recent original
+post. The connector verifies the mention's exact account ID and the expanded
+parent's author, content, age and reply/repost/sensitive flags. It rejects missing
+parents, deeper reply chains, other people's threads and mismatched conversation
+IDs. The original public post is retained as generation context and rechecked
+before delivery. This does not insert invitations automatically.
+
+Only a comment is admitted for such an invitation; it is never reposted. One
+stable invitation-comment key per account and original post prevents repeated
+summons from creating loops. A prior clearly unsummoned root may be followed by
+one new invitation, while previous eligible attempts or uncertain/legacy sends
+remain blocked. Existing source cursors, 20–29 minute background delay, shared
+budgets, six-comment daily cap and all spacing/hold rules remain unchanged. The
+owner's single-post check can accelerate admission for a live test under the same
+send caps. Turning the switch off stops unclaimed invitation work.
 
 Repost preflight also reads the source's reposting accounts. An exact positive
 match for the connected X user confirms an existing manual/legacy repost without

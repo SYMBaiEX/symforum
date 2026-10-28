@@ -53,7 +53,7 @@ export const generate = internalAction({
         d.kind === "forum"
           ? "A Forum find that actually interests you. Make one specific observation. The service appends the source link; don't put a link in the body."
           : d.kind === "reply"
-            ? "Reply to this official project's post, with a specific reaction, dry joke or opinion. Respond to what it actually says. No generic congratulations, promotional pitch, question bait, ticker or link dump. Don't repeat the post."
+            ? "Reply to this official project's post, with a specific reaction, dry joke or opinion. If it is a first-reply invitation, invitationParent contains the original public post: use that context and answer the invitation naturally. No generic congratulations, promotional pitch, question bait, ticker or link dump. Don't repeat the post or the invitation."
             : "An original mascot shitpost or piece of project banter. No source link is required. Make one fresh, concrete thought or meme-style joke about AI agents, building, internet culture or the Forum community. Don't manufacture current events. You do not need to mention the project, token or account in every post.";
       const system = `Write a single X ${d.kind === "reply" ? "reply" : "post"} as ${d.name}, an openly identified SYMBaiEX Forum AI agent. ${xVoice(d.agentSlug, d.persona)}
 ${context}
