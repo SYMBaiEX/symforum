@@ -1,7 +1,12 @@
 "use node";
 
 import { internal } from "./_generated/api";
-import { internalAction, env, type ActionCtx } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  env,
+  type ActionCtx,
+} from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { randomXSecret, sealX, unsealX } from "../lib/x-agent-crypto";
@@ -133,17 +138,44 @@ async function access(
   if (!saved) throw Error("Refresh ownership changed.");
   return t.access_token;
 }
-async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
+async function process(
+  ctx: ActionCtx,
+  activityId: Id<"xAgentActivity">,
+  options?: { force?: boolean; officialPostId?: string },
+): Promise<void> {
   const lease = randomXSecret();
   const c = await ctx.runMutation(internal.xAgentActivityData.claim, {
     activityId,
     lease,
+    force: options?.force,
   });
   if (!c) return;
   const args = { activityId, lease };
   try {
     const token = await access(ctx, c.activity, c.account, lease);
-    for (const cursor of c.activity.cursors) {
+    const pollDue = (c.activity.nextSourcePollAt ?? 0) <= Date.now();
+    if (options?.officialPostId) {
+      if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
+        throw Error("Read limit reached.");
+      const checked = await request(
+        `tweets/${options.officialPostId}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive`,
+        token,
+      );
+      const source = post(checked.data);
+      if (
+        !source ||
+        checked.errors ||
+        source.createdAt < Date.now() - 24 * 60 * 60_000
+      )
+        throw Error("Recent official source unavailable.");
+      await ctx.runMutation(internal.xAgentActivityData.ingest, {
+        ...args,
+        userId: source.authorId,
+        posts: [source],
+        ownerRequested: true,
+      });
+    }
+    for (const cursor of pollDue ? c.activity.cursors : []) {
       if (!officialXAuthor(cursor.userId))
         throw Error("Source is not allowlisted.");
       if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
@@ -181,23 +213,27 @@ async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
     const op = await ctx.runMutation(internal.xAgentActivityData.next, args);
     if (
       op &&
-      (await ctx.runMutation(internal.xAgentActivityData.apiRead, args))
+      (op.kind === "original" ||
+        (await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
     ) {
       // Recheck the actual author and text before a send. Edits/deletions stop it.
-      const check = await request(
-        `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive`,
-        token,
-      );
-      const current = post(check.data);
-      if (
-        !current ||
-        check.errors ||
-        current.authorId !== op.post.authorId ||
-        current.text !== op.post.text
-      ) {
-        throw Error(
-          "Official source changed or is no longer available. Review before resuming.",
+      if (op.kind !== "original") {
+        if (!op.post) throw Error("Missing official source.");
+        const check = await request(
+          `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive`,
+          token,
         );
+        const current = post(check.data);
+        if (
+          !current ||
+          check.errors ||
+          current.authorId !== op.post.authorId ||
+          current.text !== op.post.text
+        ) {
+          throw Error(
+            "Official source changed or is no longer available. Review before resuming.",
+          );
+        }
       }
       const send = await ctx.runMutation(
         internal.xAgentActivityData.claimSend,
@@ -208,11 +244,13 @@ async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
           const result =
             op.kind === "repost"
               ? await request(`users/${c.account.xUserId}/retweets`, token, {
-                  tweet_id: op.post.id,
+                  tweet_id: op.post!.id,
                 })
               : await request("tweets", token, {
                   text: send.text,
-                  reply: { in_reply_to_tweet_id: op.post.id },
+                  ...(op.kind === "comment"
+                    ? { reply: { in_reply_to_tweet_id: op.post!.id } }
+                    : {}),
                 });
           const data = result.data as
             { retweeted?: boolean; id?: string; text?: string } | undefined;
@@ -228,7 +266,7 @@ async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
             resultId:
               op.kind === "repost"
                 ? confirmed
-                  ? op.post.id
+                  ? op.post!.id
                   : undefined
                 : data?.id,
             issue: confirmed
@@ -250,7 +288,7 @@ async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
     }
     await ctx.runMutation(internal.xAgentActivityData.release, {
       ...args,
-      poll: true,
+      poll: pollDue,
     });
   } catch (e) {
     // Provider errors are never routed through another app or browser.
@@ -268,11 +306,41 @@ async function process(ctx: ActionCtx, activityId: Id<"xAgentActivity">) {
 export const tick = internalAction({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<null> => {
     const due = await ctx.runQuery(internal.xAgentActivityData.due, {
       now: Date.now(),
     });
     for (const id of due) await process(ctx, id);
+    return null;
+  },
+});
+
+// Human owner requests remain subject to the same shared caps and durable claims.
+export const publishDraft = action({
+  args: { draftId: v.id("xAgentDrafts") },
+  returns: v.id("xAgentOperations"),
+  handler: async (ctx, args): Promise<Id<"xAgentOperations">> => {
+    const queued: {
+      activityId: Id<"xAgentActivity">;
+      operationId: Id<"xAgentOperations">;
+    } = await ctx.runMutation(internal.xAgentOriginals.queueApproved, args);
+    await process(ctx, queued.activityId, { force: true });
+    return queued.operationId;
+  },
+});
+export const checkOfficialPost = action({
+  args: { agentSlug: v.string(), postId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    if (!/^\d{1,19}$/.test(args.postId)) throw Error("Invalid post ID.");
+    const activityId = await ctx.runMutation(
+      internal.xAgentOriginals.wakeOwner,
+      { agentSlug: args.agentSlug },
+    );
+    await process(ctx, activityId, {
+      force: true,
+      officialPostId: args.postId,
+    });
     return null;
   },
 });

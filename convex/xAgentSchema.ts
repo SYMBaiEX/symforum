@@ -6,6 +6,7 @@ export const xActivityOptions = v.object({
   reposts: v.boolean(),
   comments: v.boolean(),
   aiRepliesApproved: v.boolean(),
+  originals: v.optional(v.boolean()),
 });
 export const xDraftKind = v.union(
   v.literal("mascot"),
@@ -40,7 +41,7 @@ export const xAgentTables = {
     expectedUsername: v.string(),
     epoch: v.number(),
     connected: v.boolean(),
-    mode: v.literal("drafts"),
+    mode: v.union(v.literal("drafts"), v.literal("automatic")),
     xUserId: v.optional(v.string()),
     username: v.optional(v.string()),
     grant: v.optional(xSealed),
@@ -98,6 +99,9 @@ export const xAgentTables = {
     leaseUntil: v.optional(v.number()),
     refreshClaimed: v.optional(v.boolean()),
     holdReason: v.optional(v.string()),
+    nextSourcePollAt: v.optional(v.number()),
+    nextOriginalAt: v.optional(v.number()),
+    automaticOrdinal: v.optional(v.number()),
   })
     .index("by_accountId", ["accountId"])
     .index("by_enabled_and_nextPollAt", ["enabled", "nextPollAt"]),
@@ -105,8 +109,14 @@ export const xAgentTables = {
     accountId: v.id("xAgentAccounts"),
     epoch: v.number(),
     key: v.string(),
-    kind: v.union(v.literal("repost"), v.literal("comment")),
-    post: xOfficialPost,
+    kind: v.union(
+      v.literal("repost"),
+      v.literal("comment"),
+      v.literal("original"),
+    ),
+    post: v.optional(xOfficialPost),
+    ownerRequested: v.optional(v.boolean()),
+    approvedText: v.optional(v.string()),
     status: v.union(
       v.literal("queued"),
       v.literal("sending"),

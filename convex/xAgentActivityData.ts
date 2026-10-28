@@ -11,6 +11,8 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { admitOriginal } from "./xAgentOriginals";
+import { researchSource } from "./telegramYapResearch";
 import { requireOwner } from "./authz";
 import { xActivityOptions, xOfficialPost, xSealed } from "./xAgentSchema";
 import {
@@ -19,14 +21,34 @@ import {
   X_OFFICIAL_SOURCES,
   officialXAuthor,
   validXDraft,
+  X_ORIGINAL_INTERVAL_MS,
 } from "../lib/x-agent-policy";
 
 const limits = new RateLimiter(components.rateLimiter, {
+  xAllActions: { kind: "fixed window", rate: 24, period: DAY },
+  xAllSpacing: { kind: "token bucket", rate: 12, period: HOUR, capacity: 1 },
+  xOriginals: { kind: "fixed window", rate: 6, period: DAY },
+  xOriginalSpacing: {
+    kind: "token bucket",
+    rate: 1,
+    period: X_ORIGINAL_INTERVAL_MS,
+    capacity: 1,
+  },
   xReads: { kind: "fixed window", rate: 360, period: DAY },
-  xReposts: { kind: "fixed window", rate: 48, period: DAY },
-  xComments: { kind: "fixed window", rate: 24, period: DAY },
-  xRepostSpacing: { kind: "token bucket", rate: 6, period: HOUR, capacity: 1 },
-  xCommentSpacing: { kind: "token bucket", rate: 2, period: HOUR, capacity: 1 },
+  xRepostsV2: { kind: "fixed window", rate: 12, period: DAY },
+  xCommentsV2: { kind: "fixed window", rate: 6, period: DAY },
+  xRepostSpacingV2: {
+    kind: "token bucket",
+    rate: 3,
+    period: HOUR,
+    capacity: 1,
+  },
+  xCommentSpacingV2: {
+    kind: "token bucket",
+    rate: 1,
+    period: HOUR,
+    capacity: 1,
+  },
 });
 const leaseArgs = { activityId: v.id("xAgentActivity"), lease: v.string() };
 function writeScope(a: Doc<"xAgentAccounts">) {
@@ -35,7 +57,12 @@ function writeScope(a: Doc<"xAgentAccounts">) {
 export async function configureActivity(
   ctx: MutationCtx,
   a: Doc<"xAgentAccounts">,
-  options: { reposts: boolean; comments: boolean; aiRepliesApproved: boolean },
+  options: {
+    reposts: boolean;
+    comments: boolean;
+    aiRepliesApproved: boolean;
+    originals?: boolean;
+  },
 ) {
   if (!a.connected || !writeScope(a))
     throw Error("Reconnect X with posting permission first.");
@@ -51,9 +78,13 @@ export async function configureActivity(
     );
   const values = {
     accountId: a._id,
-    enabled: options.reposts || options.comments,
+    enabled: options.reposts || options.comments || options.originals === true,
     epoch: a.epoch,
-    options,
+    options: {
+      ...options,
+      originals: options.originals ?? prior?.options.originals,
+    },
+    nextOriginalAt: prior?.nextOriginalAt,
     enabledAt: Date.now(),
     nextPollAt: Date.now(),
     cursors: X_OFFICIAL_SOURCES.map((s) => ({ userId: s.userId })),
@@ -76,7 +107,11 @@ export const configure = mutation({
       .withIndex("by_agentSlug", (q) => q.eq("agentSlug", args.agentSlug))
       .unique();
     if (!a || a.ownerUserId !== u._id) throw Error("Account unavailable.");
-    if (!args.options.reposts && !args.options.comments) {
+    if (
+      !args.options.reposts &&
+      !args.options.comments &&
+      !args.options.originals
+    ) {
       const row = await ctx.db
         .query("xAgentActivity")
         .withIndex("by_accountId", (q) => q.eq("accountId", a._id))
@@ -84,9 +119,14 @@ export const configure = mutation({
       if (row)
         await ctx.db.patch("xAgentActivity", row._id, {
           enabled: false,
+          options: { ...args.options, originals: false },
           lease: undefined,
           leaseUntil: undefined,
         });
+      await ctx.db.patch("xAgentAccounts", a._id, {
+        mode: "drafts",
+        updatedAt: Date.now(),
+      });
     } else await configureActivity(ctx, a, args.options);
     return null;
   },
@@ -142,7 +182,11 @@ export const due = internalQuery({
         ).map((r) => r._id),
 });
 export const claim = internalMutation({
-  args: { activityId: v.id("xAgentActivity"), lease: v.string() },
+  args: {
+    activityId: v.id("xAgentActivity"),
+    lease: v.string(),
+    force: v.optional(v.boolean()),
+  },
   returns: v.union(
     v.null(),
     v.object({
@@ -152,7 +196,7 @@ export const claim = internalMutation({
   ),
   handler: async (ctx, args) => {
     const r = await ctx.db.get("xAgentActivity", args.activityId);
-    if (!r?.enabled || r.nextPollAt > Date.now()) return null;
+    if (!r?.enabled || (!args.force && r.nextPollAt > Date.now())) return null;
     if (r.lease) {
       if ((r.leaseUntil ?? 0) > Date.now()) return null;
       // Expired external work may have refreshed a rotating token or sent a post.
@@ -192,8 +236,10 @@ export const release = internalMutation({
     await ctx.db.patch("xAgentActivity", r._id, {
       lease: undefined,
       leaseUntil: undefined,
-      nextPollAt:
-        Date.now() + (args.delayMs ?? (args.poll ? 15 * 60_000 : 60_000)),
+      nextPollAt: Date.now() + (args.delayMs ?? 60_000),
+      nextSourcePollAt: args.poll
+        ? Date.now() + 15 * 60_000
+        : r.nextSourcePollAt,
       holdReason: args.issue,
       enabled: args.issue ? false : r.enabled,
     });
@@ -251,6 +297,7 @@ export const ingest = internalMutation({
     posts: v.array(xOfficialPost),
     newestId: v.optional(v.string()),
     nextPage: v.optional(v.string()),
+    ownerRequested: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -262,7 +309,8 @@ export const ingest = internalMutation({
         post.authorId !== args.userId ||
         !/^\d{1,19}$/.test(post.id) ||
         post.text.length > 25000 ||
-        post.createdAt < c.activity.enabledAt ||
+        (!args.ownerRequested && post.createdAt < c.activity.enabledAt) ||
+        post.createdAt < Date.now() - X_ACTIVITY_TTL_MS ||
         post.createdAt > Date.now() + 60_000
       )
         continue;
@@ -289,30 +337,38 @@ export const ingest = internalMutation({
           key,
           kind,
           post,
+          ownerRequested: args.ownerRequested,
           status: "queued",
           notBefore:
-            Date.now() + (kind === "comment" ? 20 + jitter : jitter) * 60_000,
+            Date.now() +
+            (args.ownerRequested
+              ? 0
+              : kind === "comment"
+                ? 20 + jitter
+                : jitter) *
+              60_000,
           expiresAt: post.createdAt + X_ACTIVITY_TTL_MS,
           updatedAt: Date.now(),
         });
       }
     }
-    await ctx.db.patch("xAgentActivity", c.activity._id, {
-      cursors: c.activity.cursors.map((s) =>
-        s.userId !== args.userId
-          ? s
-          : {
-              userId: s.userId,
-              sinceId: args.nextPage
-                ? s.sinceId
-                : (args.newestId ?? s.newestId ?? s.sinceId),
-              page: args.nextPage,
-              newestId: args.nextPage
-                ? (args.newestId ?? s.newestId)
-                : undefined,
-            },
-      ),
-    });
+    if (!args.ownerRequested)
+      await ctx.db.patch("xAgentActivity", c.activity._id, {
+        cursors: c.activity.cursors.map((s) =>
+          s.userId !== args.userId
+            ? s
+            : {
+                userId: s.userId,
+                sinceId: args.nextPage
+                  ? s.sinceId
+                  : (args.newestId ?? s.newestId ?? s.sinceId),
+                page: args.nextPage,
+                newestId: args.nextPage
+                  ? (args.newestId ?? s.newestId)
+                  : undefined,
+              },
+        ),
+      });
     return null;
   },
 });
@@ -322,6 +378,7 @@ export const next = internalMutation({
   handler: async (ctx, args) => {
     const c = await active(ctx, args.activityId, args.lease);
     if (!c) return null;
+    await admitOriginal(ctx, c.account, c.activity);
     const rows = await ctx.db
       .query("xAgentOperations")
       .withIndex("by_accountId_and_status_and_notBefore", (q) =>
@@ -333,15 +390,21 @@ export const next = internalMutation({
       .take(12);
     for (const op of rows) {
       const permitted =
-        op.kind === "repost"
-          ? c.activity.options.reposts
-          : c.activity.options.comments && c.activity.options.aiRepliesApproved;
+        op.kind === "original"
+          ? op.ownerRequested ||
+            (c.activity.options.originals && c.account.mode === "automatic")
+          : op.kind === "repost"
+            ? c.activity.options.reposts
+            : c.activity.options.comments &&
+              c.activity.options.aiRepliesApproved;
       if (
         !permitted ||
         op.epoch !== c.account.epoch ||
-        op.post.createdAt < c.activity.enabledAt ||
-        op.expiresAt <= Date.now() ||
-        !officialXAuthor(op.post.authorId)
+        (op.kind !== "original" &&
+          (!op.post ||
+            (!op.ownerRequested && op.post.createdAt < c.activity.enabledAt) ||
+            !officialXAuthor(op.post.authorId))) ||
+        op.expiresAt <= Date.now()
       ) {
         await ctx.db.patch("xAgentOperations", op._id, {
           status: "held",
@@ -350,8 +413,9 @@ export const next = internalMutation({
         });
         continue;
       }
-      if (op.kind === "comment") {
+      if (op.kind !== "repost") {
         if (!op.draftId) {
+          if (op.kind !== "comment" || !op.post) continue;
           if (env.ELIZA_RUNTIME_MODE !== "live") continue;
           const conversationId = await createThread(ctx, components.agent, {
             title: `Private X reply: ${c.account.agentSlug}`,
@@ -379,7 +443,11 @@ export const next = internalMutation({
           continue;
         }
         const d = await ctx.db.get("xAgentDrafts", op.draftId);
-        if (!d || d.manuallyEdited || ["held", "archived"].includes(d.status)) {
+        if (
+          !d ||
+          (d.manuallyEdited && !op.ownerRequested) ||
+          ["held", "archived"].includes(d.status)
+        ) {
           await ctx.db.patch("xAgentOperations", op._id, {
             status: "held",
             issue: "Reply was held or archived.",
@@ -408,45 +476,60 @@ export const claimSend = internalMutation({
       op.status !== "queued" ||
       op.notBefore > Date.now() ||
       op.expiresAt <= Date.now() ||
-      !officialXAuthor(op.post.authorId)
+      (op.kind !== "original" &&
+        (!op.post || !officialXAuthor(op.post.authorId)))
     )
       return null;
     const enabled =
-      op.kind === "repost"
-        ? c.activity.options.reposts
-        : c.activity.options.comments && c.activity.options.aiRepliesApproved;
+      op.kind === "original"
+        ? op.ownerRequested ||
+          (c.activity.options.originals && c.account.mode === "automatic")
+        : op.kind === "repost"
+          ? c.activity.options.reposts
+          : c.activity.options.comments && c.activity.options.aiRepliesApproved;
     if (!enabled) return null;
     const d = op.draftId ? await ctx.db.get("xAgentDrafts", op.draftId) : null;
     if (
-      op.kind === "comment" &&
+      op.kind !== "repost" &&
       (!d ||
         d.status !== "draft" ||
-        d.manuallyEdited ||
+        (d.manuallyEdited && !op.ownerRequested) ||
+        (op.approvedText !== undefined && d.text !== op.approvedText) ||
+        d.accountEpoch !== c.account.epoch ||
         !d.text ||
         !validXDraft(d.text))
     )
       return null;
-    const spacing = await limits.limit(
-      ctx,
-      op.kind === "repost" ? "xRepostSpacing" : "xCommentSpacing",
-      { key: c.account._id },
-    );
-    if (!spacing.ok) {
+    if (d?.sourceThreadId && !(await researchSource(ctx, d.sourceThreadId))) {
       await ctx.db.patch("xAgentOperations", op._id, {
-        notBefore: Date.now() + spacing.retryAfter,
+        status: "held",
+        issue: "Forum source is no longer eligible.",
+        updatedAt: Date.now(),
       });
       return null;
     }
-    const daily = await limits.limit(
-      ctx,
-      op.kind === "repost" ? "xReposts" : "xComments",
-      { key: c.account._id },
-    );
-    if (!daily.ok) {
-      await ctx.db.patch("xAgentOperations", op._id, {
-        notBefore: Date.now() + daily.retryAfter,
-      });
-      return null;
+    const names = [
+      "xAllSpacing",
+      "xAllActions",
+      op.kind === "original"
+        ? "xOriginalSpacing"
+        : op.kind === "repost"
+          ? "xRepostSpacingV2"
+          : "xCommentSpacingV2",
+      op.kind === "original"
+        ? "xOriginals"
+        : op.kind === "repost"
+          ? "xRepostsV2"
+          : "xCommentsV2",
+    ] as const;
+    for (const name of names) {
+      const available = await limits.check(ctx, name, { key: c.account._id });
+      if (!available.ok) {
+        await ctx.db.patch("xAgentOperations", op._id, {
+          notBefore: Date.now() + available.retryAfter,
+        });
+        return null;
+      }
     }
     if (d?.text) {
       const recent = await ctx.db
@@ -471,11 +554,14 @@ export const claimSend = internalMutation({
             return null;
           }
         }
+    }
+    for (const name of names)
+      await limits.limit(ctx, name, { key: c.account._id, throws: true });
+    if (d)
       await ctx.db.patch("xAgentDrafts", d._id, {
         status: "publishing",
         updatedAt: Date.now(),
       });
-    }
     await ctx.db.patch("xAgentOperations", op._id, {
       status: "sending",
       updatedAt: Date.now(),
@@ -504,6 +590,10 @@ export const finishSend = internalMutation({
       issue: args.issue,
       updatedAt: Date.now(),
     });
+    if (args.confirmed && op.kind === "original")
+      await ctx.db.patch("xAgentActivity", r._id, {
+        nextOriginalAt: Date.now() + X_ORIGINAL_INTERVAL_MS,
+      });
     if (op.draftId)
       await ctx.db.patch("xAgentDrafts", op.draftId, {
         status: args.confirmed ? "published" : "held",

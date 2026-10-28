@@ -57,7 +57,7 @@ const safeAccount = v.object({
   connected: v.boolean(),
   username: v.optional(v.string()),
   connectedAt: v.optional(v.number()),
-  mode: v.literal("drafts"),
+  mode: v.union(v.literal("drafts"), v.literal("automatic")),
   canWrite: v.boolean(),
   activity: v.optional(
     v.object({
@@ -65,6 +65,8 @@ const safeAccount = v.object({
       reposts: v.boolean(),
       comments: v.boolean(),
       holdReason: v.optional(v.string()),
+      originals: v.boolean(),
+      nextOriginalAt: v.optional(v.number()),
     }),
   ),
 });
@@ -100,7 +102,7 @@ export const dashboard = query({
         agentSlug: v.string(),
         kind: v.string(),
         status: v.string(),
-        url: v.string(),
+        url: v.optional(v.string()),
         issue: v.optional(v.string()),
         resultId: v.optional(v.string()),
       }),
@@ -148,7 +150,9 @@ export const dashboard = query({
             agentSlug: a.agentSlug,
             kind: r.kind,
             status: r.status,
-            url: `https://x.com/${officialXAuthor(r.post.authorId)?.username}/status/${r.post.id}`,
+            url: r.post
+              ? `https://x.com/${officialXAuthor(r.post.authorId)?.username}/status/${r.post.id}`
+              : undefined,
             issue: r.issue,
             resultId: r.resultId,
           });
@@ -185,6 +189,8 @@ export const dashboard = query({
                   reposts: activity.options.reposts,
                   comments: activity.options.comments,
                   holdReason: activity.holdReason,
+                  originals: activity.options.originals === true,
+                  nextOriginalAt: activity.nextOriginalAt,
                 }
               : undefined,
           };
@@ -247,7 +253,7 @@ export const prepareAuthorization = internalMutation({
       expectedUsername,
       epoch,
       connected: false,
-      mode: "drafts" as const,
+      mode: prior?.mode ?? ("drafts" as const),
       updatedAt: Date.now(),
       grant: undefined,
     };
@@ -511,6 +517,7 @@ export const claimDraft = internalMutation({
       source: v.union(v.null(), source),
       kind: xDraftKind,
       officialPost: v.optional(xOfficialPost),
+      recentOwnPosts: v.array(v.string()),
     }),
   ),
   handler: async (ctx, { draftId }) => {
@@ -559,6 +566,21 @@ export const claimDraft = internalMutation({
       source: s,
       kind,
       officialPost: d.officialPost,
+      recentOwnPosts: (
+        await ctx.db
+          .query("xAgentDrafts")
+          .withIndex("by_ownerUserId", (q) =>
+            q.eq("ownerUserId", d.ownerUserId),
+          )
+          .order("desc")
+          .take(40)
+      )
+        .filter(
+          (p) =>
+            p.agentSlug === d.agentSlug && p.status === "published" && p.text,
+        )
+        .slice(0, 6)
+        .map((p) => p.text!),
     };
   },
 });

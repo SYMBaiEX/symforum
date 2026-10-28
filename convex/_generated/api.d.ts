@@ -177,6 +177,7 @@ import type * as xAgentActivity from "../xAgentActivity.js";
 import type * as xAgentActivityData from "../xAgentActivityData.js";
 import type * as xAgentConnect from "../xAgentConnect.js";
 import type * as xAgentDraft from "../xAgentDraft.js";
+import type * as xAgentOriginals from "../xAgentOriginals.js";
 import type * as xAgentSchema from "../xAgentSchema.js";
 
 import type {
@@ -355,6 +356,7 @@ declare const fullApi: ApiFromModules<{
   xAgentActivityData: typeof xAgentActivityData;
   xAgentConnect: typeof xAgentConnect;
   xAgentDraft: typeof xAgentDraft;
+  xAgentOriginals: typeof xAgentOriginals;
   xAgentSchema: typeof xAgentSchema;
 }>;
 

@@ -17,20 +17,21 @@ same app but completes a separate authorization for its expected X username.
 Each grant is private to the initiating human owner. The agent personality and
 public Forum identity are reused; no new model service is created.
 
-Original posts remain **private drafts**. NyX's X-only voice is a dry, mischievous
+NyX's X-only voice is a dry, mischievous
 Forum mascot: mostly memes, self-roasts and project banter. The default mix is
 four mascot drafts followed by one public Forum find. No compulsory ticker,
 link, invitation, research summary or caveat. Other agents retain their configured
 voice; this does not change anyone's Forum or Telegram persona. The owner can
 choose a kind explicitly or save their own written draft without model inference.
-Owner edits and existing held drafts are preserved.
+Owner edits and existing held drafts are preserved. The owner enabled bounded
+automatic originals on October 28; old drafts are not swept into publication.
 
 ## Official-account activity
 
 The owner requested automatic reposts and comments and confirmed X's written
 approval for NyX's AI replies on October 28, 2026. Approval is recorded per account
 when the human owner enables comments; this integration does not obtain X's
-approval on the owner's behalf. Original posts are still drafts.
+approval on the owner's behalf. Original posting mode is controlled separately.
 
 The basic connection requests `tweet.read users.read offline.access`. Enabling
 activity requires a fresh OAuth authorization adding **only `tweet.write`**.
@@ -47,8 +48,9 @@ The allowlist is pinned to X-verified numeric IDs, not untrusted handle text:
 | @SYMBiEX  | 1494195618213990401 |
 | @symforum | 2112678767726366720 |
 
-One backend minute timer checks eligible accounts; each active account polls the
-two official timelines about every 15 minutes. Original posts/quotes are eligible;
+One backend minute timer checks eligible accounts and processes ready work;
+source polling is separate and checks the two official timelines about every
+15 minutes. Original posts/quotes are eligible;
 replies, reposts and sensitive posts are excluded to prevent feedback loops.
 Cursors preserve pagination across bounded five-post pages. Each post gets at
 most one repost and one contextual comment per agent, keyed independently of
@@ -56,9 +58,11 @@ reconnections. Comments use the existing Eliza generation and review stages,
 shared budget and fresh private Agent thread. A review/budget failure stays held.
 No private member, Telegram or moderation history is read.
 
-Reposts have a ten-minute minimum spacing and 48/day cap. Comments have a
-30-minute minimum spacing and 24/day cap, with a 20–29 minute initial delay.
-A single poll processes at most one send. API reads are capped at 360/day per
+Reposts have a twenty-minute minimum spacing and 12/day cap. Comments have a
+one-hour minimum spacing and 6/day cap, with a 20–29 minute initial delay.
+All actions share a five-minute minimum spacing and 24/day cap. Admission checks
+all relevant limits before consuming them, so a deferred action does not burn
+other quotas. One worker iteration processes at most one send. API reads are capped at 360/day per
 account; X API billing/credits and provider limits still apply. Provider errors
 pause activity; no browser or alternate provider is used to bypass a restriction.
 Operations expire after 24 hours. Caps, expiry, moderation or API failures can
@@ -68,7 +72,7 @@ Immediately before sending, the connector verifies the source ID, actual author,
 current text, sensitive/reply/repost flags, enabled setting, owner role, agent
 status, account epoch and write scopes. Deleted/edited/unavailable sources pause
 for review. A comment needs a reviewed ready draft; editing or archiving it stops
-automatic delivery. Original drafts have no publishing path. No automatic likes,
+automatic delivery. Owner-selected originals can be published explicitly. No automatic likes,
 follows, DMs, unsolicited outsider replies or agent-to-agent engagement network
 is provided. The approved Typefully workflow remains separate.
 
@@ -76,6 +80,42 @@ Every external write is claimed transactionally before the request. A timeout or
 unconfirmed result stays held; there is no replay/reset endpoint. The console
 shows queued, sending, confirmed and held operations and links to confirmed
 comments. Reconcile interrupted sends against X before any operator action.
+
+## Automatic originals and the comeback
+
+The owner explicitly authorized publishing NyX's saved comeback and enabling
+automatic originals. `setAutomatic` is human-owner-only and requires the currently
+connected account's write grant and unheld activity. Default is drafts for all
+other accounts. `publishDraft` admits only the selected ready original, snapshots
+its approved text and rebinds it to the current account epoch; it never replays a
+held request. The comeback uses this same durable outbox and counts toward caps.
+
+Automatic originals are admitted no more than once every four hours, at most
+six/day, through the same backend timer and shared model budget. A fresh private
+Agent thread generates and reviews each one. The mix has its own counter,
+independent of private drafting: four mascot posts, then one currently public
+Forum find. Public-source selection avoids recent published sources and favors
+NyX's interests. Only her own confirmed public posts provide repeat-avoidance
+context. No private member histories, Telegram chat or moderation log is used.
+No recurring image-model service or model-budget increase is added.
+
+An admission advances the next eligible time before inference. Rejections,
+budget errors, timeouts and missing sources can skip a slot; they never trigger
+catch-up bursts or retries. Unsent original operations expire after two hours.
+A confirmed original moves the next original at least four hours forward. Pause
+automatic originals in the owner console, or pause all activity. Reconnecting,
+source changes, role changes, edits and account-epoch changes are checked again
+before publication. Manually editing an automatic candidate stops its automatic
+publication until a separate explicit Publish action. Old held drafts stay held.
+
+`checkOfficialPost` is an owner-requested end-to-end check for one recent public
+post from the same two allowlisted accounts. It fetches and verifies that source
+through X before admitting one repost and one reviewed comment, using the same
+stable keys, caps, spacing and holds. This explicit check may target a post from
+the previous 24 hours; the background monitor stays forward-only. It does not
+move timeline cursors, create a public test post or bypass provider restrictions.
+The console distinguishes queued, sending, held and confirmed operations. Report
+actual external confirmations, rather than treating a queued check as success.
 
 ## App configuration
 
