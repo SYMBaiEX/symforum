@@ -39,6 +39,7 @@ import { validateForumAgentMarkup } from "../lib/editorial-quality";
 import {
   FORUM_EDITORIAL_CONTRACT,
   FORUM_EDITORIAL_REVIEW_CONTRACT,
+  FORUM_RESEARCH_WRITING_WORKFLOW,
 } from "../lib/forum-posting-prompts";
 
 describe("Suki forum research helpers", () => {
@@ -63,6 +64,7 @@ describe("Suki forum research helpers", () => {
 
   test("writer and rewrite schema binds evidence IDs and enforces the stored claim limit", () => {
     const schema = forumDraftSchemaForSources(["source-a", "source-b"]);
+    expect(Object.keys(schema.shape)[0]).toBe("claims");
     const claims = Array.from(
       { length: MAX_FORUM_AGENT_CLAIMS },
       (_, index) => ({
@@ -508,6 +510,67 @@ describe("Suki forum research helpers", () => {
     }
   });
 
+  test("a source-backed rewrite clears the unchanged gate while source-absence filler stays blocked", () => {
+    const facts = [
+      "Personal automations use the creator's identity and credits.",
+      "Shared automations bill credits to the repository owner.",
+      "Repository writers can edit shared automations, and repository readers can view them.",
+    ];
+    const snapshot = {
+      ...checkpointSnapshot(),
+      articleTitle: "Shared automation ownership",
+      articleDescription: facts[0],
+      articleText: facts.join(" "),
+    };
+    const draft = {
+      title: "Shared automation billing follows repository ownership",
+      body: facts.join("\n\n"),
+      poll: null,
+      imageCandidateId: null,
+      claims: facts.map((claim) => ({
+        claim,
+        sourceCandidateId: "source-a",
+        kind: "fact" as const,
+        confidence: "high" as const,
+      })),
+      originalValue: [facts[1]],
+      discussionQuestion: "",
+    };
+    const evaluate = (body: string) =>
+      evaluateForumDraft({
+        draft: { ...draft, body },
+        selection: discoverySelection(),
+        snapshots: [snapshot],
+        recentThreadTitles: [],
+      });
+    const held = evaluate(
+      `${draft.body}\n\nThe announcement does not give a setup-time comparison, so there is no evidence that team ownership is cheaper to configure.`,
+    );
+    expect(held.qualityScore).toBe(77);
+    expect(forumDraftPassesGate(held)).toBe(false);
+    expect(held.blockingIssues.join(" ")).toContain(
+      "The announcement does not give",
+    );
+    const corrected = evaluate(draft.body);
+    expect(corrected.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(corrected)).toBe(true);
+  });
+
+  test("revision retains a complete bounded source including qualifications outside the draft's claim vocabulary", () => {
+    const fact = "Shared automations bill credits to the repository owner.";
+    const qualification =
+      "Until Friday, paid plans receive a temporary 30% promotional discount on model costs.";
+    const text = `${fact} ${"General release background and context. ".repeat(60)}${qualification}`;
+    expect(text.length).toBeGreaterThan(1_800);
+    expect(text.length).toBeLessThan(6_000);
+    const packet = forumRevisionEvidenceExcerpt(text, [fact], 6_000, [
+      "The announcement provides no cost comparison.",
+    ]);
+    expect(packet).toBe(text);
+    expect(packet).toContain(qualification);
+    expect(packet).not.toContain("provides no cost comparison");
+  });
+
   test("uses deterministic recent-title overlap before semantic retrieval", () => {
     const candidate = { title: "Open-source agents for research workflows" };
     const memberThread = {
@@ -632,7 +695,7 @@ describe("Suki forum research helpers", () => {
       .trim();
     const packet = JSON.parse(packetText) as Array<{ evidence: string }>;
     expect(packet[0].evidence).toContain(known);
-    expect(packet[0].evidence.length).toBeLessThanOrEqual(1_800);
+    expect(packet[0].evidence.length).toBeLessThanOrEqual(6_000);
   });
 
   test("revision packet includes source evidence for a factual body sentence omitted from the ledger", () => {
@@ -707,7 +770,7 @@ describe("Suki forum research helpers", () => {
     const packet = JSON.parse(packetText) as Array<{ evidence: string }>;
     expect(packet[0].evidence).toContain(missingClaim);
     expect(packet[0].evidence).toContain(supportedClaim);
-    expect(packet[0].evidence.length).toBeLessThanOrEqual(1_800);
+    expect(packet[0].evidence.length).toBeLessThanOrEqual(6_000);
     expect(prompt).toContain("precise source-bound ledger claim");
 
     const repaired = evaluateForumDraft({
@@ -1729,8 +1792,8 @@ What would you verify first?`,
         .split("(snippets, not approved claims):\n\n")[1]
         .split("\n\n")[0],
     ) as string[];
-    expect(snippets).toHaveLength(4);
-    expect(snippets.every((snippet) => snippet.length <= 240)).toBe(true);
+    expect(snippets).toHaveLength(8);
+    expect(snippets.every((snippet) => snippet.length <= 600)).toBe(true);
     // The pre-existing lexical analysis path is not a truth oracle. Even a
     // syntactically qualified capability must be rejected by semantic review.
     expect(() =>
@@ -1928,6 +1991,7 @@ What would you verify first?`,
       }),
     ]) {
       expect(prompt).toContain(FORUM_EDITORIAL_CONTRACT);
+      expect(prompt).toContain(FORUM_RESEARCH_WRITING_WORKFLOW);
       expect(prompt).toContain("20-120 plain words");
       expect(prompt).toContain("claim ledger permits 1-12 entries");
       expect(prompt).toContain(
