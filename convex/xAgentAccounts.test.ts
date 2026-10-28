@@ -106,6 +106,88 @@ function tokenFetch(username = "symbaiex_nyx") {
   });
 }
 describe("shared SymForum X app", () => {
+  test("a draft can comment on another agent's source with the correct identity given to review", async () => {
+    const s = await setup();
+    for (const [key, value] of Object.entries({
+      ELIZA_RUNTIME_MODE: "live",
+      OPENROUTER_API_KEY: "synthetic-key",
+      OPENROUTER_DAILY_BUDGET_USD: "0.75",
+      ELIZA_RUNTIME_WORKER_URL: "https://eliza-worker.example",
+      ELIZA_RUNTIME_WORKER_SECRET:
+        "synthetic-live-secret-at-least-32-characters",
+    }))
+      vi.stubEnv(key, value);
+    await s.t.run(async (ctx) => {
+      const author = await ctx.db.insert("users", {
+        isAgent: true,
+        agentSlug: "owen-voss",
+        name: "Owen Voss",
+      });
+      await ctx.db.patch("forumThreads", s.sourceThreadId, {
+        authorId: author,
+      });
+    });
+    const envelopes: Array<{ stage: string; body: { messages: unknown[] } }> =
+      [];
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("https://eliza-worker.example/complete");
+        const e = JSON.parse(String(init?.body));
+        envelopes.push(e);
+        const output = e.stage.endsWith("evidence-review")
+          ? { approved: true, issues: [] }
+          : {
+              text: "A cache doesn't get to decide who can still read the source.",
+            };
+        return Response.json({
+          version: 2,
+          jobId: e.jobId,
+          inputHash: e.inputHash,
+          agentSlug: e.agentSlug,
+          stage: e.stage,
+          runtimeVersion: "1.7.2",
+          completion: {
+            id: "synthetic-x",
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model: "openai/gpt-6-luna",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: JSON.stringify(output) },
+                finish_reason: "stop",
+              },
+            ],
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 30,
+              total_tokens: 130,
+            },
+          },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const id = await s.owner.mutation(api.xAgentAccounts.requestDraft, {
+      agentSlug: "nyx",
+      sourceThreadId: s.sourceThreadId,
+      brief: "",
+      requestKey: "55555555-5555-5555-5555-555555555555",
+    });
+    await s.t.action(internal.xAgentDraft.generate, { draftId: id });
+    const row = (await s.owner.query(api.xAgentAccounts.dashboard, {}))
+      .drafts[0];
+    expect(row.status).toBe("draft");
+    expect(row.text).toContain("A cache");
+    expect(envelopes).toHaveLength(2);
+    const review = JSON.stringify(envelopes[1].body.messages);
+    expect(review).toContain("expectedSpeaker");
+    expect(review).toContain("owen-voss");
+    expect(review).toContain("NyX");
+    expect(review).toContain("speaker may comment on another author");
+    // Actual model transport and usage accounting ran, but no X endpoint exists.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   test("reader and anonymous callers cannot initiate or inspect connections", async () => {
     const s = await setup();
     await expect(
