@@ -132,6 +132,57 @@ function network(uncertain = false) {
     return Response.json({ meta: { result_count: 0 } });
   });
 }
+test("Telegram relay reuses the two capped timeline reads and includes own thread replies without changing NyX eligibility", async () => {
+  vi.useFakeTimers();
+  try {
+    const s = await enabled();
+    const cutoff = await s.t.mutation(internal.xTelegramRelayData.initialize, {
+      topicId: 987,
+    });
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/users/2112678767726366720/tweets")) {
+        expect(new URL(url).searchParams.get("exclude")).toBe("retweets");
+        return Response.json({
+          data: [
+            {
+              id: p().id,
+              author_id: p().authorId,
+              text: "Second post of our own thread",
+              created_at: new Date(cutoff).toISOString(),
+              referenced_tweets: [
+                { type: "replied_to", id: "2112999999999999999" },
+              ],
+            },
+          ],
+          meta: { newest_id: p().id },
+        });
+      }
+      return Response.json({ meta: { result_count: 0 } });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await s.t.action(internal.xAgentActivity.tick, {});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      fetcher.mock.calls.every(([url]) => String(url).includes("/tweets?")),
+    ).toBe(true);
+    const deliveries = await s.t.run((ctx) =>
+      ctx.db
+        .query("xTelegramDeliveries")
+        .withIndex("by_postId", (q) => q.eq("postId", p().id))
+        .take(2),
+    );
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0].status).toBe("queued");
+    const operations = await s.t.run((ctx) =>
+      ctx.db.query("xAgentOperations").take(2),
+    );
+    expect(operations).toEqual([]); // A normal thread reply is not a NyX invitation.
+  } finally {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  }
+});
 test("activity requires human ownership, posting scope and X approval", async () => {
   const s = await setup(false);
   await expect(s.enable()).rejects.toThrow("posting permission");
