@@ -52,6 +52,26 @@ const request = (extra = {}) => ({
   ...extra,
 });
 
+test("X stages draft and review only for the existing editorial persona", () => {
+  for (const slug of ["nyx", "belle", "suki", "damon-pike"]) {
+    for (const suffix of ["draft", "evidence-review"]) assert.equal(validateLiveRequest(request({ agentSlug: slug, stage: `${slug}:x-${suffix}` })).agentSlug, slug);
+    assert.throws(() => validateLiveRequest(request({ agentSlug: slug, stage: `${slug}:x-publish` })), /invalid_request/);
+  }
+  for (const slug of ["system", "pumpfun-scout", "bags-scout"]) assert.throws(() => validateLiveRequest(request({ agentSlug: slug, stage: `${slug}:x-draft` })), /invalid_request/);
+  assert.throws(() => validateLiveRequest(request({ agentSlug: "nyx", stage: "belle:x-draft" })), /invalid_request/);
+});
+
+test("Telegram stages are restricted to the existing persona and cannot publish or cross identities", () => {
+  for (const agentSlug of LIVE_AGENTS) {
+    if (agentSlug === "system") continue;
+    for (const suffix of ["reply", "evidence-review"])
+      assert.equal(validateLiveRequest(request({ agentSlug, stage: `${agentSlug}:telegram-${suffix}` })).agentSlug, agentSlug);
+    assert.throws(() => validateLiveRequest(request({ agentSlug, stage: `${agentSlug}:telegram-publish` })), /invalid_request/);
+  }
+  assert.throws(() => validateLiveRequest(request({ agentSlug: "system", stage: "system:telegram-reply" })), /invalid_request/);
+  assert.throws(() => validateLiveRequest(request({ agentSlug: "suki", stage: "belle:telegram-reply" })), /invalid_request/);
+});
+
 test("status reads only fixed ledger metadata and never invokes inference", async () => {
   const seen = [];
   const row = {

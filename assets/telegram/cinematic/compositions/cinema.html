@@ -1,0 +1,80 @@
+<!-- Adapted from HyperFrames registry extruded-logo and vfx-portal. -->
+<template>
+<style>
+#root{position:absolute;inset:0;overflow:hidden;background:#02030a;isolation:isolate}
+#cinema-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#brand-lockup{position:absolute;left:0;right:0;bottom:8%;text-align:center;color:#fff;font-family:Inter,sans-serif;font-size:29px;font-weight:700;letter-spacing:.04em}
+#signal-kicker{position:absolute;left:0;right:0;top:10%;text-align:center;color:#aefcff;font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:700;letter-spacing:.35em}
+</style>
+<div id="root" data-composition-id="cinema" data-duration="10.8" data-fps="24">
+<canvas id="cinema-canvas" class="clip" data-start="0" data-duration="10.8" data-track-index="0" aria-label="Cinematic SYMF portal, signal-moth arrival and three-dimensional buy title" data-layout-ignore></canvas>
+<div id="signal-kicker" class="clip" data-start="0" data-duration="10.8" data-track-index="1" data-layout-allow-overlap><span id="kicker-text">$SYMF</span></div>
+<div id="brand-lockup" class="clip" data-start="0" data-duration="10.8" data-track-index="2" data-layout-allow-overlap><span id="brand-text" data-var-text="brand">SYMBaiEX Forum</span></div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.184.0/+esm';
+import {FontLoader} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/loaders/FontLoader.js/+esm';
+import {TextGeometry} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/geometries/TextGeometry.js/+esm';
+import {EffectComposer} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/postprocessing/EffectComposer.js/+esm';
+import {RenderPass} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/postprocessing/RenderPass.js/+esm';
+import {UnrealBloomPass} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/postprocessing/UnrealBloomPass.js/+esm';
+import {OutputPass} from 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/postprocessing/OutputPass.js/+esm';
+const W=960,H=640,D=10.8;
+const root=document.getElementById('root');const canvas=root.querySelector('#cinema-canvas');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:true});renderer.setPixelRatio(1);renderer.setSize(W,H,false);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#02030a');scene.fog=new THREE.FogExp2('#02030a',.018);
+const camera=new THREE.PerspectiveCamera(38,W/H,.1,160);camera.position.set(0,0,12.5);
+const composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.65,.35,.9);composer.addPass(bloom);composer.addPass(new OutputPass());
+const clamp=x=>Math.min(1,Math.max(0,x));const smooth=x=>{x=clamp(x);return x*x*(3-2*x)};const out=x=>1-Math.pow(1-clamp(x),3);const mix=THREE.MathUtils.lerp;const TAU=Math.PI*2;
+const asset=p=>window.__hyperframes?.assetUrl?window.__hyperframes.assetUrl(p):p;
+let seed=71197;function rnd(){seed=(1664525*seed+1013904223)>>>0;return seed/4294967296}
+// Studio reflection rig from the registry's extruded-logo block.
+const studio=new THREE.Scene();studio.background=new THREE.Color('#05050b');
+function softbox(w,h,x,y,z,color,power){const p=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:new THREE.Color(color).multiplyScalar(power),side:THREE.DoubleSide}));p.position.set(x,y,z);p.lookAt(0,0,0);studio.add(p)}
+softbox(12,3,0,7,4,'#ffffff',3);softbox(2,8,-7,1,6,'#00efff',3);softbox(3,8,7,1,5,'#ff168f',3.2);softbox(12,1.2,0,-4,6,'#ffffff',1.8);softbox(10,2,0,3,-6,'#ac8dff',2);
+const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(studio,.015).texture;
+scene.add(new THREE.AmbientLight('#c9deff',1.7));const key=new THREE.DirectionalLight('#ffffff',3);key.position.set(-3,5,8);scene.add(key);const pinkKey=new THREE.PointLight('#ff0088',28,25);pinkKey.position.set(5,3,4);scene.add(pinkKey);const cyanKey=new THREE.PointLight('#00f3ff',28,25);cyanKey.position.set(-5,2,4);scene.add(cyanKey);
+// A real 3D streak field; every position is a closed-form function of timeline time.
+const COUNT=560,coords=new Float32Array(COUNT*6),colors=new Float32Array(COUNT*6),stars=[];
+for(let i=0;i<COUNT;i++){const a=rnd()*TAU,r=1.2+Math.pow(rnd(),.45)*20;stars.push({a,r,z:rnd(),speed:rnd()>.85?2:1});const c=new THREE.Color(i%3===0?'#ff258f':i%3===1?'#00ddff':'#d3d3ff');for(let j=0;j<2;j++){colors[i*6+j*3]=c.r;colors[i*6+j*3+1]=c.g;colors[i*6+j*3+2]=c.b}}
+const starGeo=new THREE.BufferGeometry();starGeo.setAttribute('position',new THREE.BufferAttribute(coords,3));starGeo.setAttribute('color',new THREE.BufferAttribute(colors,3));const starMat=new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false});const streaks=new THREE.LineSegments(starGeo,starMat);scene.add(streaks);
+// Organic portal edge, adapted from vfx-portal's angular-noise ring.
+const portalUniforms={uTime:{value:0},uEnergy:{value:1},uOpacity:{value:1}};
+const portalMat=new THREE.ShaderMaterial({uniforms:portalUniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:`varying vec2 vUv;uniform float uTime;uniform float uEnergy;uniform float uOpacity;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+void main(){vec2 p=(vUv-.5)*2.;float r=length(p),a=atan(p.y,p.x);float n=noise(vec2(a*9.,uTime*2.8));float edge=.69+n*.035;float d=abs(r-edge);float core=exp(-d*145.);float halo=exp(-d*17.)*.55;float sparks=pow(noise(vec2(a*35.,uTime*9.)),7.)*exp(-d*70.)*3.;vec3 cyan=vec3(.0,.87,1.),pink=vec3(1.,.0,.47);vec3 col=mix(cyan,pink,.5+.5*sin(a*2.+uTime*1.8));float energy=(core*2.+halo+sparks)*uEnergy;gl_FragColor=vec4(col*energy,clamp(energy,0.,1.)*uOpacity);}`});
+const portal=new THREE.Mesh(new THREE.PlaneGeometry(9,9),portalMat);portal.position.set(0,.7,-3);scene.add(portal);
+const hardwareRing=new THREE.Group();hardwareRing.position.copy(portal.position);scene.add(hardwareRing);
+for(let i=0;i<3;i++){const geo=new THREE.TorusGeometry(3.25+i*.12,.012,8,192);const mat=new THREE.MeshBasicMaterial({color:i%2?'#ff169b':'#00f3ff',transparent:true,opacity:.65});const ring=new THREE.Mesh(geo,mat);ring.rotation.x=i===1?.12:0;hardwareRing.add(ring)}
+const shockwaves=[];for(let i=0;i<2;i++){const mat=new THREE.MeshBasicMaterial({color:i?'#f631b3':'#55faff',transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});const ring=new THREE.Mesh(new THREE.TorusGeometry(1,.016,6,128),mat);ring.position.z=1;scene.add(ring);shockwaves.push(ring)}
+// Transparent cinematic mascot as two hinged 3D layers, preserving the generated character's pixels.
+const texture=await new THREE.TextureLoader().loadAsync(asset('assets/signal-moth-cinema.png'));texture.colorSpace=THREE.SRGBColorSpace;
+function layer(wing){const c=document.createElement('canvas');c.width=texture.image.width;c.height=texture.image.height;const g=c.getContext('2d');g.drawImage(texture.image,0,0);g.globalCompositeOperation=wing?'destination-in':'destination-out';g.beginPath();[[.525,.57],[.79,.26],[1,.08],[1,.88],[.58,.88],[.50,.64]].forEach(([x,y],i)=>i?g.lineTo(x*c.width,y*c.height):g.moveTo(x*c.width,y*c.height));g.closePath();g.fill();const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return new THREE.Mesh(new THREE.PlaneGeometry(5.2,5.2),new THREE.MeshBasicMaterial({map:tex,transparent:true,alphaTest:.012,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}))}
+const hero=new THREE.Group();const wingPivot=new THREE.Group();wingPivot.position.set(.13,-.36,-.04);const wings=layer(true);wings.position.set(-.13,.36,0);wingPivot.add(wings);hero.add(wingPivot);const body=layer(false);body.position.z=.02;hero.add(body);scene.add(hero);
+// Chrome letter geometry and reflected neon key lights.
+const font=await new FontLoader().loadAsync(asset('assets/fonts/Geist-Bold.typeface.json'));
+const word=new THREE.Group();scene.add(word);const letters=[];let cursor=0;
+for(const [i,ch] of [...'$SYMF BUY'].entries()){const advance=((font.data.glyphs[ch]||font.data.glyphs['?']).ha||600)*1.35/font.data.resolution;if(ch.trim()){const geo=new TextGeometry(ch,{font,size:1.35,depth:.26,curveSegments:10,bevelEnabled:true,bevelThickness:.045,bevelSize:.028,bevelSegments:4});geo.computeBoundingBox();const box=geo.boundingBox;geo.translate(-(box.min.x+box.max.x)/2,0,-.13);const mat=new THREE.MeshPhysicalMaterial({color:i<5?'#64e9ff':'#ff58be',metalness:.72,roughness:.16,clearcoat:1,clearcoatRoughness:.07,emissive:i<5?'#003c48':'#44001d',emissiveIntensity:.32});const p=new THREE.Group();p.position.x=cursor+advance/2;p.add(new THREE.Mesh(geo,mat));word.add(p);letters.push({p,offset:rnd()*2-1})}cursor+=advance+.055}
+const wordScale=Math.min(1,8.7/cursor);for(const {p}of letters)p.position.x-=cursor/2;word.scale.setScalar(wordScale);word.position.set(0,-2.7,1);
+// Floating physical shards catch the portal light, then clear the readable hero shot.
+const shards=[];for(let i=0;i<42;i++){const mat=new THREE.MeshPhysicalMaterial({color:i%2?'#00e5ff':'#ed33a6',metalness:.8,roughness:.12,transparent:true,opacity:.7,emissive:i%2?'#005361':'#56002a',emissiveIntensity:.5});const m=new THREE.Mesh(new THREE.OctahedronGeometry(.035+rnd()*.10,0),mat);scene.add(m);shards.push({m,a:rnd()*TAU,r:1+rnd()*6,z:rnd()*8-4,spin:rnd()*4})}
+const clock={t:0};
+function render(t){
+const intro=1-smooth((t-1.8)/1.4),exit=smooth((t-9.15)/1.5),reveal=out((t-1.95)/1.35),hold=clamp((t-3.3)/5.8);
+const speed=.7+intro*4.5+exit*4.5;const travel=3*t/D+.36*Math.sin(TAU*t/D);
+for(let i=0;i<COUNT;i++){const s=stars[i],a=s.a+Math.sin(TAU*t/D)*.08;const z=((s.z+travel*s.speed)%1)*75-62;const r=s.r*(.97+.03*Math.cos(TAU*t/D));const x=Math.cos(a)*r,y=Math.sin(a)*r;const k=i*6;coords[k]=x;coords[k+1]=y;coords[k+2]=z;coords[k+3]=x;coords[k+4]=y;coords[k+5]=z-(.08+speed*.75)}starGeo.attributes.position.needsUpdate=true;starMat.opacity=.24+intro*.62+exit*.62;
+const portalIn=smooth((t-.35)/1.4);const portalClose=1-smooth((t-3.7)/1.7);portal.scale.setScalar((.12+portalIn*.96)*(1+exit*2.9));portalUniforms.uTime.value=t;portalUniforms.uEnergy.value=.6+Math.sin(t*3.5)*.15+intro*.8+exit;portalUniforms.uOpacity.value=Math.max(portalClose*smooth(t/.3),exit);portal.visible=portalUniforms.uOpacity.value>.01;hardwareRing.scale.copy(portal.scale);hardwareRing.rotation.z=t*.28;hardwareRing.visible=portal.visible;for(const r of hardwareRing.children)r.material.opacity=.5*Math.max(portalClose,exit);
+hero.visible=t>1.95&&t<10.6;hero.position.set((1-reveal)*-2.5+Math.sin(t*.9)*.045,1.05+Math.sin(t*1.5)*.09,(1-reveal)*-22-exit*26);hero.rotation.set((1-reveal)*-.3,.08+(1-reveal)*-1.1+Math.sin(t*.6)*.07,(1-reveal)*.8+exit*1.6);hero.scale.setScalar((.08+.92*reveal)*(1-exit*.9));wingPivot.rotation.y=Math.sin(t*7.2)*.16;wingPivot.rotation.z=Math.sin(t*7.2+.5)*.022;
+const titleTime=t-4.3;letters.forEach(({p,offset},i)=>{const k=out((titleTime-i*.075)/.65);p.visible=titleTime>=i*.075&&exit<.98;p.rotation.x=(1-k)*Math.PI*.8+exit*.5;p.rotation.y=(1-k)*offset*1.3;p.position.y=(1-k)*1.8-exit*3;p.position.z=(1-k)*5-exit*12;});word.rotation.y=(1-smooth((t-5.4)/1.2))*.18+Math.sin(t*.7)*.012;word.scale.setScalar(wordScale*(1-exit*.88));
+shards.forEach(({m,a,r,z,spin},i)=>{const k=clamp((t-2.1)/2.6);const alive=smooth((t-1.8)/.7)*(1-smooth((t-4.3)/2));m.visible=alive>.01;m.material.opacity=alive*.65;const radius=1.3+k*r;m.position.set(Math.cos(a+t*.18)*radius,Math.sin(a+t*.18)*radius+.6,z-k*2);m.rotation.set(t*spin,t*spin*.7,t*spin*.4)});
+shockwaves.forEach((m,i)=>{const k=clamp((t-(i?4.65:2.1))/.9);m.visible=k>0&&k<1;m.scale.setScalar(.2+k*9);m.material.opacity=(1-k)*.75;});
+const impact=Math.exp(-Math.abs(t-2.45)*9)*.06+Math.exp(-Math.abs(t-4.95)*9)*.045;
+camera.position.set(Math.sin(t*73)*impact+Math.sin(t*.6)*.16*(1-intro)*(1-exit),Math.cos(t*61)*impact+.04,12.5-intro*1.3-exit*1.3);camera.lookAt(0,.1,0);camera.fov=38+intro*13+exit*13;camera.updateProjectionMatrix();
+root.querySelector('#kicker-text').style.opacity=String(smooth((t-.3)/.5)*(1-smooth((t-1.65)/.4)));
+root.querySelector('#brand-text').style.opacity=String(smooth((t-5.25)/.55)*(1-smooth((t-9.1)/.5)));
+root.querySelector('#brand-text').style.display='inline-block';root.querySelector('#brand-text').style.transform=`translateY(${(1-smooth((t-5.25)/.55))*12}px)`;
+bloom.strength=.55+intro*.45+exit*.45;composer.render();
+}
+const tl=gsap.timeline({paused:true});tl.to(clock,{t:D,duration:D,ease:'none',onUpdate:()=>render(clock.t)},0);render(0);window.__timelines=window.__timelines||{};window.__timelines.cinema=tl;
+</script>
+</template>

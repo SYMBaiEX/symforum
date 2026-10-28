@@ -145,6 +145,24 @@ import type * as sukiForumAgent from "../sukiForumAgent.js";
 import type * as sukiForumAgentData from "../sukiForumAgentData.js";
 import type * as sukiForumReplyAgent from "../sukiForumReplyAgent.js";
 import type * as systemLogs from "../systemLogs.js";
+import type * as telegramAgentHttp from "../telegramAgentHttp.js";
+import type * as telegramAgentReply from "../telegramAgentReply.js";
+import type * as telegramAgentSchema from "../telegramAgentSchema.js";
+import type * as telegramAgentWorkflow from "../telegramAgentWorkflow.js";
+import type * as telegramAgents from "../telegramAgents.js";
+import type * as telegramForumDigest from "../telegramForumDigest.js";
+import type * as telegramMemeArt from "../telegramMemeArt.js";
+import type * as telegramMemeComposer from "../telegramMemeComposer.js";
+import type * as telegramMemeData from "../telegramMemeData.js";
+import type * as telegramMemeDelivery from "../telegramMemeDelivery.js";
+import type * as telegramMemeLibrary from "../telegramMemeLibrary.js";
+import type * as telegramMemePolicy from "../telegramMemePolicy.js";
+import type * as telegramMemes from "../telegramMemes.js";
+import type * as telegramTradeFeed from "../telegramTradeFeed.js";
+import type * as telegramTradeFeedPoll from "../telegramTradeFeedPoll.js";
+import type * as telegramTradeSchema from "../telegramTradeSchema.js";
+import type * as telegramYapResearch from "../telegramYapResearch.js";
+import type * as telegramYappers from "../telegramYappers.js";
 import type * as tokenAlphaAgent from "../tokenAlphaAgent.js";
 import type * as tokenAlphaData from "../tokenAlphaData.js";
 import type * as tokenAlphaRecoveryData from "../tokenAlphaRecoveryData.js";
@@ -154,6 +172,10 @@ import type * as universalSearchProjection from "../universalSearchProjection.js
 import type * as users from "../users.js";
 import type * as webVitals from "../webVitals.js";
 import type * as workosAgentRegistrationPrincipal from "../workosAgentRegistrationPrincipal.js";
+import type * as xAgentAccounts from "../xAgentAccounts.js";
+import type * as xAgentConnect from "../xAgentConnect.js";
+import type * as xAgentDraft from "../xAgentDraft.js";
+import type * as xAgentSchema from "../xAgentSchema.js";
 
 import type {
   ApiFromModules,
@@ -299,6 +321,24 @@ declare const fullApi: ApiFromModules<{
   sukiForumAgentData: typeof sukiForumAgentData;
   sukiForumReplyAgent: typeof sukiForumReplyAgent;
   systemLogs: typeof systemLogs;
+  telegramAgentHttp: typeof telegramAgentHttp;
+  telegramAgentReply: typeof telegramAgentReply;
+  telegramAgentSchema: typeof telegramAgentSchema;
+  telegramAgentWorkflow: typeof telegramAgentWorkflow;
+  telegramAgents: typeof telegramAgents;
+  telegramForumDigest: typeof telegramForumDigest;
+  telegramMemeArt: typeof telegramMemeArt;
+  telegramMemeComposer: typeof telegramMemeComposer;
+  telegramMemeData: typeof telegramMemeData;
+  telegramMemeDelivery: typeof telegramMemeDelivery;
+  telegramMemeLibrary: typeof telegramMemeLibrary;
+  telegramMemePolicy: typeof telegramMemePolicy;
+  telegramMemes: typeof telegramMemes;
+  telegramTradeFeed: typeof telegramTradeFeed;
+  telegramTradeFeedPoll: typeof telegramTradeFeedPoll;
+  telegramTradeSchema: typeof telegramTradeSchema;
+  telegramYapResearch: typeof telegramYapResearch;
+  telegramYappers: typeof telegramYappers;
   tokenAlphaAgent: typeof tokenAlphaAgent;
   tokenAlphaData: typeof tokenAlphaData;
   tokenAlphaRecoveryData: typeof tokenAlphaRecoveryData;
@@ -308,6 +348,10 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   webVitals: typeof webVitals;
   workosAgentRegistrationPrincipal: typeof workosAgentRegistrationPrincipal;
+  xAgentAccounts: typeof xAgentAccounts;
+  xAgentConnect: typeof xAgentConnect;
+  xAgentDraft: typeof xAgentDraft;
+  xAgentSchema: typeof xAgentSchema;
 }>;
 
 /**

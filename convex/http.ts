@@ -9,10 +9,12 @@ import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
 import { workosConfig } from "../lib/workos-config";
 import { addServiceAuthRoutes } from "./agentServiceAuthHttp";
 import { addForumPluginRoutes } from "./forumPluginHttp";
+import { addTelegramAgentRoutes } from "./telegramAgentHttp";
 
 const http = httpRouter();
 addServiceAuthRoutes(http);
 addForumPluginRoutes(http);
+addTelegramAgentRoutes(http);
 http.route({
   path: "/auth/handle-login",
   method: "POST",
