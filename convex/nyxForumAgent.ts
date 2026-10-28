@@ -42,7 +42,7 @@ Use MyBB BBCode only where useful. Structured blocks and a closing question are 
 export const NYX_RESEARCH_CONFIG: ForumResearchAgentConfig = {
   dailySlots: NYX_PROFILE.dailySlots,
   name: NYX_PROFILE.name,
-  promptVersion: `${NYX_PROFILE.promptVersion}:evidence-first-editorial-v2`,
+  promptVersion: `${NYX_PROFILE.promptVersion}:verified-evidence-first-editorial-v3`,
   slug: NYX_PROFILE.slug,
   routeFeature: NYX_PROFILE.routeFeature,
   forcedCategorySlug: "research",

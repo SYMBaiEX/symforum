@@ -16,6 +16,7 @@ import {
   finalizeForumBody,
   findRecentLexicalOverlap,
   fetchArticleSnapshots,
+  fetchAvailableForumTopicSources,
   forumDraftRevisionImproves,
   forumDraftPrompt,
   forumDraftSchemaForSources,
@@ -163,9 +164,12 @@ describe("Suki forum research helpers", () => {
     const configMock = vi
       .spyOn(convexRouting, "convexModelRoutingConfig")
       .mockResolvedValue({ openRouterApiKey: "fixture-no-network" });
-    const fetchMock = vi.fn(() => {
-      throw new Error("No provider/source request expected");
-    });
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        `<html><body><article>${candidate.articleText}</article></body></html>`,
+        { headers: { "content-type": "text/html" } },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     try {
       expect(() => selectForumResearchCandidates([], [candidate])).toThrow(
@@ -197,7 +201,7 @@ describe("Suki forum research helpers", () => {
       expect(mutationNames).not.toContain("sukiForumAgentData:markRunFailed");
       expect(runAfter).not.toHaveBeenCalled();
       expect(route).toHaveBeenCalledTimes(1);
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(
         isRetryableError(
           new ForumEditorialQualityError("Unavailable source IDs"),
@@ -289,6 +293,48 @@ describe("Suki forum research helpers", () => {
     } finally {
       vi.unstubAllGlobals();
       warnSpy.mockRestore();
+    }
+  });
+
+  test("probes a bounded host-diverse shortlist and excludes unavailable original sources", async () => {
+    const attempted: string[] = [];
+    let active = 0;
+    let peak = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      attempted.push(url);
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+      return url.includes("available.example")
+        ? new Response(
+            "<html><body><article>Original source details and verified release conditions.</article></body></html>",
+            { headers: { "content-type": "text/html" } },
+          )
+        : new Response("Unavailable", { status: 503 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const candidates = Array.from({ length: 12 }, (_, index) => ({
+        ...checkpointSnapshot(),
+        id: `source-${index}`,
+        url: `https://blocked.example/article-${index}`,
+      }));
+      candidates[7].url = "https://available.example/original";
+      const verified = await fetchAvailableForumTopicSources(candidates);
+      expect(attempted).toHaveLength(6);
+      expect(attempted[1]).toBe("https://available.example/original");
+      expect(peak).toBeLessThanOrEqual(2);
+      expect(verified).toHaveLength(1);
+      expect(verified[0]).toMatchObject({
+        id: "source-7",
+        sourceFetchSucceeded: true,
+      });
+      // The selected source is reused rather than fetched a second time.
+      await fetchArticleSnapshots([verified[0]], verified);
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 

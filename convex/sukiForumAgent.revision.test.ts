@@ -209,6 +209,33 @@ afterEach(() => {
 });
 
 describe("Suki action revision cursor", () => {
+  test("unavailable originals stop before paid topic selection and never become feed-summary drafts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("Unavailable", { status: 503 })),
+    );
+    model.outputs = [selection];
+    const { ctx, mutations, runAfter } = fixtureContext();
+    const result = await runForumResearchSlot(
+      ctx,
+      { slot: 0, runDate: "2026-10-22" },
+      config,
+    );
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "original-source-unavailable",
+    });
+    expect(model.prompts).toHaveLength(0);
+    expect(model.outputs).toHaveLength(1);
+    expect(model.review).not.toHaveBeenCalled();
+    expect(
+      mutations.some(
+        ({ name }) => name === "forumAgentEditorialData:recordUsage",
+      ),
+    ).toBe(false);
+    expect(runAfter).not.toHaveBeenCalled();
+  });
+
   test("revises the latest attempt but retains the unchanged best draft for the final decision", async () => {
     const first = draft("Version 9.9 adds autonomous checkpoint encryption.");
     const second = draft("Version 8.8 adds autonomous checkpoint encryption.");

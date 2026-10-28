@@ -81,8 +81,9 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
+const MAX_TOPIC_SOURCE_FETCHES = 6;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v26-evidence-first";
+const PROMPT_VERSION = "suki-forum-v27-verified-evidence-first";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // Two bounded corrections can repair distinct issues; the shared action deadline
 // reserves time for the mandatory independent review and commit.
@@ -519,12 +520,29 @@ export async function runForumResearchSlot(
       };
     }
 
-    const shortlistedCandidates = rankResearchCandidatesForTopic({
+    const rankedCandidates = rankResearchCandidatesForTopic({
       candidates: unusedCandidates,
       deskDescription: config.deskDescription,
       recentBoardSlugs: context.recentBoardSlugs,
       editorialSignals: context.editorialSignals,
     }).slice(0, TOPIC_MODEL_CANDIDATE_LIMIT);
+    // Original evidence must exist before paying to choose an angle. Probe a
+    // bounded, host-diverse shortlist, then reuse these exact fetched snapshots.
+    const verifiedSourceSnapshots = await fetchAvailableForumTopicSources(
+      rankedCandidates,
+    );
+    if (verifiedSourceSnapshots.length === 0) {
+      await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+        runKey: claim.runKey,
+        reason:
+          "No original article was available in the bounded source shortlist.",
+      });
+      return { status: "skipped", reason: "original-source-unavailable" };
+    }
+    const shortlistedCandidates = verifiedSourceSnapshots.map((snapshot) => ({
+      ...snapshot,
+      summary: compactText(snapshot.articleText, 700),
+    }));
     const suggestedBoards = new Set(
       shortlistedCandidates.flatMap((candidate) => candidate.boardSlugs),
     );
@@ -735,7 +753,10 @@ export async function runForumResearchSlot(
       followUpThreadId === undefined
         ? selection
         : { ...selection, contentFormat: "brief" as const, includePoll: false };
-    const snapshots = await fetchArticleSnapshots(selectedCandidates);
+    const snapshots = await fetchArticleSnapshots(
+      selectedCandidates,
+      verifiedSourceSnapshots,
+    );
     if (snapshots.some((snapshot) => snapshot.sourceFetchSucceeded !== true)) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
@@ -1651,6 +1672,46 @@ export async function fetchArticleSnapshots(
       return articleSnapshotForCandidate(candidate, await contentPromise);
     }),
   );
+}
+
+/** At most six original URLs, two concurrent requests, no extra inference. */
+export async function fetchAvailableForumTopicSources(
+  candidates: readonly ResearchCandidate[],
+): Promise<ArticleSnapshot[]> {
+  const hosts = new Map<string, ResearchCandidate[]>();
+  const urls = new Set<string>();
+  for (const candidate of candidates.slice(0, TOPIC_MODEL_CANDIDATE_LIMIT)) {
+    if (!isSafePublicUrl(candidate.url)) continue;
+    const canonical = canonicalUrl(candidate.url);
+    if (urls.has(canonical)) continue;
+    urls.add(canonical);
+    const host = new URL(canonical).hostname;
+    const group = hosts.get(host) ?? [];
+    group.push(candidate);
+    hosts.set(host, group);
+  }
+  const probes: ResearchCandidate[] = [];
+  while (probes.length < MAX_TOPIC_SOURCE_FETCHES) {
+    let added = false;
+    for (const group of hosts.values()) {
+      const candidate = group.shift();
+      if (!candidate) continue;
+      probes.push(candidate);
+      added = true;
+      if (probes.length === MAX_TOPIC_SOURCE_FETCHES) break;
+    }
+    if (!added) break;
+  }
+  const verified: ArticleSnapshot[] = [];
+  for (let offset = 0; offset < probes.length; offset += 2) {
+    const snapshots = await fetchArticleSnapshots(
+      probes.slice(offset, offset + 2),
+    );
+    verified.push(
+      ...snapshots.filter((snapshot) => snapshot.sourceFetchSucceeded === true),
+    );
+  }
+  return verified;
 }
 
 async function fetchArticleContent(

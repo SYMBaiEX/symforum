@@ -68,7 +68,7 @@ import {
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v19-evidence-first";
+const BELLE_PROMPT_VERSION = "belle-forum-v20-verified-evidence-first";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.

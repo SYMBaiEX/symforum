@@ -21,7 +21,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v20-evidence-first-seeded-style-entropy";
+  "roster-forum-v21-verified-evidence-first-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
