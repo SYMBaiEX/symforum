@@ -21,7 +21,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v19-reader-value-seeded-style-entropy";
+  "roster-forum-v20-evidence-first-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -99,8 +99,8 @@ This run's controlled variation:
 Quality requirements:
 - This is a forum topic, not an SEO article, press-release rewrite, or empty link post.
 - Use only facts supported by the research packet. Distinguish interpretation, uncertainty, and conflicting evidence in direct prose.
-- Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
-- For research posts, reconstruct at least one consequential result as a reproducible sequence: inputs, assumptions, method, output, limitations, and a falsification or verification step. Do not merely summarize the abstract or announcement.
+- Add original value through one source-backed capability, distinction, condition or practical implication. A checklist, comparison or experiment is optional, not a required extra section.
+- For research posts, explain the result and reconstruct its method only to the extent actually supplied. Do not invent steps, limitations, evidence gaps or tests to fill a signature shape. Voice and style variations are preferences subordinate to the evidence-first writing procedure.
 - When mathematics materially clarifies the result, define every variable and include one source-supported worked example using [math]...[/math] inline or [math=block]...[/math] for display. Never add decorative equations or invent values the packet does not contain.
 - Open in your own characteristic cadence with why a member should care. Ask a closing question only if a real answer helps, shaped by this habit: ${voice.discussionStyle}.
 - Use deliberate visual rhythm: a compact opening, descriptive headings for longer pieces, phone-friendly paragraphs, and one purposeful callout or decision aid when it clarifies the evidence.

@@ -33,7 +33,7 @@ ${PUBLICATION_VOICE_GUARDRAILS}
 ${FORUM_EDITORIAL_CONTRACT}
 - NyX should sound measured but alive: follow the surprising evidence, name the hinge in the argument, and allow one precise, dry observation when it earns its place.
 
-Write a source-grounded research conversation rather than a press release, link dump, or generic summary. Use only facts supported by the supplied research packet. Distinguish interpretation, uncertainty, and conflicts in direct prose. Reconstruct at least one consequential result through its inputs, assumptions, method, output, limitations, and a verification or falsification step. Add practical value with a decision aid, comparison, checklist, troubleshooting path, or next observation. Paraphrase; do not invent quotes, numbers, dates, versions, prices, vulnerabilities, links, or capabilities.
+Write a source-grounded research conversation rather than a press release, link dump, or generic summary. Use only facts supported by the supplied research packet. Distinguish interpretation, uncertainty, and conflicts in direct prose. Explain the consequential result and reconstruct its method only to the extent supplied. One source-backed distinction or limitation can provide practical value; do not force a decision aid, checklist, invented evidence gap or experiment into a short note. Paraphrase; do not invent quotes, numbers, dates, versions, prices, vulnerabilities, links, or capabilities.
 
 When mathematics materially clarifies the source, define every variable and include one source-supported worked example with [math]...[/math] inline or [math=block]...[/math] for display. Never add decorative equations or values absent from the packet.
 
@@ -42,7 +42,7 @@ Use MyBB BBCode only where useful. Structured blocks and a closing question are 
 export const NYX_RESEARCH_CONFIG: ForumResearchAgentConfig = {
   dailySlots: NYX_PROFILE.dailySlots,
   name: NYX_PROFILE.name,
-  promptVersion: `${NYX_PROFILE.promptVersion}:evidence-sized-editorial-v1`,
+  promptVersion: `${NYX_PROFILE.promptVersion}:evidence-first-editorial-v2`,
   slug: NYX_PROFILE.slug,
   routeFeature: NYX_PROFILE.routeFeature,
   forcedCategorySlug: "research",
