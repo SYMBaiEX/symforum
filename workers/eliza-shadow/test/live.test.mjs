@@ -114,7 +114,8 @@ test("status reads only fixed ledger metadata and never invokes inference", asyn
     seen[0].sql,
     /^SELECT job_id,input_hash,request_hash,state,error_code,created_at,updated_at/,
   );
-  assert.doesNotMatch(seen[0].sql, /\bresult\b|\bINSERT\b|\bUPDATE\b/i);
+  assert.doesNotMatch(seen[0].sql, /(?:SELECT|,)\s*result\s*(?:,|FROM)|\bINSERT\b|\bUPDATE\b/i);
+  assert.doesNotMatch(seen[0].sql, /#>>\s*'\{completion,choices,0,message,content\}'/);
   assert.deepEqual(seen[0].args, [row.job_id]);
   await assert.rejects(
     liveService.status({ jobId: "not-found" }),
@@ -1868,4 +1869,17 @@ test("HTTP auth scopes are isolated; unconfigured live does not break shadow", a
     noLive.closeAllConnections();
     await once(noLive, "close");
   }
+});
+
+
+test("receipt diagnostics return fixed scalar shape checks without completion text", async () => {
+  const row = {job_id:"eliza-shape",input_hash:"a".repeat(64),request_hash:"b".repeat(64),state:"succeeded",error_code:null,created_at:new Date(),updated_at:new Date(),result_version:2,result_runtime_version:"1.7.2",result_job_id:"eliza-shape",result_input_hash:"a".repeat(64),served_model:"openai/gpt-6-luna-20260922",completion_object:"chat.completion",completion_created:1793170000,choice_index:0,choice_role:"assistant",content_type:"string",tool_calls_type:"null",prompt_tokens:100,completion_tokens:30,total_tokens:130,result:{private:"PRIVATE_OUTPUT_MUST_NOT_LEAK"}};
+  const service = new LiveService({store:{async inspect(){return row;}},live:{async run(){throw Error("must not infer");}}});
+  const r = await service.status({jobId:row.job_id});
+  assert.equal(r.receiptDiagnostics.bindingValid,true);
+  assert.equal(r.receiptDiagnostics.toolCallsType,"null");
+  assert.equal(r.receiptDiagnostics.servedModel,"openai/gpt-6-luna-20260922");
+  assert.equal(JSON.stringify(r).includes("PRIVATE_OUTPUT"),false);
+  row.served_model="private-credential-must-not-leak";
+  assert.equal((await service.status({jobId:row.job_id})).receiptDiagnostics.servedModel,"invalid");
 });

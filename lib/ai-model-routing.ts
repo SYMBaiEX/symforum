@@ -29,6 +29,7 @@ import {
 } from "./ai-models";
 import {
   elizaRuntimeFetch,
+  elizaRuntimeFailureCode,
   isElizaRuntimeTransportError,
   type ElizaRuntimeConfig,
   type ElizaRuntimeContext,
@@ -389,7 +390,7 @@ export async function routedModelCandidates(
 
 function safeError(error: unknown) {
   if (isElizaRuntimeTransportError(error))
-    return "Eliza runtime transport failed";
+    return `Eliza runtime transport failed (${elizaRuntimeFailureCode(error) ?? "other"})`;
   const message = error instanceof Error ? error.message : String(error);
   if (NoObjectGeneratedError.isInstance(error)) {
     const schemaDiagnostics = formatAISchemaDiagnostics(error.cause);

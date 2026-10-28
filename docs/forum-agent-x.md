@@ -117,6 +117,28 @@ move timeline cursors, create a public test post or bypass provider restrictions
 The console distinguishes queued, sending, held and confirmed operations. Report
 actual external confirmations, rather than treating a queued check as success.
 
+X's self-serve API requires the original author to summon the replying account
+by an explicit mention or by quoting its post. The connector verifies the exact
+account ID in X's mention entities or expanded quoted-post author before
+generation and again before delivery. Unverified/legacy eligibility skips that
+comment without a model call, public write, or account-wide pause. Ordinary
+official posts still qualify for reposts. Tag `@symbaiex_nyx` in a new original
+official post to invite NyX's comment. Prior written AI-reply approval does not
+remove this endpoint restriction. See the
+[X integration guide](https://docs.x.com/x-api/posts/manage-tweets/integrate).
+
+Repost preflight also reads the source's reposting accounts. An exact positive
+match for the connected X user confirms an existing manual/legacy repost without
+submitting another write. Absence from the bounded first page is not treated as
+proof either way; normal single-send handling and uncertain-send holds still
+apply. This read uses the existing daily API budget.
+
+The internal `xAgentDiagnostics:status` action inspects fixed worker receipt
+metadata for an unknown call, optionally selected by its exact `operationKey`.
+It never retrieves generated text or clears a hold. Transport telemetry retains
+only fixed failure categories, not provider bodies or credentials. A subsequent
+successful generation does not resolve an earlier unknown operation.
+
 ## App configuration
 
 In X's Developer Console, configure the SymForum application for a confidential

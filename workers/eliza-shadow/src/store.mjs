@@ -33,7 +33,24 @@ export class SqlJobStore {
 
   async inspect(jobId) {
     const { rows } = await this.connection.query(
-      `SELECT job_id,input_hash,request_hash,state,error_code,created_at,updated_at
+      `SELECT job_id,input_hash,request_hash,state,error_code,created_at,updated_at,
+       result->'version' AS result_version,
+       result->>'runtimeVersion' AS result_runtime_version,
+       result->>'jobId' AS result_job_id,
+       result->>'inputHash' AS result_input_hash,
+       result#>>'{completion,model}' AS served_model,
+       result#>>'{completion,object}' AS completion_object,
+       length(result#>>'{completion,id}') AS completion_id_length,
+       jsonb_array_length(result#>'{completion,choices}') AS choice_count,
+       jsonb_typeof(result#>'{completion,choices,0,finish_reason}') AS finish_reason_type,
+       result#>'{completion,created}' AS completion_created,
+       result#>'{completion,choices,0,index}' AS choice_index,
+       result#>>'{completion,choices,0,message,role}' AS choice_role,
+       jsonb_typeof(result#>'{completion,choices,0,message,content}') AS content_type,
+       jsonb_typeof(result#>'{completion,choices,0,message,tool_calls}') AS tool_calls_type,
+       result#>'{completion,usage,prompt_tokens}' AS prompt_tokens,
+       result#>'{completion,usage,completion_tokens}' AS completion_tokens,
+       result#>'{completion,usage,total_tokens}' AS total_tokens
        FROM eliza_shadow_jobs WHERE job_id=$1 LIMIT 1`,
       [jobId],
     );

@@ -109,8 +109,18 @@ const FORUM_STAGE_SUFFIXES = new Set([
 
 function validStage(agentSlug, stage) {
   if (agentSlug === "system") return stage === "health-canary";
-  if (LIVE_AGENTS.has(agentSlug) && !["bags-scout", "pumpfun-scout"].includes(agentSlug) && (stage === `${agentSlug}:x-draft` || stage === `${agentSlug}:x-evidence-review`)) return true;
-  if (stage === `${agentSlug}:telegram-reply` || stage === `${agentSlug}:telegram-evidence-review`) return true;
+  if (
+    LIVE_AGENTS.has(agentSlug) &&
+    !["bags-scout", "pumpfun-scout"].includes(agentSlug) &&
+    (stage === `${agentSlug}:x-draft` ||
+      stage === `${agentSlug}:x-evidence-review`)
+  )
+    return true;
+  if (
+    stage === `${agentSlug}:telegram-reply` ||
+    stage === `${agentSlug}:telegram-evidence-review`
+  )
+    return true;
   if (
     stage.startsWith(`${agentSlug}:forum-`) &&
     FORUM_STAGE_SUFFIXES.has(stage.slice(`${agentSlug}:forum-`.length))
@@ -793,6 +803,62 @@ export class LiveService {
       requestHash: row.request_hash,
       state: row.state,
       errorCode: row.error_code ?? null,
+      ...(row.state === "succeeded" && row.result_version !== undefined
+        ? {
+            receiptDiagnostics: {
+              bindingValid:
+                row.result_version === 2 &&
+                row.result_runtime_version === RUNTIME_VERSION &&
+                row.result_job_id === row.job_id &&
+                row.result_input_hash === row.input_hash,
+              servedModel:
+                typeof row.served_model === "string" &&
+                /^(?:openai\/gpt-6-luna(?:-[0-9]{8})?|openrouter\/free|deepseek\/deepseek-v4-flash(?:-[a-z0-9-]{1,40})?)$/.test(
+                  row.served_model,
+                )
+                  ? row.served_model
+                  : "invalid",
+              objectValid: row.completion_object === "chat.completion",
+              idValid:
+                Number.isSafeInteger(row.completion_id_length) &&
+                row.completion_id_length > 0 &&
+                row.completion_id_length <= 200,
+              choiceCountValid:
+                Number.isSafeInteger(row.choice_count) &&
+                row.choice_count >= 1 &&
+                row.choice_count <= 4,
+              finishReasonType: ["string", "null"].includes(
+                row.finish_reason_type,
+              )
+                ? row.finish_reason_type
+                : row.finish_reason_type == null
+                  ? "absent"
+                  : "invalid",
+              createdValid:
+                Number.isSafeInteger(row.completion_created) &&
+                row.completion_created >= 0,
+              choiceValid:
+                Number.isSafeInteger(row.choice_index) &&
+                row.choice_role === "assistant",
+              contentType: ["string", "null"].includes(row.content_type)
+                ? row.content_type
+                : "invalid",
+              toolCallsType: ["array", "null"].includes(row.tool_calls_type)
+                ? row.tool_calls_type
+                : row.tool_calls_type == null
+                  ? "absent"
+                  : "invalid",
+              usageValid:
+                Number.isSafeInteger(row.prompt_tokens) &&
+                row.prompt_tokens >= 0 &&
+                Number.isSafeInteger(row.completion_tokens) &&
+                row.completion_tokens >= 0 &&
+                (row.total_tokens == null ||
+                  (Number.isSafeInteger(row.total_tokens) &&
+                    row.total_tokens >= 0)),
+            },
+          }
+        : {}),
       createdAt: createdAt.toISOString(),
       updatedAt: updatedAt.toISOString(),
     };

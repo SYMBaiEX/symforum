@@ -51,6 +51,8 @@ const limits = new RateLimiter(components.rateLimiter, {
   },
 });
 const leaseArgs = { activityId: v.id("xAgentActivity"), lease: v.string() };
+const UNSUMMONED_REPLY =
+  "X requires this official post to mention the agent or quote one of its posts before an automatic reply. Skipped without sending.";
 function writeScope(a: Doc<"xAgentAccounts">) {
   return X_ACTIVITY_SCOPES.every((s) => a.scope?.split(" ").includes(s));
 }
@@ -414,6 +416,14 @@ export const next = internalMutation({
         continue;
       }
       if (op.kind !== "repost") {
+        if (op.kind === "comment" && op.post?.replyEligible !== true) {
+          await ctx.db.patch("xAgentOperations", op._id, {
+            status: "held",
+            issue: UNSUMMONED_REPLY,
+            updatedAt: Date.now(),
+          });
+          continue;
+        }
         if (!op.draftId) {
           if (op.kind !== "comment" || !op.post) continue;
           if (env.ELIZA_RUNTIME_MODE !== "live") continue;
@@ -488,6 +498,7 @@ export const claimSend = internalMutation({
           ? c.activity.options.reposts
           : c.activity.options.comments && c.activity.options.aiRepliesApproved;
     if (!enabled) return null;
+    if (op.kind === "comment" && op.post?.replyEligible !== true) return null;
     const d = op.draftId ? await ctx.db.get("xAgentDrafts", op.draftId) : null;
     if (
       op.kind !== "repost" &&
@@ -567,6 +578,28 @@ export const claimSend = internalMutation({
       updatedAt: Date.now(),
     });
     return { text: d?.text };
+  },
+});
+export const holdIneligibleReply = internalMutation({
+  args: { ...leaseArgs, operationId: v.id("xAgentOperations") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const c = await active(ctx, args.activityId, args.lease);
+    const op = await ctx.db.get("xAgentOperations", args.operationId);
+    if (
+      !c ||
+      !op ||
+      op.accountId !== c.account._id ||
+      op.kind !== "comment" ||
+      op.status !== "queued"
+    )
+      return null;
+    await ctx.db.patch("xAgentOperations", op._id, {
+      status: "held",
+      issue: UNSUMMONED_REPLY,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 export const finishSend = internalMutation({

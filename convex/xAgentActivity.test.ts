@@ -92,6 +92,7 @@ const p = () => ({
   authorId: "2112678767726366720",
   text: "Our Forum's token page now has one-minute candles.",
   createdAt: Date.now() - 10000,
+  replyEligible: true,
 });
 function network(uncertain = false) {
   const original = p();
@@ -112,6 +113,7 @@ function network(uncertain = false) {
           author_id: original.authorId,
           text: original.text,
           created_at: new Date(original.createdAt).toISOString(),
+          entities: { mentions: [{ id: "1234" }] },
         },
       });
     if (url.includes("/users/2112678767726366720/tweets"))
@@ -122,6 +124,7 @@ function network(uncertain = false) {
             author_id: original.authorId,
             text: original.text,
             created_at: new Date(original.createdAt).toISOString(),
+            entities: { mentions: [{ id: "1234" }] },
           },
         ],
         meta: { newest_id: original.id },
@@ -214,6 +217,25 @@ test("a confirmed repost uses NyX's user ID and never an arbitrary target", asyn
     )?.status,
   ).toBe("confirmed");
 });
+test("an exact existing NyX repost is confirmed without writing it again", async () => {
+  const s = await enabled();
+  const base = network();
+  const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes("/retweeted_by?")
+      ? Promise.resolve(Response.json({ data: [{ id: "1234" }] }))
+      : base(input, init),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  await s.t.action(internal.xAgentActivity.tick, {});
+  expect(
+    fetcher.mock.calls.filter((c) => c[1]?.method === "POST"),
+  ).toHaveLength(0);
+  const op = (
+    await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(10))
+  ).find((o) => o.kind === "repost");
+  expect(op?.status).toBe("confirmed");
+  expect(op?.resultId).toBe(p().id);
+});
 test("an uncertain send stays held and is not sent again after re-enabling", async () => {
   const s = await enabled();
   const fetcher = network(true);
@@ -232,6 +254,50 @@ test("an uncertain send stays held and is not sent again after re-enabling", asy
   expect(
     fetcher.mock.calls.filter((c) => c[1]?.method === "POST"),
   ).toHaveLength(1);
+});
+test("unsummoned comments skip generation without stopping originals or reposts", async () => {
+  const s = await enabled();
+  const base = network();
+  vi.stubGlobal(
+    "fetch",
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await base(input, init);
+      if (init?.method === "POST") return response;
+      const body = await response.json();
+      for (const post of Array.isArray(body.data)
+        ? body.data
+        : body.data
+          ? [body.data]
+          : [])
+        delete post.entities;
+      return Response.json(body);
+    },
+  );
+  await s.t.action(internal.xAgentActivity.tick, {});
+  await s.t.run(async (ctx) => {
+    const op = (await ctx.db.query("xAgentOperations").take(10)).find(
+      (o) => o.kind === "comment",
+    )!;
+    await ctx.db.patch("xAgentOperations", op._id, {
+      notBefore: Date.now() - 1,
+    });
+    await ctx.db.patch("xAgentActivity", s.activityId, {
+      nextPollAt: Date.now() - 1,
+    });
+  });
+  await s.t.action(internal.xAgentActivity.tick, {});
+  const ops = await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(10));
+  expect(ops.find((o) => o.kind === "comment")?.issue).toContain(
+    "mention the agent",
+  );
+  expect(ops.find((o) => o.kind === "repost")?.status).toBe("confirmed");
+  expect(
+    await s.t.run((ctx) => ctx.db.query("xAgentDrafts").take(10)),
+  ).toHaveLength(0);
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("xAgentActivity", s.activityId)))
+      ?.enabled,
+  ).toBe(true);
 });
 test("refresh is claimed once; an interrupted rotation cannot be reset by resume", async () => {
   const s = await enabled();

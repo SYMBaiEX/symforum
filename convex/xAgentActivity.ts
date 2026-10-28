@@ -10,7 +10,11 @@ import {
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { randomXSecret, sealX, unsealX } from "../lib/x-agent-crypto";
-import { officialXAuthor, X_ACTIVITY_SCOPES } from "../lib/x-agent-policy";
+import {
+  officialXAuthor,
+  X_ACTIVITY_SCOPES,
+  xReplySummoned,
+} from "../lib/x-agent-policy";
 
 class XFailure extends Error {
   constructor(public status: number) {
@@ -33,7 +37,7 @@ async function request(path: string, token: string, body?: object) {
   if (text.length > 256_000) throw Error("Oversized X response.");
   return JSON.parse(text) as Record<string, unknown>;
 }
-function post(value: unknown) {
+function post(value: unknown, replyingUserId: string, includes?: unknown) {
   const p = value as Record<string, unknown> | null;
   if (
     !p ||
@@ -59,6 +63,7 @@ function post(value: unknown) {
     authorId: p.author_id,
     text: p.text,
     createdAt: Date.parse(p.created_at),
+    replyEligible: xReplySummoned(p, replyingUserId, includes),
   };
 }
 async function access(
@@ -158,10 +163,10 @@ async function process(
       if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
         throw Error("Read limit reached.");
       const checked = await request(
-        `tweets/${options.officialPostId}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive`,
+        `tweets/${options.officialPostId}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities&expansions=referenced_tweets.id`,
         token,
       );
-      const source = post(checked.data);
+      const source = post(checked.data, c.account.xUserId!, checked.includes);
       if (
         !source ||
         checked.errors ||
@@ -184,7 +189,8 @@ async function process(
         max_results: "5",
         exclude: "replies,retweets",
         "tweet.fields":
-          "author_id,created_at,referenced_tweets,possibly_sensitive",
+          "author_id,created_at,referenced_tweets,possibly_sensitive,entities",
+        expansions: "referenced_tweets.id",
       });
       if (cursor.sinceId) q.set("since_id", cursor.sinceId);
       else q.set("start_time", new Date(c.activity.enabledAt).toISOString());
@@ -193,7 +199,7 @@ async function process(
       if (data.errors) throw Error("Partial X source response.");
       const posts = Array.isArray(data.data)
         ? data.data
-            .map(post)
+            .map((p) => post(p, c.account.xUserId!, data.includes))
             .filter((p): p is NonNullable<ReturnType<typeof post>> =>
               Boolean(p && p.authorId === cursor.userId),
             )
@@ -220,10 +226,10 @@ async function process(
       if (op.kind !== "original") {
         if (!op.post) throw Error("Missing official source.");
         const check = await request(
-          `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive`,
+          `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities&expansions=referenced_tweets.id`,
           token,
         );
-        const current = post(check.data);
+        const current = post(check.data, c.account.xUserId!, check.includes);
         if (
           !current ||
           check.errors ||
@@ -234,6 +240,34 @@ async function process(
             "Official source changed or is no longer available. Review before resuming.",
           );
         }
+        if (op.kind === "comment" && !current.replyEligible) {
+          await ctx.runMutation(
+            internal.xAgentActivityData.holdIneligibleReply,
+            { ...args, operationId: op._id },
+          );
+          await ctx.runMutation(internal.xAgentActivityData.release, {
+            ...args,
+            poll: pollDue,
+          });
+          return;
+        }
+      }
+      // Existing manual/legacy reposts count as already done. A positive exact
+      // account match is authoritative; an absent match is never a confirmation.
+      let alreadyReposted = false;
+      if (op.kind === "repost") {
+        if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
+          throw Error("Read limit reached.");
+        const prior = await request(
+          `tweets/${op.post!.id}/retweeted_by?max_results=100`,
+          token,
+        );
+        if (prior.errors) throw Error("Partial X repost-state response.");
+        alreadyReposted =
+          Array.isArray(prior.data) &&
+          prior.data.some(
+            (user: { id?: string }) => user?.id === c.account.xUserId,
+          );
       }
       const send = await ctx.runMutation(
         internal.xAgentActivityData.claimSend,
@@ -241,8 +275,9 @@ async function process(
       );
       if (send) {
         try {
-          const result =
-            op.kind === "repost"
+          const result = alreadyReposted
+            ? { data: { retweeted: true } }
+            : op.kind === "repost"
               ? await request(`users/${c.account.xUserId}/retweets`, token, {
                   tweet_id: op.post!.id,
                 })
@@ -298,7 +333,9 @@ async function process(
       poll: true,
       issue: rate
         ? "X rate limit reached. Paused; review the provider limit before resuming."
-        : "X access, source validation or delivery needs review. Paused without replaying uncertain work.",
+        : e instanceof XFailure
+          ? `X returned HTTP ${e.status}. Paused without replaying uncertain work.`
+          : "X access, source validation or delivery needs review. Paused without replaying uncertain work.",
       delayMs: rate ? 60 * 60_000 : undefined,
     });
   }

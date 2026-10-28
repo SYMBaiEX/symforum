@@ -18,6 +18,7 @@ export const xOfficialPost = v.object({
   authorId: v.string(),
   text: v.string(),
   createdAt: v.number(),
+  replyEligible: v.optional(v.boolean()),
 });
 export const xCursor = v.object({
   userId: v.string(),
