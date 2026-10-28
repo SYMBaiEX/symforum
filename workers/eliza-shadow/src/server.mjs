@@ -84,35 +84,41 @@ export function createHttpServer({
       });
     }
     if (
-      !["/generate", "/maintenance", "/complete", "/status"].includes(
-        req.url,
-      ) ||
+      ![
+        "/generate",
+        "/maintenance",
+        "/complete",
+        "/status",
+        "/receipt",
+      ].includes(req.url) ||
       req.method !== "POST"
     )
       return send(404, {
         error: "not_found",
-        ...(["/complete", "/status"].includes(req.url)
+        ...(["/complete", "/status", "/receipt"].includes(req.url)
           ? { outcomeUnknown: false }
           : {}),
       });
-    if (["/complete", "/status"].includes(req.url) && !liveService)
+    if (["/complete", "/status", "/receipt"].includes(req.url) && !liveService)
       return send(503, { error: "live_not_configured", outcomeUnknown: false });
     if (
       !authorized(
         req.headers.authorization,
-        ["/complete", "/status"].includes(req.url) ? liveSecret : secret,
+        ["/complete", "/status", "/receipt"].includes(req.url)
+          ? liveSecret
+          : secret,
       )
     )
       return send(401, {
         error: "unauthorized",
-        ...(["/complete", "/status"].includes(req.url)
+        ...(["/complete", "/status", "/receipt"].includes(req.url)
           ? { outcomeUnknown: false }
           : {}),
       });
     try {
       const input = await readRequest(
         req,
-        req.url === "/status" ? 512 : MAX_REQUEST_BYTES,
+        ["/status", "/receipt"].includes(req.url) ? 512 : MAX_REQUEST_BYTES,
       );
       send(
         200,
@@ -120,9 +126,11 @@ export function createHttpServer({
           ? await service.maintenance()
           : req.url === "/status"
             ? await liveService.status(input)
-            : req.url === "/complete"
-              ? await liveService.complete(input)
-              : await service.generate(input),
+            : req.url === "/receipt"
+              ? await liveService.receipt(input)
+              : req.url === "/complete"
+                ? await liveService.complete(input)
+                : await service.generate(input),
       );
     } catch (error) {
       const safe =
@@ -141,7 +149,7 @@ export function createHttpServer({
           ...(PREINFERENCE_REJECTION_CODES.has(safe.code)
             ? { providerStatus: safe.status }
             : {}),
-          ...(["/complete", "/status"].includes(req.url)
+          ...(["/complete", "/status", "/receipt"].includes(req.url)
             ? { outcomeUnknown: safe.outcomeUnknown }
             : safe.outcomeUnknown
               ? { outcomeUnknown: true }

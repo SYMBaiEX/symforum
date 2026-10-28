@@ -51,7 +51,7 @@ export class ElizaShadowContainer extends Container<Env> {
               },
             },
           )
-        : path === "/status"
+        : ["/status", "/receipt"].includes(path)
           ? Response.json(
               { error: "container_unavailable", outcomeUnknown: false },
               {

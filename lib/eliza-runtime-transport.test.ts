@@ -45,6 +45,204 @@ function completion(model = "openrouter/free", content = "hello") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Eliza live compatible transport", () => {
+  test.each(["network", "truncated"])(
+    "recovers a fresh %s response with one read and one inference intent",
+    async (mode) => {
+      let envelope: Record<string, unknown> = {};
+      const onRequest = vi.fn(),
+        onReceipt = vi.fn();
+      const paths: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input, init) => {
+          paths.push(new URL(String(input)).pathname);
+          if (paths.length === 1) {
+            envelope = JSON.parse(String(init.body));
+            if (mode === "network") throw Error("synthetic dropped response");
+            return new Response("{truncated");
+          }
+          expect(JSON.parse(String(init.body))).toEqual({
+            jobId: envelope.jobId,
+            inputHash: envelope.inputHash,
+            agentSlug: context.agentSlug,
+            stage: context.stage,
+          });
+          return Response.json({
+            ...envelope,
+            runtimeVersion: "1.7.2",
+            completion: completion(),
+          });
+        }),
+      );
+      const transport = elizaRuntimeFetch(
+        { ...config.elizaRuntime, onRequest, onReceipt, receiptRecovery: true },
+        context,
+      );
+      const r = await transport("ignored", {
+        body: JSON.stringify({
+          model: "openrouter/free",
+          messages: [],
+          max_tokens: 20,
+        }),
+      });
+      expect(r.ok).toBe(true);
+      expect(paths).toEqual(["/complete", "/receipt"]);
+      expect(onRequest).toHaveBeenCalledTimes(1);
+      expect(onReceipt).toHaveBeenCalledTimes(1);
+      expect(onReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "completed",
+          recoveredReceipt: true,
+        }),
+      );
+    },
+  );
+  test.each(["unavailable", "wrong-binding"])(
+    "receipt %s leaves an unknown hold without a second inference",
+    async (mode) => {
+      let envelope: Record<string, unknown> = {};
+      const onReceipt = vi.fn(),
+        paths: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input, init) => {
+          paths.push(new URL(String(input)).pathname);
+          if (paths.length === 1) {
+            envelope = JSON.parse(String(init.body));
+            throw Error("dropped");
+          }
+          return mode === "unavailable"
+            ? Response.json({ error: "receipt_unavailable" }, { status: 404 })
+            : Response.json({
+                ...envelope,
+                agentSlug: "nyx",
+                runtimeVersion: "1.7.2",
+                completion: completion(),
+              });
+        }),
+      );
+      const transport = elizaRuntimeFetch(
+        { ...config.elizaRuntime, onReceipt, receiptRecovery: true },
+        context,
+      );
+      await expect(
+        transport("ignored", {
+          body: JSON.stringify({
+            model: "openrouter/free",
+            messages: [],
+            max_tokens: 20,
+          }),
+        }),
+      ).rejects.toThrow(
+        mode === "unavailable" ? "outcome_unknown" : "invalid_receipt",
+      );
+      expect(paths).toEqual(["/complete", "/receipt"]);
+      expect(onReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "failed", outcomeUnknown: true }),
+      );
+    },
+  );
+  test("an existing uncertain operation cannot enter receipt recovery", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const transport = elizaRuntimeFetch(
+      {
+        ...config.elizaRuntime,
+        receiptRecovery: true,
+        onRequest: async () => {
+          throw Error("existing operation hold");
+        },
+      },
+      context,
+    );
+    await expect(
+      transport("ignored", {
+        body: JSON.stringify({
+          model: "openrouter/free",
+          messages: [],
+          max_tokens: 20,
+        }),
+      }),
+    ).rejects.toThrow("operation_unavailable");
+    expect(f).not.toHaveBeenCalled();
+  });
+  test("network diagnostics retain a fixed cause and hold without retrying", async () => {
+    const onReceipt = vi.fn();
+    const fetcher = vi.fn(async () => {
+      throw Object.assign(new Error("PRIVATE upstream failure"), {
+        cause: { code: "ECONNRESET", message: "PRIVATE credential" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const transport = elizaRuntimeFetch(
+      { ...config.elizaRuntime, onReceipt },
+      context,
+    );
+    await expect(
+      transport("ignored", {
+        body: JSON.stringify({
+          model: "openrouter/free",
+          messages: [],
+          max_tokens: 20,
+        }),
+      }),
+    ).rejects.toThrow("outcome_unknown");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workerErrorCode: "transport_connection_reset",
+        outcomeUnknown: true,
+      }),
+    );
+    expect(JSON.stringify(onReceipt.mock.calls)).not.toContain("PRIVATE");
+  });
+  test.each(["worker_busy", "invalid_request", "private-body-secret"])(
+    "worker failure telemetry bounds %s and never retries",
+    async (code) => {
+      const onReceipt = vi.fn();
+      const f = vi.fn(async () =>
+        Response.json(
+          {
+            error: code,
+            outcomeUnknown: false,
+            detail: "PRIVATE provider body",
+          },
+          { status: 503 },
+        ),
+      );
+      vi.stubGlobal("fetch", f);
+      const transport = elizaRuntimeFetch(
+        {
+          ...config.elizaRuntime,
+          onReceipt,
+        },
+        context,
+      );
+      await expect(
+        transport("https://ignored.example", {
+          body: JSON.stringify({
+            model: "openrouter/free",
+            messages: [],
+            max_tokens: 20,
+          }),
+        }),
+      ).rejects.toThrow("worker_failure");
+      expect(f).toHaveBeenCalledTimes(1);
+      expect(onReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+          outcomeUnknown: false,
+          workerHttpStatus: 503,
+          workerErrorCode:
+            code === "private-body-secret" ? "unclassified" : code,
+        }),
+      );
+      expect(JSON.stringify(onReceipt.mock.calls)).not.toMatch(
+        /PRIVATE|private-body-secret/,
+      );
+    },
+  );
+
   test("reports only fixed transport codes through nested SDK errors", () => {
     expect(
       elizaRuntimeFailureCode({
@@ -82,7 +280,10 @@ describe("Eliza live compatible transport", () => {
               },
             },
           });
-          expect(envelope.body.reasoning).toEqual({ effort: "low", exclude: true });
+          expect(envelope.body.reasoning).toEqual({
+            effort: "low",
+            exclude: true,
+          });
           expect(envelope.body.reasoning_effort).toBeUndefined();
           expect(onRequest).toHaveBeenCalledTimes(1);
           return Response.json({
@@ -140,7 +341,11 @@ describe("Eliza live compatible transport", () => {
     const [route] = await routedModelCandidates(
       { ...config, elizaRuntime: { ...config.elizaRuntime, onRequest } },
       [OPENROUTER_NEWSLETTER_MODEL],
-      { ...context, agentSlug: "unknown-persona", stage: "unknown-persona:forum-draft" },
+      {
+        ...context,
+        agentSlug: "unknown-persona",
+        stage: "unknown-persona:forum-draft",
+      },
     );
     await expect(
       generateText({
@@ -154,8 +359,17 @@ describe("Eliza live compatible transport", () => {
   });
 
   test.each([
-    ...ELIZA_EDITORIAL_PERSONAS.flatMap(slug =>
-      ["topic", "draft", "revision", "revision-light", "evidence-review", "reply", "reply-evidence-review"].map(stage => [slug, stage])),
+    ...ELIZA_EDITORIAL_PERSONAS.flatMap((slug) =>
+      [
+        "topic",
+        "draft",
+        "revision",
+        "revision-light",
+        "evidence-review",
+        "reply",
+        "reply-evidence-review",
+      ].map((stage) => [slug, stage]),
+    ),
     ["bags-scout", "draft"],
     ["bags-scout", "evidence-review"],
     ["pumpfun-scout", "draft"],
@@ -169,7 +383,10 @@ describe("Eliza live compatible transport", () => {
         const envelope = JSON.parse(String(init?.body));
         expect(envelope).toMatchObject({ agentSlug, stage });
         expect(envelope.body.model).toBe(OPENROUTER_NEWSLETTER_MODEL);
-        expect(envelope.body.reasoning).toEqual({ effort: "low", exclude: true });
+        expect(envelope.body.reasoning).toEqual({
+          effort: "low",
+          exclude: true,
+        });
         expect(envelope.body.provider).toEqual({
           require_parameters: true,
           allow_fallbacks: false,
@@ -185,7 +402,10 @@ describe("Eliza live compatible transport", () => {
         return Response.json({
           ...envelope,
           runtimeVersion: "1.7.2",
-          completion: completion(OPENROUTER_NEWSLETTER_MODEL, '{"status":"ok"}'),
+          completion: completion(
+            OPENROUTER_NEWSLETTER_MODEL,
+            '{"status":"ok"}',
+          ),
         });
       },
     );
@@ -226,7 +446,8 @@ describe("Eliza live compatible transport", () => {
       const onRequest = vi.fn();
       const workerFetch = vi.fn();
       vi.stubGlobal("fetch", workerFetch);
-      const otherScout = agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout";
+      const otherScout =
+        agentSlug === "bags-scout" ? "pumpfun-scout" : "bags-scout";
       for (const stage of [
         `${agentSlug}:forum-topic`,
         `${agentSlug}:forum-revision`,

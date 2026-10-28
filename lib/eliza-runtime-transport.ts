@@ -17,6 +17,9 @@ export type ElizaRuntimeReceipt = {
   runtimeVersion?: string;
   providerStatus?: number;
   outcomeUnknown?: boolean;
+  workerErrorCode?: string;
+  workerHttpStatus?: number;
+  recoveredReceipt?: boolean;
   inputTokens?: number;
   outputTokens?: number;
   servedModel?: string;
@@ -29,6 +32,8 @@ export type ElizaRuntimeConfig = {
   /** Durable operation claim. Must finish before any network request is sent. */
   onRequest?: (request: ElizaRuntimeRequest) => void | Promise<void>;
   onReceipt?: (receipt: ElizaRuntimeReceipt) => void | Promise<void>;
+  /** One read of a fresh committed result after a dropped response; no replay. */
+  receiptRecovery?: boolean;
 };
 
 export type ElizaRuntimeRequest = Pick<
@@ -76,6 +81,37 @@ const PROVIDER_REJECTION_CODES = new Set([
   "provider_rejected_rate_upstream",
   "provider_rejected_rate_account",
   "provider_rejected_rate_generic",
+]);
+const WORKER_FAILURE_CODES = new Set([
+  ...PROVIDER_REJECTION_CODES,
+  "worker_busy",
+  "worker_stopping",
+  "worker_internal_error",
+  "container_unavailable",
+  "invalid_request",
+  "model_not_allowed",
+  "input_hash_mismatch",
+  "invalid_output_limit",
+  "request_too_large",
+  "provider_network_error",
+  "provider_timeout",
+  "provider_shutdown",
+  "provider_unavailable",
+  "provider_embedded_error",
+  "provider_invalid_json",
+  "provider_unexpected_stream",
+  "provider_response_too_large",
+  "provider_empty_response",
+  "provider_invalid_envelope",
+  "provider_invalid_id",
+  "provider_invalid_choices",
+  "provider_invalid_message",
+  "provider_invalid_model",
+  "provider_invalid_usage",
+  "job_input_conflict",
+  "job_result_expired",
+  "job_failed_no_retry",
+  "job_outcome_unknown",
 ]);
 
 function canonical(value: unknown): unknown {
@@ -240,6 +276,26 @@ function isTransportError(error: unknown, depth = 0): boolean {
   );
 }
 
+/** Fixed categories only; exception messages and provider bodies stay private. */
+function transportFailure(error: unknown, signal: AbortSignal): string {
+  if (signal.aborted)
+    return signal.reason?.name === "TimeoutError"
+      ? "transport_timeout"
+      : "transport_aborted";
+  let current = error;
+  for (let depth = 0; depth < 5 && object(current); depth++) {
+    if (current.code === "ECONNRESET") return "transport_connection_reset";
+    if (current.code === "UND_ERR_SOCKET") return "transport_socket";
+    if (
+      current.code === "ETIMEDOUT" ||
+      current.code === "UND_ERR_CONNECT_TIMEOUT"
+    )
+      return "transport_timeout";
+    current = current.cause;
+  }
+  return "transport_fetch_failure";
+}
+
 export { isTransportError as isElizaRuntimeTransportError };
 
 /** Fixed protocol codes only; never forward provider/body/exception text. */
@@ -377,6 +433,9 @@ export function elizaRuntimeFetch(
       ? AbortSignal.any([init.signal, AbortSignal.timeout(MAX_TRANSPORT_MS)])
       : AbortSignal.timeout(MAX_TRANSPORT_MS);
     let response: Response;
+    let payload: unknown;
+    let recoveredReceipt = false;
+    let phase: "fetch" | "body" = "fetch";
     try {
       response = await fetch(endpoint, {
         method: "POST",
@@ -388,20 +447,54 @@ export function elizaRuntimeFetch(
         signal,
         redirect: "error",
       });
-    } catch {
-      await report({ ...receiptBase, status: "failed", outcomeUnknown: true });
-      throw new ElizaRuntimeTransportError("outcome_unknown", true);
-    }
-    let payload: unknown;
-    try {
+      phase = "body";
       payload = JSON.parse(
         await boundedText(response, MAX_RESPONSE_BYTES, signal),
       );
-    } catch {
-      await report({ ...receiptBase, status: "failed", outcomeUnknown: true });
-      throw new ElizaRuntimeTransportError("invalid_response", true);
+    } catch (error) {
+      // Do not issue /complete again. Only the same fresh pending attempt can
+      // read its already committed receipt, once, with an independent deadline.
+      if (config.receiptRecovery && !signal.aborted) {
+        try {
+          const readSignal = AbortSignal.timeout(8_000);
+          const receipt = await fetch(new URL("/receipt", origin), {
+            method: "POST",
+            redirect: "error",
+            signal: readSignal,
+            headers: {
+              Authorization: `Bearer ${config.secret}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ jobId, inputHash, agentSlug, stage }),
+          });
+          if (receipt.ok) {
+            payload = JSON.parse(
+              await boundedText(receipt, MAX_RESPONSE_BYTES, readSignal),
+            );
+            response = receipt;
+            recoveredReceipt = true;
+          } else await receipt.body?.cancel();
+        } catch {
+          /* No receipt means the original attempt stays unknown. */
+        }
+      }
+      if (!recoveredReceipt) {
+        await report({
+          ...receiptBase,
+          status: "failed",
+          outcomeUnknown: true,
+          workerErrorCode:
+            phase === "fetch"
+              ? transportFailure(error, signal)
+              : "transport_invalid_body",
+        });
+        throw new ElizaRuntimeTransportError(
+          phase === "fetch" ? "outcome_unknown" : "invalid_response",
+          true,
+        );
+      }
     }
-    if (!response.ok) {
+    if (!response!.ok) {
       const providerStatus =
         object(payload) &&
         typeof payload.error === "string" &&
@@ -415,15 +508,22 @@ export function elizaRuntimeFetch(
         providerStatus < 500 &&
         providerStatus !== 408 &&
         providerStatus !== 409 &&
-        providerStatus === response.status;
+        providerStatus === response!.status;
       const outcomeUnknown =
-        response.status === 408 ||
-        response.status === 409 ||
+        response!.status === 408 ||
+        response!.status === 409 ||
         (!providerRejected &&
           (!object(payload) || payload.outcomeUnknown !== false));
       await report({
         ...receiptBase,
         status: "failed",
+        workerHttpStatus: response!.status,
+        workerErrorCode:
+          object(payload) &&
+          typeof payload.error === "string" &&
+          WORKER_FAILURE_CODES.has(payload.error)
+            ? payload.error
+            : "unclassified",
         providerStatus,
         outcomeUnknown,
       });
@@ -465,6 +565,7 @@ export function elizaRuntimeFetch(
       ...receiptBase,
       status: "completed",
       runtimeVersion: "1.7.2",
+      ...(recoveredReceipt ? { recoveredReceipt: true } : {}),
       servedModel: completion.model as string,
       inputTokens:
         typeof usage.prompt_tokens === "number"

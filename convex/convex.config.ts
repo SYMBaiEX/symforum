@@ -35,6 +35,7 @@ const app = defineApp({
     ELIZA_SHADOW_WORKER_SECRET: v.optional(v.string()),
     ELIZA_SHADOW_DAILY_BUDGET_USD: v.optional(v.string()),
     ELIZA_RUNTIME_MODE: v.optional(v.string()),
+    ELIZA_RUNTIME_RECEIPT_RECOVERY_ENABLED: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_URL: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_SECRET: v.optional(v.string()),
     TELEGRAM_AGENTS_ENABLED: v.optional(v.string()),

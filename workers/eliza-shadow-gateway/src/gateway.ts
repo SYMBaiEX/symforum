@@ -101,7 +101,7 @@ export async function fetchGateway(
   env: GatewayEnv,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const liveRoute = url.pathname === "/complete" || url.pathname === "/status";
+  const liveRoute = ["/complete", "/status", "/receipt"].includes(url.pathname);
   if (url.pathname === "/healthz" && !url.search && request.method === "GET") {
     // This check must never obtain a Durable Object stub or wake its container.
     const liveConfigured =
@@ -118,7 +118,7 @@ export async function fetchGateway(
   if (
     url.search ||
     request.method !== "POST" ||
-    !["/generate", "/maintenance", "/complete", "/status"].includes(
+    !["/generate", "/maintenance", "/complete", "/status", "/receipt"].includes(
       url.pathname,
     )
   ) {
@@ -150,9 +150,9 @@ export async function fetchGateway(
   try {
     body = await readBoundedBody(
       request,
-      url.pathname === "/status" ? 512 : MAX_REQUEST_BYTES,
+      ["/status", "/receipt"].includes(url.pathname) ? 512 : MAX_REQUEST_BYTES,
     );
-    if (url.pathname === "/status") {
+    if (["/status", "/receipt"].includes(url.pathname)) {
       let value: unknown;
       try {
         value = JSON.parse(
@@ -167,11 +167,26 @@ export async function fetchGateway(
         !value ||
         typeof value !== "object" ||
         Array.isArray(value) ||
-        Object.keys(value).length !== 1 ||
+        Object.keys(value).length !== (url.pathname === "/receipt" ? 4 : 1) ||
         typeof (value as { jobId?: unknown }).jobId !== "string" ||
         !/^[A-Za-z0-9:_-]{1,200}$/.test((value as { jobId: string }).jobId)
       )
         throw new BodyError(400, "invalid_request");
+      if (url.pathname === "/receipt") {
+        const r = value as Record<string, unknown>;
+        if (
+          Object.keys(r).some(
+            (k) => !["jobId", "inputHash", "agentSlug", "stage"].includes(k),
+          ) ||
+          typeof r.inputHash !== "string" ||
+          !/^[a-f0-9]{64}$/.test(r.inputHash) ||
+          typeof r.agentSlug !== "string" ||
+          !/^[a-z0-9-]{1,80}$/.test(r.agentSlug) ||
+          typeof r.stage !== "string" ||
+          !/^[a-zA-Z0-9:_-]{1,160}$/.test(r.stage)
+        )
+          throw new BodyError(400, "invalid_request");
+      }
     }
   } catch (error) {
     const safe =
@@ -202,7 +217,7 @@ export async function fetchGateway(
     // Never include platform exception text, provider data, headers or secrets.
     return url.pathname === "/complete"
       ? json(503, { error: "container_unavailable", outcomeUnknown: true })
-      : url.pathname === "/status"
+      : ["/status", "/receipt"].includes(url.pathname)
         ? json(503, { error: "container_unavailable", outcomeUnknown: false })
         : unavailable();
   }

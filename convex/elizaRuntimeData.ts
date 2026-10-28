@@ -89,6 +89,12 @@ export const recordReceipt = internalMutation({
   handler: async (ctx, args) => {
     validateIdentity(args);
     if (
+      (args.workerErrorCode !== undefined &&
+        !/^[a-z0-9_]{1,80}$/.test(args.workerErrorCode)) ||
+      (args.workerHttpStatus !== undefined &&
+        (!Number.isInteger(args.workerHttpStatus) ||
+          args.workerHttpStatus < 400 ||
+          args.workerHttpStatus > 599)) ||
       (args.servedModel?.length ?? 0) > 160 ||
       (args.runtimeVersion?.length ?? 0) > 24 ||
       [args.inputTokens, args.outputTokens].some(
@@ -167,19 +173,33 @@ const summary = v.object({
   updatedAt: v.number(),
 });
 export const inspect = internalQuery({
-  args: { agentSlug: v.string(), limit: v.optional(v.number()) },
+  args: {
+    agentSlug: v.string(),
+    limit: v.optional(v.number()),
+    jobId: v.optional(v.string()),
+  },
   returns: v.array(summary),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(40, Math.floor(args.limit ?? 10)));
     if (!Number.isFinite(limit))
       throw new ConvexError("invalid_eliza_runtime_limit");
-    const rows = await ctx.db
-      .query("elizaRuntimeCalls")
-      .withIndex("by_agentSlug_and_createdAt", (q) =>
-        q.eq("agentSlug", args.agentSlug),
-      )
-      .order("desc")
-      .take(limit);
+    const exact = args.jobId
+      ? await ctx.db
+          .query("elizaRuntimeCalls")
+          .withIndex("by_jobId", (q) => q.eq("jobId", args.jobId!))
+          .unique()
+      : null;
+    const rows = args.jobId
+      ? exact?.agentSlug === args.agentSlug
+        ? [exact]
+        : []
+      : await ctx.db
+          .query("elizaRuntimeCalls")
+          .withIndex("by_agentSlug_and_createdAt", (q) =>
+            q.eq("agentSlug", args.agentSlug),
+          )
+          .order("desc")
+          .take(limit);
     return rows.map(({ _id, _creationTime, expiresAt, ...receipt }) => {
       void _id;
       void _creationTime;
