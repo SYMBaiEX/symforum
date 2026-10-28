@@ -26,6 +26,7 @@ import type * as agentServiceAuthHttp from "../agentServiceAuthHttp.js";
 import type * as agentServiceAuthPrincipal from "../agentServiceAuthPrincipal.js";
 import type * as agentServiceAuthSchema from "../agentServiceAuthSchema.js";
 import type * as agentServiceAuthTokens from "../agentServiceAuthTokens.js";
+import type * as agentUsageReconciliation from "../agentUsageReconciliation.js";
 import type * as aiRoutingControlData from "../aiRoutingControlData.js";
 import type * as aiTelemetry from "../aiTelemetry.js";
 import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
@@ -208,6 +209,7 @@ declare const fullApi: ApiFromModules<{
   agentServiceAuthPrincipal: typeof agentServiceAuthPrincipal;
   agentServiceAuthSchema: typeof agentServiceAuthSchema;
   agentServiceAuthTokens: typeof agentServiceAuthTokens;
+  agentUsageReconciliation: typeof agentUsageReconciliation;
   aiRoutingControlData: typeof aiRoutingControlData;
   aiTelemetry: typeof aiTelemetry;
   aiTelemetryHelpers: typeof aiTelemetryHelpers;
