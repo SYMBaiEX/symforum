@@ -32,6 +32,17 @@ const app = defineApp({
     ELIZA_RUNTIME_MODE: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_URL: v.optional(v.string()),
     ELIZA_RUNTIME_WORKER_SECRET: v.optional(v.string()),
+    TELEGRAM_AGENTS_ENABLED: v.optional(v.string()),
+    TELEGRAM_AGENT_BOTS: v.optional(v.string()),
+    TELEGRAM_DIGEST_ENABLED: v.optional(v.string()),
+    TELEGRAM_DIGEST_TOPIC_ID: v.optional(v.string()),
+    TELEGRAM_TRADE_FEED_ENABLED: v.optional(v.string()),
+    TELEGRAM_TRADE_FEED_TOPIC_ID: v.optional(v.string()),
+    TELEGRAM_MEMES_PIPELINE_VERSION: v.optional(v.string()),
+    TELEGRAM_MEMES_ENABLED: v.optional(v.string()),
+    TELEGRAM_MEMES_TOPIC_ID: v.optional(v.string()),
+    TELEGRAM_YAPPERS_ENABLED: v.optional(v.string()),
+    TELEGRAM_YAPPERS_TOPIC_ID: v.optional(v.string()),
     // Semantic retrieval is intentionally opt-in. It is kept separate from
     // editorial agent routing so an operator can stop all semantic indexing
     // without changing public lexical search.

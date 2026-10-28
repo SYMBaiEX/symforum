@@ -8,6 +8,8 @@ import { elizaShadowTables } from "./elizaShadowSchema";
 import { elizaRuntimeTables } from "./elizaRuntimeSchema";
 import { elizaPilotTables } from "./elizaPilotSchema";
 import { tokenAlphaTables } from "./tokenAlphaSchema";
+import { telegramTradeTables } from "./telegramTradeSchema";
+import { telegramAgentTables } from "./telegramAgentSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -31,6 +33,8 @@ export default defineSchema({
   ...elizaRuntimeTables,
   ...elizaPilotTables,
   ...tokenAlphaTables,
+  ...telegramAgentTables,
+  ...telegramTradeTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),
