@@ -311,12 +311,19 @@ export const ingest = internalMutation({
         post.authorId !== args.userId ||
         !/^\d{1,19}$/.test(post.id) ||
         post.text.length > 25000 ||
+        (post.invitationParent &&
+          (env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED !== "true" ||
+            post.invitationParent.authorId !== post.authorId ||
+            !/^\d{1,19}$/.test(post.invitationParent.id) ||
+            post.invitationParent.id === post.id ||
+            post.replyEligible !== true)) ||
         (!args.ownerRequested && post.createdAt < c.activity.enabledAt) ||
         post.createdAt < Date.now() - X_ACTIVITY_TTL_MS ||
         post.createdAt > Date.now() + 60_000
       )
         continue;
       for (const kind of ["repost", "comment"] as const) {
+        if (post.invitationParent && kind === "repost") continue;
         if (
           kind === "repost"
             ? !c.activity.options.reposts
@@ -324,7 +331,30 @@ export const ingest = internalMutation({
               !c.activity.options.aiRepliesApproved
         )
           continue;
-        const key = `${c.account._id}:${post.id}:${kind}`;
+        const key = post.invitationParent
+          ? `${c.account._id}:${post.invitationParent.id}:invitation-comment`
+          : `${c.account._id}:${post.id}:${kind}`;
+        if (post.invitationParent) {
+          const rootReply = await ctx.db
+            .query("xAgentOperations")
+            .withIndex("by_key", (q) =>
+              q.eq(
+                "key",
+                `${c.account._id}:${post.invitationParent!.id}:comment`,
+              ),
+            )
+            .unique();
+          // A clearly unsummoned root can be followed by a new invitation.
+          // Prior sends, eligible attempts and legacy uncertainty stay blocked.
+          if (
+            rootReply &&
+            !(
+              rootReply.post?.replyEligible === false &&
+              ["queued", "held"].includes(rootReply.status)
+            )
+          )
+            continue;
+        }
         if (
           await ctx.db
             .query("xAgentOperations")
@@ -406,7 +436,9 @@ export const next = internalMutation({
           (!op.post ||
             (!op.ownerRequested && op.post.createdAt < c.activity.enabledAt) ||
             !officialXAuthor(op.post.authorId))) ||
-        op.expiresAt <= Date.now()
+        op.expiresAt <= Date.now() ||
+        (op.post?.invitationParent &&
+          env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED !== "true")
       ) {
         await ctx.db.patch("xAgentOperations", op._id, {
           status: "held",
@@ -498,6 +530,11 @@ export const claimSend = internalMutation({
           ? c.activity.options.reposts
           : c.activity.options.comments && c.activity.options.aiRepliesApproved;
     if (!enabled) return null;
+    if (
+      op.post?.invitationParent &&
+      env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED !== "true"
+    )
+      return null;
     if (op.kind === "comment" && op.post?.replyEligible !== true) return null;
     const d = op.draftId ? await ctx.db.get("xAgentDrafts", op.draftId) : null;
     if (

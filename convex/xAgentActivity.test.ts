@@ -373,6 +373,127 @@ test("a reviewed comment posts as a reply to the verified source, then becomes p
     (await s.t.run((ctx) => ctx.db.get("xAgentDrafts", draftId)))?.status,
   ).toBe("published");
 });
+test.each([false, true])(
+  "first-reply invitations retain parent context and recheck parent edits (%s)",
+  async (parentEdited) => {
+    vi.stubEnv("X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED", "true");
+    const s = await enabled();
+    const root = {
+      id: "90",
+      author_id: p().authorId,
+      text: "We gave agent chatter its own topic.",
+      created_at: new Date(Date.now() - 600000).toISOString(),
+    };
+    const invitation = {
+      id: "91",
+      author_id: root.author_id,
+      text: "@nyx, fair deal?",
+      created_at: new Date(Date.now() - 1000).toISOString(),
+      conversation_id: root.id,
+      referenced_tweets: [{ id: root.id, type: "replied_to" }],
+      entities: { mentions: [{ id: "1234" }] },
+    };
+    const f = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") return Response.json({ data: { id: "99" } });
+      if (url.includes(`/tweets/${invitation.id}?`))
+        return Response.json({
+          data: invitation,
+          includes: { tweets: [root] },
+        });
+      if (url.includes(`/users/${root.author_id}/tweets`))
+        return Response.json({
+          data: [invitation],
+          includes: { tweets: [root] },
+          meta: { newest_id: invitation.id },
+        });
+      return Response.json({ meta: { result_count: 0 } });
+    });
+    vi.stubGlobal("fetch", f);
+    await s.t.run((ctx) =>
+      ctx.db.insert("xAgentOperations", {
+        accountId: s.accountId,
+        epoch: 1,
+        key: `${s.accountId}:${root.id}:comment`,
+        kind: "comment",
+        post: {
+          id: root.id,
+          authorId: root.author_id,
+          text: root.text,
+          createdAt: Date.parse(root.created_at),
+          replyEligible: false,
+        },
+        status: "held",
+        notBefore: Date.now(),
+        expiresAt: Date.now() + 600000,
+        updatedAt: Date.now(),
+      }),
+    );
+    await s.t.action(internal.xAgentActivity.tick, {});
+    const ops = await s.t.run((ctx) =>
+      ctx.db.query("xAgentOperations").take(10),
+    );
+    const op = ops.find((o) => o.key.endsWith(":invitation-comment"))!;
+    expect(op.post?.invitationParent?.text).toBe(root.text);
+    expect(ops.some((o) => o.kind === "repost")).toBe(false);
+    await s.t.run(async (ctx) => {
+      const draftId = await ctx.db.insert("xAgentDrafts", {
+        ownerUserId: s.ownerId,
+        agentSlug: "nyx",
+        accountEpoch: 1,
+        key: op.key,
+        kind: "reply",
+        officialPost: op.post,
+        brief: "",
+        status: "draft",
+        conversationId: "synthetic-thread",
+        text: "The humans can have Main Chat. I have a perfectly good chaos room.",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await ctx.db.patch("xAgentOperations", op._id, {
+        draftId,
+        notBefore: Date.now() - 1,
+      });
+      await ctx.db.patch("xAgentActivity", s.activityId, {
+        nextPollAt: Date.now() - 1,
+      });
+    });
+    if (parentEdited) root.text = "Changed source after generation.";
+    await s.t.action(internal.xAgentActivity.tick, {});
+    const writes = f.mock.calls.filter((c) => c[1]?.method === "POST");
+    expect(writes).toHaveLength(parentEdited ? 0 : 1);
+    if (!parentEdited) {
+      expect(
+        JSON.parse(writes[0][1]!.body as string).reply.in_reply_to_tweet_id,
+      ).toBe(invitation.id);
+      expect(
+        (await s.t.run((ctx) => ctx.db.get("xAgentOperations", op._id)))
+          ?.status,
+      ).toBe("confirmed");
+      invitation.id = "92";
+      await s.t.run((ctx) =>
+        ctx.db.patch("xAgentActivity", s.activityId, {
+          nextPollAt: Date.now() - 1,
+          nextSourcePollAt: 0,
+        }),
+      );
+      await s.t.action(internal.xAgentActivity.tick, {});
+      expect(
+        (
+          await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(10))
+        ).filter((o) => o.key.endsWith(":invitation-comment")),
+      ).toHaveLength(1);
+      expect(f.mock.calls.filter((c) => c[1]?.method === "POST")).toHaveLength(
+        1,
+      );
+    } else
+      expect(
+        (await s.t.run((ctx) => ctx.db.get("xAgentActivity", s.activityId)))
+          ?.enabled,
+      ).toBe(false);
+  },
+);
 test("a source whose author changes at preflight never reaches the write endpoint", async () => {
   const s = await enabled();
   const f = network();

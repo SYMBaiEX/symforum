@@ -11,11 +11,53 @@ import {
   xOriginalKind,
   xVoice,
   xReplySummoned,
+  xFirstReplyInvitationParent,
 } from "./x-agent-policy";
 import { pkceChallenge, randomXSecret, sealX, unsealX } from "./x-agent-crypto";
 import { permitsLunaRuntimeStage } from "./eliza-runtime-personas";
 
 describe("X account authorization and draft boundaries", () => {
+  test("a first reply invitation must mention NyX under the same official author's original", () => {
+    const parent = {
+      id: "90",
+      author_id: "2112678767726366720",
+      text: "Main Chat stays clear.",
+      created_at: "2026-10-28T17:00:00Z",
+    };
+    const invite = {
+      id: "91",
+      author_id: parent.author_id,
+      text: "NyX?",
+      created_at: "2026-10-28T17:01:00Z",
+      conversation_id: parent.id,
+      entities: { mentions: [{ id: "1234" }] },
+      referenced_tweets: [{ id: parent.id, type: "replied_to" }],
+    };
+    const parse = (p = invite, r: object = parent) =>
+      xFirstReplyInvitationParent(p, "1234", { tweets: [r] });
+    expect(parse()).toEqual({
+      id: "90",
+      authorId: parent.author_id,
+      text: parent.text,
+      createdAt: Date.parse(parent.created_at),
+    });
+    expect(
+      parse({ ...invite, entities: { mentions: [{ id: "5678" }] } }),
+    ).toBeNull();
+    expect(
+      parse(invite, { ...parent, author_id: "1494195618213990401" }),
+    ).toBeNull();
+    expect(
+      parse(invite, {
+        ...parent,
+        referenced_tweets: [{ id: "80", type: "replied_to" }],
+      }),
+    ).toBeNull();
+    expect(parse(invite, { ...parent, possibly_sensitive: true })).toBeNull();
+    expect(parse({ ...invite, conversation_id: "80" })).toBeNull();
+    expect(xFirstReplyInvitationParent(invite, "1234")).toBeNull();
+    expect(parse({ ...invite, author_id: "1234" })).toBeNull();
+  });
   test("automatic replies require the exact mentioned or quoted account ID", () => {
     expect(
       xReplySummoned({ entities: { mentions: [{ id: "1234" }] } }, "1234"),

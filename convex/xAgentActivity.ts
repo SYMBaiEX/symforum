@@ -14,6 +14,7 @@ import {
   officialXAuthor,
   X_ACTIVITY_SCOPES,
   xReplySummoned,
+  xFirstReplyInvitationParent,
 } from "../lib/x-agent-policy";
 
 class XFailure extends Error {
@@ -53,9 +54,16 @@ function post(value: unknown, replyingUserId: string, includes?: unknown) {
   )
     return null;
   const refs = p.referenced_tweets;
+  const hasReply =
+    Array.isArray(refs) && refs.some((r) => r?.type === "replied_to");
+  const invitationParent =
+    hasReply && env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED === "true"
+      ? xFirstReplyInvitationParent(p, replyingUserId, includes)
+      : null;
   if (
     Array.isArray(refs) &&
-    refs.some((r) => r.type === "retweeted" || r.type === "replied_to")
+    (refs.some((r) => r?.type === "retweeted") ||
+      (hasReply && !invitationParent))
   )
     return null;
   return {
@@ -64,6 +72,7 @@ function post(value: unknown, replyingUserId: string, includes?: unknown) {
     text: p.text,
     createdAt: Date.parse(p.created_at),
     replyEligible: xReplySummoned(p, replyingUserId, includes),
+    ...(invitationParent ? { invitationParent } : {}),
   };
 }
 async function access(
@@ -163,7 +172,7 @@ async function process(
       if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
         throw Error("Read limit reached.");
       const checked = await request(
-        `tweets/${options.officialPostId}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities&expansions=referenced_tweets.id`,
+        `tweets/${options.officialPostId}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities,conversation_id&expansions=referenced_tweets.id`,
         token,
       );
       const source = post(checked.data, c.account.xUserId!, checked.includes);
@@ -187,9 +196,12 @@ async function process(
         break;
       const q = new URLSearchParams({
         max_results: "5",
-        exclude: "replies,retweets",
+        exclude:
+          env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED === "true"
+            ? "retweets"
+            : "replies,retweets",
         "tweet.fields":
-          "author_id,created_at,referenced_tweets,possibly_sensitive,entities",
+          "author_id,created_at,referenced_tweets,possibly_sensitive,entities,conversation_id",
         expansions: "referenced_tweets.id",
       });
       if (cursor.sinceId) q.set("since_id", cursor.sinceId);
@@ -226,7 +238,7 @@ async function process(
       if (op.kind !== "original") {
         if (!op.post) throw Error("Missing official source.");
         const check = await request(
-          `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities&expansions=referenced_tweets.id`,
+          `tweets/${op.post.id}?tweet.fields=author_id,created_at,referenced_tweets,possibly_sensitive,entities,conversation_id&expansions=referenced_tweets.id`,
           token,
         );
         const current = post(check.data, c.account.xUserId!, check.includes);
@@ -234,7 +246,9 @@ async function process(
           !current ||
           check.errors ||
           current.authorId !== op.post.authorId ||
-          current.text !== op.post.text
+          current.text !== op.post.text ||
+          current.invitationParent?.id !== op.post.invitationParent?.id ||
+          current.invitationParent?.text !== op.post.invitationParent?.text
         ) {
           throw Error(
             "Official source changed or is no longer available. Review before resuming.",

@@ -12,6 +12,7 @@ import migrations from "@convex-dev/migrations/convex.config.js";
 const app = defineApp({
   env: {
     X_AGENTS_ENABLED: v.optional(v.string()),
+    X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED: v.optional(v.string()),
     X_AGENT_CLIENT_ID: v.optional(v.string()),
     X_AGENT_CLIENT_SECRET: v.optional(v.string()),
     X_AGENT_TOKEN_KEK: v.optional(v.string()),
