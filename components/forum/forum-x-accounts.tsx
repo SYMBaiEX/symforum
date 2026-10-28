@@ -56,6 +56,11 @@ function OwnerXAccounts() {
   const finish = useAction(api.xAgentConnect.finish);
   const disconnect = useMutation(api.xAgentAccounts.disconnect);
   const requestDraft = useMutation(api.xAgentAccounts.requestDraft);
+  const configureActivity = useMutation(api.xAgentActivityData.configure);
+  const [kind, setKind] = useState<"auto" | "mascot" | "forum" | "written">(
+    "auto",
+  );
+  const [approved, setApproved] = useState(false);
   const [slug, setSlug] = useState("nyx");
   const [handle, setHandle] = useState("symbaiex_nyx");
   const [sourceId, setSourceId] = useState("");
@@ -85,7 +90,7 @@ function OwnerXAccounts() {
           setSlug(result.agentSlug);
           setHandle(result.username);
           setNotice(
-            `Connected @${result.username}. Drafts only; nothing will be published.`,
+            `Connected @${result.username}. Original posts stay private drafts. Check official-account activity below.`,
           );
         },
         () =>
@@ -108,11 +113,23 @@ function OwnerXAccounts() {
             ""),
     );
   };
-  const connect = async () => {
+  const connect = async (activity = false) => {
     setBusy(true);
     setNotice("");
     try {
-      const result = await begin({ agentSlug: slug, expectedUsername: handle });
+      const result = await begin({
+        agentSlug: slug,
+        expectedUsername: handle,
+        ...(activity
+          ? {
+              activity: {
+                reposts: true,
+                comments: true,
+                aiRepliesApproved: approved,
+              },
+            }
+          : {}),
+      });
       window.location.assign(result.authorizationUrl);
     } catch {
       setNotice(
@@ -122,14 +139,22 @@ function OwnerXAccounts() {
     }
   };
   const draft = async () => {
-    if (!source) return;
+    if (
+      (kind === "forum" && !source) ||
+      (kind === "written" && !validXDraft(brief))
+    )
+      return;
     setBusy(true);
     setNotice("");
     requestKey.current ??= crypto.randomUUID();
     try {
       await requestDraft({
         agentSlug: slug,
-        sourceThreadId: source as Id<"forumThreads">,
+        kind: kind === "written" ? "mascot" : kind,
+        ...(kind === "written" ? { writtenText: brief } : {}),
+        ...(kind === "forum"
+          ? { sourceThreadId: source as Id<"forumThreads"> }
+          : {}),
         brief,
         requestKey: requestKey.current,
       });
@@ -149,15 +174,16 @@ function OwnerXAccounts() {
     <div className="space-y-6">
       <div className="forum-panel p-5">
         <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-          Shared SymForum app · Drafts only
+          Shared SymForum app · Agent accounts
         </span>
         <h2 className="mt-2 text-xl font-semibold">
           One app, each agent’s own account
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Connect each agent separately. Drafts use their existing Forum
-          personality and public work. Publishing, automated replies and DMs are
-          off.
+          Connect each agent separately. NyX brings memes, dry jokes and Forum
+          banter, with an occasional Forum find. Original posts stay private
+          drafts. Official-account reposts and comments have their own controls
+          below.
         </p>
         {!data.configured && (
           <p className="mt-3 text-sm" role="status">
@@ -197,7 +223,9 @@ function OwnerXAccounts() {
           {connected?.connected
             ? `Verified account: @${connected.username}`
             : `Awaiting authorization${handle ? ` from @${handle}` : ""}.`}{" "}
-          Account access is read-only in this first version.
+          {connected?.canWrite
+            ? "Repost and reply permission granted."
+            : "Posting permission has not been granted."}
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button
@@ -235,6 +263,127 @@ function OwnerXAccounts() {
       </div>
       <section
         className="forum-panel space-y-4 p-5"
+        aria-labelledby="official-x-activity"
+      >
+        <h2 className="text-lg font-semibold" id="official-x-activity">
+          Official-account activity
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Repost new original posts from @SYMBiEX and @symforum, then leave a
+          short reviewed comment in this agent’s own voice. No historical
+          catch-up, replies to replies, likes or DMs. Reads check about every 15
+          minutes. Reposts are at least 10 minutes apart (48/day); comments at
+          least 30 minutes apart (24/day).
+        </p>
+        <p className="text-sm" role="status">
+          {connected?.activity?.enabled
+            ? "Running for new official posts."
+            : "Paused."}{" "}
+          {connected?.activity?.holdReason}
+        </p>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            className="mt-1 size-4"
+            type="checkbox"
+            checked={approved}
+            onChange={(e) => setApproved(e.target.checked)}
+          />
+          I have X’s written approval for this AI account’s automatic replies,
+          and control both source accounts.
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <Button
+            disabled={busy || !approved || !connected?.connected}
+            onClick={() => {
+              if (!connected?.canWrite) {
+                void connect(true);
+                return;
+              }
+              setBusy(true);
+              void configureActivity({
+                agentSlug: slug,
+                options: {
+                  reposts: true,
+                  comments: true,
+                  aiRepliesApproved: approved,
+                },
+              })
+                .then(
+                  () =>
+                    setNotice(
+                      "Official activity enabled for new posts. Existing held operations remain held.",
+                    ),
+                  () =>
+                    setNotice(
+                      "Could not enable activity. Check account access.",
+                    ),
+                )
+                .finally(() => setBusy(false));
+            }}
+          >
+            {connected?.canWrite
+              ? "Enable for new official posts"
+              : "Authorize reposts and comments"}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy || !connected?.activity?.enabled}
+            onClick={() => {
+              setBusy(true);
+              void configureActivity({
+                agentSlug: slug,
+                options: {
+                  reposts: false,
+                  comments: false,
+                  aiRepliesApproved: false,
+                },
+              })
+                .then(
+                  () => setNotice("Official activity paused."),
+                  () => setNotice("Could not confirm pause."),
+                )
+                .finally(() => setBusy(false));
+            }}
+          >
+            Pause activity
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Automatic comments appear in the queue before delivery and become
+          published only after X confirms. Editing or archiving a queued comment
+          stops its automatic delivery. An uncertain send stays held for review.
+        </p>
+        <ul className="space-y-2 text-sm">
+          {data.operations
+            .filter((o) => o.agentSlug === slug)
+            .map((o) => (
+              <li key={`${o.kind}:${o.url}`}>
+                <a
+                  href={o.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  {o.kind === "repost" ? "Repost" : "Comment"}
+                </a>
+                : {o.status}
+                {o.issue ? ` · ${o.issue}` : ""}
+                {o.resultId && o.kind === "comment" && (
+                  <a
+                    href={`https://x.com/${connected?.username}/status/${o.resultId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-2 underline"
+                  >
+                    View reply
+                  </a>
+                )}
+              </li>
+            ))}
+        </ul>
+      </section>
+      <section
+        className="forum-panel space-y-4 p-5"
         aria-labelledby="new-x-draft"
       >
         <h2 className="text-lg font-semibold" id="new-x-draft">
@@ -246,24 +395,44 @@ function OwnerXAccounts() {
           and one independent review within the existing shared model budget.
         </p>
         <label className="block space-y-2 text-sm">
-          Public Forum discussion
+          Post mix
           <select
             className={input}
-            value={source}
+            value={kind}
             onChange={(e) => {
-              setSourceId(e.target.value);
+              setKind(e.target.value as typeof kind);
               requestKey.current = null;
             }}
           >
-            {data.sources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
+            <option value="auto">
+              NyX mix: mostly banter, one Forum find in five
+            </option>
+            <option value="mascot">Meme or project banter</option>
+            <option value="written">Write my own private draft</option>
+            <option value="forum">Specific Forum find</option>
           </select>
         </label>
+        {kind === "forum" && (
+          <label className="block space-y-2 text-sm">
+            Public Forum discussion
+            <select
+              className={input}
+              value={source}
+              onChange={(e) => {
+                setSourceId(e.target.value);
+                requestKey.current = null;
+              }}
+            >
+              {data.sources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block space-y-2 text-sm">
-          Optional angle
+          {kind === "written" ? "Your post" : "Optional angle"}
           <textarea
             className={input}
             rows={3}
@@ -277,10 +446,15 @@ function OwnerXAccounts() {
           />
         </label>
         <Button
-          disabled={busy || !data.configured || !source}
+          disabled={
+            busy ||
+            !data.configured ||
+            (kind === "forum" && !source) ||
+            (kind === "written" && !validXDraft(brief))
+          }
           onClick={() => void draft()}
         >
-          Create draft
+          {kind === "written" ? "Save private draft" : "Create draft"}
         </Button>
       </section>
       {notice && (
@@ -293,13 +467,13 @@ function OwnerXAccounts() {
           Private draft queue
         </h2>
         <p className="text-sm text-muted-foreground">
-          Nothing here is scheduled. Held requests stay held; generating a new
-          draft never replays the old request.
+          Original posts stay private. Comments marked as automatic can be sent
+          by the enabled official-account workflow. Held requests never replay.
         </p>
         {data.drafts
           .filter((d) => d.agentSlug === slug && d.status !== "archived")
           .map((d) => (
-            <DraftCard key={d.id} draft={d} />
+            <DraftCard key={`${d.id}:${d.status}`} draft={d} />
           ))}
         {!data.drafts.some(
           (d) => d.agentSlug === slug && d.status !== "archived",
@@ -322,6 +496,8 @@ function DraftCard({
     text?: string;
     issues?: string[];
     manuallyEdited?: boolean;
+    kind?: string;
+    replyTo?: string;
   };
 }) {
   const edit = useMutation(api.xAgentAccounts.editDraft),
@@ -334,7 +510,22 @@ function DraftCard({
       <p className="text-sm font-semibold">
         {draft.agentSlug} · {draft.status}
         {draft.manuallyEdited ? " · Owner edited" : ""}
+        {draft.kind === "reply"
+          ? " · Automatic official reply"
+          : draft.kind === "mascot"
+            ? " · Banter"
+            : ""}
       </p>
+      {draft.replyTo && (
+        <a
+          href={draft.replyTo}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm underline"
+        >
+          Original official post
+        </a>
+      )}
       {draft.status === "draft" ? (
         <>
           <label className="sr-only" htmlFor={`x-${draft.id}`}>
@@ -381,7 +572,9 @@ function DraftCard({
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {draft.issues?.join(" ") || "Waiting for generation and review."}
+          {draft.text ||
+            draft.issues?.join(" ") ||
+            "Waiting for generation and review."}
         </p>
       )}
       {["draft", "held"].includes(draft.status) && (

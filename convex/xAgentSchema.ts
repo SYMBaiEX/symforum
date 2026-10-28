@@ -2,12 +2,36 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export const xSealed = v.object({ ciphertext: v.string(), nonce: v.string() });
+export const xActivityOptions = v.object({
+  reposts: v.boolean(),
+  comments: v.boolean(),
+  aiRepliesApproved: v.boolean(),
+});
+export const xDraftKind = v.union(
+  v.literal("mascot"),
+  v.literal("forum"),
+  v.literal("reply"),
+);
+export const xOfficialPost = v.object({
+  id: v.string(),
+  authorId: v.string(),
+  text: v.string(),
+  createdAt: v.number(),
+});
+export const xCursor = v.object({
+  userId: v.string(),
+  sinceId: v.optional(v.string()),
+  page: v.optional(v.string()),
+  newestId: v.optional(v.string()),
+});
 export const xDraftStatus = v.union(
   v.literal("queued"),
   v.literal("generating"),
   v.literal("draft"),
   v.literal("held"),
   v.literal("archived"),
+  v.literal("publishing"),
+  v.literal("published"),
 );
 export const xAgentTables = {
   xAgentAccounts: defineTable({
@@ -24,6 +48,7 @@ export const xAgentTables = {
     expiresAt: v.optional(v.number()),
     connectedAt: v.optional(v.number()),
     updatedAt: v.number(),
+    originalOrdinal: v.optional(v.number()),
   })
     .index("by_agentSlug", ["agentSlug"])
     .index("by_ownerUserId", ["ownerUserId"])
@@ -36,6 +61,7 @@ export const xAgentTables = {
     verifier: v.optional(xSealed),
     consumed: v.boolean(),
     expiresAt: v.number(),
+    activity: v.optional(xActivityOptions),
   })
     .index("by_stateHash", ["stateHash"])
     .index("by_expiresAt", ["expiresAt"]),
@@ -44,7 +70,10 @@ export const xAgentTables = {
     agentSlug: v.string(),
     accountEpoch: v.number(),
     key: v.string(),
-    sourceThreadId: v.id("forumThreads"),
+    sourceThreadId: v.optional(v.id("forumThreads")),
+    kind: v.optional(xDraftKind),
+    officialPost: v.optional(xOfficialPost),
+    activityId: v.optional(v.id("xAgentOperations")),
     brief: v.string(),
     status: xDraftStatus,
     conversationId: v.string(),
@@ -57,4 +86,44 @@ export const xAgentTables = {
     .index("by_ownerUserId", ["ownerUserId"])
     .index("by_key", ["key"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  xAgentActivity: defineTable({
+    accountId: v.id("xAgentAccounts"),
+    enabled: v.boolean(),
+    epoch: v.number(),
+    options: xActivityOptions,
+    enabledAt: v.number(),
+    nextPollAt: v.number(),
+    cursors: v.array(xCursor),
+    lease: v.optional(v.string()),
+    leaseUntil: v.optional(v.number()),
+    refreshClaimed: v.optional(v.boolean()),
+    holdReason: v.optional(v.string()),
+  })
+    .index("by_accountId", ["accountId"])
+    .index("by_enabled_and_nextPollAt", ["enabled", "nextPollAt"]),
+  xAgentOperations: defineTable({
+    accountId: v.id("xAgentAccounts"),
+    epoch: v.number(),
+    key: v.string(),
+    kind: v.union(v.literal("repost"), v.literal("comment")),
+    post: xOfficialPost,
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sending"),
+      v.literal("confirmed"),
+      v.literal("held"),
+    ),
+    draftId: v.optional(v.id("xAgentDrafts")),
+    notBefore: v.number(),
+    expiresAt: v.number(),
+    resultId: v.optional(v.string()),
+    issue: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_accountId_and_status_and_notBefore", [
+      "accountId",
+      "status",
+      "notBefore",
+    ]),
 };

@@ -173,6 +173,8 @@ import type * as users from "../users.js";
 import type * as webVitals from "../webVitals.js";
 import type * as workosAgentRegistrationPrincipal from "../workosAgentRegistrationPrincipal.js";
 import type * as xAgentAccounts from "../xAgentAccounts.js";
+import type * as xAgentActivity from "../xAgentActivity.js";
+import type * as xAgentActivityData from "../xAgentActivityData.js";
 import type * as xAgentConnect from "../xAgentConnect.js";
 import type * as xAgentDraft from "../xAgentDraft.js";
 import type * as xAgentSchema from "../xAgentSchema.js";
@@ -349,6 +351,8 @@ declare const fullApi: ApiFromModules<{
   webVitals: typeof webVitals;
   workosAgentRegistrationPrincipal: typeof workosAgentRegistrationPrincipal;
   xAgentAccounts: typeof xAgentAccounts;
+  xAgentActivity: typeof xAgentActivity;
+  xAgentActivityData: typeof xAgentActivityData;
   xAgentConnect: typeof xAgentConnect;
   xAgentDraft: typeof xAgentDraft;
   xAgentSchema: typeof xAgentSchema;

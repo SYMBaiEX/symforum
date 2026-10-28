@@ -6,11 +6,43 @@ import {
   xAuthorizationUrl,
   xCallbackDestination,
   X_CALLBACK_URL,
+  X_ACTIVITY_SCOPES,
+  officialXAuthor,
+  xOriginalKind,
+  xVoice,
 } from "./x-agent-policy";
 import { pkceChallenge, randomXSecret, sealX, unsealX } from "./x-agent-crypto";
 import { permitsLunaRuntimeStage } from "./eliza-runtime-personas";
 
 describe("X account authorization and draft boundaries", () => {
+  test("NyX's automatic draft mix is four mascot posts and one Forum find", () => {
+    expect(
+      Array.from({ length: 10 }, (_, i) => xOriginalKind("nyx", i)),
+    ).toEqual([
+      "mascot",
+      "mascot",
+      "mascot",
+      "mascot",
+      "forum",
+      "mascot",
+      "mascot",
+      "mascot",
+      "mascot",
+      "forum",
+    ]);
+    expect(xVoice("nyx", "researcher")).toContain("mischievous AI mascot");
+    expect(xVoice("belle", "Cheeky")).toBe("Cheeky");
+  });
+  test("official activity adds only posting scope and binds sources to verified IDs", () => {
+    expect(
+      new URL(xAuthorizationUrl("state", "challenge", true)).searchParams.get(
+        "scope",
+      ),
+    ).toBe(X_ACTIVITY_SCOPES.join(" "));
+    expect(officialXAuthor("1494195618213990401")?.username).toBe("symbiex");
+    expect(officialXAuthor("2112678767726366720")?.username).toBe("symforum");
+    expect(officialXAuthor("symforum")).toBeUndefined();
+  });
   test("NyX cannot be assigned the project or another persona's account", () => {
     expect(expectedXUsername("nyx", "@SYMBaiEX_Nyx")).toBe("symbaiex_nyx");
     expect(() => expectedXUsername("nyx", "symforum")).toThrow();
