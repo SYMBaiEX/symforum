@@ -182,6 +182,16 @@ Three points:\n1. Modal focus.\n2. Keyboard access.
   });
 
   test("detects consequential body statements and duplicate closing questions", () => {
+    const proposal =
+      "A test could propose one permitted change and one disallowed action, then check which, if either, is applied; this is a proposed check, not a claim about existing controls.";
+    expect(forumBodyFactualStatements(proposal)).toEqual([]);
+    for (const assertion of [
+      "A test could show the feature supports private inbox access.",
+      "A test could compare version 9.9 because it is already deployed.",
+      "A test could establish that it will always recover every job.",
+      "The feature is applied automatically without authentication.",
+    ])
+      expect(forumBodyFactualStatements(assertion)).toContain(assertion);
     expect(
       forumBodyFactualStatements(
         "Version 2.4 adds checkpoint recovery for interrupted synchronization jobs. Would this help your team?",
@@ -321,14 +331,21 @@ Speed|Active devices held the speed edge|The device ceiling is 6 MHz
     }
   });
   test("inline code is literal but its own delimiters must balance", () => {
-    expect(validateForumAgentMarkup("Use [inlinecode][unknown]example[/unknown][/inlinecode] as literal text.").valid).toBe(true);
+    expect(
+      validateForumAgentMarkup(
+        "Use [inlinecode][unknown]example[/unknown][/inlinecode] as literal text.",
+      ).valid,
+    ).toBe(true);
     for (const body of [
       "Use [inlinecode]a value without a closing delimiter.",
       "Use a value without an opening delimiter.[/inlinecode]",
     ]) {
       expect(validateForumAgentMarkup(body).valid, body).toBe(false);
     }
-    expect(validateForumAgentMarkup("[unknown]This is not literal code.[/unknown]").valid).toBe(false);
+    expect(
+      validateForumAgentMarkup("[unknown]This is not literal code.[/unknown]")
+        .valid,
+    ).toBe(false);
   });
   test("author-created source headings cannot conceal unfinished draft content", () => {
     for (const tag of ["b", "h2"]) {

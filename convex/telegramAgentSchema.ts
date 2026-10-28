@@ -140,6 +140,12 @@ export const telegramAgentTables = {
     yapTurn: v.optional(v.number()),
     prompt: v.optional(v.string()),
     reply: v.optional(v.string()),
+    review: v.optional(
+      v.object({
+        approved: v.boolean(),
+        issues: v.array(v.string()),
+      }),
+    ),
     status: v.union(
       v.literal("queued"),
       v.literal("generating"),
