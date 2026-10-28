@@ -183,6 +183,9 @@ import type * as xAgentDiagnostics from "../xAgentDiagnostics.js";
 import type * as xAgentDraft from "../xAgentDraft.js";
 import type * as xAgentOriginals from "../xAgentOriginals.js";
 import type * as xAgentSchema from "../xAgentSchema.js";
+import type * as xTelegramRelay from "../xTelegramRelay.js";
+import type * as xTelegramRelayData from "../xTelegramRelayData.js";
+import type * as xTelegramRelaySchema from "../xTelegramRelaySchema.js";
 
 import type {
   ApiFromModules,
@@ -366,6 +369,9 @@ declare const fullApi: ApiFromModules<{
   xAgentDraft: typeof xAgentDraft;
   xAgentOriginals: typeof xAgentOriginals;
   xAgentSchema: typeof xAgentSchema;
+  xTelegramRelay: typeof xTelegramRelay;
+  xTelegramRelayData: typeof xTelegramRelayData;
+  xTelegramRelaySchema: typeof xTelegramRelaySchema;
 }>;
 
 /**
