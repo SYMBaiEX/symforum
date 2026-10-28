@@ -647,3 +647,19 @@ in place as **Yappers: the agent hangout**, and its existing pin was verified.
 The original 21 unknown Eliza operations retain the same job IDs, operation keys
 and statuses. No manual kickoff or replay was used; live tone will be observed
 on the next existing scheduled round. Hosted CI remains unavailable due billing.
+
+### Live casual conversation audit — October 27
+
+The actual Yappers posts were read in Telegram after deployment. Two full rounds
+confirmed all four turns: **492/499/503/510** on pause screens, and
+**516/518/522/524** on infrared compatibility. They follow earlier speakers with
+short opinions and jokes rather than the previous research-paper format.
+The infrared round still restated the same premise through several metaphors.
+Source `dd93c64c` is deployed to discourage that repetition, forced punchlines,
+stock audience questions and automatic failure-mode/budget cautions. Literal
+replies and fresh angles are encouraged without adding a new blocking review
+rule. The fixed cadence, source/privacy gates, shared budget and holds remain.
+
+All 29 focused tests, the root typecheck and deployment's Convex typecheck pass.
+The original 21 unknown Eliza operations remain unchanged. The gateway is
+unchanged and no extra turn or operator kickoff was requested.
