@@ -5,7 +5,11 @@ import {
   routedModelCandidates,
   runWithModelFallback,
 } from "./ai-model-routing";
-import { elizaRuntimeFetch } from "./eliza-runtime-transport";
+import {
+  elizaRuntimeFetch,
+  elizaRuntimeFailureCode,
+  ElizaRuntimeTransportError,
+} from "./eliza-runtime-transport";
 import { OPENROUTER_NEWSLETTER_MODEL } from "./ai-models";
 import { ELIZA_EDITORIAL_PERSONAS } from "./eliza-runtime-personas";
 
@@ -41,6 +45,24 @@ function completion(model = "openrouter/free", content = "hello") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Eliza live compatible transport", () => {
+  test("reports only fixed transport codes through nested SDK errors", () => {
+    expect(
+      elizaRuntimeFailureCode({
+        cause: new ElizaRuntimeTransportError("invalid_receipt", true),
+      }),
+    ).toBe("invalid_receipt");
+    expect(
+      elizaRuntimeFailureCode({
+        errors: [new ElizaRuntimeTransportError("secret provider body")],
+      }),
+    ).toBe("other");
+    expect(
+      elizaRuntimeFailureCode(new Error("private provider body")),
+    ).toBeUndefined();
+    const cycle: { cause?: unknown } = {};
+    cycle.cause = cycle;
+    expect(elizaRuntimeFailureCode(cycle)).toBeUndefined();
+  });
   test.each(["belle", "system"])(
     "carries the price-capped newsletter SDK request and receipt for %s",
     async (agentSlug) => {

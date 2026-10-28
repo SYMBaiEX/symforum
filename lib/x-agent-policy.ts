@@ -18,6 +18,36 @@ export const X_ORIGINAL_INTERVAL_MS = 4 * 60 * 60_000;
 export function officialXAuthor(id: string) {
   return X_OFFICIAL_SOURCES.find((s) => s.userId === id);
 }
+
+/** Self-serve API replies require an explicit mention or a quote of this user. */
+export function xReplySummoned(
+  post: Record<string, unknown>,
+  userId: string,
+  includes?: unknown,
+) {
+  const record = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+  if (!/^\d{1,19}$/.test(userId)) return false;
+  const entities = record(post.entities) ? post.entities : undefined;
+  if (
+    Array.isArray(entities?.mentions) &&
+    entities.mentions.some((m) => record(m) && m.id === userId)
+  )
+    return true;
+  const tweets =
+    record(includes) && Array.isArray(includes.tweets) ? includes.tweets : [];
+  return (
+    Array.isArray(post.referenced_tweets) &&
+    post.referenced_tweets.some(
+      (ref) =>
+        record(ref) &&
+        ref.type === "quoted" &&
+        tweets.some(
+          (t) => record(t) && t.id === ref.id && t.author_id === userId,
+        ),
+    )
+  );
+}
 export function xOriginalKind(slug: string, ordinal: number) {
   return slug === "nyx" && ordinal % 5 !== 4 ? "mascot" : "forum";
 }

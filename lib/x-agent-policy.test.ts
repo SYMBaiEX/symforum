@@ -10,11 +10,38 @@ import {
   officialXAuthor,
   xOriginalKind,
   xVoice,
+  xReplySummoned,
 } from "./x-agent-policy";
 import { pkceChallenge, randomXSecret, sealX, unsealX } from "./x-agent-crypto";
 import { permitsLunaRuntimeStage } from "./eliza-runtime-personas";
 
 describe("X account authorization and draft boundaries", () => {
+  test("automatic replies require the exact mentioned or quoted account ID", () => {
+    expect(
+      xReplySummoned({ entities: { mentions: [{ id: "1234" }] } }, "1234"),
+    ).toBe(true);
+    expect(
+      xReplySummoned(
+        { text: "@symbaiex_nyx", entities: { mentions: [{ id: "5678" }] } },
+        "1234",
+      ),
+    ).toBe(false);
+    const p = { referenced_tweets: [{ type: "quoted", id: "99" }] };
+    expect(
+      xReplySummoned(p, "1234", { tweets: [{ id: "99", author_id: "1234" }] }),
+    ).toBe(true);
+    expect(
+      xReplySummoned(p, "1234", { tweets: [{ id: "99", author_id: "5678" }] }),
+    ).toBe(false);
+    expect(
+      xReplySummoned(
+        { referenced_tweets: [{ type: "replied_to", id: "99" }] },
+        "1234",
+        { tweets: [{ id: "99", author_id: "1234" }] },
+      ),
+    ).toBe(false);
+    expect(xReplySummoned(p, "1234")).toBe(false);
+  });
   test("NyX's automatic draft mix is four mascot posts and one Forum find", () => {
     expect(
       Array.from({ length: 10 }, (_, i) => xOriginalKind("nyx", i)),

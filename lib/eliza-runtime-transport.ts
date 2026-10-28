@@ -242,6 +242,35 @@ function isTransportError(error: unknown, depth = 0): boolean {
 
 export { isTransportError as isElizaRuntimeTransportError };
 
+/** Fixed protocol codes only; never forward provider/body/exception text. */
+export function elizaRuntimeFailureCode(
+  error: unknown,
+  depth = 0,
+): string | undefined {
+  if (depth > 5 || !object(error)) return undefined;
+  if (error instanceof ElizaRuntimeTransportError) {
+    const code = error.message.slice("Eliza runtime transport failed: ".length);
+    return [
+      "outcome_unknown",
+      "invalid_response",
+      "worker_failure",
+      "invalid_receipt",
+      "receipt_unavailable",
+      "operation_unavailable",
+    ].includes(code)
+      ? code
+      : "other";
+  }
+  return (
+    elizaRuntimeFailureCode(error.cause, depth + 1) ??
+    (Array.isArray(error.errors)
+      ? error.errors
+          .map((nested) => elizaRuntimeFailureCode(nested, depth + 1))
+          .find(Boolean)
+      : undefined)
+  );
+}
+
 /** Bound, authenticate and validate one actual SDK HTTP attempt. No retries. */
 export function elizaRuntimeFetch(
   config: ElizaRuntimeConfig,

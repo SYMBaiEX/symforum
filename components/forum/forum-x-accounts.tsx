@@ -271,11 +271,12 @@ function OwnerXAccounts() {
         </h2>
         <p className="text-sm text-muted-foreground">
           Repost new original posts from @SYMBiEX and @symforum, then leave a
-          short reviewed comment in this agent’s own voice. No historical
-          catch-up, replies to replies, likes or DMs. Reads check about every 15
-          minutes. Reposts are at least 20 minutes apart (12/day); comments at
-          least an hour apart (6/day). All public actions are at least five
-          minutes apart, with a shared 24/day cap.
+          short reviewed comment when the official post mentions this agent or
+          quotes one of its posts, as required by X. No historical catch-up,
+          replies to replies, likes or DMs. Reads check about every 15 minutes.
+          Reposts are at least 20 minutes apart (12/day); comments at least an
+          hour apart (6/day). All public actions are at least five minutes
+          apart, with a shared 24/day cap.
         </p>
         <p className="text-sm" role="status">
           {connected?.activity?.enabled
