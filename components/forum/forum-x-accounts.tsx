@@ -57,6 +57,7 @@ function OwnerXAccounts() {
   const disconnect = useMutation(api.xAgentAccounts.disconnect);
   const requestDraft = useMutation(api.xAgentAccounts.requestDraft);
   const configureActivity = useMutation(api.xAgentActivityData.configure);
+  const setAutomatic = useMutation(api.xAgentOriginals.setAutomatic);
   const [kind, setKind] = useState<"auto" | "mascot" | "forum" | "written">(
     "auto",
   );
@@ -90,7 +91,7 @@ function OwnerXAccounts() {
           setSlug(result.agentSlug);
           setHandle(result.username);
           setNotice(
-            `Connected @${result.username}. Original posts stay private drafts. Check official-account activity below.`,
+            `Connected @${result.username}. Check posting mode and official-account activity below.`,
           );
         },
         () =>
@@ -181,9 +182,9 @@ function OwnerXAccounts() {
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Connect each agent separately. NyX brings memes, dry jokes and Forum
-          banter, with an occasional Forum find. Original posts stay private
-          drafts. Official-account reposts and comments have their own controls
-          below.
+          banter, with an occasional Forum find. Choose automatic originals or
+          private drafts below. Official-account reposts and comments have
+          separate controls.
         </p>
         {!data.configured && (
           <p className="mt-3 text-sm" role="status">
@@ -272,8 +273,9 @@ function OwnerXAccounts() {
           Repost new original posts from @SYMBiEX and @symforum, then leave a
           short reviewed comment in this agent’s own voice. No historical
           catch-up, replies to replies, likes or DMs. Reads check about every 15
-          minutes. Reposts are at least 10 minutes apart (48/day); comments at
-          least 30 minutes apart (24/day).
+          minutes. Reposts are at least 20 minutes apart (12/day); comments at
+          least an hour apart (6/day). All public actions are at least five
+          minutes apart, with a shared 24/day cap.
         </p>
         <p className="text-sm" role="status">
           {connected?.activity?.enabled
@@ -357,30 +359,94 @@ function OwnerXAccounts() {
           {data.operations
             .filter((o) => o.agentSlug === slug)
             .map((o) => (
-              <li key={`${o.kind}:${o.url}`}>
-                <a
-                  href={o.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline"
-                >
-                  {o.kind === "repost" ? "Repost" : "Comment"}
-                </a>
+              <li key={`${o.kind}:${o.url ?? o.resultId ?? o.status}`}>
+                {o.url ? (
+                  <a
+                    href={o.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    {o.kind === "repost" ? "Repost" : "Comment"}
+                  </a>
+                ) : (
+                  "Original"
+                )}
                 : {o.status}
                 {o.issue ? ` · ${o.issue}` : ""}
-                {o.resultId && o.kind === "comment" && (
+                {o.resultId && o.kind !== "repost" && (
                   <a
                     href={`https://x.com/${connected?.username}/status/${o.resultId}`}
                     target="_blank"
                     rel="noreferrer"
                     className="ml-2 underline"
                   >
-                    View reply
+                    View post
                   </a>
                 )}
               </li>
             ))}
         </ul>
+      </section>
+      <section
+        className="forum-panel space-y-4 p-5"
+        aria-labelledby="x-original-mode"
+      >
+        <h2 className="text-lg font-semibold" id="x-original-mode">
+          Original posts
+        </h2>
+        <p className="text-sm">
+          {connected?.mode === "automatic" && connected.activity?.originals
+            ? "Automatic originals enabled"
+            : "Private drafts only"}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          One original about every four hours, at most six per day. Four banter
+          or meme-style posts to one Forum find. Each automatic post needs
+          review, a fresh eligible source when used, and room in the existing
+          shared budget. Rejected or uncertain work stays held. Turning this on
+          does not publish old drafts.
+        </p>
+        {connected?.activity?.nextOriginalAt &&
+          connected.mode === "automatic" && (
+            <p className="text-sm">
+              Next original no earlier than{" "}
+              {new Intl.DateTimeFormat("en-US", {
+                timeZone: "America/Chicago",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              }).format(connected.activity.nextOriginalAt)}
+              .
+            </p>
+          )}
+        <Button
+          disabled={
+            busy || !connected?.canWrite || !connected.activity?.enabled
+          }
+          onClick={() => {
+            setBusy(true);
+            const enabled = connected?.mode !== "automatic";
+            void setAutomatic({ agentSlug: slug, enabled })
+              .then(
+                () =>
+                  setNotice(
+                    enabled
+                      ? "Automatic originals enabled with the four-hour limit."
+                      : "Automatic originals paused. Private drafts are preserved.",
+                  ),
+                () =>
+                  setNotice(
+                    "Could not change posting mode. Check account status.",
+                  ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          {connected?.mode === "automatic"
+            ? "Pause automatic originals"
+            : "Enable automatic originals"}
+        </Button>
       </section>
       <section
         className="forum-panel space-y-4 p-5"
@@ -467,8 +533,9 @@ function OwnerXAccounts() {
           Private draft queue
         </h2>
         <p className="text-sm text-muted-foreground">
-          Original posts stay private. Comments marked as automatic can be sent
-          by the enabled official-account workflow. Held requests never replay.
+          Old drafts stay private unless you publish one explicitly. Scheduled
+          automatic originals and comments use the limits above. Held requests
+          never replay.
         </p>
         {data.drafts
           .filter((d) => d.agentSlug === slug && d.status !== "archived")
@@ -500,6 +567,7 @@ function DraftCard({
     replyTo?: string;
   };
 }) {
+  const publish = useAction(api.xAgentActivity.publishDraft);
   const edit = useMutation(api.xAgentAccounts.editDraft),
     archive = useMutation(api.xAgentAccounts.archiveDraft);
   const [text, setText] = useState(draft.text ?? ""),
@@ -541,7 +609,29 @@ function DraftCard({
           <p className="text-xs text-muted-foreground">
             {xDraftLength(text)}/280 · Edits require your own review.
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {draft.kind !== "reply" && (
+              <Button
+                disabled={busy || text !== draft.text}
+                onClick={() => {
+                  setBusy(true);
+                  void publish({ draftId: draft.id })
+                    .then(
+                      () =>
+                        setMessage(
+                          "Publication requested. Check activity for X's confirmed result.",
+                        ),
+                      () =>
+                        setMessage(
+                          "Could not confirm publication. Check its existing activity before trying again.",
+                        ),
+                    )
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Publish now
+              </Button>
+            )}
             <Button
               variant="outline"
               disabled={busy || !validXDraft(text)}

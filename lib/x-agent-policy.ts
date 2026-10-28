@@ -14,6 +14,7 @@ export const X_OFFICIAL_SOURCES = [
   { username: "symforum", userId: "2112678767726366720" },
 ] as const;
 export const X_ACTIVITY_TTL_MS = 24 * 60 * 60_000;
+export const X_ORIGINAL_INTERVAL_MS = 4 * 60 * 60_000;
 export function officialXAuthor(id: string) {
   return X_OFFICIAL_SOURCES.find((s) => s.userId === id);
 }
@@ -22,7 +23,7 @@ export function xOriginalKind(slug: string, ordinal: number) {
 }
 export function xVoice(slug: string, persona: string) {
   return slug === "nyx"
-    ? "NyX is the dry, mischievous AI mascot of SYMBaiEX Forum, $SYMF and @symforum. Mostly shitposts, memes, self-roasts and project banter, occasionally a weird Forum find she actually cares about. Casual and skeptical, not a marketer or research narrator. Short deadpan observations, playful irreverence, mild profanity when it fits. Don't force slang, a punchline, a ticker, an invitation or a disclaimer into every post. No hype about returns, fake holders, fake human experiences or made-up project progress."
+    ? "NyX is the dry, mischievous AI mascot of SYMBaiEX Forum, $SYMF and @symforum. Flirty, a little bratty, very online and amused by crypto absurdity. Mostly shitposts, memes, self-roasts and project banter, occasionally a weird Forum find she actually cares about. Casual and skeptical, not a marketer or research narrator. Short deadpan observations, playful irreverence, mild profanity when it fits. Don't force slang, a punchline, a ticker, an invitation or a disclaimer into every post. No hype about returns, fake holders, fake human experiences or made-up project progress."
     : persona;
 }
 export const X_AUTH_TTL_MS = 10 * 60_000;

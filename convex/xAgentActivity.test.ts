@@ -355,3 +355,167 @@ test("the owner's written comeback is saved once without inference or scheduling
     await s.t.mutation(internal.xAgentAccounts.claimDraft, { draftId: id }),
   ).toBeNull();
 });
+async function comeback(s: Awaited<ReturnType<typeof setup>>) {
+  vi.stubEnv("ELIZA_RUNTIME_MODE", "live");
+  return s.owner.mutation(api.xAgentAccounts.requestDraft, {
+    agentSlug: "nyx",
+    kind: "mascot",
+    brief: "Owner-approved comeback",
+    requestKey: "c".repeat(36),
+    writtenText:
+      "Immmmm backkkkk!!! Miss me? Of course you did. $SYMF, darling.",
+  });
+}
+test("publishing an approved comeback sends its exact text once without a reply target", async () => {
+  const s = await enabled();
+  const id = await comeback(s);
+  const fetcher = network();
+  vi.stubGlobal("fetch", fetcher);
+  const operationId = await s.owner.action(api.xAgentActivity.publishDraft, {
+    draftId: id,
+  });
+  expect(
+    await s.owner.action(api.xAgentActivity.publishDraft, { draftId: id }),
+  ).toBe(operationId);
+  const writes = fetcher.mock.calls.filter((c) => c[1]?.method === "POST");
+  expect(writes).toHaveLength(1);
+  expect(JSON.parse(writes[0][1]!.body as string)).toEqual({
+    text: "Immmmm backkkkk!!! Miss me? Of course you did. $SYMF, darling.",
+  });
+  expect((await s.t.run((ctx) => ctx.db.get("xAgentDrafts", id)))?.status).toBe(
+    "published",
+  );
+});
+test("an unprivileged user cannot publish or enable originals, and a held draft cannot publish", async () => {
+  const s = await enabled();
+  const id = await comeback(s);
+  const reader = s.t.withIdentity({ subject: s.readerId });
+  await expect(
+    reader.action(api.xAgentActivity.publishDraft, { draftId: id }),
+  ).rejects.toThrow();
+  await expect(
+    reader.mutation(api.xAgentOriginals.setAutomatic, {
+      agentSlug: "nyx",
+      enabled: true,
+    }),
+  ).rejects.toThrow();
+  await s.t.run((ctx) => ctx.db.patch("xAgentDrafts", id, { status: "held" }));
+  await expect(
+    s.owner.action(api.xAgentActivity.publishDraft, { draftId: id }),
+  ).rejects.toThrow();
+});
+test("automatic mode admits one fresh original per slot and never sweeps old drafts into publishing", async () => {
+  const s = await enabled();
+  const old = await comeback(s);
+  await s.owner.mutation(api.xAgentOriginals.setAutomatic, {
+    agentSlug: "nyx",
+    enabled: true,
+  });
+  await s.t.run((ctx) =>
+    ctx.db.patch("xAgentActivity", s.activityId, {
+      nextOriginalAt: Date.now() - 1,
+    }),
+  );
+  const args = { activityId: s.activityId, lease: "automatic" };
+  await s.t.mutation(internal.xAgentActivityData.claim, args);
+  await s.t.mutation(internal.xAgentActivityData.next, args);
+  await s.t.mutation(internal.xAgentActivityData.next, args);
+  const originals = await s.t.run((ctx) =>
+    ctx.db.query("xAgentOperations").take(10),
+  );
+  expect(originals.filter((o) => o.kind === "original")).toHaveLength(1);
+  expect(originals[0].draftId).not.toBe(old);
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("xAgentDrafts", old)))?.status,
+  ).toBe("draft");
+  const r = await s.t.run((ctx) => ctx.db.get("xAgentActivity", s.activityId));
+  expect(r!.nextOriginalAt! - Date.now()).toBeGreaterThan(3.9 * 3600000);
+  await s.owner.mutation(api.xAgentOriginals.setAutomatic, {
+    agentSlug: "nyx",
+    enabled: false,
+  });
+  const op = originals[0];
+  expect(
+    await s.t.mutation(internal.xAgentActivityData.claimSend, {
+      ...args,
+      operationId: op._id,
+    }),
+  ).toBeNull();
+});
+test("the four-hour original spacing applies even to a second manually requested post", async () => {
+  const s = await enabled();
+  const id = await comeback(s);
+  vi.stubGlobal("fetch", network());
+  await s.owner.action(api.xAgentActivity.publishDraft, { draftId: id });
+  const second = await s.owner.mutation(api.xAgentAccounts.requestDraft, {
+    agentSlug: "nyx",
+    kind: "mascot",
+    brief: "Second",
+    requestKey: "d".repeat(36),
+    writtenText: "I have another thought, but no reason to spam it.",
+  });
+  const queued = await s.owner.mutation(
+    internal.xAgentOriginals.queueApproved,
+    { draftId: second },
+  );
+  const started = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(started + 10 * 60_000);
+  try {
+    await s.t.mutation(internal.xAgentActivityData.claim, {
+      activityId: s.activityId,
+      lease: "second",
+      force: true,
+    });
+    // Global spacing has elapsed; the original's independent four-hour guard remains.
+    expect(
+      await s.t.mutation(internal.xAgentActivityData.claimSend, {
+        activityId: s.activityId,
+        lease: "second",
+        operationId: queued.operationId,
+      }),
+    ).toBeNull();
+    const op = await s.t.run((ctx) =>
+      ctx.db.get("xAgentOperations", queued.operationId),
+    );
+    expect(op?.status).toBe("queued");
+    expect(op!.notBefore).toBeGreaterThan(started + 3.9 * 3600000);
+  } finally {
+    clock.mockRestore();
+  }
+});
+test("an approved-text snapshot prevents editing a queued post into different public content", async () => {
+  const s = await enabled();
+  const id = await comeback(s);
+  const queued = await s.owner.mutation(
+    internal.xAgentOriginals.queueApproved,
+    { draftId: id },
+  );
+  await s.owner.mutation(api.xAgentAccounts.editDraft, {
+    draftId: id,
+    text: "Changed after publication was requested.",
+  });
+  const args = { activityId: s.activityId, lease: "edited" };
+  await s.t.mutation(internal.xAgentActivityData.claim, args);
+  expect(
+    await s.t.mutation(internal.xAgentActivityData.claimSend, {
+      ...args,
+      operationId: queued.operationId,
+    }),
+  ).toBeNull();
+});
+test("an unknown original send is held and does not get replayed by another publish request", async () => {
+  const s = await enabled();
+  const id = await comeback(s);
+  const fetcher = network(true);
+  vi.stubGlobal("fetch", fetcher);
+  await s.owner.action(api.xAgentActivity.publishDraft, { draftId: id });
+  expect((await s.t.run((ctx) => ctx.db.get("xAgentDrafts", id)))?.status).toBe(
+    "held",
+  );
+  await expect(
+    s.owner.action(api.xAgentActivity.publishDraft, { draftId: id }),
+  ).rejects.toThrow();
+  expect(
+    fetcher.mock.calls.filter((c) => c[1]?.method === "POST"),
+  ).toHaveLength(1);
+});
