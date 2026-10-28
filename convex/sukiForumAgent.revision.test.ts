@@ -51,7 +51,12 @@ vi.mock("../lib/ai-model-routing", async (original) => ({
       },
       new AbortController().signal,
     ),
-    route: { persistedModel: OPENROUTER_FORUM_MODEL, provider: "openrouter" },
+    route: {
+      persistedModel: OPENROUTER_FORUM_MODEL,
+      provider: "openrouter",
+      reservationKey: `reservation:${options.stage}`,
+      reservationModel: OPENROUTER_FORUM_MODEL,
+    },
   })),
 }));
 
@@ -290,6 +295,16 @@ describe("Suki action revision cursor", () => {
     expect(model.prompts).toHaveLength(4);
     expect(model.review).toHaveBeenCalledTimes(1);
     expect(model.review.mock.calls[0][0].prompt).toContain(corrected.body);
+    expect(
+      mutations.find(
+        ({ name, args }) =>
+          name === "forumAgentEditorialData:recordUsage" &&
+          args.stage === "research",
+      )?.args,
+    ).toMatchObject({
+      reservationKey: "reservation:test:forum-evidence-review",
+      reservationModel: OPENROUTER_FORUM_MODEL,
+    });
     expect(
       mutations.filter(
         ({ name }) =>

@@ -171,7 +171,16 @@ operation. The worker ledger claims the unique job ID and canonical input hash,
 replays only an identical completed job and never reruns an ambiguous job.
 Completed receipts must save in Convex before output is returned to a caller.
 
-Network, timeout, ambiguous provider and receipt-persistence failures are fatal
+With `ELIZA_RUNTIME_RECEIPT_RECOVERY_ENABLED=true`, a dropped HTTP response may
+make one eight-second authenticated `/receipt` read for that same fresh pending
+attempt. The SQL path only selects an already committed result created within
+two minutes, bound to job ID, input hash, persona and stage. It never claims,
+purges, regenerates or sends. The unchanged completion validator and durable
+Convex receipt must succeed before returning the result. Aborted calls and old
+pending/unknown operations cannot enter this recovery path. Missing, expired or
+mismatched receipts remain unknown; no `/complete` retry is issued.
+
+Unrecovered network, timeout, ambiguous provider and receipt-persistence failures are fatal
 transport errors, not automatic model fallback triggers. A pending or unknown
 logical operation blocks later stages and scheduled retries, including after
 `ELIZA_RUNTIME_MODE=off`. Known pre-inference provider rejections can proceed to
@@ -619,3 +628,38 @@ Existing scheduling and publishing were not changed to manufacture a passing tes
   or hold clearing. Deployment verification now waits for the actual container
   version before generating. [Cloudflare documents the asynchronous replacement
   and SIGTERM drain window](https://developers.cloudflare.com/containers/configuration/rollouts/).
+
+## October 28 cross-channel reliability audit
+
+The fixed audit window ended at 18:18:48 UTC. Model attempts in the preceding
+12 hours were 275 completed and 22 failed. Four free-route failures recovered
+through the old canary fallback. The hourly canary now exercises the fixed Luna
+route that production agents actually use; explicit operator free-route probes
+remain available.
+
+Belle's assistant-only confirmed meme saves had accumulated in one Agent order.
+Completing that order expanded a six-message context past the worker's 64-message
+limit. Meme generation now hard-bounds confirmed history to six messages and
+saves future confirmed memes at `order: "next"`. Existing history is preserved.
+The next natural slot generated, reviewed and sent message 955 without fallback.
+
+Forum semantic-review receipts now settle their existing reservation rather than
+charging actual usage separately and leaving the estimate open. The internal
+`agentUsageReconciliation.recordedForumReview` repair requires matching usage,
+completed runtime and pre-fix reservation receipts; preview is read-only and
+application is idempotent. Seventeen matched reviews released $0.053826 of
+incorrect internal reservation charges, without changing actual recorded costs
+or any inference/delivery holds. Usage events now retain their reservation key.
+
+Topic selection explicitly distinguishes source-backed release news from actual
+build logs and practical guides. A narrowly framed, nonnumeric proposed test is
+not treated as an observed factual result by the lexical gate; embedded
+capability claims and promised outcomes remain gated, and independent semantic
+review still examines the entire body. Rejected drafts are never republished.
+
+Runtime failures retain allowlisted worker/HTTP or transport categories, without
+provider bodies. Exact-job metadata inspection can reach older receipts while
+retaining persona binding. `xAgentDiagnostics.freshReceipt` verifies only a fresh
+locally completed call and returns booleans, never generated text. Telegram
+review rejection diagnostics are bounded and private, redact after seven days,
+and do not change rejection or non-replay behavior.

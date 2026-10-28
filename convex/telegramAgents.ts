@@ -436,6 +436,9 @@ export const finish = internalMutation({
     ...requestIdArgs,
     messageId: v.optional(v.number()),
     reason: v.optional(v.string()),
+    review: v.optional(
+      v.object({ approved: v.boolean(), issues: v.array(v.string()) }),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -448,6 +451,7 @@ export const finish = internalMutation({
       await saveMessages(ctx, components.agent, {
         threadId: row.conversationId,
         agentName: "Belle",
+        order: "next",
         messages: [{ role: "assistant", content: row.reply }],
       });
     }
@@ -492,6 +496,16 @@ export const finish = internalMutation({
       status: sent ? "sent" : "held",
       sentMessageId: args.messageId,
       reason: args.reason?.slice(0, 80),
+      ...(args.review
+        ? {
+            review: {
+              approved: args.review.approved,
+              issues: args.review.issues
+                .slice(0, 6)
+                .map((issue) => issue.slice(0, 180)),
+            },
+          }
+        : {}),
       prompt: undefined,
       reply: undefined,
       updatedAt: Date.now(),
@@ -511,6 +525,7 @@ export const redact = internalMutation({
         reply: undefined,
         memeRejectedDraft: undefined,
         memeReview: undefined,
+        review: undefined,
       });
     return null;
   },

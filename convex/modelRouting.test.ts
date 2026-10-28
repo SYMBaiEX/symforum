@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { getFunctionName } from "convex/server";
-import { runStructuredProbe } from "./modelRouting";
+import { runStructuredProbe, runStructuredCanary } from "./modelRouting";
 import type { ActionCtx } from "./_generated/server";
 
 afterEach(() => {
@@ -205,6 +205,17 @@ describe("free-only structured operator probe", () => {
     });
     expect(bodies[0].reasoning).toEqual({ effort: "low", exclude: true });
     expect(bodies[0].reasoning_effort).toBeUndefined();
+    const hourly = await (
+      runStructuredCanary as unknown as {
+        _handler: (
+          ctx: ActionCtx,
+          args: Record<string, never>,
+        ) => Promise<{ healthy: boolean; model?: string }>;
+      }
+    )._handler(ctx, {});
+    expect(hourly).toMatchObject({ healthy: true, model: "openai/gpt-6-luna" });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].model).toBe("openai/gpt-6-luna");
     const wireSchema = (
       bodies[0].response_format as {
         json_schema: { schema: Record<string, unknown> };

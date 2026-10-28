@@ -408,6 +408,18 @@ export function forumBodyFactualStatements(body: string) {
           (statement) =>
             statement.split(/\s+/).length >= 3 &&
             !statement.endsWith("?") &&
+            // A proposed test is not an observed result. Keep numbered claims,
+            // promised outcomes and embedded capability assertions gated; all
+            // proposals still pass the independent original-source review.
+            !(
+              /^(?:a (?:possible |proposed )?(?:test|check|experiment) could|one (?:test|check) would be to)\b/i.test(
+                statement,
+              ) &&
+              extractVerifiableTokens(statement).length === 0 &&
+              !/\b(?:because|therefore|already|proves?|guarantees?|will|supports?|adds?|enables?)\b/i.test(
+                statement,
+              )
+            ) &&
             (extractVerifiableTokens(statement).length > 0 ||
               /\b(?:adds?|allows?|available|can|deprecat(?:e|es|ed)|has|have|includes?|introduc(?:e|es|ed)|is|are|means?|offers?|requires?|ships?|supports?|will)\b/i.test(
                 statement,

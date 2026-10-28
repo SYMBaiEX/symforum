@@ -766,6 +766,32 @@ export class LiveService {
   stopAccepting() {
     this.stopped = true;
   }
+  async receipt(input) {
+    if (
+      !record(input) ||
+      Object.keys(input).length !== 4 ||
+      typeof input.jobId !== "string" ||
+      !/^[A-Za-z0-9:_-]{1,200}$/.test(input.jobId) ||
+      typeof input.inputHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(input.inputHash) ||
+      !LIVE_AGENTS.has(input.agentSlug) ||
+      typeof input.stage !== "string" ||
+      !validStage(input.agentSlug, input.stage)
+    )
+      throw new WorkerError("invalid_request");
+    const result = await this.backend.store.receipt(input);
+    if (
+      !record(result) ||
+      result.version !== 2 ||
+      result.jobId !== input.jobId ||
+      result.inputHash !== input.inputHash ||
+      result.agentSlug !== input.agentSlug ||
+      result.stage !== input.stage ||
+      result.runtimeVersion !== RUNTIME_VERSION
+    )
+      throw new WorkerError("receipt_unavailable", 404);
+    return result;
+  }
   async status(input) {
     if (
       !record(input) ||

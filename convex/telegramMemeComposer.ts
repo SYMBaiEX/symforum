@@ -124,6 +124,14 @@ export const prepare = internalAction({
                 searchOtherThreads: false,
                 excludeToolMessages: true,
               },
+              // Older assistant-only saves share one Agent order. The Agent
+              // completes that entire order despite recentMessages, so cap
+              // confirmed meme history without changing the stored archive.
+              contextHandler: async (_ctx, context) => [
+                ...context.recent.slice(-6),
+                ...context.inputMessages,
+                ...context.inputPrompt,
+              ],
               storageOptions: { saveMessages: "none" },
             });
             return await agent.generateObject(

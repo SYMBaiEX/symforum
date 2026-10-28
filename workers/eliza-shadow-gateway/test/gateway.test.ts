@@ -75,6 +75,56 @@ function streamRequest(
 }
 
 describe("gateway routing and pre-wake authorization", () => {
+  test("receipt reads require the live key and exact bounded binding before waking", async () => {
+    const { env, names, requests } = fixture();
+    env.ELIZA_RUNTIME_WORKER_SECRET = liveSecret;
+    const body = {
+      jobId: "fresh",
+      inputHash: "a".repeat(64),
+      agentSlug: "suki",
+      stage: "suki:forum-reply",
+    };
+    expect(
+      (
+        await fetchGateway(
+          request("/receipt", { body: JSON.stringify(body) }),
+          env,
+        )
+      ).status,
+    ).toBe(401);
+    for (const bad of [
+      { ...body, extra: true },
+      { ...body, inputHash: "bad" },
+      { ...body, stage: "invalid stage" },
+      {},
+    ]) {
+      expect(
+        (
+          await fetchGateway(
+            request("/receipt", {
+              headers: { ...headers, Authorization: `Bearer ${liveSecret}` },
+              body: JSON.stringify(bad),
+            }),
+            env,
+          )
+        ).status,
+      ).toBe(400);
+    }
+    expect(names).toEqual([]);
+    expect(
+      (
+        await fetchGateway(
+          request("/receipt", {
+            headers: { ...headers, Authorization: `Bearer ${liveSecret}` },
+            body: JSON.stringify(body),
+          }),
+          env,
+        )
+      ).status,
+    ).toBe(200);
+    expect(names).toEqual([PILOT_CONTAINER_NAME]);
+    expect(new URL(requests[0].url).pathname).toBe("/receipt");
+  });
   test("status is live-key-only, exact bounded JSON, and does not wake on invalid input", async () => {
     const { env, names, requests } = fixture(async () =>
       Response.json({ version: 2, state: "unknown" }),

@@ -414,8 +414,14 @@ ${data.research ? YAPPERS_CHAT_STYLE : ""}`;
           durationMs: Date.now() - reviewStartedAt,
         });
         const verdict = reviewSchema.parse(review.value.output);
-        if (!verdict.approved || verdict.issues.length)
-          throw new Error("review_rejected");
+        if (!verdict.approved || verdict.issues.length) {
+          await ctx.runMutation(internal.telegramAgents.finish, {
+            requestId,
+            reason: "review_rejected",
+            review: verdict,
+          });
+          return null;
+        }
         if (data.research) {
           markup = researchMarkup({ ...data.research, turn: row.yapTurn ?? 0 });
           text = researchMessage(text, {

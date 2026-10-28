@@ -236,6 +236,7 @@ export const recordUsage = internalMutation({
 
     const usageEvent = {
       runKey: args.runKey,
+      reservationKey: args.reservationKey,
       agentSlug: args.agentSlug,
       stage: args.stage,
       model: billingModel,

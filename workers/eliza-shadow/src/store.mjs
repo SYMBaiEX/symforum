@@ -57,6 +57,18 @@ export class SqlJobStore {
     return rows[0] ?? null;
   }
 
+  /** Read an already committed fresh receipt. Never claim, purge or infer. */
+  async receipt({ jobId, inputHash, agentSlug, stage }) {
+    const { rows } = await this.connection.query(
+      `SELECT result FROM eliza_shadow_jobs
+       WHERE job_id=$1 AND input_hash=$2 AND state='succeeded'
+       AND result_expires_at > now() AND created_at > now() - interval '2 minutes'
+       AND result->>'agentSlug'=$3 AND result->>'stage'=$4 LIMIT 1`,
+      [jobId, inputHash, agentSlug, stage],
+    );
+    return rows[0]?.result ?? null;
+  }
+
   async claim(request, hash) {
     const inserted = await this.connection.query(
       `INSERT INTO eliza_shadow_jobs (job_id,input_hash,request_hash,state)

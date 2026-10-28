@@ -1883,3 +1883,52 @@ test("receipt diagnostics return fixed scalar shape checks without completion te
   row.served_model="private-credential-must-not-leak";
   assert.equal((await service.status({jobId:row.job_id})).receiptDiagnostics.servedModel,"invalid");
 });
+
+test('fresh receipt recovery is a bound read with no claim, purge or inference', async () => {
+  const input = {jobId:'fresh-job',inputHash:'a'.repeat(64),agentSlug:'suki',stage:'suki:forum-reply'};
+  const result = {version:2,...input,runtimeVersion:'1.7.2',completion};
+  let reads=0;
+  const store=new SqlJobStore({async query(sql,args){
+    reads++;
+    assert.match(sql,/^SELECT result/);
+    assert.match(sql,/state='succeeded'/);
+    assert.match(sql,/created_at > now\(\) - interval '2 minutes'/);
+    assert.match(sql,/result_expires_at > now\(\)/);
+    assert.deepEqual(args,[input.jobId,input.inputHash,input.agentSlug,input.stage]);
+    return {rows:[{result}]};
+  }});
+  const liveService=new LiveService({store,live:{async run(){assert.fail('must not infer');}}});
+  assert.deepEqual(await liveService.receipt(input),result);
+  assert.equal(reads,1);
+  assert.equal(liveService.active.size,0);
+  for (const extra of [{body:{}},{inputHash:'invalid'},{agentSlug:'system'},{stage:'nyx:forum-reply'}])
+    await assert.rejects(liveService.receipt({...input,...extra}),/invalid_request/);
+  assert.equal(reads,1);
+});
+test('missing, expired, mismatched or uncommitted receipts cannot be recovered',async()=>{
+  const input={jobId:'fresh-job',inputHash:'a'.repeat(64),agentSlug:'suki',stage:'suki:forum-reply'};
+  for(const result of [null,{version:2,...input,agentSlug:'nyx',runtimeVersion:'1.7.2'}]){
+    const service=new LiveService({store:{async receipt(){return result;}},live:{async run(){assert.fail('must not infer');}}});
+    await assert.rejects(service.receipt(input),/receipt_unavailable/);
+  }
+});
+
+test('HTTP receipt is live-key-only, body-bounded and never invokes complete',async()=>{
+  let reads=0;
+  const server=createHttpServer({
+    service:{stopped:false,busy:false},secret:shadowSecret,liveSecret,log:()=>{},
+    liveService:{active:new Map(),async receipt(input){reads++;return {version:2,jobId:input.jobId};},async complete(){assert.fail('must not complete');}},
+  });
+  server.listen(0,'127.0.0.1');await once(server,'listening');
+  const url=`http://127.0.0.1:${server.address().port}/receipt`;
+  const input={jobId:'fresh',inputHash:'a'.repeat(64),agentSlug:'suki',stage:'suki:forum-reply'};
+  const post=(key,body)=>fetch(url,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body});
+  try{
+    assert.equal((await post(shadowSecret,JSON.stringify(input))).status,401);
+    assert.equal(reads,0);
+    assert.equal((await post(liveSecret,'x'.repeat(513))).status,413);
+    assert.equal(reads,0);
+    const r=await post(liveSecret,JSON.stringify(input));assert.equal(r.status,200);
+    assert.deepEqual(await r.json(),{version:2,jobId:'fresh'});assert.equal(reads,1);
+  }finally{server.close();server.closeAllConnections();await once(server,'close');}
+});

@@ -21,6 +21,7 @@ import {
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
 import {
   OPENROUTER_NEWSLETTER_MODEL,
+  OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
 import { internal } from "./_generated/api";
@@ -86,6 +87,7 @@ export async function convexModelRoutingConfig(
     base.elizaRuntime = {
       url,
       secret,
+      receiptRecovery: env.ELIZA_RUNTIME_RECEIPT_RECOVERY_ENABLED === "true",
       ...(ctx === undefined
         ? {}
         : {
@@ -209,7 +211,11 @@ export const runStructuredCanary = internalAction({
   }),
   handler: async (ctx) => {
     try {
-      const result = await runStructuredProbe(ctx);
+      // Exercise the route production agents actually use. A free-router
+      // rejection followed by DeepSeek rescue does not establish Luna health.
+      const result = await runStructuredProbe(ctx, undefined, false, {
+        model: OPENROUTER_FORUM_MODEL,
+      });
       await ctx.runMutation(internal.aiRoutingControlData.recordCanaryState, {
         healthy: true,
         provider: result.provider,

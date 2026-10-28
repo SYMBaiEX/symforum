@@ -1,12 +1,13 @@
 // @vitest-environment node
 /// <reference types="vite/client" />
 import agentTest from "@convex-dev/agent/test";
+import { listMessages, saveMessages } from "@convex-dev/agent";
 import workflowTest from "@convex-dev/workflow/test";
 import { register } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import sharp from "sharp";
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import schema from "./schema";
 import { MEME_INTERVAL_MS } from "../lib/telegram-memes";
 import {
@@ -213,6 +214,44 @@ async function start(
     );
   return id;
 }
+test("legacy assistant-only history stays bounded and new confirmed memes start fresh orders", async () => {
+  const { t, image } = await setup(),
+    io = transport(image);
+  const id = await start(t, "original");
+  const threadId = (await t.run((ctx) =>
+    ctx.db.get("telegramAgentRequests", id),
+  ))!.conversationId;
+  await t.run(async (ctx) => {
+    for (let n = 0; n < 70; n++)
+      await saveMessages(ctx, components.agent, {
+        threadId,
+        agentName: "Belle",
+        messages: [
+          {
+            role: "assistant",
+            content: `TOP: old joke ${n}\nBOTTOM: old punchline ${n}`,
+          },
+        ],
+      });
+  });
+  await t.action(internal.telegramMemeComposer.prepare, { requestId: id });
+  const generation = io.calls.find((c) => c.stage === "belle:telegram-reply")!;
+  const body = generation.body as {
+    messages: { role: string; content: string }[];
+  };
+  expect(body.messages.length).toBeLessThanOrEqual(8);
+  expect(JSON.stringify(body.messages)).toContain("old joke 69");
+  expect(JSON.stringify(body.messages)).not.toContain("old joke 0");
+  await t.action(internal.telegramMemeDelivery.deliver, { requestId: id });
+  expect(io.sends).toHaveLength(1);
+  const history = await t.run((ctx) =>
+    listMessages(ctx, components.agent, {
+      threadId,
+      paginationOpts: { numItems: 1, cursor: null },
+    }),
+  );
+  expect(history.page[0].order).toBeGreaterThan(0);
+});
 test("v2 requires a reserve, admits one 18-minute intent and never reopens legacy holds", async () => {
   const { t } = await setup(false);
   expect(await t.mutation(internal.telegramMemes.start, {})).toBeNull();

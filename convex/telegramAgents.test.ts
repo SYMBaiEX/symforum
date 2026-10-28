@@ -69,6 +69,32 @@ async function setup() {
 }
 
 describe("Telegram durable admission and delivery", () => {
+  test("a rejected review keeps bounded diagnostics and cannot be reopened", async () => {
+    const t = await setup();
+    await t.mutation(internal.telegramAgents.accept, request);
+    const row = (await t.run((ctx) =>
+      ctx.db.query("telegramAgentRequests").first(),
+    ))!;
+    await t.mutation(internal.telegramAgents.claim, { requestId: row._id });
+    await t.mutation(internal.telegramAgents.finish, {
+      requestId: row._id,
+      reason: "review_rejected",
+      review: {
+        approved: false,
+        issues: ["Specific unsupported claim", "x".repeat(300)],
+      },
+    });
+    const saved = await t.run((ctx) =>
+      ctx.db.get("telegramAgentRequests", row._id),
+    );
+    expect(saved?.status).toBe("held");
+    expect(saved?.review?.issues[0]).toBe("Specific unsupported claim");
+    expect(saved?.review?.issues[1]).toHaveLength(180);
+    expect(
+      await t.mutation(internal.telegramAgents.claim, { requestId: row._id }),
+    ).toBe(false);
+    expect(saved?.prompt).toBeUndefined();
+  });
   test("all existing personas retain their configured voice, including NyX's dedicated profile", () => {
     for (const slug of TELEGRAM_AGENT_SLUGS)
       expect(typeof telegramVoice(slug)).toBe("string");

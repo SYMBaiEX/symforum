@@ -4,9 +4,75 @@ import { internal } from "./_generated/api";
 import { internalAction, env } from "./_generated/server";
 import { shadowWorkerOrigin } from "../lib/eliza-shadow-contract";
 
+/** Verify the new read path using a freshly completed local receipt only.
+ * Returns booleans, never result text, and cannot inspect a held operation. */
+export const freshReceipt = internalAction({
+  args: { agentSlug: v.string(), jobId: v.string() },
+  returns: v.object({ httpStatus: v.number(), verified: v.boolean() }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ httpStatus: number; verified: boolean }> => {
+    const [call] = await ctx.runQuery(internal.elizaRuntimeData.inspect, args);
+    const origin = shadowWorkerOrigin(env.ELIZA_RUNTIME_WORKER_URL);
+    if (
+      !call ||
+      call.status !== "completed" ||
+      call.outcomeUnknown ||
+      Date.now() - call.createdAt > 120000 ||
+      !origin ||
+      !env.ELIZA_RUNTIME_WORKER_SECRET
+    )
+      return { httpStatus: 0, verified: false };
+    try {
+      const r = await fetch(new URL("/receipt", origin), {
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          Authorization: `Bearer ${env.ELIZA_RUNTIME_WORKER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId: call.jobId,
+          inputHash: call.inputHash,
+          agentSlug: call.agentSlug,
+          stage: call.stage,
+        }),
+      });
+      if (!r.ok) {
+        await r.body?.cancel();
+        return { httpStatus: r.status, verified: false };
+      }
+      const raw = await r.text();
+      if (raw.length > 256 * 1024)
+        return { httpStatus: r.status, verified: false };
+      const p = JSON.parse(raw);
+      return {
+        httpStatus: r.status,
+        verified:
+          p.version === 2 &&
+          p.jobId === call.jobId &&
+          p.inputHash === call.inputHash &&
+          p.agentSlug === call.agentSlug &&
+          p.stage === call.stage &&
+          p.runtimeVersion === "1.7.2" &&
+          p.completion?.usage?.prompt_tokens === call.inputTokens &&
+          p.completion?.usage?.completion_tokens === call.outputTokens,
+      };
+    } catch {
+      return { httpStatus: 0, verified: false };
+    }
+  },
+});
+
 /** Read-only worker metadata. Never fetch a completion, infer, refund or replay. */
 export const status = internalAction({
-  args: { agentSlug: v.string(), operationKey: v.optional(v.string()) },
+  args: {
+    agentSlug: v.string(),
+    operationKey: v.optional(v.string()),
+    jobId: v.optional(v.string()),
+  },
   returns: v.object({
     httpStatus: v.number(),
     state: v.optional(v.string()),
@@ -30,7 +96,7 @@ export const status = internalAction({
   }),
   handler: async (
     ctx,
-    { agentSlug, operationKey },
+    { agentSlug, operationKey, jobId },
   ): Promise<{
     httpStatus: number;
     state?: string;
@@ -53,10 +119,12 @@ export const status = internalAction({
     const calls = await ctx.runQuery(internal.elizaRuntimeData.inspect, {
       agentSlug,
       limit: 40,
+      jobId,
     });
     const call = calls.find(
       (c) =>
-        c.outcomeUnknown && (!operationKey || c.operationKey === operationKey),
+        (jobId ? c.jobId === jobId : c.outcomeUnknown) &&
+        (!operationKey || c.operationKey === operationKey),
     );
     const origin = shadowWorkerOrigin(env.ELIZA_RUNTIME_WORKER_URL);
     if (!call) return { httpStatus: 0, code: "no_unknown_call" };

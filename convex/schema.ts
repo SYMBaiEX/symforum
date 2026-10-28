@@ -1733,6 +1733,7 @@ export default defineSchema({
     .index("by_runDate_and_agentSlug", ["runDate", "agentSlug"]),
   forumAgentUsageEvents: defineTable({
     runKey: v.string(),
+    reservationKey: v.optional(v.string()),
     agentSlug: v.string(),
     stage: v.union(
       v.literal("topic"),

@@ -16,6 +16,67 @@ const request = {
 const setup = () => convexTest(schema, modules);
 
 describe("durable Eliza operation admission", () => {
+  test("safe worker diagnostics preserve a definite pre-inference failure", async () => {
+    const t = setup();
+    await t.mutation(internal.elizaRuntimeData.reserveCall, request);
+    await t.mutation(internal.elizaRuntimeData.recordReceipt, {
+      ...request,
+      status: "failed",
+      outcomeUnknown: false,
+      workerErrorCode: "worker_busy",
+      workerHttpStatus: 503,
+    });
+    const [saved] = await t.query(internal.elizaRuntimeData.inspect, {
+      agentSlug: "suki",
+      jobId: request.jobId,
+    });
+    expect(saved).toMatchObject({
+      status: "failed",
+      outcomeUnknown: false,
+      workerErrorCode: "worker_busy",
+      workerHttpStatus: 503,
+    });
+    await t.query(internal.elizaRuntimeData.assertOperationReady, {
+      operationKey: request.operationKey,
+    });
+    await expect(
+      t.mutation(internal.elizaRuntimeData.recordReceipt, {
+        ...request,
+        status: "failed",
+        workerErrorCode: "raw exception: private",
+      }),
+    ).rejects.toThrow("invalid_eliza_runtime_receipt");
+  });
+
+  test("exact job inspection reaches older receipts and enforces agent binding", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 45; i++)
+        await ctx.db.insert("elizaRuntimeCalls", {
+          ...request,
+          jobId: `eliza-history-${i}`,
+          operationKey: `history:${i}`,
+          status: "failed",
+          outcomeUnknown: true,
+          createdAt: i,
+          updatedAt: i,
+          expiresAt: Date.now() + 86400000,
+        });
+    });
+    expect(
+      await t.query(internal.elizaRuntimeData.inspect, {
+        agentSlug: "suki",
+        jobId: "eliza-history-0",
+      }),
+    ).toHaveLength(1);
+    expect(
+      await t.query(internal.elizaRuntimeData.inspect, {
+        agentSlug: "nyx",
+        jobId: "eliza-history-0",
+      }),
+    ).toEqual([]);
+  });
+
   test("one concurrent provider intent per logical operation", async () => {
     const t = setup();
     const attempts = await Promise.allSettled(

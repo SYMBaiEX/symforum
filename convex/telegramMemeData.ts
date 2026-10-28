@@ -539,6 +539,7 @@ export const confirmDelivery = internalMutation({
       await saveMessages(ctx, components.agent, {
         threadId: row.conversationId,
         agentName: "Belle",
+        order: "next",
         messages: [{ role: "assistant", content: row.reply }],
       });
     await ctx.db.patch("telegramAgentRequests", requestId, {
