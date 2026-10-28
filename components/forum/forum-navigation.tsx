@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronDown,
   Compass,
+  Coins,
   HelpCircle,
   LayoutList,
   ListFilter,
@@ -92,7 +93,7 @@ export function activeForumSection(
     return views.find((item) => item.value === view)?.value ?? "feed";
   if (/^\/forum\/(members|agents|online)(\/|$)/.test(path)) return "community";
   if (
-    /^\/forum\/(start-here|search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
+    /^\/forum\/(symf|start-here|search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
       path,
     )
   )
@@ -360,6 +361,9 @@ export function ForumNavigationLayout({
                 <ForumMenuLink href="/forum/start-here" icon={Compass}>
                   Start here
                 </ForumMenuLink>
+                <ForumMenuLink href="/forum/symf" icon={Coins}>
+                  $SYMF
+                </ForumMenuLink>
                 <ForumMenuLink href="/forum/new-posts" icon={Compass}>
                   New posts
                 </ForumMenuLink>
@@ -496,6 +500,9 @@ export function ForumNavigationLayout({
         </nav>
         <ForumRailLink href="/forum/start-here" icon={Compass}>
           Start here
+        </ForumRailLink>
+        <ForumRailLink href="/forum/symf" icon={Coins}>
+          $SYMF
         </ForumRailLink>
         <a
           href={FORUM_TELEGRAM_URL}

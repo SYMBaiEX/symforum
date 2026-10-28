@@ -1,0 +1,534 @@
+.page {
+  display: grid;
+  gap: 24px;
+  padding-block: 8px 24px;
+}
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  min-height: 350px;
+  overflow: hidden;
+  border: 1px solid hsl(var(--primary) / 0.24);
+  border-radius: 20px;
+  background:
+    radial-gradient(
+      ellipse at 95% 85%,
+      hsl(var(--primary) / 0.18),
+      transparent 65%
+    ),
+    hsl(var(--card));
+}
+.heroCopy {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  padding: 36px 0 36px 36px;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.eyebrow::before {
+  content: "";
+  width: 22px;
+  height: 2px;
+  background: hsl(var(--primary));
+}
+.title {
+  margin-top: 18px;
+  font-size: clamp(64px, 7vw, 100px);
+  line-height: 0.95;
+  font-weight: 750;
+  letter-spacing: -0.065em;
+}
+.title span {
+  color: hsl(var(--primary));
+}
+.description {
+  max-width: 360px;
+  margin-top: 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+}
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.15s,
+    transform 0.15s;
+}
+.primaryAction {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.secondaryAction {
+  border: 1px solid hsl(var(--row-border));
+  background: hsl(var(--background) / 0.4);
+}
+.primaryAction:hover,
+.secondaryAction:hover {
+  transform: translateY(-1px);
+}
+.heroArt {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+.moth {
+  position: absolute;
+  width: min(112%, 420px);
+  max-width: none;
+  height: auto;
+  filter: drop-shadow(0 18px 34px hsl(var(--primary) / 0.1));
+  transform: rotate(-7deg) translateY(4px);
+}
+.network {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 999px;
+  background: hsl(var(--background) / 0.55);
+  padding: 7px 11px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+}
+.networkMark {
+  display: grid;
+  gap: 2px;
+  transform: skewX(-24deg);
+}
+.networkMark i {
+  display: block;
+  width: 10px;
+  height: 2px;
+  background: hsl(var(--primary));
+}
+.mint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 12px;
+  background: hsl(var(--card) / 0.45);
+}
+.mintLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+.mintValue {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: all;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.chart {
+  overflow: hidden;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 16px;
+  background: hsl(var(--card));
+}
+.chartHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px;
+  border-bottom: 1px solid hsl(var(--row-border));
+}
+.chartIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tokenIcon {
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 12px;
+}
+.chartTitle {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.chartMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.chartMeta span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: hsl(var(--muted));
+  font-size: 10px;
+}
+.chartFooter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 12px 22px;
+  border-top: 1px solid hsl(var(--row-border));
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.6;
+}
+.links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.linkCard {
+  padding: 24px;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 14px;
+  background: hsl(var(--card) / 0.3);
+}
+.cardIcon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  margin-bottom: 14px;
+}
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+.cardBody {
+  max-width: 420px;
+  margin-top: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.7;
+}
+.textLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--primary));
+}
+@media (max-width: 680px) {
+  .page {
+    gap: 16px;
+    padding-top: 0;
+  }
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    border-radius: 16px;
+  }
+  .heroCopy {
+    padding: 28px 24px;
+  }
+  .eyebrow {
+    max-width: 170px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+  .title {
+    font-size: 76px;
+  }
+  .description {
+    max-width: 245px;
+    font-size: 14px;
+  }
+  .heroArt {
+    position: absolute;
+    width: 200px;
+    height: 240px;
+    top: 54px;
+    right: -100px;
+    opacity: 0.16;
+  }
+  .moth {
+    width: 280px;
+  }
+  .network {
+    top: 18px;
+    right: 16px;
+    font-size: 9px;
+  }
+  .mint {
+    padding: 16px;
+  }
+  .mintValue {
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .chartHeader {
+    padding: 16px;
+  }
+  .chartTitle {
+    font-size: 15px;
+  }
+  .chartFooter {
+    padding: 12px 16px;
+  }
+  .links {
+    grid-template-columns: 1fr;
+  }
+  .linkCard {
+    padding: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction,
+  .secondaryAction {
+    transition: none;
+  }
+  .primaryAction:hover,
+  .secondaryAction:hover {
+    transform: none;
+  }
+}
+
+.candleCanvas {
+  width: 100%;
+  height: 520px;
+  min-width: 0;
+}
+.chartControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid hsl(var(--row-border));
+}
+.chartControls button {
+  min-width: 48px;
+  min-height: 40px;
+  border-radius: 7px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.chartControls button[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+}
+.chartControls span {
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+.priceBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 22px 8px;
+}
+.priceBar > p:first-child {
+  font-size: 20px;
+  font-weight: 600;
+}
+.priceBar span {
+  margin-left: 8px;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+.priceBar > p:last-child {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+@media (max-width: 680px) {
+  .candleCanvas {
+    height: 380px;
+  }
+  .priceBar {
+    padding-inline: 16px;
+  }
+  .priceBar > p:first-child {
+    font-size: 17px;
+  }
+  .priceBar span {
+    display: block;
+    margin: 3px 0 0;
+  }
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.metric {
+  padding: 18px 20px;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 12px;
+  background: hsl(var(--card) / 0.45);
+}
+.metric > p:first-child {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+.metric > p:nth-child(2) {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+.metric > span {
+  display: block;
+  margin-top: 7px;
+  color: hsl(var(--muted-foreground));
+  font-size: 9px;
+}
+.marketStatus {
+  grid-column: 1 / -1;
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+.trades {
+  overflow: hidden;
+  border: 1px solid hsl(var(--row-border));
+  border-radius: 16px;
+  background: hsl(var(--card));
+}
+.tradeScroll {
+  max-height: 480px;
+  overflow: auto;
+}
+.tradeTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+  font-size: 12px;
+}
+.tradeTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 13px 18px;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--row-border));
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+  font-weight: 500;
+}
+.tradeTable td {
+  padding: 2px 18px;
+  height: 48px;
+  border-bottom: 1px solid hsl(var(--row-border) / 0.5);
+}
+.tradeTable th:first-child,
+.tradeTable td:first-child,
+.tradeTable th:nth-child(2),
+.tradeTable td:nth-child(2) {
+  text-align: left;
+}
+.tradeTable td:first-child {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+.tradeTable tr:hover td {
+  background: hsl(var(--muted) / 0.25);
+}
+.buy,
+.sell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.buy {
+  color: #2dd4bf;
+}
+.sell {
+  color: hsl(var(--primary));
+}
+.mobileQuantity {
+  display: none;
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+  margin-top: 3px;
+}
+@media (max-width: 900px) {
+  .priceColumn {
+    display: none;
+  }
+}
+@media (max-width: 680px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metric {
+    padding: 15px;
+  }
+  .metric > p:nth-child(2) {
+    font-size: 21px;
+  }
+  .chartControls {
+    flex-wrap: wrap;
+  }
+  .chartControls button {
+    min-width: 42px;
+    min-height: 44px;
+  }
+  .quantityColumn {
+    display: none;
+  }
+  .mobileQuantity {
+    display: block;
+  }
+  .tradeTable th {
+    padding: 12px 10px;
+  }
+  .tradeTable td {
+    padding-inline: 10px;
+  }
+  .tradeTable td:last-child {
+    padding-inline: 0;
+    width: 44px;
+  }
+}

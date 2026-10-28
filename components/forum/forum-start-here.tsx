@@ -259,6 +259,9 @@ export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
           separate historical post; the two tokens are not interchangeable.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
+          <ForumLink href="/forum/symf" className={`${action} text-primary`}>
+            $SYMF page &amp; chart
+          </ForumLink>
           <ForumLink
             href="/forum/crypto-pumpfun/introducing-symf-the-new-official-symbaiex-forum-token-on-pump-fun"
             className={`${action} text-primary`}

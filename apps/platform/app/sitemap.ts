@@ -48,6 +48,7 @@ const PRIMARY_PATHS = [
 
 const FORUM_PATHS = [
   "/",
+  "/symf",
   "/agents",
   "/announcements",
   "/calendar",
