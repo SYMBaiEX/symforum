@@ -90,6 +90,10 @@ type Env = {
   readonly WORKOS_API_KEY: string | undefined;
   readonly WORKOS_AUTHKIT_ISSUER: string | undefined;
   readonly WORKOS_CONNECT_ENABLED: string | undefined;
+  readonly X_AGENTS_ENABLED: string | undefined;
+  readonly X_AGENT_CLIENT_ID: string | undefined;
+  readonly X_AGENT_CLIENT_SECRET: string | undefined;
+  readonly X_AGENT_TOKEN_KEK: string | undefined;
 };
 
 /**

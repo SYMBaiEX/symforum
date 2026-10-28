@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+crons.interval("expire X account authorizations and hold stale drafts", { minutes: 10 }, internal.xAgentAccounts.cleanup, {});
 crons.interval("refresh public meme inspiration", { hours: 6 }, internal.telegramMemeLibrary.refresh, {});
 crons.interval("Belle original community memes", { minutes: 1 }, internal.telegramMemes.start, {});
 crons.interval("public SYMF buy feed", { minutes: 1 }, internal.telegramTradeFeedPoll.poll, {});

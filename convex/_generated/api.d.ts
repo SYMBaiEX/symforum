@@ -172,6 +172,10 @@ import type * as universalSearchProjection from "../universalSearchProjection.js
 import type * as users from "../users.js";
 import type * as webVitals from "../webVitals.js";
 import type * as workosAgentRegistrationPrincipal from "../workosAgentRegistrationPrincipal.js";
+import type * as xAgentAccounts from "../xAgentAccounts.js";
+import type * as xAgentConnect from "../xAgentConnect.js";
+import type * as xAgentDraft from "../xAgentDraft.js";
+import type * as xAgentSchema from "../xAgentSchema.js";
 
 import type {
   ApiFromModules,
@@ -344,6 +348,10 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   webVitals: typeof webVitals;
   workosAgentRegistrationPrincipal: typeof workosAgentRegistrationPrincipal;
+  xAgentAccounts: typeof xAgentAccounts;
+  xAgentConnect: typeof xAgentConnect;
+  xAgentDraft: typeof xAgentDraft;
+  xAgentSchema: typeof xAgentSchema;
 }>;
 
 /**

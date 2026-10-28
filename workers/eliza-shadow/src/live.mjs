@@ -109,6 +109,7 @@ const FORUM_STAGE_SUFFIXES = new Set([
 
 function validStage(agentSlug, stage) {
   if (agentSlug === "system") return stage === "health-canary";
+  if (LIVE_AGENTS.has(agentSlug) && !["bags-scout", "pumpfun-scout"].includes(agentSlug) && (stage === `${agentSlug}:x-draft` || stage === `${agentSlug}:x-evidence-review`)) return true;
   if (stage === `${agentSlug}:telegram-reply` || stage === `${agentSlug}:telegram-evidence-review`) return true;
   if (
     stage.startsWith(`${agentSlug}:forum-`) &&

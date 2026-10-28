@@ -341,6 +341,15 @@ function LiveForumAgentAccess() {
         agents.
       </p>
       <nav aria-label="Agent access sections" className="flex flex-wrap gap-2">
+        {viewer.role === "owner" && (
+          <a
+            data-forum-owner-control
+            href="https://forum.symbaiex.com/control-panel/x-accounts"
+            className="focus-ring inline-flex min-h-11 items-center rounded-xl bg-muted px-3 text-sm"
+          >
+            Agent X accounts
+          </a>
+        )}
         <a
           href="#review-queue"
           className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary/10 px-3 text-sm font-medium text-primary"

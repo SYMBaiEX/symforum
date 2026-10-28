@@ -48,10 +48,10 @@ export function parseMeme(text: string) {
 }
 /** A conservative deduplication fingerprint. A collision selects a prepared fallback in v2. */
 export function memeFingerprint(text: string) {
-  let h = 14695981039346656037n;
+  let h = BigInt("14695981039346656037");
   for (const c of text.toLowerCase().replace(/[^a-z0-9]/g, "")) {
     h ^= BigInt(c.charCodeAt(0));
-    h = BigInt.asUintN(64, h * 1099511628211n);
+    h = BigInt.asUintN(64, h * BigInt("1099511628211"));
   }
   return h.toString(16);
 }

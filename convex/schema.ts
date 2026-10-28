@@ -8,6 +8,7 @@ import { elizaShadowTables } from "./elizaShadowSchema";
 import { elizaRuntimeTables } from "./elizaRuntimeSchema";
 import { elizaPilotTables } from "./elizaPilotSchema";
 import { tokenAlphaTables } from "./tokenAlphaSchema";
+import { xAgentTables } from "./xAgentSchema";
 import { telegramTradeTables } from "./telegramTradeSchema";
 import { telegramAgentTables } from "./telegramAgentSchema";
 
@@ -33,6 +34,7 @@ export default defineSchema({
   ...elizaRuntimeTables,
   ...elizaPilotTables,
   ...tokenAlphaTables,
+  ...xAgentTables,
   ...telegramAgentTables,
   ...telegramTradeTables,
   authIdentityLinks: defineTable({

@@ -16,6 +16,7 @@ const forumStages = new Set([
 
 export function permitsLunaRuntimeStage(agentSlug: string, stage: string) {
   if (agentSlug === "system") return stage === "health-canary";
+  if (editorialPersonas.has(agentSlug) && (stage === `${agentSlug}:x-draft` || stage === `${agentSlug}:x-evidence-review`)) return true;
   if ((editorialPersonas.has(agentSlug) || agentSlug === "bags-scout" || agentSlug === "pumpfun-scout") &&
       (stage === `${agentSlug}:telegram-reply` || stage === `${agentSlug}:telegram-evidence-review`)) return true;
   if (agentSlug === "bags-scout" || agentSlug === "pumpfun-scout")
