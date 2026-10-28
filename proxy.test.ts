@@ -59,6 +59,15 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({
 }));
 
 describe("proxy forum routing", () => {
+  test("the X callback stays on the API surface with private OAuth response headers", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor("https://forum.symbaiex.com/api/agents/x/callback?state=synthetic&code=synthetic"));
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
   test.each([
     ["blog.symbaiex.com", "/blog"],
     ["news.symbaiex.com", "/news"],

@@ -451,6 +451,9 @@ function applySecurityHeaders(
 ) {
   response.headers.set("Content-Security-Policy", policy.value);
   const isOAuthConnect =
+    request?.nextUrl.pathname === "/api/agents/x/callback" ||
+    request?.nextUrl.pathname === "/control-panel/x-accounts" ||
+    request?.nextUrl.pathname === "/forum/control-panel/x-accounts" ||
     request?.nextUrl.pathname === "/agent/connect" ||
     request?.nextUrl.pathname === "/agent/claim" ||
     request?.nextUrl.pathname.startsWith("/agent-auth/") ||
