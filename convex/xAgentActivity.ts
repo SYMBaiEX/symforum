@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { relayPost, SYMFORUM_X_USER_ID } from "../lib/x-telegram-relay";
 import { randomXSecret, sealX, unsealX } from "../lib/x-agent-crypto";
 import {
   officialXAuthor,
@@ -168,6 +169,8 @@ async function process(
   try {
     const token = await access(ctx, c.activity, c.account, lease);
     const pollDue = (c.activity.nextSourcePollAt ?? 0) <= Date.now();
+    const relayEnabled =
+      pollDue && (await ctx.runQuery(internal.xTelegramRelayData.enabled, {}));
     if (options?.officialPostId) {
       if (!(await ctx.runMutation(internal.xAgentActivityData.apiRead, args)))
         throw Error("Read limit reached.");
@@ -197,7 +200,8 @@ async function process(
       const q = new URLSearchParams({
         max_results: "5",
         exclude:
-          env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED === "true"
+          env.X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED === "true" ||
+          (relayEnabled && cursor.userId === SYMFORUM_X_USER_ID)
             ? "retweets"
             : "replies,retweets",
         "tweet.fields":
@@ -224,6 +228,18 @@ async function process(
         ...args,
         userId: cursor.userId,
         posts,
+        ...(relayEnabled && cursor.userId === SYMFORUM_X_USER_ID
+          ? {
+              relayPosts: Array.isArray(data.data)
+                ? data.data
+                    .map(relayPost)
+                    .filter(
+                      (p): p is NonNullable<ReturnType<typeof relayPost>> =>
+                        p !== null,
+                    )
+                : [],
+            }
+          : {}),
         newestId: cursor.newestId ?? meta?.newest_id,
         nextPage: meta?.next_token,
       });

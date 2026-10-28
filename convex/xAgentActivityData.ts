@@ -11,6 +11,8 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { relaySource } from "./xTelegramRelaySchema";
+import { enqueueRelay } from "./xTelegramRelayData";
 import { admitOriginal } from "./xAgentOriginals";
 import { researchSource } from "./telegramYapResearch";
 import { requireOwner } from "./authz";
@@ -297,6 +299,7 @@ export const ingest = internalMutation({
     ...leaseArgs,
     userId: v.string(),
     posts: v.array(xOfficialPost),
+    relayPosts: v.optional(v.array(relaySource)),
     newestId: v.optional(v.string()),
     nextPage: v.optional(v.string()),
     ownerRequested: v.optional(v.boolean()),
@@ -306,6 +309,11 @@ export const ingest = internalMutation({
     const c = await active(ctx, args.activityId, args.lease);
     if (!c || !officialXAuthor(args.userId) || args.posts.length > 5)
       return null;
+    if (
+      !args.ownerRequested &&
+      args.relayPosts?.every((p) => p.authorId === args.userId)
+    )
+      await enqueueRelay(ctx, args.relayPosts);
     for (const post of args.posts) {
       if (
         post.authorId !== args.userId ||
