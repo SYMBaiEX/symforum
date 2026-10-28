@@ -38,3 +38,13 @@ independent reviews, revision counts, posting schedules or model budgets were
 relaxed. Unsupported drafts and uncertain operations remain held. A live check
 must observe a new scheduled run and verify its active public thread and claim
 provenance; it must not rerun a held slot or manually force publication.
+
+Source availability is checked before paid topic selection. The run probes up
+to six distinct original URLs from the ranked shortlist, rotating across hosts
+and fetching two at a time. Only successfully retrieved originals enter the
+topic selector; their actual article text supplies its excerpts. Selected
+snapshots are reused for writing, avoiding another fetch or a changed source
+between selection and drafting. Existing URL, redirect and byte limits still
+apply. No extra inference, posting allowance or recurring task is added. If all
+originals are unavailable, the run stops before purchasing topic inference and
+never substitutes a feed summary for original evidence.
