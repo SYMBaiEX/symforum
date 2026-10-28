@@ -360,7 +360,7 @@ describe("shared SymForum X app", () => {
       draftId: id,
     });
     expect(context?.agentSlug).toBe("nyx");
-    expect(context?.source.url).toContain("/research/agent-memory");
+    expect(context?.source?.url).toContain("/research/agent-memory");
     expect(
       await s.t.mutation(internal.xAgentAccounts.claimDraft, { draftId: id }),
     ).toBeNull();

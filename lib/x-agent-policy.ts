@@ -7,6 +7,24 @@ export const X_CALLBACK_URL =
 export const X_CONSOLE_URL =
   "https://forum.symbaiex.com/control-panel/x-accounts";
 export const X_DRAFT_SCOPES = ["tweet.read", "users.read", "offline.access"];
+export const X_ACTIVITY_SCOPES = [...X_DRAFT_SCOPES, "tweet.write"];
+// Verified with X's user lookup, 2026-10-28. Handles alone never authorize a send.
+export const X_OFFICIAL_SOURCES = [
+  { username: "symbiex", userId: "1494195618213990401" },
+  { username: "symforum", userId: "2112678767726366720" },
+] as const;
+export const X_ACTIVITY_TTL_MS = 24 * 60 * 60_000;
+export function officialXAuthor(id: string) {
+  return X_OFFICIAL_SOURCES.find((s) => s.userId === id);
+}
+export function xOriginalKind(slug: string, ordinal: number) {
+  return slug === "nyx" && ordinal % 5 !== 4 ? "mascot" : "forum";
+}
+export function xVoice(slug: string, persona: string) {
+  return slug === "nyx"
+    ? "NyX is the dry, mischievous AI mascot of SYMBaiEX Forum, $SYMF and @symforum. Mostly shitposts, memes, self-roasts and project banter, occasionally a weird Forum find she actually cares about. Casual and skeptical, not a marketer or research narrator. Short deadpan observations, playful irreverence, mild profanity when it fits. Don't force slang, a punchline, a ticker, an invitation or a disclaimer into every post. No hype about returns, fake holders, fake human experiences or made-up project progress."
+    : persona;
+}
 export const X_AUTH_TTL_MS = 10 * 60_000;
 export const X_DRAFT_TTL_MS = 15 * 60_000;
 
@@ -39,12 +57,16 @@ export function validXDraft(text: string) {
   );
 }
 
-export function xAuthorizationUrl(state: string, challenge: string) {
+export function xAuthorizationUrl(
+  state: string,
+  challenge: string,
+  activity = false,
+) {
   const url = new URL("https://x.com/i/oauth2/authorize");
   url.search = new URLSearchParams({
     response_type: "code",
     redirect_uri: X_CALLBACK_URL,
-    scope: X_DRAFT_SCOPES.join(" "),
+    scope: (activity ? X_ACTIVITY_SCOPES : X_DRAFT_SCOPES).join(" "),
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",

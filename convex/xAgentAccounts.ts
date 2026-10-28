@@ -14,13 +14,23 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { requireOwner } from "./authz";
 import { researchSource } from "./telegramYapResearch";
-import { xSealed, xDraftStatus } from "./xAgentSchema";
+import {
+  xSealed,
+  xDraftStatus,
+  xDraftKind,
+  xActivityOptions,
+  xOfficialPost,
+} from "./xAgentSchema";
+import { configureActivity } from "./xAgentActivityData";
 import {
   expectedXUsername,
   validXDraft,
   X_AUTH_TTL_MS,
   X_DRAFT_TTL_MS,
   X_AGENT_SLUGS,
+  xOriginalKind,
+  officialXAuthor,
+  X_ACTIVITY_SCOPES,
 } from "../lib/x-agent-policy";
 
 const limiter = new RateLimiter(components.rateLimiter, {
@@ -48,6 +58,15 @@ const safeAccount = v.object({
   username: v.optional(v.string()),
   connectedAt: v.optional(v.number()),
   mode: v.literal("drafts"),
+  canWrite: v.boolean(),
+  activity: v.optional(
+    v.object({
+      enabled: v.boolean(),
+      reposts: v.boolean(),
+      comments: v.boolean(),
+      holdReason: v.optional(v.string()),
+    }),
+  ),
 });
 const safeDraft = v.object({
   id: v.id("xAgentDrafts"),
@@ -57,6 +76,8 @@ const safeDraft = v.object({
   issues: v.optional(v.array(v.string())),
   createdAt: v.number(),
   manuallyEdited: v.optional(v.boolean()),
+  kind: v.optional(xDraftKind),
+  replyTo: v.optional(v.string()),
 });
 const source = v.object({
   title: v.string(),
@@ -74,6 +95,16 @@ export const dashboard = query({
     agents: v.array(v.object({ slug: v.string(), name: v.string() })),
     sources: v.array(v.object({ id: v.id("forumThreads"), title: v.string() })),
     drafts: v.array(safeDraft),
+    operations: v.array(
+      v.object({
+        agentSlug: v.string(),
+        kind: v.string(),
+        status: v.string(),
+        url: v.string(),
+        issue: v.optional(v.string()),
+        resultId: v.optional(v.string()),
+      }),
+    ),
   }),
   handler: async (ctx) => {
     const user = await owner(ctx);
@@ -97,7 +128,34 @@ export const dashboard = query({
       .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", user._id))
       .order("desc")
       .take(40);
+    const operations = [];
+    for (const a of accounts) {
+      for (const status of [
+        "queued",
+        "sending",
+        "confirmed",
+        "held",
+      ] as const) {
+        const rows = await ctx.db
+          .query("xAgentOperations")
+          .withIndex("by_accountId_and_status_and_notBefore", (q) =>
+            q.eq("accountId", a._id).eq("status", status),
+          )
+          .order("desc")
+          .take(4);
+        for (const r of rows)
+          operations.push({
+            agentSlug: a.agentSlug,
+            kind: r.kind,
+            status: r.status,
+            url: `https://x.com/${officialXAuthor(r.post.authorId)?.username}/status/${r.post.id}`,
+            issue: r.issue,
+            resultId: r.resultId,
+          });
+      }
+    }
     return {
+      operations,
       configured:
         env.X_AGENTS_ENABLED === "true" &&
         Boolean(
@@ -105,14 +163,33 @@ export const dashboard = query({
           env.X_AGENT_CLIENT_SECRET &&
           env.X_AGENT_TOKEN_KEK,
         ),
-      accounts: accounts.map((a) => ({
-        agentSlug: a.agentSlug,
-        expectedUsername: a.expectedUsername,
-        connected: a.connected,
-        username: a.username,
-        connectedAt: a.connectedAt,
-        mode: a.mode,
-      })),
+      accounts: await Promise.all(
+        accounts.map(async (a) => {
+          const activity = await ctx.db
+            .query("xAgentActivity")
+            .withIndex("by_accountId", (q) => q.eq("accountId", a._id))
+            .unique();
+          return {
+            agentSlug: a.agentSlug,
+            expectedUsername: a.expectedUsername,
+            connected: a.connected,
+            username: a.username,
+            connectedAt: a.connectedAt,
+            mode: a.mode,
+            canWrite: X_ACTIVITY_SCOPES.every((s) =>
+              a.scope?.split(" ").includes(s),
+            ),
+            activity: activity
+              ? {
+                  enabled: activity.enabled,
+                  reposts: activity.options.reposts,
+                  comments: activity.options.comments,
+                  holdReason: activity.holdReason,
+                }
+              : undefined,
+          };
+        }),
+      ),
       agents: agents
         .filter((a) => a.enabled && X_AGENT_SLUGS.has(a.slug))
         .map((a) => ({ slug: a.slug, name: a.name })),
@@ -125,6 +202,10 @@ export const dashboard = query({
         issues: d.issues,
         createdAt: d.createdAt,
         manuallyEdited: d.manuallyEdited,
+        kind: d.kind,
+        replyTo: d.officialPost
+          ? `https://x.com/${officialXAuthor(d.officialPost.authorId)?.username}/status/${d.officialPost.id}`
+          : undefined,
       })),
     };
   },
@@ -136,10 +217,13 @@ export const prepareAuthorization = internalMutation({
     expectedUsername: v.string(),
     stateHash: v.string(),
     verifier: xSealed,
+    activity: v.optional(xActivityOptions),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await owner(ctx);
+    if (args.activity?.comments && !args.activity.aiRepliesApproved)
+      throw Error("X approval is required for automatic AI replies.");
     if (env.X_AGENTS_ENABLED !== "true")
       throw Error("X connections are paused.");
     const agent = await ctx.db
@@ -178,6 +262,7 @@ export const prepareAuthorization = internalMutation({
       verifier: args.verifier,
       consumed: false,
       expiresAt: Date.now() + X_AUTH_TTL_MS,
+      activity: args.activity,
     });
     return null;
   },
@@ -198,6 +283,7 @@ export const claimAuthorization = internalMutation({
     epoch: v.number(),
     ownerUserId: v.id("users"),
     verifier: xSealed,
+    activity: v.optional(xActivityOptions),
   }),
   handler: async (ctx, { stateHash }) => {
     const user = await owner(ctx);
@@ -233,6 +319,7 @@ export const claimAuthorization = internalMutation({
       epoch: a.epoch,
       ownerUserId: user._id,
       verifier: row.verifier,
+      activity: row.activity,
     };
   },
 });
@@ -287,6 +374,10 @@ export const completeAuthorization = internalMutation({
       updatedAt: Date.now(),
     });
     await ctx.db.delete("xAgentAuthorizations", pending._id);
+    if (pending.activity) {
+      const connected = await ctx.db.get("xAgentAccounts", a._id);
+      if (connected) await configureActivity(ctx, connected, pending.activity);
+    }
     return null;
   },
 });
@@ -312,9 +403,13 @@ export const disconnect = mutation({
 export const requestDraft = mutation({
   args: {
     agentSlug: v.string(),
-    sourceThreadId: v.id("forumThreads"),
+    sourceThreadId: v.optional(v.id("forumThreads")),
+    kind: v.optional(
+      v.union(v.literal("auto"), v.literal("mascot"), v.literal("forum")),
+    ),
     brief: v.string(),
     requestKey: v.string(),
+    writtenText: v.optional(v.string()),
   },
   returns: v.id("xAgentDrafts"),
   handler: async (ctx, args) => {
@@ -333,14 +428,49 @@ export const requestDraft = mutation({
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
       .unique();
-    if (
-      !agent?.enabled ||
-      !X_AGENT_SLUGS.has(args.agentSlug) ||
-      !(await researchSource(ctx, args.sourceThreadId))
-    )
+    if (!agent?.enabled || !X_AGENT_SLUGS.has(args.agentSlug))
       throw Error("Agent or public source unavailable.");
     await limiter.limit(ctx, "xDraft", { key: user._id, throws: true });
     const a = await account(ctx, args.agentSlug, user._id);
+    if (
+      args.writtenText !== undefined &&
+      (!validXDraft(args.writtenText) || args.kind !== "mascot")
+    )
+      throw Error("An owner-written draft must fit one X post.");
+    const kind = !args.kind
+      ? "forum"
+      : args.kind === "auto"
+        ? xOriginalKind(args.agentSlug, a?.originalOrdinal ?? 0)
+        : args.kind;
+    let sourceThreadId = kind === "forum" ? args.sourceThreadId : undefined;
+    if (kind === "forum" && !sourceThreadId) {
+      const threads = await ctx.db
+        .query("forumThreads")
+        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+        .order("desc")
+        .take(24);
+      const interest = (title: string) =>
+        /agent|security|hardware|retro|robot|privacy|memory|game|weird|obsolete/i.test(
+          title,
+        )
+          ? 1
+          : 0;
+      threads.sort((a, b) => interest(b.title) - interest(a.title));
+      for (const t of threads)
+        if (await researchSource(ctx, t._id)) {
+          sourceThreadId = t._id;
+          break;
+        }
+    }
+    if (
+      kind === "forum" &&
+      (!sourceThreadId || !(await researchSource(ctx, sourceThreadId)))
+    )
+      throw Error("Choose an available public Forum source.");
+    if (a)
+      await ctx.db.patch("xAgentAccounts", a._id, {
+        originalOrdinal: (a.originalOrdinal ?? 0) + 1,
+      });
     const conversationId = await createThread(ctx, components.agent, {
       title: `Private X draft: ${args.agentSlug}`,
       summary:
@@ -351,16 +481,20 @@ export const requestDraft = mutation({
       ownerUserId: user._id,
       agentSlug: args.agentSlug,
       accountEpoch: a?.epoch ?? 0,
-      sourceThreadId: args.sourceThreadId,
+      sourceThreadId,
+      kind,
       brief: args.brief.trim(),
-      status: "queued",
+      status: args.writtenText !== undefined ? "draft" : "queued",
+      text: args.writtenText?.trim(),
+      manuallyEdited: args.writtenText !== undefined ? true : undefined,
       conversationId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.xAgentDraft.generate, {
-      draftId: id,
-    });
+    if (args.writtenText === undefined)
+      await ctx.scheduler.runAfter(0, internal.xAgentDraft.generate, {
+        draftId: id,
+      });
     return id;
   },
 });
@@ -374,7 +508,9 @@ export const claimDraft = internalMutation({
       persona: v.string(),
       brief: v.string(),
       conversationId: v.string(),
-      source,
+      source: v.union(v.null(), source),
+      kind: xDraftKind,
+      officialPost: v.optional(xOfficialPost),
     }),
   ),
   handler: async (ctx, { draftId }) => {
@@ -386,7 +522,10 @@ export const claimDraft = internalMutation({
       .withIndex("by_slug", (q) => q.eq("slug", d.agentSlug))
       .unique();
     const a = await account(ctx, d.agentSlug, d.ownerUserId);
-    const s = await researchSource(ctx, d.sourceThreadId);
+    const s = d.sourceThreadId
+      ? await researchSource(ctx, d.sourceThreadId)
+      : null;
+    const kind = d.kind ?? "forum";
     if (
       env.X_AGENTS_ENABLED !== "true" ||
       env.ELIZA_RUNTIME_MODE !== "live" ||
@@ -394,7 +533,9 @@ export const claimDraft = internalMutation({
       user.isAgent ||
       !agent?.enabled ||
       !X_AGENT_SLUGS.has(d.agentSlug) ||
-      !s ||
+      (kind === "forum" && !s) ||
+      (kind === "reply" &&
+        (!d.officialPost || !officialXAuthor(d.officialPost.authorId))) ||
       (a?.epoch ?? 0) !== d.accountEpoch ||
       Date.now() - d.createdAt > X_DRAFT_TTL_MS
     ) {
@@ -416,6 +557,8 @@ export const claimDraft = internalMutation({
       brief: d.brief,
       conversationId: d.conversationId,
       source: s,
+      kind,
+      officialPost: d.officialPost,
     };
   },
 });
@@ -443,7 +586,12 @@ export const finishDraft = internalMutation({
       X_AGENT_SLUGS.has(d.agentSlug) &&
       (a?.epoch ?? 0) === d.accountEpoch &&
       Date.now() - d.createdAt <= X_DRAFT_TTL_MS &&
-      (await researchSource(ctx, d.sourceThreadId));
+      ((d.kind ?? "forum") === "mascot" ||
+        (d.kind === "reply"
+          ? Boolean(d.officialPost && officialXAuthor(d.officialPost.authorId))
+          : Boolean(
+              d.sourceThreadId && (await researchSource(ctx, d.sourceThreadId)),
+            )));
     const issues = valid
       ? args.issues
       : ["Source, account or authorization changed."];

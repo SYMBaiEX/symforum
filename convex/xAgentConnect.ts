@@ -13,9 +13,11 @@ import {
 import {
   X_CALLBACK_URL,
   X_DRAFT_SCOPES,
+  X_ACTIVITY_SCOPES,
   xAuthorizationUrl,
   xUsername,
 } from "../lib/x-agent-policy";
+import { xActivityOptions } from "./xAgentSchema";
 
 function config() {
   if (
@@ -42,7 +44,11 @@ async function jsonResponse(response: Response) {
   return JSON.parse(text) as Record<string, unknown>;
 }
 export const begin = action({
-  args: { agentSlug: v.string(), expectedUsername: v.string() },
+  args: {
+    agentSlug: v.string(),
+    expectedUsername: v.string(),
+    activity: v.optional(xActivityOptions),
+  },
   returns: v.object({ authorizationUrl: v.string() }),
   handler: async (ctx, args): Promise<{ authorizationUrl: string }> => {
     const ownerId = await ctx.runQuery(
@@ -62,7 +68,11 @@ export const begin = action({
       stateHash: await xHash(state),
       verifier: encrypted,
     });
-    const url = xAuthorizationUrl(state, await pkceChallenge(verifier));
+    const url = xAuthorizationUrl(
+      state,
+      await pkceChallenge(verifier),
+      Boolean(args.activity),
+    );
     url.searchParams.set("client_id", c.clientId);
     return { authorizationUrl: url.toString() };
   },
@@ -118,7 +128,7 @@ export const finish = action({
         token.expires_in <= 0 ||
         token.expires_in > 86400 ||
         String(token.token_type).toLowerCase() !== "bearer" ||
-        !X_DRAFT_SCOPES.every((s) =>
+        !(pending.activity ? X_ACTIVITY_SCOPES : X_DRAFT_SCOPES).every((s) =>
           (token.scope as string).split(" ").includes(s),
         )
       )
