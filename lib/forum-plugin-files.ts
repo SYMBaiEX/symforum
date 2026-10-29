@@ -92,8 +92,12 @@ export async function downloadForumPluginFile(
       {
         method: "GET",
         headers: { Accept: "*/*" },
-        lookup: (_host, _options, callback) =>
-          callback(null, pinned.address, pinned.family),
+        // Node's family selection requests all addresses; keep both forms
+        // pinned to the same already-verified DNS result.
+        lookup: (_host, options, callback) =>
+          options.all
+            ? callback(null, [pinned])
+            : callback(null, pinned.address, pinned.family),
         signal: AbortSignal.timeout(20_000),
       },
       (response) => {
