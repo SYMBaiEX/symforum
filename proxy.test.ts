@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
@@ -59,6 +61,27 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({
 }));
 
 describe("proxy forum routing", () => {
+  test("the chart stylesheet permission matches the installed library's exact static CSS", () => {
+    const source = readFileSync("node_modules/lightweight-charts/dist/lightweight-charts.development.mjs", "utf8");
+    const css = source.match(/const css = `([^`]+)`;/)?.[1];
+    expect(css).toBeDefined();
+    expect(createHash("sha256").update(css!).digest("base64")).toBe("3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY=");
+  });
+  test.each(["/symf", "/forum/symf"])("permits only the exact chart attribution stylesheet on %s", async path => {
+    vi.stubEnv("NODE_ENV", "production");
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor(`https://forum.symbaiex.com${path}`));
+    const policy = response.headers.get("content-security-policy") ?? "";
+    expect(policy).toContain("'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='");
+    expect(policy.match(/style-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
+    expect(policy.match(/script-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
+  });
+  test.each(["/", "/swap", "/signin"])("does not add chart stylesheet permission outside token pages: %s", async path => {
+    vi.stubEnv("NODE_ENV", "production");
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor(`https://forum.symbaiex.com${path}`));
+    expect(response.headers.get("content-security-policy")).not.toContain("3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY=");
+  });
   test.each(["/signin", "/account/connections"])("allows only Telegram's exact stylesheet on %s", async path => {
     vi.stubEnv("NODE_ENV", "production");
     const proxy = await loadProxy();
