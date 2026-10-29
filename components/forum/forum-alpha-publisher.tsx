@@ -12,6 +12,7 @@ export function ForumAlphaPublisher() {
   const verify = useMutation(api.forumAlphaDistribution.verifyProject);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [name, setName] = useState("");
   const [host, setHost] = useState("");
   const [handle, setHandle] = useState("");
   const [proof, setProof] = useState("");
@@ -22,7 +23,7 @@ export function ForumAlphaPublisher() {
       aria-labelledby="alpha-publisher"
     >
       <h2 id="alpha-publisher" className="text-lg font-semibold">
-        Solana Alpha · @symforum
+        Forum Alpha · @symforum
       </h2>
       <p className="text-sm text-muted-foreground">
         Fresh reviewed Forum discoveries go to the dedicated Telegram topic
@@ -93,6 +94,7 @@ export function ForumAlphaPublisher() {
             e.preventDefault();
             setBusy(true);
             void verify({
+              name: name || undefined,
               host,
               username: handle.replace(/^@/, ""),
               proofUrl: proof,
@@ -107,6 +109,16 @@ export function ForumAlphaPublisher() {
               .finally(() => setBusy(false));
           }}
         >
+          <label className="block">
+            Full project name (optional)
+            <input
+              value={name}
+              maxLength={80}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ondo Finance"
+              className="focus-ring ml-2 rounded border bg-background p-2"
+            />
+          </label>
           <label className="block">
             Original project host
             <input

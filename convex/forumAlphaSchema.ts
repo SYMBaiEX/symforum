@@ -37,10 +37,13 @@ export const forumAlphaTables = {
     .index("by_createdAt", ["createdAt"]),
   // Operators verify a handle on an original project website before adding it.
   forumAlphaProjects: defineTable({
+    name: v.optional(v.string()),
     host: v.string(),
     username: v.string(),
     proofUrl: v.string(),
     verifiedBy: v.id("users"),
     updatedAt: v.number(),
-  }).index("by_host", ["host"]),
+  })
+    .index("by_host", ["host"])
+    .index("by_updatedAt", ["updatedAt"]),
 };

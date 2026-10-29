@@ -6,6 +6,8 @@ import {
   alphaPagePublishedAt,
   alphaShareText,
   alphaLeadMs,
+  alphaProjectMention,
+  alphaTelegramText,
 } from "./forum-alpha-editorial";
 import { alphaPublicAddress } from "./alpha-public-fetch";
 const now = Date.UTC(2026, 9, 29, 18);
@@ -16,6 +18,20 @@ const candidate = {
   publishedAt: now - 60_000,
 };
 describe("fresh Solana editorial", () => {
+  test("Telegram keeps a complete reviewed paragraph including its qualifier", () => {
+    expect(
+      alphaTelegramText(
+        "Launch",
+        "[b]Seven portfolios[/b] are available outside the US.\n\nMore details.",
+      ),
+    ).toBe("Launch\n\nSeven portfolios are available outside the US.");
+    expect(
+      alphaTelegramText("Launch", "x".repeat(901) + " outside the US."),
+    ).toBe("Launch");
+    expect(
+      alphaTelegramText("Launch", "<unsupported>format</unsupported>"),
+    ).toBe("Launch");
+  });
   test("assigns a majority across all three desks", () => {
     expect(Object.keys(ALPHA_DESKS)).toHaveLength(24);
     expect(new Set(Object.values(ALPHA_DESKS).map((d) => d.board)).size).toBe(
@@ -124,4 +140,24 @@ describe("fresh Solana editorial", () => {
     expect(alphaLeadMs("0")).toBe(30 * 60_000);
     expect(alphaLeadMs("15")).toBe(15 * 60_000);
   });
+});
+
+test("verified project names match full words in relevant coverage", () => {
+  expect(
+    alphaProjectMention(
+      "Ondo Finance",
+      "New portfolios",
+      "Ondo Finance launched seven portfolios",
+    ),
+  ).toBe(true);
+  expect(
+    alphaProjectMention(
+      "Ondo Finance",
+      "New portfolios",
+      "FakeOndo FinancePlus launched portfolios",
+    ),
+  ).toBe(false);
+  expect(alphaProjectMention(undefined, "Ondo Finance launched", "text")).toBe(
+    false,
+  );
 });
