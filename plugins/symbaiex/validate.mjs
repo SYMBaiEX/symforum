@@ -1,5 +1,3 @@
-
-import { PRIMARY_SITE_URL } from "../../lib/site-urls.ts";
 import assert from "node:assert/strict";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
@@ -23,7 +21,8 @@ export async function validateForumPluginPackage(root = pluginRoot) {
   assert.match(plugin.version, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(Object.keys(mcp.mcpServers), ["symbaiex"]);
   assert.deepEqual(mcp.mcpServers.symbaiex, {
-    type: "streamable-http", url: PRIMARY_SITE_URL + "/api/plugin/mcp",
+    // Validate the checked-in branded distribution independently of runtime env.
+    type: "streamable-http", url: "https://www.symbaiex.com/api/plugin/mcp",
   });
   const openai = plugin.extensions["com.openai"];
   assert.ok(openai.apps == null && openai.hooks == null, "Public submission does not accept app references or hooks.");
