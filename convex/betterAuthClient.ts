@@ -3,13 +3,17 @@ import type { DataModel } from "./_generated/dataModel";
 import { components, internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 import { ConvexError } from "convex/values";
+import { isRecoveryEmail } from "../lib/identity-config";
 
 async function uniqueUser(
   ctx: MutationCtx,
   doc: { _id: string; email: string; username?: string | null },
 ) {
   for (const [field, value] of [
-    ["email", doc.email.toLowerCase()],
+    // Wallet/legacy synthetic identifiers are not mailboxes. Their local part
+    // can contain case-sensitive IDs; case-folding it cannot find the same row.
+    // Deliverable recovery emails retain the existing normalized ownership check.
+    ["email", isRecoveryEmail(doc.email) ? doc.email.toLowerCase() : doc.email],
     ["username", doc.username?.toLowerCase()],
   ] as const) {
     if (!value) continue;
