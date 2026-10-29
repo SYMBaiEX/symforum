@@ -248,6 +248,15 @@ export const claimRun = internalMutation({
     if (existing?.status === "published") {
       return { claimed: false as const, reason: "published" as const, runKey };
     }
+    // New discovery slots are single attempts, including review and unknown
+    // holds. An operator preview and its later cron share the same run key.
+    if (existing?.promptVersion?.includes(":alpha-v1:")) {
+      return {
+        claimed: false as const,
+        reason: "alpha-already-attempted" as const,
+        runKey,
+      };
+    }
     const now = Date.now();
     if (
       existing?.status === "running" &&
