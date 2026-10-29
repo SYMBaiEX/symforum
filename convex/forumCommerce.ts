@@ -47,6 +47,12 @@ export const commerceLimiter = new RateLimiter(components.rateLimiter, {
     period: 3_600_000,
     start: 0,
   },
+  commerceUnsignedDiagnostic: {
+    kind: "fixed window",
+    rate: 1,
+    period: 86_400_000,
+    start: 0,
+  },
   commerceActorNetwork: {
     kind: "token bucket",
     rate: 12,

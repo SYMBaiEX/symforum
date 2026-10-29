@@ -631,6 +631,142 @@ export const rpcHealthCheck = internalAction({
     }
   },
 });
+export const reserveUnsignedDiagnostic = internalMutation({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const once = await commerceLimiter.limit(
+      ctx,
+      "commerceUnsignedDiagnostic",
+      { key: "operator" },
+    );
+    if (!once.ok) return false;
+    const provider = await commerceLimiter.limit(
+      ctx,
+      env.JUPITER_API_KEY ? "commerceJupiter" : "commerceJupiterKeyless",
+      { key: "shared-key" },
+    );
+    if (!provider.ok) return false;
+    const daily = await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
+      key: "all",
+      count: 10,
+    });
+    return daily.ok;
+  },
+});
+/** Manual operator diagnostic only. Fresh 0.001 SOL quote, no saved payment or wallet request. */
+export const unsignedDiagnostic = internalAction({
+  args: { wallet: v.string() },
+  returns: v.object({
+    ok: v.boolean(),
+    code: v.string(),
+    stage: v.string(),
+    simulations: v.number(),
+    kitCode: v.union(v.number(), v.null()),
+    source: v.union(v.string(), v.null()),
+  }),
+  handler: async (
+    ctx,
+    { wallet },
+  ): Promise<{
+    ok: boolean;
+    code: string;
+    stage: string;
+    simulations: number;
+    kitCode: number | null;
+    source: string | null;
+  }> => {
+    let stage = "admission",
+      simulations = 0;
+    if (
+      !(await ctx.runMutation(
+        internal.forumSwaps.reserveUnsignedDiagnostic,
+        {},
+      ))
+    )
+      return {
+        ok: false,
+        code: "diagnostic_budget_reached",
+        stage,
+        simulations,
+        kitCode: null,
+        source: null,
+      };
+    const config = commerceConfig(env);
+    if (!config.rpcUrl || !config.treasury || !config.swapsEnabled)
+      throw new ConvexError("Swaps unavailable.");
+    const routerConfig = {
+      rpcUrl: config.rpcUrl,
+      treasury: config.treasury,
+      jupiterApiKey: config.jupiterApiKey,
+    };
+    const fetcher: typeof fetch = async (input, init) => {
+      const method =
+        init?.method === "POST"
+          ? JSON.parse(String(init.body)).method
+          : undefined;
+      stage = typeof method === "string" ? method : "quote";
+      if (method === "simulateTransaction") simulations++;
+      return fetch(input, init);
+    };
+    try {
+      const request = {
+        wallet,
+        inputMint: SOL_MINT,
+        outputMint: COMMERCE_MINT,
+        amountRaw: "1000000",
+        slippageBps: 50,
+        platformFeeBps: config.platformFeeBps,
+        supportsV1: true,
+      };
+      const result = await collectSwapQuotes(request, routerConfig, fetcher);
+      const quote = result.quotes.find((q) => q.provider === "jupiter");
+      if (!quote)
+        return {
+          ok: false,
+          code: "no_fresh_jupiter_route",
+          stage,
+          simulations,
+          kitCode: null,
+          source: null,
+        };
+      await buildSwapTransaction(quote, routerConfig, fetcher);
+      return {
+        ok: true,
+        code: "simulated",
+        stage,
+        simulations,
+        kitCode: null,
+        source: null,
+      };
+    } catch (error) {
+      const context =
+        error && typeof error === "object" && "context" in error
+          ? error.context
+          : null;
+      const kitCode =
+        context &&
+        typeof context === "object" &&
+        "__code" in context &&
+        typeof context.__code === "number"
+          ? context.__code
+          : null;
+      // Only code-owned file/line metadata. Never return an error message, provider body or stack.
+      const source =
+        error instanceof Error
+          ? (error.stack?.match(/lib\/swap-[a-z-]+\.ts:\d+:\d+/)?.[0] ?? null)
+          : null;
+      return {
+        ok: false,
+        code: swapPreparationIssue(error),
+        stage,
+        simulations,
+        kitCode,
+        source,
+      };
+    }
+  },
+});
 const receiptValidator = v.object({
   quoteId: v.id("forumSwapQuotes"),
   status: statusValidator,

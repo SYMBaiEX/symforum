@@ -934,6 +934,34 @@ describe("paid placements: capacity, receipts, ownership and moderation", () => 
   });
 });
 describe("verified token discovery and one-shot swaps", () => {
+  test("one operator unsigned diagnostic is bounded, fresh and cannot invoke a wallet or save a payment", async () => {
+    const t = setup(),
+      a = await actor(t, 98);
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("amount")).toBe("997500");
+      return new Response("unavailable", { status: 503 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      t.action(internal.forumSwaps.unsignedDiagnostic, { wallet: a.wallet }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "no_fresh_jupiter_route",
+      simulations: 0,
+    });
+    await expect(
+      t.action(internal.forumSwaps.unsignedDiagnostic, { wallet: a.wallet }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "diagnostic_budget_reached",
+      simulations: 0,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumSwapQuotes").take(1)),
+    ).toEqual([]);
+  });
   test("operator RPC health checks are fixed-mint, bounded and never prepare a swap", async () => {
     const t = setup();
     const fetcher = vi.fn(
