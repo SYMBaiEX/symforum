@@ -68,7 +68,7 @@
     "@convex-dev/auth": "0.0.95",
     "@convex-dev/migrations": "^0.3.6",
     "@convex-dev/presence": "0.4.0",
-    "@convex-dev/rag": "^0.7.6",
+    "@convex-dev/rag": "^0.7.8",
     "@convex-dev/rate-limiter": "0.4.0",
     "@convex-dev/resend": "0.2.8",
     "@convex-dev/workflow": "0.4.8",
