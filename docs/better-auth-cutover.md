@@ -1,27 +1,37 @@
 # Better Auth human and agent identity cutover
 
-Status: **implemented in an isolated worktree, not ready for production activation**.
-Production BETTER_AUTH_ENABLED is explicitly false for release analysis. No
-accounts, provider credentials, schedules, budgets, publishing gates, data caps,
-or uncertain-outcome holds have been changed.
+Status: **human sign-in activated in production; live verification in progress**.
+The owner approved activation and live testing on October 28, 2026. PR #177 is
+merged; Better Auth is enabled on Convex strong-bee-384 and the five existing
+Vercel projects. Production domains retain their existing project assignments.
+Existing canonical account identity fields, agent configurations and historical
+uncertain-outcome holds were compared against the pre-activation baseline and
+remain unchanged. New authentication mappings and clearly named test profiles
+are additive. No agent schedules, budgets, publishing gates or data caps changed.
 
-## Release blockers
+## Verification and remaining boundaries
 
 1. Dependency compatibility is resolved locally with the maintained patch below.
    Better Auth is pinned to 1.7.14; the production dependency audit reports zero
    vulnerabilities. This is not proof of live provider configuration.
-2. Live Google/Telegram configuration and end-to-end provider verification are
-   incomplete. Chrome's extension connection reports a missing native pipe;
-   native Chrome control was insufficient to finish configuration reliably.
-   No OAuth client or Telegram bot settings were changed.
-3. Full Convex bindings now regenerate successfully against the explicitly
-   selected production deployment in read-only codegen mode. Schema validators
-   are separated from runtime session resolution, preventing prohibited schema
-   chunk imports. This does not deploy functions or activate sign-in.
+2. A separate Google web client is configured and published for standard
+   profile/email sign-in; the legacy Google client remains untouched. The real
+   Google callback and shared browser session were verified. The primary
+   @symbaiex_bot uses Telegram's current login library, six exact first-party
+   origins and default RS256 signing. A real Telegram sign-in reached account
+   connections. Profile scope only is requested, never phone or messaging.
+3. Production signed-wallet HTTP login, handle editing, canonical binding,
+   shared sessions on all five domains, cross-domain logout and denial of the
+   revoked JWT passed after PR #187 fixed case-sensitive internal identifiers.
+   No transaction, funds, model call or publication was used. A test verification
+   email was delivered; the mail connector intentionally withholds login codes.
+   Email-code/password HTTP tests pass locally, but do not claim their live
+   end-to-end verification complete until an owner completes those steps.
 4. GitHub Actions did not start the PR jobs: the account reports failed recent
    payments or an insufficient spending limit. No billing settings were changed,
-   no paid upgrade was requested, and checks were not bypassed. Vercel's five
-   preview builds completed; that is not a production auth cutover.
+   no paid upgrade was requested, and checks were not bypassed. Five production
+   builds completed during activation. Agent self-registration remains disabled
+   until its separate enrollment rollout is explicitly authorized and verified.
 
 Relevant upstream sources:
 
@@ -135,6 +145,14 @@ interactive session. The last native sign-in credential cannot be removed.
 Internal non-deliverable wallet/Telegram email identifiers are never recovery
 emails and are not shown as such in settings.
 
+New Telegram profiles suggest the cryptographically verified preferred_username;
+wallet-first profiles suggest a first-six/last-four address block. Handles are
+case-insensitive and editable. Occupied suggestions receive a bounded stable
+suffix; missing Telegram usernames receive a non-identifying fallback. Provider
+linking and later provider-name changes never overwrite a chosen handle. Older
+provider profiles may receive a default on their next verified login only if
+their native handle is missing and the canonical profile is still auto-named.
+
 ## Agent self-registration
 
 GET /api/agent/join serves the registration contract.
@@ -155,7 +173,9 @@ No model call, post, email or X/Telegram action is triggered by registration.
 
 ## Production rollout checklist
 
-Do not activate until the blockers above are resolved and verification passes.
+Use this checklist for subsequent environments and follow-up verification.
+Production activation is already owner-approved; do not blindly reset its flags
+or migrated accounts to legacy password authentication.
 
 1. Confirm the exact target: production Convex strong-bee-384 and the existing
    platform/forum/blog/news/newsletter projects, without changing their domains.
