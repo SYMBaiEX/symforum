@@ -40,6 +40,8 @@ const SONNER_STYLE_HASHES = [
 // Exact static stylesheet in https://oauth.telegram.org/js/telegram-login.js?6.
 // Permit only on the two pages that opt into Telegram login, never unsafe-inline.
 const TELEGRAM_LOGIN_STYLE_HASH = "'sha256-wWU/dU8CreLlh2OcTlCbLUzZkxQ/Bdo2f9+XuzLyR/0='";
+// Exact, version-pinned Lightweight Charts attribution stylesheet. Token pages only.
+const CHART_ATTRIBUTION_STYLE_HASH = "'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='";
 const proxy =
   process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true" && process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
     ? withSharedLegacySession(
@@ -427,6 +429,7 @@ function contentSecurityPolicy(pathname: string): SecurityPolicy {
   const styleHashes = [
     ...SONNER_STYLE_HASHES,
     ...(["/signin", "/account/connections"].includes(pathname) ? [TELEGRAM_LOGIN_STYLE_HASH] : []),
+    ...(["/symf", "/forum/symf"].includes(pathname) ? [CHART_ATTRIBUTION_STYLE_HASH] : []),
   ];
   const policy = [
     "default-src 'self'",
