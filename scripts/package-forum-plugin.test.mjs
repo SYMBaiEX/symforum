@@ -1,5 +1,7 @@
 // @vitest-environment node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { localInstallation } from "../lib/installation-config";
 import { randomBytes } from "node:crypto";
 import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -76,4 +78,13 @@ test("positive review expectations use real tool names with complete MCP annotat
   for (const tool of tools.values())
     for (const hint of ["readOnlyHint", "openWorldHint", "destructiveHint"])
       assert.equal(typeof tool.annotations[hint], "boolean", `${tool.name} ${hint}`);
+});
+
+test("branded package validation is independent of local application configuration", () => {
+  const result = spawnSync("bun", [resolve(pluginRoot, "validate.mjs")], {
+    env: {...process.env, NEXT_PUBLIC_INSTALLATION_CONFIG: JSON.stringify(localInstallation())},
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Portable package checks passed/);
 });
