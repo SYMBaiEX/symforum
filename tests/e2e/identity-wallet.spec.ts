@@ -289,7 +289,6 @@ test("failed preparation allows explicit retry without signing", async ({
   await expect.poll(() => count(run.requests, "/identity/challenge")).toBe(2);
   expect((await events(page)).map((event) => event.action)).toEqual([
     "connect",
-    "connect",
   ]);
   expect(count(run.requests, "/sign-in/solana")).toBe(0);
 });
@@ -385,5 +384,24 @@ test("SIWS-only wallets prepare first and sign on a separate direct click", asyn
   await expect(page.getByText("Signed in successfully")).toBeVisible();
   expect((await events(page)).map((event) => event.action)).toEqual(["signIn"]);
   expect((await events(page))[0].userActivated).toBe(true);
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
+});
+
+test("an exposed account signs in without issuing a failing reconnect RPC", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await open(page, "?preconnected&connectinternal");
+  await choose(page);
+  await expect(signButton(page)).toBeEnabled();
+  expect(await events(page)).toEqual([]);
+  expect(count(run.requests, "/identity/challenge")).toBe(1);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+  await signButton(page).click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "signMessage",
+  ]);
   expect(count(run.requests, "/sign-in/solana")).toBe(1);
 });
