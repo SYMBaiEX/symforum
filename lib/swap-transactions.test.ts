@@ -16,6 +16,7 @@ import {
 } from "@solana-program/token";
 import {
   buildPromotionTransaction,
+  buildSwapTransaction,
   validateSwapInstruction,
   validateSetupSequence,
   associatedAccount,
@@ -86,6 +87,89 @@ async function jupiter() {
     },
   };
 }
+describe("full unsigned swap preparation", () => {
+  test.each([0, 1] as const)(
+    "preserves both simulations and all binding checks for version %s",
+    async (version) => {
+      const { ix } = await jupiter();
+      const q: SwapRouteQuote = {
+        ...quote,
+        request: { ...quote.request, supportsV1: true },
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 25000,
+        opaque: {
+          transactionVersion: version,
+          setupInstructions: [],
+          otherInstructions: [],
+          swapInstruction: {
+            programId: ix.programAddress,
+            data: getBase64Decoder().decode(ix.data!),
+            accounts: ix.accounts.map((a) => ({
+              pubkey: a.address,
+              isSigner: a.role === AccountRole.READONLY_SIGNER,
+              isWritable: false,
+            })),
+          },
+        },
+      };
+      const methods: string[] = [],
+        wires: string[] = [];
+      const built = await buildSwapTransaction(
+        q,
+        { rpcUrl: "https://rpc.example", treasury },
+        async (_url, init) => {
+          const { method, params } = JSON.parse(String(init?.body));
+          methods.push(method);
+          let result: unknown;
+          if (method === "getAccountInfo")
+            result = {
+              value: {
+                owner: TOKEN_PROGRAM,
+                data: {
+                  parsed: {
+                    type: "mint",
+                    info: {
+                      isInitialized: true,
+                      decimals: params[0] === SOL_MINT ? 9 : 6,
+                    },
+                  },
+                },
+              },
+            };
+          else if (method === "getLatestBlockhash")
+            result = {
+              value: { blockhash: treasury, lastValidBlockHeight: 99999 },
+            };
+          else if (method === "simulateTransaction") {
+            wires.push(params[0]);
+            result = {
+              context: { slot: 10 },
+              value: {
+                err: null,
+                unitsConsumed: 100000,
+                loadedAccountsDataSize: 100000,
+              },
+            };
+          } else if (method === "getFeeForMessage") result = { value: 5005 };
+          else throw new Error("Unexpected RPC method");
+          return Response.json({ jsonrpc: "2.0", id: 1, result });
+        },
+      );
+      expect(methods.filter((m) => m === "simulateTransaction")).toHaveLength(
+        2,
+      );
+      expect(wires[1]).toBe(built.transactionBase64);
+      expect(built.transactionVersion).toBe(version);
+      expect(
+        Object.values(
+          getTransactionDecoder().decode(
+            getBase64Encoder().encode(built.transactionBase64),
+          ).signatures,
+        ),
+      ).toEqual([null]);
+    },
+  );
+});
 describe("exact instruction binding", () => {
   test("binds Jupiter amount, recipient, mint, slippage and zero provider fees", async () => {
     const { source, destination, ix } = await jupiter();

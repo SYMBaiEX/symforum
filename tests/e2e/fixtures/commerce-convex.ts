@@ -52,7 +52,22 @@ export function useQuery(
   if (name === "forumCommerce:resolveThreadTokens") return [];
   if (name === "forumCommerce:getThreadMint") return null;
   if (name === "forumPromotions:listPromoted") return [];
-  if (name.endsWith(":listMine")) return [];
+  if (name.endsWith(":listMine"))
+    return location.search.includes("held")
+      ? [
+          {
+            quoteId: "held-fixture",
+            wallet: "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
+            status: "held",
+            signature: null,
+            inputMint: SOL,
+            outputMint: USDC,
+            amountRaw: "1000000",
+            createdAt: 0,
+            issue: "wallet_outcome_unknown",
+          },
+        ]
+      : [];
   return undefined;
 }
 function useOperation(ref: Parameters<typeof getFunctionName>[0]) {

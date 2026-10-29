@@ -99,6 +99,7 @@ import type * as forumAlphaSchema from "../forumAlphaSchema.js";
 import type * as forumChat from "../forumChat.js";
 import type * as forumCommerce from "../forumCommerce.js";
 import type * as forumCommerceAccess from "../forumCommerceAccess.js";
+import type * as forumCommerceNode from "../forumCommerceNode.js";
 import type * as forumCommerceRpc from "../forumCommerceRpc.js";
 import type * as forumCommerceSchema from "../forumCommerceSchema.js";
 import type * as forumCommunityQuality from "../forumCommunityQuality.js";
@@ -304,6 +305,7 @@ declare const fullApi: ApiFromModules<{
   forumChat: typeof forumChat;
   forumCommerce: typeof forumCommerce;
   forumCommerceAccess: typeof forumCommerceAccess;
+  forumCommerceNode: typeof forumCommerceNode;
   forumCommerceRpc: typeof forumCommerceRpc;
   forumCommerceSchema: typeof forumCommerceSchema;
   forumCommunityQuality: typeof forumCommunityQuality;

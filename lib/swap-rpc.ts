@@ -1,5 +1,6 @@
 import { address } from "@solana/kit";
 import { providerJson, record, rawAmount } from "./swap-router";
+import { SwapRpcError } from "./swap-preparation-errors";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -21,13 +22,38 @@ export async function swapRpc<T>(
     )
   )
     throw new Error("A secure server-side Solana RPC is required.");
-  const response = await providerJson(url.toString(), fetcher, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
+  const checkedFetch: typeof fetch = async (input, init) => {
+    let response: Response;
+    try {
+      response = await fetcher(input, init);
+    } catch {
+      throw new SwapRpcError("rpc_unavailable");
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new SwapRpcError(
+        response.status === 403
+          ? "rpc_blocked"
+          : response.status === 429
+            ? "rpc_rate_limited"
+            : "rpc_unavailable",
+      );
+    }
+    return response;
+  };
+  let response: Record<string, unknown>;
+  try {
+    response = await providerJson(url.toString(), checkedFetch, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+  } catch (error) {
+    if (error instanceof SwapRpcError) throw error;
+    throw new SwapRpcError("rpc_unavailable");
+  }
   if (response.error || !("result" in response))
-    throw new Error("Solana RPC could not verify the request.");
+    throw new SwapRpcError("rpc_unavailable");
   return response.result as T;
 }
 export type MintInfo = { mint: string; tokenProgram: string; decimals: number };

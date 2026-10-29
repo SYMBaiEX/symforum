@@ -7,7 +7,7 @@ import {
   useMutation,
 } from "convex/react";
 import { useAction } from "@solana/react";
-import { ArrowDownUp, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,12 @@ import { Input } from "@/components/ui/input";
 import { ForumLink } from "@/components/forum/forum-link";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { forumSiteUrl } from "@/lib/site-urls";
-import { parseTokenAmount, formatTokenAmount } from "@/lib/swap-amounts";
+import {
+  parseTokenAmount,
+  formatTokenAmount,
+  normalizeTokenAmount,
+} from "@/lib/swap-amounts";
+import { publicSwapPreparationError } from "@/lib/swap-preparation-errors";
 import {
   requestReviewedTransaction,
   verifyPreparedTransaction,
@@ -43,6 +48,11 @@ const SOL = "So11111111111111111111111111111111111111112";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 type QuoteResult = FunctionReturnType<typeof api.forumSwaps.quote>;
 type Quote = QuoteResult["quotes"][number];
+type ReadySwap = {
+  quote: Quote;
+  transaction: ReviewedTransaction;
+  revision: number;
+};
 const short = (mint: string) => `${mint.slice(0, 5)}…${mint.slice(-5)}`;
 
 export function TokenSwap({ outputToken }: { outputToken?: TradeToken }) {
@@ -158,11 +168,18 @@ function LiveSwap({
   const [finalized, setFinalized] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const dispatched = useRef(false),
+    purchaseActive = useRef(false),
     busyGuard = useRef(false),
     identity = useRef("");
   const revision = useRef(0),
     attemptedQuote = useRef("");
   const identityKey = `${isAuthenticated ? (session?.authUserId ?? "loading") : "guest"}:${connected?.account.address ?? ""}:${linked}`;
+  const unresolved =
+    mine?.some(
+      (row) =>
+        row.wallet === connected?.account.address &&
+        ["held", "submitted"].includes(row.status),
+    ) ?? false;
   const id = useId();
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -239,7 +256,7 @@ function LiveSwap({
       if (revision.current === started)
         setError(
           /Routing is busy|already in progress/.test(detail)
-            ? "Routing is busy. Wait a few seconds, then choose Review swap. No payment was requested and nothing is retried automatically."
+            ? "Routing is busy. Wait a few seconds, then choose Swap. No payment was requested and nothing is retried automatically."
             : "Routes could not be verified. Check the amount, your linked wallet in Account Connections, and try later if the free data limit has been reached.",
         );
     } finally {
@@ -265,25 +282,30 @@ function LiveSwap({
           "Connected wallet changed or does not support this transaction version.",
         );
       const verified = await verifyPreparedTransaction(data);
-      if (!_signal.aborted && started === revision.current)
-        setPrepared(verified);
-    } catch {
+      if (_signal.aborted || started !== revision.current) return;
+      setPrepared(verified);
+      return {
+        quote: q,
+        transaction: verified,
+        revision: started,
+      } satisfies ReadySwap;
+    } catch (reason) {
       if (started !== revision.current) return;
       setSelected(null);
       setPrepared(null);
       setResult(null);
-      setError(
-        "This route could not pass preparation and simulation, or its quote expired. No wallet request was made. Request fresh routes.",
-      );
+      setError(publicSwapPreparationError(reason));
     } finally {
       busyGuard.current = false;
     }
   });
-  const send = useAction(async () => {
+  const send = useAction(async (_signal: AbortSignal, ready: ReadySwap) => {
+    const { quote: selected, transaction: prepared } = ready;
     if (
       dispatched.current ||
-      !selected ||
-      !prepared ||
+      _signal.aborted ||
+      ready.revision !== revision.current ||
+      client.wallet.getState().connected?.account.address !== prepared.wallet ||
       selected.expiresAt <= Date.now()
     )
       return;
@@ -292,10 +314,12 @@ function LiveSwap({
     setError("");
     setNotice("Approve only if the amounts and destination match your review.");
     let walletInvoked = false;
+    let returnedSignature = false;
     try {
       await begin({ quoteId: selected.quoteId });
       walletInvoked = true;
       const sig = await requestReviewedTransaction(client, prepared);
+      returnedSignature = true;
       setSignature(sig);
       setNotice(
         "Submitted. Verifying the finalized receipt; do not submit again.",
@@ -310,13 +334,31 @@ function LiveSwap({
           ? "Swap finalized. The exact reviewed transaction was verified."
           : "Receipt not finalized or requires review. This operation remains held; do not repeat it.",
       );
-    } catch {
+    } catch (reason) {
+      const code =
+        reason &&
+        typeof reason === "object" &&
+        "code" in reason &&
+        typeof reason.code === "number" &&
+        Number.isSafeInteger(reason.code)
+          ? reason.code
+          : null;
+      console.warn("Swap approval did not complete", {
+        stage: returnedSignature
+          ? "receipt"
+          : walletInvoked
+            ? "wallet"
+            : "authorization",
+        code,
+      });
       if (walletInvoked)
         await hold({ quoteId: selected.quoteId }).catch(() => {});
       setError(
-        walletInvoked
-          ? "Wallet outcome is uncertain or the request was declined. Do not repeat this operation. Check wallet history and use the receipt check below if a signature is available."
-          : "The wallet request could not be authorized. No wallet window was opened. Reload to inspect the saved operation status; nothing is resent automatically.",
+        returnedSignature
+          ? "Your wallet returned a transaction signature, but its receipt could not be checked. Use Check receipt below; do not submit another swap."
+          : walletInvoked
+            ? "The wallet did not return a transaction signature. Check wallet Activity. Do not repeat this swap until its outcome is verified."
+            : "The wallet request could not be authorized. No wallet window was opened. Reload to inspect the saved operation status; nothing is resent automatically.",
       );
     }
   });
@@ -340,18 +382,24 @@ function LiveSwap({
       );
     }
   });
-  const review = useAction(async () => {
-    let q = result?.quotes[0];
-    if (!q || q.expiresAt <= Date.now()) {
-      const freshResult = await routes.dispatchAsync();
-      q = freshResult?.quotes[0];
+  const buy = useAction(async (signal: AbortSignal) => {
+    try {
+      if (dispatched.current || unresolved) return;
+      let q = result?.quotes[0];
+      if (!q || q.expiresAt <= Date.now() + 5000) {
+        const freshResult = await routes.dispatchAsync();
+        q = freshResult?.quotes[0];
+      }
+      if (!q) return;
+      const ready = await prepare.dispatchAsync(q);
+      if (ready && !signal.aborted) await send.dispatchAsync(ready);
+    } finally {
+      purchaseActive.current = false;
     }
-    if (q) await prepare.dispatchAsync(q);
   });
   const busy =
-    routes.isRunning || prepare.isRunning || send.isRunning || review.isRunning;
-  const locked =
-    prepare.isRunning || send.isRunning || review.isRunning || sent;
+    routes.isRunning || prepare.isRunning || send.isRunning || buy.isRunning;
+  const locked = prepare.isRunning || send.isRunning || buy.isRunning || sent;
   const [visible, setVisible] = useState(true);
   useEffect(() => {
     const update = () => setVisible(document.visibilityState !== "hidden");
@@ -369,6 +417,7 @@ function LiveSwap({
     rawAmount &&
     BigInt(rawAmount) > 0n &&
     inputMint !== outputMint &&
+    !unresolved &&
     !locked;
   const quoteKey = canQuote ? inputKey : "";
   const quoteDispatch = useRef(routes.dispatch);
@@ -436,7 +485,7 @@ function LiveSwap({
             value={amount}
             disabled={locked}
             onChange={(e) => {
-              setAmount(e.target.value);
+              setAmount(normalizeTokenAmount(e.target.value));
               clear();
             }}
           />
@@ -501,33 +550,51 @@ function LiveSwap({
           <option value={100}>1%</option>
         </select>
       </div>
-      {(!prepared || !fresh) && !sent && (
-        <Button
-          className="w-full swap-primary"
-          disabled={!canQuote || busy}
-          onClick={() => review.dispatch()}
-        >
-          {prepare.isRunning
-            ? "Simulating your swap…"
-            : routes.isRunning || review.isRunning
-              ? "Finding the best available route…"
-              : !isAuthenticated
-                ? "Sign in to swap"
-                : !linked
-                  ? "Connect your linked wallet"
-                  : !rawAmount || BigInt(rawAmount) === 0n
-                    ? "Enter an amount"
-                    : "Review swap"}
-        </Button>
-      )}
+      <Button
+        className="w-full swap-primary"
+        disabled={!canQuote || busy || sent || unresolved}
+        onClick={() => {
+          if (purchaseActive.current || dispatched.current || unresolved)
+            return;
+          purchaseActive.current = true;
+          buy.dispatch();
+        }}
+      >
+        {send.isRunning
+          ? "Waiting for wallet / receipt…"
+          : sent
+            ? finalized
+              ? "Swap complete"
+              : "Wallet request completed"
+            : unresolved
+              ? "Check previous swap"
+              : prepare.isRunning
+                ? "Preparing swap…"
+                : routes.isRunning || buy.isRunning
+                  ? "Finding your route…"
+                  : !isAuthenticated
+                    ? "Sign in to swap"
+                    : !linked
+                      ? "Connect your linked wallet"
+                      : !rawAmount || BigInt(rawAmount) === 0n
+                        ? "Enter an amount"
+                        : outputToken
+                          ? `Buy ${output?.symbol ?? "token"}`
+                          : "Swap"}
+      </Button>
       {best && !fresh && !sent && (
         <p className="commerce-note">
-          Quote expired. Review swap will automatically check fresh routes
-          before showing your review.
+          Quote expired. A fresh quote will be checked when you swap.
         </p>
       )}
       {result && (
-        <div className="commerce-routes">
+        <details className="commerce-details commerce-routes">
+          <summary>
+            Route and fees ·{" "}
+            {result.platformFeeBps === 0
+              ? "Platform fee waived"
+              : `${result.platformFeeBps / 100}% platform fee`}
+          </summary>
           <div className="commerce-heading">
             <h3>Route comparison</h3>
             <span>
@@ -541,14 +608,7 @@ function LiveSwap({
             this ranking.
           </p>
           {result.quotes.map((q, i) => (
-            <button
-              key={q.quoteId}
-              type="button"
-              className="commerce-route focus-ring"
-              aria-pressed={selected?.quoteId === q.quoteId}
-              disabled={locked || q.expiresAt <= now || !!prepared}
-              onClick={() => prepare.dispatch(q)}
-            >
+            <div key={q.quoteId} className="commerce-route">
               <span>
                 <strong>
                   {q.provider === "jupiter" ? "Jupiter" : "Raydium"}
@@ -561,11 +621,10 @@ function LiveSwap({
                   {output?.symbol}
                 </strong>
                 <small>
-                  {Math.max(0, Math.ceil((q.expiresAt - now) / 1000))}s to
-                  review
+                  {Math.max(0, Math.ceil((q.expiresAt - now) / 1000))}s to quote
                 </small>
               </span>
-            </button>
+            </div>
           ))}
           {result.failures.length > 0 && (
             <p>
@@ -575,14 +634,11 @@ function LiveSwap({
               unavailable. Comparison coverage is limited.
             </p>
           )}
-        </div>
+        </details>
       )}
       {prepared && selected && (
-        <section className="commerce-review" aria-label="Review swap">
-          <h3>
-            <ShieldCheck aria-hidden="true" />
-            Review before approving
-          </h3>
+        <details className="commerce-details commerce-review">
+          <summary>Transaction details</summary>
           <dl>
             <div>
               <dt>Minimum received</dt>
@@ -619,26 +675,7 @@ function LiveSwap({
             New token-account rent may also be required. Pool fees are included
             in the route quote. Simulation is not a guarantee of execution.
           </p>
-          <Button
-            className="w-full"
-            disabled={
-              sent ||
-              send.isRunning ||
-              selected.expiresAt <= now ||
-              !isAuthenticated ||
-              connected?.account.address !== prepared.wallet
-            }
-            onClick={() => send.dispatch()}
-          >
-            {send.isRunning
-              ? "Waiting for wallet / receipt…"
-              : sent
-                ? "Wallet request completed"
-                : selected.expiresAt <= now
-                  ? "Quote expired"
-                  : "Approve in wallet"}
-          </Button>
-        </section>
+        </details>
       )}
       {signature && (
         <a

@@ -1,5 +1,9 @@
 /** Exact decimal input, never binary-float conversion of token base units. */
+export function normalizeTokenAmount(value: string): string {
+  return /^\.\d/.test(value) ? `0${value}` : value;
+}
 export function parseTokenAmount(value: string, decimals: number): string {
+  value = normalizeTokenAmount(value);
   if (
     !Number.isInteger(decimals) ||
     decimals < 0 ||

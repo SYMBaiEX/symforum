@@ -22,7 +22,6 @@ import {
   verifyPromotionReceipt,
 } from "../lib/forum-commerce";
 import { promotionStatus } from "./forumCommerceSchema";
-import { buildPromotionTransaction } from "../lib/swap-transactions";
 import type { PreparedSwap } from "../lib/swap-router";
 import { walletTokenAccount } from "../lib/swap-rpc";
 
@@ -364,14 +363,12 @@ export const prepare = action({
         wallet: saved.wallet,
         cost: 10,
       });
-      const result = await buildPromotionTransaction(
-        saved,
+      const result: PreparedSwap = await ctx.runAction(
+        internal.forumCommerceNode.buildPromotion,
         {
-          rpcUrl: config.rpcUrl,
-          treasury: saved.treasury,
-          jupiterApiKey: config.jupiterApiKey,
+          intentJson: JSON.stringify(saved),
+          supportsV1: supportsV1 === true,
         },
-        supportsV1 === true,
       );
       await ctx.runMutation(internal.forumPromotions.savePreparation, {
         intentId,
