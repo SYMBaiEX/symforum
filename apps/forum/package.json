@@ -29,7 +29,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "3.9.9",
     "@workos-inc/authkit-nextjs": "4.4.0",
-    "@workos-inc/node": "10.13.0",
+    "@workos-inc/node": "12.0.0",
     "ai": "7.0.111",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
