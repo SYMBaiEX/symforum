@@ -8,6 +8,7 @@ import {
 import { createIdentityWalletClient } from "./identity-wallet-client";
 import { getWalletAccountFeature } from "@wallet-standard/ui-features";
 import { getWalletAccountForUiWalletAccount } from "@wallet-standard/ui-registry";
+import type { SolanaSignAndSendTransactionFeature } from "@solana/wallet-standard-features";
 import type { PreparedSwap } from "./swap-router";
 
 export function createCommerceWalletClient() {
@@ -64,22 +65,21 @@ export async function requestReviewedTransaction(
   const feature = getWalletAccountFeature(
     current.account,
     "solana:signAndSendTransaction",
-  ) as {
-    signAndSendTransaction(input: {
-      account: ReturnType<typeof getWalletAccountForUiWalletAccount>;
-      transaction: Uint8Array;
-      chain: "solana:mainnet";
-      options: { skipPreflight: false; maxRetries: 0; commitment: "confirmed" };
-    }): Promise<readonly { signature: Uint8Array }[]>;
-  };
-  // First asynchronous operation invokes the wallet directly from the user's click.
+  ) as SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
+  // Exactly one Wallet Standard request; never resend or switch signing methods on error.
   const results = await feature.signAndSendTransaction({
     account: getWalletAccountForUiWalletAccount(current.account),
     transaction: Uint8Array.from(
       getBase64Encoder().encode(prepared.transactionBase64),
     ),
     chain: "solana:mainnet",
-    options: { skipPreflight: false, maxRetries: 0, commitment: "confirmed" },
+    options: {
+      skipPreflight: false,
+      maxRetries: 0,
+      commitment: "confirmed",
+      preflightCommitment: "confirmed",
+      minContextSlot: prepared.simulationSlot,
+    },
   });
   if (
     results.length !== 1 ||

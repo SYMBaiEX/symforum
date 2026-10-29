@@ -155,12 +155,14 @@ async function harness(page: Page, query = "") {
         ? null
         : { quoteId: "quote-fixture", ...prepared() };
     else if (name === "forumSwaps:confirm")
-      result = {
-        quoteId: "quote-fixture",
-        status: "confirmed",
-        signature: getBase58Decoder().decode(new Uint8Array(64).fill(1)),
-        issue: null,
-      };
+      result = query.includes("confirmfail")
+        ? null
+        : {
+            quoteId: "quote-fixture",
+            status: "confirmed",
+            signature: getBase58Decoder().decode(new Uint8Array(64).fill(1)),
+            issue: null,
+          };
     else if (name === "forumPromotions:quotePromotion") result = intent;
     else if (name === "forumPromotions:prepare")
       result = { intentId: intent.intentId, ...prepared() };
@@ -198,22 +200,27 @@ async function connect(page: Page) {
 }
 async function reviewSwap(page: Page) {
   await expect(page.locator(".swap-receive")).toHaveText("1");
-  await page.getByRole("button", { name: "Review swap", exact: true }).click();
+  await page.getByRole("button", { name: "Swap", exact: true }).click();
 }
-test("comparison -> exact simulated review -> one wallet request -> finalized receipt", async ({
+test("one Swap click -> simulation -> one wallet approval -> finalized receipt", async ({
   page,
 }) => {
   const requests = await harness(page);
   await connect(page);
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await reviewSwap(page);
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  await page.getByText("Transaction details", { exact: true }).click();
   await expect(page.getByText("0.000025 SOL", { exact: true })).toBeVisible();
-  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await expect(
+    page.getByRole("button", { name: "Approve in wallet" }),
+  ).toHaveCount(0);
   await page.screenshot({
     path: "tmp/forum-render-tests/commerce-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Approve in wallet" }).click();
   await expect(
     page.getByText("Swap finalized.", { exact: false }),
   ).toBeVisible();
@@ -233,6 +240,54 @@ test("failed simulation never opens a wallet request", async ({ page }) => {
   await expect(page.locator("#wallet-calls")).toHaveText("0");
   expect(requests).not.toContain("forumSwaps:beginWalletRequest");
 });
+test("double clicks still open only one wallet request", async ({ page }) => {
+  const requests = await harness(page, "?authorized");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  const swap = page.getByRole("button", { name: "Swap", exact: true });
+  await expect(swap).toBeEnabled();
+  await swap.evaluate((element: HTMLButtonElement) => {
+    element.click();
+    element.click();
+  });
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  expect(
+    requests.filter((r) => r === "forumSwaps:beginWalletRequest"),
+  ).toHaveLength(1);
+  expect(requests.filter((r) => r === "forumSwaps:prepare")).toHaveLength(1);
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
+test("an existing uncertain hold blocks new buying and automatic quote spend", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&held");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await expect(
+    page.getByRole("button", { name: "Check previous swap" }),
+  ).toBeDisabled();
+  await page.waitForTimeout(1500);
+  expect(requests).not.toContain("forumSwaps:quote");
+  expect(requests).not.toContain("forumSwaps:prepare");
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+});
+test("a receipt-check error is distinguished from a missing wallet signature", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&confirmfail");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await reviewSwap(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "wallet returned a transaction signature",
+  );
+  await expect(
+    page.getByRole("link", { name: "View transaction" }),
+  ).toBeVisible();
+  expect(requests.filter((r) => r === "forumSwaps:markUnknown")).toHaveLength(
+    1,
+  );
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
 test("a leading decimal is normalized and automatically quoted exactly once", async ({
   page,
 }) => {
@@ -245,7 +300,7 @@ test("a leading decimal is normalized and automatically quoted exactly once", as
   await page.getByLabel("You pay", { exact: true }).fill(".5");
   await expect(page.getByLabel("You pay", { exact: true })).toHaveValue("0.5");
   await expect(
-    page.getByRole("button", { name: "Review swap", exact: true }),
+    page.getByRole("button", { name: "Swap", exact: true }),
   ).toBeEnabled();
   await expect.poll(() => quoteBodies.length).toBe(1);
   expect(quoteBodies[0]).toMatchObject({ amountRaw: "500000000" });
@@ -261,7 +316,6 @@ test("uncertain wallet request is held and cannot be resent", async ({
   await connect(page);
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await reviewSwap(page);
-  await page.getByRole("button", { name: "Approve in wallet" }).click();
   await expect(page.getByRole("alert")).toContainText("Do not repeat");
   await expect(
     page.getByRole("button", { name: "Wallet request completed" }),
@@ -278,7 +332,6 @@ test("server refusal before the wallet boundary does not fabricate an uncertain 
   await connect(page);
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await reviewSwap(page);
-  await page.getByRole("button", { name: "Approve in wallet" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "No wallet window was opened",
   );
@@ -345,14 +398,18 @@ test("an already-authorized linked wallet restores without another connection pr
     page.getByRole("button", { name: "Compare routes" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Review swap", exact: true }),
+    page.getByRole("button", { name: "Swap", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".swap-receive")).toHaveText("1");
   expect(requests.filter((r) => r === "forumSwaps:quote")).toHaveLength(1);
   expect(requests).not.toContain("forumSwaps:prepare");
-  await page.getByRole("button", { name: "Review swap", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Review swap" })).toBeVisible();
-  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await page.getByRole("button", { name: "Swap", exact: true }).click();
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  expect(
+    requests.filter((r) => r === "forumSwaps:beginWalletRequest"),
+  ).toHaveLength(1);
 });
 test("the token modal has a large searchable directory and verifies a selected mint before quoting", async ({
   page,
@@ -405,11 +462,11 @@ test("an expired preview never starts polling or spending more data quota in the
   await page.getByLabel("You pay", { exact: true }).fill("1");
   await page.clock.runFor(1100);
   await expect(
-    page.getByRole("button", { name: "Review swap", exact: true }),
+    page.getByRole("button", { name: "Swap", exact: true }),
   ).toBeEnabled();
   await page.clock.runFor(180000);
   await expect(
-    page.getByRole("button", { name: "Review swap", exact: true }),
+    page.getByRole("button", { name: "Swap", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".swap-receive")).toHaveText("0.00");
   expect(requests.filter((r) => r === "forumSwaps:quote")).toHaveLength(1);
@@ -434,7 +491,7 @@ test("a deliberate wallet disconnect is not silently undone by restoration", asy
     }),
   ).toBeDisabled();
 });
-test("Review swap revalidates an expired quote automatically without a Compare or Refresh button", async ({
+test("Swap refreshes an expired quote and opens the wallet without another review click", async ({
   page,
 }) => {
   await page.clock.install();
@@ -444,11 +501,15 @@ test("Review swap revalidates an expired quote automatically without a Compare o
   await expect(page.locator(".swap-receive")).toHaveText("1");
   await page.clock.runFor(180000);
   await expect(page.locator(".swap-receive")).toHaveText("0.00");
-  await page.getByRole("button", { name: "Review swap", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Review swap" })).toBeVisible();
+  await page.getByRole("button", { name: "Swap", exact: true }).click();
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
   expect(requests.filter((r) => r === "forumSwaps:quote")).toHaveLength(2);
   expect(requests.filter((r) => r === "forumSwaps:prepare")).toHaveLength(1);
-  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  expect(
+    requests.filter((r) => r === "forumSwaps:beginWalletRequest"),
+  ).toHaveLength(1);
   await expect(
     page.getByRole("button", { name: /Compare routes|Refresh quote/ }),
   ).toHaveCount(0);

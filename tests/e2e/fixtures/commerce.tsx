@@ -59,14 +59,21 @@ getWallets().register({
       signAndSendTransaction: async (input: {
         account: typeof account;
         transaction: Uint8Array;
-        options: { skipPreflight: boolean; maxRetries: number };
+        options: {
+          skipPreflight: boolean;
+          maxRetries: number;
+          preflightCommitment: string;
+          minContextSlot: number;
+        };
       }) => {
         calls++;
         document.getElementById("wallet-calls")!.textContent = String(calls);
         if (
           input.account !== account ||
           input.options.skipPreflight ||
-          input.options.maxRetries !== 0
+          input.options.maxRetries !== 0 ||
+          input.options.preflightCommitment !== "confirmed" ||
+          input.options.minContextSlot !== 1
         )
           throw new Error("Wrong raw account or unsafe wallet options");
         if (location.search.includes("walletfail"))
