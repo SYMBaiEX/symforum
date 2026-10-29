@@ -37,5 +37,4 @@ Generated from project sources at 2026-10-29T21:17:56.710Z.
 
 ## Decisions
 
-- None recorded
-
+- Compact sell/receive panels and a searchable token directory, based on the supplied Jupiter reference. Preserve SYMBaiEX colors, shared Dialog/Button primitives, responsive behavior and explicit transaction review.
