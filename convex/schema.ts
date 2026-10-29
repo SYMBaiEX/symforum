@@ -2,7 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { identityTables } from "./identitySchema";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { agentScopeValidator } from "./authz";
+import { agentScopeValidator } from "./agentScopeSchema";
 import { serviceAuthTables } from "./agentServiceAuthSchema";
 import { forumPluginTables } from "./forumPluginSchema";
 import { elizaShadowTables } from "./elizaShadowSchema";

@@ -7,6 +7,10 @@ import schema from "./schema";
 import { components } from "./_generated/api";
 import { api } from "./_generated/api";
 import { Password } from "@convex-dev/auth/providers/Password";
+import { createIdentityAuth } from "./identity";
+import { bytesToBase64Url } from "./agentIdentityCrypto";
+import { createSignInMessage } from "@solana/wallet-standard-util";
+import { createLocalJWKSet, jwtVerify } from "jose";
 const mail = vi.hoisted(() => ({
   messages: [] as { text: string; to: string }[],
 }));
@@ -35,8 +39,11 @@ beforeEach(() => {
     "isolated-test-secret-never-used-in-production-identity",
   );
   vi.stubEnv("IDENTITY_SITE_URL", "https://www.symbaiex.com");
-  vi.stubEnv("AUTH_GOOGLE_ID", "isolated-test.apps.googleusercontent.com");
-  vi.stubEnv("AUTH_GOOGLE_SECRET", "isolated-test-only");
+  vi.stubEnv(
+    "BETTER_AUTH_GOOGLE_CLIENT_ID",
+    "isolated-test.apps.googleusercontent.com",
+  );
+  vi.stubEnv("BETTER_AUTH_GOOGLE_CLIENT_SECRET", "isolated-test-only");
 });
 afterEach(() => vi.unstubAllEnvs());
 function request(
@@ -108,6 +115,192 @@ test("a password cannot be pre-registered before proving ownership of the email"
   });
   expect(response.status).toBe(400);
   expect(mail.messages).toHaveLength(0);
+});
+test("patched discovery exposes only the fixed issuer and public JWKS location", async () => {
+  const response = await request(
+    setup(),
+    "/convex/.well-known/openid-configuration",
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    issuer: "https://strong-bee-384.convex.site",
+    jwks_uri: "https://strong-bee-384.convex.site/api/identity/convex/jwks",
+    id_token_signing_alg_values_supported: ["RS256"],
+  });
+});
+test("1.7 atomic fallbacks consume a proof once and preserve concurrent increments", async () => {
+  const t = setup();
+  await t.action(async (ctx) => {
+    const adapter = (await createIdentityAuth(ctx).$context).adapter;
+    const now = Date.now();
+    await adapter.create({
+      model: "verification",
+      data: {
+        identifier: "one-use-test",
+        value: "test-only",
+        expiresAt: new Date(now + 60000),
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      },
+    });
+    const consumed = await Promise.all(
+      [0, 1].map(() =>
+        adapter.consumeOne({
+          model: "verification",
+          where: [{ field: "identifier", value: "one-use-test" }],
+        }),
+      ),
+    );
+    expect(consumed.filter(Boolean)).toHaveLength(1);
+    await adapter.create({
+      model: "rateLimit",
+      data: { key: "atomic-counter-test", count: 0, lastRequest: now },
+    });
+    const incremented = await Promise.all(
+      [0, 1, 2, 3].map(() =>
+        adapter.incrementOne({
+          model: "rateLimit",
+          where: [
+            { field: "key", value: "atomic-counter-test" },
+            { field: "count", operator: "lt", value: 2 },
+          ],
+          increment: { count: 1 },
+        }),
+      ),
+    );
+    expect(incremented.filter(Boolean)).toHaveLength(2);
+    expect(
+      await adapter.findOne({
+        model: "rateLimit",
+        where: [{ field: "key", value: "atomic-counter-test" }],
+      }),
+    ).toMatchObject({ count: 2 });
+    return null;
+  });
+});
+test("parallel rate-limit key creation leaves exactly one authoritative row", async () => {
+  const t = setup();
+  await t.action(async (ctx) => {
+    const adapter = (await createIdentityAuth(ctx).$context).adapter;
+    const results = await Promise.allSettled(
+      [0, 1].map(() =>
+        adapter.create({
+          model: "rateLimit",
+          data: {
+            key: "racing-new-limit",
+            count: 1,
+            lastRequest: Date.now(),
+          },
+        }),
+      ),
+    );
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      await adapter.findMany({
+        model: "rateLimit",
+        where: [{ field: "key", value: "racing-new-limit" }],
+      }),
+    ).toHaveLength(1);
+    return null;
+  });
+});
+test("a signed wallet proof creates a native session and verifiable JWT, never a transaction", async () => {
+  const t = setup();
+  const issued = await request(
+    t,
+    "/identity/challenge",
+    { provider: "solana", purpose: "login" },
+    undefined,
+    "forum.symbaiex.com",
+  );
+  expect(issued.status).toBe(200);
+  const challenge = await issued.json();
+  const keys = await crypto.subtle.generateKey("Ed25519", true, [
+    "sign",
+    "verify",
+  ]);
+  const raw = new Uint8Array(
+    await crypto.subtle.exportKey("raw", keys.publicKey),
+  );
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let number = raw.reduce((value, byte) => value * 256n + BigInt(byte), 0n),
+    address = "";
+  while (number) {
+    address = alphabet[Number(number % 58n)] + address;
+    number /= 58n;
+  }
+  for (const byte of raw) {
+    if (byte) break;
+    address = "1" + address;
+  }
+  const message = createSignInMessage({ ...challenge.input, address });
+  const proof = {
+    nonce: challenge.nonce,
+    address,
+    publicKey: bytesToBase64Url(raw),
+    signedMessage: bytesToBase64Url(message),
+    signature: bytesToBase64Url(
+      new Uint8Array(
+        await crypto.subtle.sign(
+          "Ed25519",
+          keys.privateKey,
+          new Uint8Array(message),
+        ),
+      ),
+    ),
+  };
+  const loggedIn = await request(
+    t,
+    "/sign-in/solana",
+    proof,
+    cookies(issued),
+    "forum.symbaiex.com",
+  );
+  expect(loggedIn.status).toBe(200);
+  const cookie = cookies(loggedIn);
+  const tokenResponse = await request(t, "/convex/token", undefined, cookie);
+  expect(tokenResponse.status).toBe(200);
+  const { token } = await tokenResponse.json();
+  const publicKeys = await (await request(t, "/convex/jwks")).json();
+  for (const key of publicKeys.keys) expect(key).not.toHaveProperty("d");
+  const { payload } = await jwtVerify(token, createLocalJWKSet(publicKeys), {
+    issuer: "https://strong-bee-384.convex.site",
+    audience: "convex",
+    algorithms: ["RS256"],
+  });
+  expect(payload.authSystem).toBe("symbaiex-human-v1");
+  expect(payload.sessionId).toEqual(expect.any(String));
+  expect(Number(payload.exp) - Number(payload.iat)).toBe(300);
+  for (const host of [
+    "www.symbaiex.com",
+    "forum.symbaiex.com",
+    "blog.symbaiex.com",
+    "news.symbaiex.com",
+    "newsletter.symbaiex.com",
+  ]) {
+    expect(
+      await (await request(t, "/get-session", undefined, cookie, host)).json(),
+    ).toMatchObject({ user: { id: payload.sub } });
+  }
+  expect(
+    (
+      await request(
+        t,
+        "/sign-in/solana",
+        proof,
+        cookies(issued),
+        "forum.symbaiex.com",
+      )
+    ).status,
+  ).not.toBe(200);
+  expect(
+    (await request(t, "/sign-out", {}, cookie, "forum.symbaiex.com")).status,
+  ).toBe(200);
+  expect(
+    await (await request(t, "/get-session", undefined, cookie)).json(),
+  ).toBeNull();
 });
 test("unused Magic Link, OAuth Proxy, device and key-administration routes are not public", async () => {
   const t = setup();

@@ -49,6 +49,22 @@ async function uniqueAccount(
       "This identity is already connected. No accounts were merged.",
     );
 }
+async function uniqueRateLimit(
+  ctx: MutationCtx,
+  doc: { _id: string; key: string },
+) {
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "rateLimit",
+    where: [{ field: "key", value: doc.key }],
+    paginationOpts: { numItems: 2, cursor: null },
+  });
+  if (
+    !result.isDone ||
+    result.page.length !== 1 ||
+    result.page[0]._id !== doc._id
+  )
+    throw new ConvexError("Rate limit key already exists.");
+}
 // Component triggers execute inside the original write transaction, so parallel
 // OAuth links or username claims cannot create duplicate provider ownership.
 export const identityComponent: ReturnType<typeof createClient<DataModel>> =
@@ -63,6 +79,9 @@ export const identityComponent: ReturnType<typeof createClient<DataModel>> =
         onCreate: uniqueAccount,
         onUpdate: (ctx, doc) => uniqueAccount(ctx, doc),
       },
+      // 1.7's database limiter retries a racing create only when the losing
+      // insert fails atomically. Convex indexes alone do not enforce uniqueness.
+      rateLimit: { onCreate: uniqueRateLimit },
     },
   });
 export const { onCreate, onUpdate, onDelete } = identityComponent.triggersApi();

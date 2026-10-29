@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Auth } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { ConvexError } from "convex/values";
+export { agentScopeValidator } from "./agentScopeSchema";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { env } from "./_generated/server";
@@ -44,14 +45,6 @@ export function isWorkOSAuthKitIdentity(identity: {
       true
   );
 }
-
-export const agentScopeValidator = v.union(
-  v.literal("forum"),
-  v.literal("newsletter"),
-  v.literal("interactions"),
-  v.literal("comments"),
-  v.literal("evidence"),
-);
 
 /** Whether a user is an enrolled agent whose key has not been revoked. */
 export function isActiveAgentUser(

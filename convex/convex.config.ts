@@ -14,6 +14,8 @@ const app = defineApp({
   env: {
     BETTER_AUTH_ENABLED: v.optional(v.string()),
     BETTER_AUTH_SECRET: v.optional(v.string()),
+    BETTER_AUTH_GOOGLE_CLIENT_ID: v.optional(v.string()),
+    BETTER_AUTH_GOOGLE_CLIENT_SECRET: v.optional(v.string()),
     IDENTITY_SITE_URL: v.optional(v.string()),
     AUTH_GOOGLE_ID: v.optional(v.string()),
     AUTH_GOOGLE_SECRET: v.optional(v.string()),

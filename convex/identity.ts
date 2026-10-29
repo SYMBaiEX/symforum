@@ -119,11 +119,12 @@ export const createIdentityAuth = (ctx: GenericCtx<DataModel>) => {
       },
     },
     socialProviders: {
-      ...(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET
+      ...(env.BETTER_AUTH_GOOGLE_CLIENT_ID &&
+      env.BETTER_AUTH_GOOGLE_CLIENT_SECRET
         ? {
             google: {
-              clientId: env.AUTH_GOOGLE_ID,
-              clientSecret: env.AUTH_GOOGLE_SECRET,
+              clientId: env.BETTER_AUTH_GOOGLE_CLIENT_ID,
+              clientSecret: env.BETTER_AUTH_GOOGLE_CLIENT_SECRET,
               prompt: "select_account" as const,
             },
           }

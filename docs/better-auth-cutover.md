@@ -1,28 +1,23 @@
 # Better Auth human and agent identity cutover
 
 Status: **implemented in an isolated worktree, not ready for production activation**.
-No production identity settings, accounts, provider credentials, schedules,
-budgets, publishing gates, data caps, or uncertain-outcome holds have been changed.
+Production BETTER_AUTH_ENABLED is explicitly false for release analysis. No
+accounts, provider credentials, schedules, budgets, publishing gates, data caps,
+or uncertain-outcome holds have been changed.
 
 ## Release blockers
 
-1. Dependency audit is not clean. Published Convex adapter 0.12.6 accepts
-   better-auth >=1.6.11 <1.7.0. This branch uses the latest supported patch,
-   1.6.33. The pre-account-hijacking fix is included, and password creation also
-   requires prior email proof here. Package-level critical/high advisories remain
-   for Magic Link, OAuth Proxy and Device Authorization, none of which this
-   implementation enables. Do not suppress the audit or silently force 1.7.
-   A fully patched 1.7 integration needs a reviewed compatibility adaptation:
-   1.7 removed the OIDC plugin imported by the current Convex integration and
-   changed the account identity schema.
+1. Dependency compatibility is resolved locally with the maintained patch below.
+   Better Auth is pinned to 1.7.14; the production dependency audit reports zero
+   vulnerabilities. This is not proof of live provider configuration.
 2. Live Google/Telegram configuration and end-to-end provider verification are
    incomplete. Chrome's extension connection reports a missing native pipe;
    native Chrome control was insufficient to finish configuration reliably.
    No OAuth client or Telegram bot settings were changed.
-3. Convex code generation against the existing development deployment is blocked
-   by its missing WORKOS_CLIENT_ID, which the existing auth configuration reads.
-   Read-only codegen did not deploy functions. Additive API/component/env
-   declarations are present locally, but must be regenerated before release.
+3. Full Convex bindings now regenerate successfully against the explicitly
+   selected production deployment in read-only codegen mode. Schema validators
+   are separated from runtime session resolution, preventing prohibited schema
+   chunk imports. This does not deploy functions or activate sign-in.
 4. GitHub Actions did not start the PR jobs: the account reports failed recent
    payments or an insufficient spending limit. No billing settings were changed,
    no paid upgrade was requested, and checks were not bypassed. Vercel's five
@@ -37,6 +32,47 @@ Relevant upstream sources:
 - https://github.com/advisories/GHSA-qq9h-g4jm-xgf3
 - https://labs.convex.dev/better-auth/framework-guides/next
 - https://core.telegram.org/bots/telegram-login
+
+## Maintained Better Auth 1.7 compatibility patch
+
+`patches/@convex-dev%2Fbetter-auth@0.12.6.patch` is applied by Bun's
+`patchedDependencies`, including frozen installs in Vercel. The npm package
+and public adapter interfaces remain upstream 0.12.6; only the reviewed changes
+listed here are carried locally, in source, runtime distribution and declarations:
+
+- Pin the compatibility peer to the tested Better Auth 1.7.14, not a floating
+  major override. All Better Auth core packages resolve to that release.
+- Remove the deleted in-core OIDC-provider import from the Convex plugin and
+  schema-generation options. Expose only fixed issuer/JWKS discovery metadata;
+  no OAuth authorization, consent, registration or token server is added.
+  Existing native JWT, bearer/session, cookie and revocation hooks remain.
+- Strip factory-only `modelKey` metadata before calling component functions.
+  Reject case-insensitive selectors as upstream does; the accepted sensitive
+  mode is not forwarded as unrecognized metadata. Keep every value predicate.
+- Allow immutable `_creationTime` as an additional conditional-write predicate,
+  preserving all snapshot guards used by 1.7's atomic consume/increment fallback.
+  Never drop that guard or replace an atomic operation with read-then-delete.
+- Add optional JWKS `alg`/`crv` fields required by the current JWT plugin, plus
+  an account identity/user compound index. No account ownership schema change:
+  1.7.3 restored the 1.6 `(providerId, accountId)` identity contract.
+- Enforce unique rate-limit keys inside the component creation transaction via
+  an application trigger, so concurrent first requests cannot create independent
+  quota buckets. Existing user/provider ownership triggers remain.
+
+Regression coverage exercises real native HTTP handlers, signed SIWS login,
+cryptographic RSA JWT verification, five-host sessions/logout, duplicate rate
+keys, conditional increments and one-use proof consumption under concurrency.
+The database adapter's conditional mutation and affected-row counts are retained.
+Unused OAuth/Magic Link/device/key-administration endpoints remain inaccessible.
+
+Unrelated dependency advisories are resolved by pinning compatible
+`@react-email/render` 2.2.0 (which uses html-to-text 10/deepmerge-ts) and `qs`
+6.17.1. No audit ignore, threshold reduction or invented package version is used.
+
+Maintenance: review upstream issue #433 and adapter releases before upgrading.
+Remove this patch only when upstream natively supports the selected Better Auth
+release and all identity/concurrency tests pass. Regenerate component bindings
+and rerun the complete audit/build/test suite for every patch change.
 
 ## Identity architecture
 
@@ -73,6 +109,9 @@ Relevant upstream sources:
 Google uses the first-party callback:
 https://www.symbaiex.com/api/identity/callback/google.
 Keep all existing provider callbacks during configuration.
+The new client uses BETTER_AUTH_GOOGLE_CLIENT_ID and
+BETTER_AUTH_GOOGLE_CLIENT_SECRET, separate from the existing legacy
+AUTH_GOOGLE_ID/SECRET. Never overwrite the old pair during preparation.
 
 Email-code sign-in proves the mailbox before account/password creation. Username
 and email password sign-in use Better Auth's credential provider. New passwords
@@ -145,11 +184,11 @@ revocation across all five hosts. They are not proof of live Google/Telegram
 configuration, wallet approval, real email delivery or production cutover.
 Local app builds with the new flag are not live deployment.
 
-Local checks on latest main before the release hold: 3,369 tests passed across 332 files;
+Local checks after the compatibility patch: 3,373 tests passed across 332 files;
 all five app builds with the new frontend flag passed; root and Convex
 type checks passed; lint had no errors and one existing cron-timing warning.
-The dependency audit still fails, and live provider/browser verification is
-not complete. Re-run checks after any compatibility change.
+The production dependency audit reports zero vulnerabilities. Live
+provider/browser verification is not complete. Re-run checks after changes.
 
 One earlier concurrent full-suite/build run passed all assertions but returned
 a Vitest console-RPC teardown error in telegramMemes.test.ts. That file passed

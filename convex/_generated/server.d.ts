@@ -28,26 +28,24 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
-  readonly BETTER_AUTH_ENABLED: string | undefined;
-  readonly WORKOS_CLIENT_ID: string | undefined;
-  readonly BETTER_AUTH_SECRET: string | undefined;
-  readonly BETTER_AUTH_COOKIE_DOMAIN: string | undefined;
-  readonly IDENTITY_SITE_URL: string | undefined;
-  readonly AUTH_GOOGLE_ID: string | undefined;
-  readonly AUTH_GOOGLE_SECRET: string | undefined;
-  readonly JWKS: string | undefined;
-  readonly TELEGRAM_LOGIN_CLIENT_ID: string | undefined;
-  readonly AGENT_SELF_JOIN_ENABLED: string | undefined;
-  readonly AGENT_JOIN_RELAY_SECRET: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
+  readonly AGENT_JOIN_RELAY_SECRET: string | undefined;
+  readonly AGENT_SELF_JOIN_ENABLED: string | undefined;
   readonly AGENT_SEMANTIC_RELAY_SECRET: string | undefined;
   readonly AGENT_SERVICE_AUTH_ENABLED: string | undefined;
   readonly AGENT_SERVICE_AUTH_PRIVATE_JWK: string | undefined;
   readonly AGENT_SERVICE_AUTH_PUBLIC_JWKS: string | undefined;
   readonly AGENT_SERVICE_AUTH_RELAY_SECRET: string | undefined;
   readonly AI_USAGE_SETTLEMENT_SECRET: string | undefined;
+  readonly AUTH_GOOGLE_ID: string | undefined;
+  readonly AUTH_GOOGLE_SECRET: string | undefined;
   readonly AUTH_HANDLE_LOOKUP_SECRET: string | undefined;
+  readonly BETTER_AUTH_COOKIE_DOMAIN: string | undefined;
+  readonly BETTER_AUTH_ENABLED: string | undefined;
+  readonly BETTER_AUTH_GOOGLE_CLIENT_ID: string | undefined;
+  readonly BETTER_AUTH_GOOGLE_CLIENT_SECRET: string | undefined;
+  readonly BETTER_AUTH_SECRET: string | undefined;
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
   readonly CRON_WATCHDOG_ENABLED: string | undefined;
@@ -69,6 +67,8 @@ type Env = {
   readonly FORUM_SITE_URL: string | undefined;
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
+  readonly IDENTITY_SITE_URL: string | undefined;
+  readonly JWKS: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
@@ -88,6 +88,7 @@ type Env = {
   readonly TELEGRAM_AGENT_BOTS: string | undefined;
   readonly TELEGRAM_DIGEST_ENABLED: string | undefined;
   readonly TELEGRAM_DIGEST_TOPIC_ID: string | undefined;
+  readonly TELEGRAM_LOGIN_CLIENT_ID: string | undefined;
   readonly TELEGRAM_MEMES_ENABLED: string | undefined;
   readonly TELEGRAM_MEMES_PIPELINE_VERSION: string | undefined;
   readonly TELEGRAM_MEMES_TOPIC_ID: string | undefined;
@@ -101,6 +102,7 @@ type Env = {
   readonly WORKOS_AGENT_REGISTRATION_ENABLED: string | undefined;
   readonly WORKOS_API_KEY: string | undefined;
   readonly WORKOS_AUTHKIT_ISSUER: string | undefined;
+  readonly WORKOS_CLIENT_ID: string | undefined;
   readonly WORKOS_CONNECT_ENABLED: string | undefined;
   readonly X_AGENTS_ENABLED: string | undefined;
   readonly X_AGENT_CLIENT_ID: string | undefined;

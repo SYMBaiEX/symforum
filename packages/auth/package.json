@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@convex-dev/better-auth": "0.12.6",
-    "better-auth": "1.6.33",
+    "better-auth": "1.7.14",
     "@convex-dev/auth": "0.0.95",
     "@convex-dev/workos": "0.0.3",
     "@workos-inc/authkit-nextjs": "4.4.0",

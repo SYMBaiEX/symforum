@@ -16,10 +16,12 @@ import type * as agentDataApi from "../agentDataApi.js";
 import type * as agentDataHttpErrors from "../agentDataHttpErrors.js";
 import type * as agentIdentity from "../agentIdentity.js";
 import type * as agentIdentityCrypto from "../agentIdentityCrypto.js";
+import type * as agentJoin from "../agentJoin.js";
 import type * as agentOAuth from "../agentOAuth.js";
 import type * as agentOAuthConnect from "../agentOAuthConnect.js";
 import type * as agentOAuthPrincipal from "../agentOAuthPrincipal.js";
 import type * as agentQuota from "../agentQuota.js";
+import type * as agentScopeSchema from "../agentScopeSchema.js";
 import type * as agentSemanticApi from "../agentSemanticApi.js";
 import type * as agentServiceAuth from "../agentServiceAuth.js";
 import type * as agentServiceAuthHttp from "../agentServiceAuthHttp.js";
@@ -33,12 +35,11 @@ import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
 import type * as apiCommerce from "../apiCommerce.js";
 import type * as auth from "../auth.js";
-import type * as identityData from "../identityData.js";
-import type * as agentJoin from "../agentJoin.js";
-import type * as betterAuthClient from "../betterAuthClient.js";
 import type * as authKitIdentity from "../authKitIdentity.js";
 import type * as authz from "../authz.js";
 import type * as belleForumAgent from "../belleForumAgent.js";
+import type * as betterAuthClient from "../betterAuthClient.js";
+import type * as betterAuthPrincipal from "../betterAuthPrincipal.js";
 import type * as broadcastActivity from "../broadcastActivity.js";
 import type * as broadcastActivityLive from "../broadcastActivityLive.js";
 import type * as comments from "../comments.js";
@@ -117,6 +118,10 @@ import type * as forumThreadDigest from "../forumThreadDigest.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
+import type * as identity from "../identity.js";
+import type * as identityData from "../identityData.js";
+import type * as identityPlugin from "../identityPlugin.js";
+import type * as identitySchema from "../identitySchema.js";
 import type * as interactions from "../interactions.js";
 import type * as migrations from "../migrations.js";
 import type * as modelRouting from "../modelRouting.js";
@@ -197,9 +202,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  identityData: typeof identityData;
-  agentJoin: typeof agentJoin;
-  betterAuthClient: typeof betterAuthClient;
   accountEmailVerification: typeof accountEmailVerification;
   admin: typeof admin;
   adminAiBudget: typeof adminAiBudget;
@@ -208,10 +210,12 @@ declare const fullApi: ApiFromModules<{
   agentDataHttpErrors: typeof agentDataHttpErrors;
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
+  agentJoin: typeof agentJoin;
   agentOAuth: typeof agentOAuth;
   agentOAuthConnect: typeof agentOAuthConnect;
   agentOAuthPrincipal: typeof agentOAuthPrincipal;
   agentQuota: typeof agentQuota;
+  agentScopeSchema: typeof agentScopeSchema;
   agentSemanticApi: typeof agentSemanticApi;
   agentServiceAuth: typeof agentServiceAuth;
   agentServiceAuthHttp: typeof agentServiceAuthHttp;
@@ -228,6 +232,8 @@ declare const fullApi: ApiFromModules<{
   authKitIdentity: typeof authKitIdentity;
   authz: typeof authz;
   belleForumAgent: typeof belleForumAgent;
+  betterAuthClient: typeof betterAuthClient;
+  betterAuthPrincipal: typeof betterAuthPrincipal;
   broadcastActivity: typeof broadcastActivity;
   broadcastActivityLive: typeof broadcastActivityLive;
   comments: typeof comments;
@@ -306,6 +312,10 @@ declare const fullApi: ApiFromModules<{
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
+  identity: typeof identity;
+  identityData: typeof identityData;
+  identityPlugin: typeof identityPlugin;
+  identitySchema: typeof identitySchema;
   interactions: typeof interactions;
   migrations: typeof migrations;
   modelRouting: typeof modelRouting;
@@ -407,8 +417,8 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
