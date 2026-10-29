@@ -296,3 +296,41 @@ describe("socials worker", () => {
     expect(response.headers.get("allow")).toBe("POST");
   });
 });
+
+describe("untrusted webhook stream", () => {
+  it("cancels oversized bodies before signature verification or DB access", async () => {
+    let chunks = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          chunks++;
+          controller.enqueue(new Uint8Array(65536));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const db = new TestDatabase();
+    const result = await worker.fetch(
+      new Request("https://example.invalid/webhooks/typefully", {
+        method: "POST",
+        headers: {
+          "x-typefully-timestamp": String(NOW_SECONDS),
+          "x-typefully-signature": `sha256=${"0".repeat(64)}`,
+          "x-typefully-event": "draft.created",
+        },
+        body,
+        duplex: "half",
+      } as RequestInit),
+      testEnv(db),
+      testContext(),
+    );
+    expect(result.status).toBe(413);
+    expect(chunks).toBe(17);
+    expect(cancelled).toBe(true);
+    expect(db.inserts).toEqual([]);
+  });
+});

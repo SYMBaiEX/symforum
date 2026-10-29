@@ -302,18 +302,20 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_createdAt", ["createdAt"]),
-  agentIdentities: defineTable(v.union(
-    v.object({
-      ...agentIdentityFields,
-      credentialKind: v.optional(v.literal("ed25519")),
-      publicKey: v.string(),
-    }),
-    v.object({
-      ...agentIdentityFields,
-      credentialKind: v.literal("oauth"),
-      publicKey: v.optional(v.null()),
-    }),
-  ))
+  agentIdentities: defineTable(
+    v.union(
+      v.object({
+        ...agentIdentityFields,
+        credentialKind: v.optional(v.literal("ed25519")),
+        publicKey: v.string(),
+      }),
+      v.object({
+        ...agentIdentityFields,
+        credentialKind: v.literal("oauth"),
+        publicKey: v.optional(v.null()),
+      }),
+    ),
+  )
     .index("by_agentId", ["agentId"])
     .index("by_userId", ["userId"])
     .index("by_ownerUserId", ["ownerUserId"])
@@ -595,7 +597,10 @@ export default defineSchema({
     agentUsedAfter: v.number(),
     appliedAt: v.number(),
   }).index("by_connectionId_and_monthKey_and_ownerUserId_and_agentId", [
-    "connectionId", "monthKey", "ownerUserId", "agentId",
+    "connectionId",
+    "monthKey",
+    "ownerUserId",
+    "agentId",
   ]),
   agentQuotaLimits: defineTable({
     ownerUserId: v.id("users"),
@@ -707,6 +712,12 @@ export default defineSchema({
     dailyOptIn: v.optional(v.boolean()),
     weeklyOptIn: v.optional(v.boolean()),
     tokenHash: v.string(),
+    // Version 2 capabilities are generated only by the backend, never callers.
+    tokenVersion: v.optional(v.literal(2)),
+    tokenExpiresAt: v.optional(v.number()),
+    tokenPurpose: v.optional(
+      v.union(v.literal("confirm"), v.literal("manage")),
+    ),
     resendContactId: v.optional(v.string()),
     resendSyncStatus: v.union(
       v.literal("idle"),
@@ -1246,14 +1257,28 @@ export default defineSchema({
     ownerUserId: v.id("users"),
     connectionId: v.optional(v.id("forumPluginConnections")),
     body: v.string(),
-    status: v.union(v.literal("active"), v.literal("pending"), v.literal("hidden"), v.literal("deleted")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("pending"),
+      v.literal("hidden"),
+      v.literal("deleted"),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
     moderatedBy: v.optional(v.id("users")),
     moderatedOwnerUserId: v.optional(v.id("users")),
   })
-    .index("by_categoryId_and_status_and_createdAt", ["categoryId", "status", "createdAt"])
-    .index("by_categoryId_and_authorId_and_status_and_createdAt", ["categoryId", "authorId", "status", "createdAt"]),
+    .index("by_categoryId_and_status_and_createdAt", [
+      "categoryId",
+      "status",
+      "createdAt",
+    ])
+    .index("by_categoryId_and_authorId_and_status_and_createdAt", [
+      "categoryId",
+      "authorId",
+      "status",
+      "createdAt",
+    ]),
   forumPosts: defineTable({
     parentPostId: v.optional(v.id("forumPosts")),
     threadId: v.id("forumThreads"),
@@ -2362,8 +2387,11 @@ export default defineSchema({
       "type",
     ]),
   forumPrivateConversationRequests: defineTable({
-    actorId: v.id("users"), requestId: v.string(), fingerprint: v.string(),
-    conversationId: v.id("forumPrivateConversations"), createdAt: v.number(),
+    actorId: v.id("users"),
+    requestId: v.string(),
+    fingerprint: v.string(),
+    conversationId: v.id("forumPrivateConversations"),
+    createdAt: v.number(),
   }).index("by_actorId_and_requestId", ["actorId", "requestId"]),
   forumPrivateConversations: defineTable({
     kind: v.union(v.literal("direct"), v.literal("group")),
@@ -2376,7 +2404,8 @@ export default defineSchema({
     lastSequence: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_directKey", ["directKey"])
+  })
+    .index("by_directKey", ["directKey"])
     .index("by_creatorId_and_requestId", ["creatorId", "requestId"]),
   forumPrivateConversationMembers: defineTable({
     conversationId: v.id("forumPrivateConversations"),
@@ -2387,20 +2416,38 @@ export default defineSchema({
     archived: v.boolean(),
     muted: v.boolean(),
     lastActivityAt: v.number(),
-  }).index("by_conversationId_and_userId", ["conversationId", "userId"])
-    .index("by_userId_and_active_and_archived_and_lastActivityAt", ["userId", "active", "archived", "lastActivityAt"]),
+  })
+    .index("by_conversationId_and_userId", ["conversationId", "userId"])
+    .index("by_userId_and_active_and_archived_and_lastActivityAt", [
+      "userId",
+      "active",
+      "archived",
+      "lastActivityAt",
+    ]),
   forumPrivateConversationMessages: defineTable({
     conversationId: v.id("forumPrivateConversations"),
     authorId: v.id("users"),
     sequence: v.number(),
     body: v.string(),
-    attachments: v.array(v.object({ storageId: v.id("_storage"), filename: v.string(), contentType: v.string(), size: v.number() })),
+    attachments: v.array(
+      v.object({
+        storageId: v.id("_storage"),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+      }),
+    ),
     requestId: v.string(),
     requestFingerprint: v.string(),
     agentAssisted: v.boolean(),
     createdAt: v.number(),
-  }).index("by_conversationId_and_sequence", ["conversationId", "sequence"])
-    .index("by_authorId_and_conversationId_and_requestId", ["authorId", "conversationId", "requestId"]),
+  })
+    .index("by_conversationId_and_sequence", ["conversationId", "sequence"])
+    .index("by_authorId_and_conversationId_and_requestId", [
+      "authorId",
+      "conversationId",
+      "requestId",
+    ]),
   forumPrivateMessages: defineTable({
     senderUserId: v.id("users"),
     recipientUserId: v.id("users"),

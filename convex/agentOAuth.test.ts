@@ -444,8 +444,6 @@ describe("WorkOS owner-approved agent authorization", () => {
     await expect(
       f.oauth.mutation(api.newsletter.requestViewerSubscription, {
         email: "owner@example.test",
-        token: "test",
-        tokenHash: "test",
       }),
     ).rejects.toThrow(/sign in/i);
     await expect(

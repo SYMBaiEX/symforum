@@ -361,7 +361,7 @@ function AdminAiSession({
                 event.currentTarget.form?.requestSubmit();
               }
             }}
-            placeholder="Ask the agent to inspect, summarize, or queue an explicit platform action..."
+            placeholder="Ask the read-only agent to inspect or summarize platform activity..."
             rows={3}
             disabled={isBusy}
             className="w-full resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
@@ -483,7 +483,7 @@ function ChatMessageBubble({ message }: { message: UIMessage }) {
       )}
     >
       <p className="mb-2 font-mono text-[11px] uppercase text-muted-foreground">
-        {isUser ? "Austin" : "Agent"}
+        {isUser ? "Owner" : "Agent"}
       </p>
       <div
         className={cn(

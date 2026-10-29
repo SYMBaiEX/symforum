@@ -32,18 +32,11 @@ export function ProfileNewsletterPreferences() {
     event.preventDefault();
     setPending(true);
     try {
-      const token = createClientNewsletterToken();
-      const subscriber = await requestSubscription({
+      await requestSubscription({
         email,
         source: "profile",
-        token,
-        tokenHash: await sha256Hex(token),
       });
-      toast.success(
-        subscriber.status === "confirmed"
-          ? "You are already subscribed."
-          : "Confirmation email queued",
-      );
+      toast.success("Check your inbox for a private subscription link.");
     } catch (error) {
       reportAppError(error, {
         scope: "newsletter",
@@ -187,20 +180,4 @@ function TopicToggle({
       {label}
     </label>
   );
-}
-
-function createClientNewsletterToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return `sym_nl_${Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("")}`;
-}
-
-async function sha256Hex(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
 }

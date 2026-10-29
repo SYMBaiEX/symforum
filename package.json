@@ -22,7 +22,7 @@
     "env:push:prod": "bun scripts/sync-convex-env.mjs --prod",
     "build": "bun run build:platform",
     "start": "bun run --cwd apps/platform start",
-    "deps:audit": "bun audit --production",
+    "deps:audit": "bun scripts/audit-dependencies.mjs",
     "test": "vitest run",
     "test:devtools": "vitest run convex/agentIdentity.test.ts packages/agent-sdk/src/index.test.ts packages/agent-cli/src/token-store.test.ts packages/agent-cli/bin/symbaiex.test.ts",
     "typecheck": "tsc --noEmit",
@@ -50,7 +50,8 @@
     "build:news": "bun run --cwd apps/news build",
     "build:newsletter": "bun run --cwd apps/newsletter build",
     "build:apps": "bun run build:platform && bun run build:forum && bun run build:blog && bun run build:news && bun run build:newsletter",
-    "test:forum:render": "playwright test --config playwright.forum.config.ts"
+    "test:forum:render": "playwright test --config playwright.forum.config.ts",
+    "security:secrets": "gitleaks git --redact --no-banner --log-opts=\"--all --full-history\" ."
   },
   "dependencies": {
     "@symbaiex/auth": "workspace:*",

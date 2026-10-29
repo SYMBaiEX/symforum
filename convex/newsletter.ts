@@ -32,7 +32,7 @@ import {
 } from "./newsletterModel";
 import { parseEditorialNewsletterPayload } from "./newsletterPayload";
 import { applyContactEmailEvent } from "./contact";
-import { sha256Base64Url } from "./agentIdentityCrypto";
+import { randomBase64Url, sha256Base64Url } from "./agentIdentityCrypto";
 import { interactionSaveCounts } from "./contentAggregates";
 import { migrations } from "./migrations";
 import {
@@ -146,104 +146,42 @@ function scheduledNewsletterSiteUrl(callerSiteUrl?: string) {
   );
 }
 
+const subscriptionRequestArgs = {
+  // Accepted for old clients during rollout, but never trusted or persisted.
+  token: v.optional(v.string()),
+  tokenHash: v.optional(v.string()),
+  email: v.string(),
+  source: v.optional(v.string()),
+  // Compatibility input only; the origin is always selected from trusted env.
+  siteUrl: v.optional(v.string()),
+};
+const subscriptionRequestResult = v.object({ ok: v.literal(true) });
+
 export const subscribe = mutation({
-  args: {
-    email: v.string(),
-    source: v.optional(v.string()),
-    token: v.string(),
-    tokenHash: v.string(),
-    siteUrl: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const normalizedEmail = normalizeEmail(args.email);
-    const emailKey = await sha256Base64Url(normalizedEmail);
-    const [globalCapacity, emailCapacity] = await Promise.all([
-      newsletterPublicRateLimiter.limit(ctx, "subscribeGlobal", {
-        key: "global",
-      }),
-      newsletterPublicRateLimiter.limit(ctx, "subscribePerEmail", {
-        key: emailKey,
-      }),
-    ]);
-    if (!globalCapacity.ok || !emailCapacity.ok) {
-      throw new ConvexError({
-        code: "NEWSLETTER_RATE_LIMITED",
-        message:
-          "Newsletter signup is temporarily rate limited. Please try again later.",
-        retryAfter: Math.max(
-          globalCapacity.ok ? 0 : globalCapacity.retryAfter,
-          emailCapacity.ok ? 0 : emailCapacity.retryAfter,
-        ),
-      });
-    }
-    const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
-      email: normalizedEmail,
-      source: args.source,
-      tokenHash: args.tokenHash,
-    });
-
-    // Only email links built from args.token when that token was actually
-    // stored (tokenStored), otherwise the recipient would get a dead link.
-    if (tokenStored) {
-      if (subscriber.status === "confirmed") {
-        // Already confirmed: send a link that lets them manage/unsubscribe,
-        // since the recurring issue emails point at /newsletter/preferences.
-        await ctx.scheduler.runAfter(0, sendManageSubscriptionEmailRef, {
-          subscriberId: subscriber._id,
-          token: args.token,
-          siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
-        });
-      } else {
-        await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
-          subscriberId: subscriber._id,
-          token: args.token,
-          siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
-        });
-      }
-    }
-
-    return publicSubscriber(subscriber);
-  },
+  args: subscriptionRequestArgs,
+  returns: subscriptionRequestResult,
+  handler: async (ctx, args) => requestSubscription(ctx, args),
 });
 
 export const requestViewerSubscription = mutation({
-  args: {
-    email: v.string(),
-    source: v.optional(v.string()),
-    token: v.string(),
-    tokenHash: v.string(),
-    siteUrl: v.optional(v.string()),
-    idempotencyKey: v.optional(v.string()),
-  },
+  args: { ...subscriptionRequestArgs, idempotencyKey: v.optional(v.string()) },
+  returns: subscriptionRequestResult,
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = userId === null ? null : await ctx.db.get("users", userId);
+    if (user === null)
       throw new Error("Sign in to manage newsletter preferences");
-    }
-    const user = await ctx.db.get("users", userId);
     enforceAgentScopeIfNeeded(user, "newsletter");
-
-    const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
-      email: args.email,
-      source: args.source ?? "profile",
-      tokenHash: args.tokenHash,
-      userId,
-    });
-
     await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "newsletter.subscribe",
       idempotencyKey: args.idempotencyKey,
     });
-
-    if (subscriber.status !== "confirmed" && tokenStored) {
-      await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
-        subscriberId: subscriber._id,
-        token: args.token,
-        siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
-      });
-    }
-
-    return publicSubscriber(subscriber);
+    // A signed-in account is not proof that it owns an arbitrary email address.
+    return requestSubscription(
+      ctx,
+      args,
+      ownsSubscriberMailbox(user, args.email) ? user._id : undefined,
+    );
   },
 });
 
@@ -263,7 +201,11 @@ export const viewerPreferences = query({
 
     return {
       userEmail: user?.email ?? user?.contactEmail ?? null,
-      subscriptions: subscriptions.map(publicSubscriber),
+      subscriptions: subscriptions
+        .filter((subscription) =>
+          ownsSubscriberMailbox(user, subscription.emailNormalized),
+        )
+        .map(publicSubscriber),
     };
   },
 });
@@ -286,7 +228,11 @@ export const updateViewerTopics = mutation({
       "newsletterSubscribers",
       args.subscriberId,
     );
-    if (subscriber === null || subscriber.userId !== userId) {
+    if (
+      subscriber === null ||
+      subscriber.userId !== userId ||
+      !ownsSubscriberMailbox(user, subscriber.emailNormalized)
+    ) {
       throw new Error("Newsletter subscription not found");
     }
     await consumeAgentQuotaIfNeeded(ctx, user, {
@@ -353,8 +299,15 @@ export const confirm = mutation({
 
     const now = Date.now();
     if (subscriber.status !== "confirmed") {
+      if (
+        subscriber.status !== "pending" ||
+        subscriber.tokenPurpose !== "confirm"
+      )
+        return { ok: false, subscriber: null };
       await ctx.db.patch("newsletterSubscribers", subscriber._id, {
         status: "confirmed",
+        tokenPurpose: "manage",
+        tokenExpiresAt: now + MANAGE_TOKEN_TTL_MS,
         confirmedAt: now,
         unsubscribedAt: undefined,
         resendSyncStatus: "idle",
@@ -367,10 +320,6 @@ export const confirm = mutation({
       await ctx.scheduler.runAfter(0, sendWelcomeEmailRef, {
         subscriberId: subscriber._id,
         siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
-      });
-    } else {
-      await ctx.scheduler.runAfter(0, syncSubscriberRef, {
-        subscriberId: subscriber._id,
       });
     }
 
@@ -388,6 +337,8 @@ export const unsubscribe = mutation({
       return { ok: false, subscriber: null };
     }
 
+    if (subscriber.status === "unsubscribed")
+      return { ok: true, subscriber: publicSubscriber(subscriber) };
     await ctx.db.patch("newsletterSubscribers", subscriber._id, {
       status: "unsubscribed",
       unsubscribedAt: Date.now(),
@@ -992,7 +943,14 @@ async function upsertPendingSubscriber(
     .withIndex("by_emailNormalized", (q) => q.eq("emailNormalized", email))
     .unique();
   const now = Date.now();
-
+  const purpose = existing?.status === "confirmed" ? "manage" : "confirm";
+  const capability = {
+    tokenHash,
+    tokenVersion: 2 as const,
+    tokenPurpose: purpose as "manage" | "confirm",
+    tokenExpiresAt:
+      now + (purpose === "manage" ? MANAGE_TOKEN_TTL_MS : CONFIRM_TOKEN_TTL_MS),
+  };
   if (existing === null) {
     const id = await ctx.db.insert("newsletterSubscribers", {
       email,
@@ -1002,57 +960,117 @@ async function upsertPendingSubscriber(
       source: normalizeNewsletterSource(args.source),
       dailyOptIn: true,
       weeklyOptIn: true,
-      tokenHash,
+      ...capability,
       resendSyncStatus: "idle",
       createdAt: now,
       updatedAt: now,
     });
-    const created = await ctx.db.get("newsletterSubscribers", id);
-    if (created === null) {
-      throw new Error("Could not create newsletter subscription");
-    }
-    return { subscriber: created, tokenStored: true };
+    return {
+      subscriber: (await ctx.db.get("newsletterSubscribers", id))!,
+      tokenStored: true,
+    };
   }
-
-  // Throttle token rotation for rapid re-subscribes while still pending. The
-  // caller-supplied token was NOT stored, so its links would be dead — signal
-  // tokenStored: false so the caller skips sending an email with those links.
   if (
-    existing.status === "pending" &&
-    now - existing.updatedAt < RESUBSCRIBE_TOKEN_THROTTLE_MS
+    existing.tokenVersion === 2 &&
+    now - existing.updatedAt < RESUBSCRIBE_TOKEN_THROTTLE_MS &&
+    (existing.tokenExpiresAt ?? 0) > now
   ) {
+    if (args.userId !== undefined && existing.userId !== args.userId) {
+      await ctx.db.patch("newsletterSubscribers", existing._id, {
+        userId: args.userId,
+      });
+    }
     return { subscriber: existing, tokenStored: false };
   }
-
   await ctx.db.patch("newsletterSubscribers", existing._id, {
-    email,
-    userId: args.userId ?? existing.userId,
+    ...capability,
+    // Preserve consent and preferences while delivering a fresh private link.
     status: existing.status === "confirmed" ? "confirmed" : "pending",
-    source: normalizeNewsletterSource(args.source),
-    tokenHash,
-    resendSyncStatus:
-      existing.status === "confirmed" ? existing.resendSyncStatus : "idle",
-    resendError: undefined,
-    unsubscribedAt: undefined,
+    ...(args.userId === undefined ? {} : { userId: args.userId }),
     updatedAt: now,
   });
-  const updated = await ctx.db.get("newsletterSubscribers", existing._id);
-  if (updated === null) {
-    throw new Error("Could not update newsletter subscription");
-  }
-  return { subscriber: updated, tokenStored: true };
+  return {
+    subscriber: (await ctx.db.get("newsletterSubscribers", existing._id))!,
+    tokenStored: true,
+  };
+}
+
+const CONFIRM_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const MANAGE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+function ownsSubscriberMailbox(user: Doc<"users"> | null, email: string) {
+  return Boolean(
+    user &&
+    !user.isAgent &&
+    user.emailVerificationTime !== undefined &&
+    user.email?.trim().toLowerCase() === email.trim().toLowerCase(),
+  );
+}
+async function requestSubscription(
+  ctx: MutationCtx,
+  args: { email: string; source?: string; siteUrl?: string },
+  userId?: Id<"users">,
+): Promise<{ ok: true }> {
+  const email = normalizeEmail(args.email);
+  const [globalCapacity, emailCapacity] = await Promise.all([
+    newsletterPublicRateLimiter.limit(ctx, "subscribeGlobal", {
+      key: "global",
+    }),
+    newsletterPublicRateLimiter.limit(ctx, "subscribePerEmail", {
+      key: await sha256Base64Url(email),
+    }),
+  ]);
+  if (!globalCapacity.ok || !emailCapacity.ok)
+    throw new ConvexError({
+      code: "NEWSLETTER_RATE_LIMITED",
+      message:
+        "Newsletter signup is temporarily rate limited. Please try again later.",
+    });
+  // Only the trusted backend can mint the capability; never return it to the caller.
+  const token = `sym_nl_${randomBase64Url(32)}`;
+  const tokenHash = [
+    ...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)),
+    ),
+  ]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
+    email,
+    source: args.source,
+    tokenHash,
+    userId,
+  });
+  if (tokenStored)
+    await ctx.scheduler.runAfter(
+      0,
+      subscriber.status === "confirmed"
+        ? sendManageSubscriptionEmailRef
+        : sendConfirmationEmailRef,
+      {
+        subscriberId: subscriber._id,
+        token,
+        siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
+      },
+    );
+  return { ok: true };
 }
 
 async function subscriberByTokenHash(
   ctx: { db: MutationCtx["db"] | QueryCtx["db"] },
   tokenHash: string,
 ) {
-  return await ctx.db
+  const subscriber = await ctx.db
     .query("newsletterSubscribers")
     .withIndex("by_tokenHash", (q) =>
       q.eq("tokenHash", normalizeTokenHash(tokenHash)),
     )
     .unique();
+  // Pre-fix caller-selected capabilities have no trusted provenance. Expire them
+  // without changing subscription status; users can request a fresh emailed link.
+  return subscriber?.tokenVersion === 2 &&
+    (subscriber.tokenExpiresAt ?? 0) > Date.now()
+    ? subscriber
+    : null;
 }
 
 async function issueBySlug(

@@ -1,0 +1,18 @@
+title = "SYMBaiEX secret scanning"
+[extend]
+useDefault = true
+
+# Exact audited fixtures only. Tests remain scanned for real credentials.
+[[allowlists]]
+description = "Synthetic auth identifiers and runtime secrets"
+regexTarget = "secret"
+regexes = [
+  '''^01J3X4Y5Z6A7B8C9D0E1F2G3H4$''',
+  '''^legacy-private-citation-v1$''',
+  '''^synthetic-live-secret-at-least-32-characters$''',
+]
+[[allowlists]]
+description = "Public container content digest, not a credential"
+paths = ['''^docs/eliza-shadow-pilot\.md$''']
+regexTarget = "line"
+regexes = ['''sha256:[a-f0-9]{64}''']
