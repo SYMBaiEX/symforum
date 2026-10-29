@@ -102,6 +102,34 @@ export const authorizeWallet = internalQuery({
     return { authUserId, userId };
   },
 });
+/** Own verified identity only. A browser connection never proves account ownership. */
+export const getWalletSession = query({
+  args: {},
+  returns: v.object({ authUserId: v.string(), wallets: v.array(v.string()) }),
+  handler: async (ctx) => {
+    const actor = await commerceActor(ctx);
+    const accounts = await ctx.runQuery(
+      components.betterAuth.adapter.findMany,
+      {
+        model: "account",
+        where: [
+          { field: "userId", value: actor.authUserId },
+          { field: "providerId", value: "solana" },
+        ],
+        paginationOpts: { numItems: 50, cursor: null },
+      },
+    );
+    // Fail closed rather than silently choosing from a partial ownership list.
+    if (!accounts.isDone)
+      throw new ConvexError("Open Account connections to select a wallet.");
+    return {
+      authUserId: actor.authUserId,
+      wallets: accounts.page
+        .map((a: { accountId: string }) => a.accountId)
+        .filter(isSolanaAddress),
+    };
+  },
+});
 export const reserveNetwork = internalMutation({
   args: { wallet: v.string(), cost: v.number() },
   returns: v.null(),

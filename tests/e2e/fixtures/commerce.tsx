@@ -11,7 +11,11 @@ const account = {
   chains: ["solana:mainnet"] as const,
   features: ["solana:signAndSendTransaction"] as const,
 };
-let connected: readonly (typeof account)[] = [];
+let connected: readonly (typeof account)[] = location.search.includes(
+  "authorized",
+)
+  ? [account]
+  : [];
 const listeners = new Set<
   (value: { accounts: readonly (typeof account)[] }) => void
 >();

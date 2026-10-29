@@ -125,6 +125,7 @@ import type * as forumSearchProjectionConstants from "../forumSearchProjectionCo
 import type * as forumSwaps from "../forumSwaps.js";
 import type * as forumThreadDigest from "../forumThreadDigest.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
+import type * as forumTokenDiscovery from "../forumTokenDiscovery.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
 import type * as identity from "../identity.js";
@@ -328,6 +329,7 @@ declare const fullApi: ApiFromModules<{
   forumSwaps: typeof forumSwaps;
   forumThreadDigest: typeof forumThreadDigest;
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
+  forumTokenDiscovery: typeof forumTokenDiscovery;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
   identity: typeof identity;

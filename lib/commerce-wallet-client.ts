@@ -1,26 +1,17 @@
 import {
-  createClient,
   address,
   getBase64Encoder,
   getBase58Decoder,
   getTransactionDecoder,
   getCompiledTransactionMessageDecoder,
 } from "@solana/kit";
-import { walletWithoutSigner } from "@solana/kit-plugin-wallet";
+import { createIdentityWalletClient } from "./identity-wallet-client";
 import { getWalletAccountFeature } from "@wallet-standard/ui-features";
 import { getWalletAccountForUiWalletAccount } from "@wallet-standard/ui-registry";
 import type { PreparedSwap } from "./swap-router";
 
 export function createCommerceWalletClient() {
-  return createClient().use(
-    walletWithoutSigner({
-      chain: "solana:mainnet",
-      autoConnect: false,
-      storage: null,
-      filter: (wallet) =>
-        wallet.features.includes("solana:signAndSendTransaction"),
-    }),
-  );
+  return createIdentityWalletClient();
 }
 export type CommerceWalletClient = ReturnType<
   typeof createCommerceWalletClient

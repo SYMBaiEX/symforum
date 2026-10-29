@@ -1,5 +1,6 @@
 // Isolated fake boundary. No production data, session or network transport.
 import { getFunctionName } from "convex/server";
+import { useCallback } from "react";
 const SOL = "So11111111111111111111111111111111111111112",
   USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   SYMF = "5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump";
@@ -15,6 +16,13 @@ export function useQuery(
 ) {
   if (args === "skip") return undefined;
   const name = getFunctionName(ref);
+  if (name === "forumCommerce:getWalletSession")
+    return {
+      authUserId: "test-reader",
+      wallets: location.search.includes("unlinked")
+        ? []
+        : ["6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY"],
+    };
   if (name === "forumCommerce:getConfig")
     return {
       swapsEnabled: !location.search.includes("disabled"),
@@ -47,17 +55,20 @@ export function useQuery(
   if (name.endsWith(":listMine")) return [];
   return undefined;
 }
-function operation(ref: Parameters<typeof getFunctionName>[0]) {
+function useOperation(ref: Parameters<typeof getFunctionName>[0]) {
   const name = getFunctionName(ref);
-  return async (args: unknown) => {
-    const response = await fetch(`/__commerce/${name}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(args),
-    });
-    if (!response.ok) throw new Error("Mock operation failed");
-    return response.json();
-  };
+  return useCallback(
+    async (args: unknown) => {
+      const response = await fetch(`/__commerce/${name}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      if (!response.ok) throw new Error("Mock operation failed");
+      return response.json();
+    },
+    [name],
+  );
 }
-export const useMutation = operation;
-export const useAction = operation;
+export const useMutation = useOperation;
+export const useAction = useOperation;

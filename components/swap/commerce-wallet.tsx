@@ -1,19 +1,14 @@
 "use client";
-
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useConvexAuth, useQuery } from "convex/react";
 import {
   useConnect,
   useConnectedWallet,
   useWallets,
   useWalletStatus,
 } from "@solana/kit-plugin-wallet/react";
-import { Wallet, ChevronRight, LoaderCircle } from "lucide-react";
+import { Wallet, ChevronRight } from "lucide-react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,29 +18,61 @@ import {
   DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { WalletSignIn } from "@/components/auth/wallet-signin";
 import {
-  createCommerceWalletClient,
-  type CommerceWalletClient,
-} from "@/lib/commerce-wallet-client";
+  SolanaWalletBoundary,
+  useSessionWalletClient,
+} from "@/components/auth/solana-wallet-provider";
+import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 
-const CommerceContext = createContext<CommerceWalletClient | null>(null);
 export function CommerceWalletProvider({ children }: { children: ReactNode }) {
-  const [client, setClient] = useState<CommerceWalletClient | null>(null);
-  useEffect(() => {
-    const owned = createCommerceWalletClient();
-    setClient(owned);
-    return () => owned[Symbol.dispose]();
-  }, []);
-  return (
-    <CommerceContext.Provider value={client}>
-      {children}
-    </CommerceContext.Provider>
-  );
+  return <SolanaWalletBoundary>{children}</SolanaWalletBoundary>;
 }
 export function useCommerceWallet() {
-  return useContext(CommerceContext);
+  return useSessionWalletClient() ?? null;
 }
 
+export function useCommerceIdentity(client: CommerceWalletClient) {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const session = useQuery(
+    api.forumCommerce.getWalletSession,
+    isAuthenticated ? {} : "skip",
+  );
+  const connected = useConnectedWallet(client);
+  const wallets = useWallets(client);
+  const status = useWalletStatus(client);
+  const restoredFor = useRef<string | null>(null);
+  // Restore only a uniquely exposed, already authorized AND server-linked account.
+  // Never connect/sign silently or trust a persisted browser address as proof.
+  useEffect(() => {
+    if (!session) return;
+    if (connected) {
+      restoredFor.current = session.authUserId;
+      return;
+    }
+    if (restoredFor.current === session.authUserId || status !== "disconnected")
+      return;
+    const matches = wallets
+      .flatMap((w) => w.accounts)
+      .filter(
+        (a) =>
+          session.wallets.includes(a.address) &&
+          a.chains.includes("solana:mainnet") &&
+          a.features.includes("solana:signAndSendTransaction"),
+      );
+    if (matches.length === 1) {
+      restoredFor.current = session.authUserId;
+      try {
+        client.wallet.selectAccount(matches[0]);
+      } catch {
+        /* Explicit selection remains available. */
+      }
+    }
+  }, [session, connected, wallets, client, status]);
+  const linked =
+    !!connected && !!session?.wallets.includes(connected.account.address);
+  return { isAuthenticated, isLoading, session, linked, connected };
+}
 export function CommerceWalletButton({
   disabled = false,
 }: {
@@ -57,7 +84,7 @@ export function CommerceWalletButton({
   ) : (
     <Button disabled variant="outline">
       <Wallet aria-hidden="true" />
-      Connect wallet
+      Loading wallet…
     </Button>
   );
 }
@@ -68,23 +95,40 @@ function ConnectedButton({
   client: CommerceWalletClient;
   disabled: boolean;
 }) {
-  const connected = useConnectedWallet(client),
-    wallets = useWallets(client),
-    status = useWalletStatus(client);
+  const { isAuthenticated, isLoading, session, connected, linked } =
+    useCommerceIdentity(client);
+  const wallets = useWallets(client).filter((w) =>
+    w.features.includes("solana:signAndSendTransaction"),
+  );
   const connect = useConnect(client);
   const [open, setOpen] = useState(false);
-  const busy = connect.isRunning || status === "connecting";
+  const [authBusy, setAuthBusy] = useState(false);
+  if (
+    !isAuthenticated ||
+    (session && (!session.wallets.length || (connected && !linked)))
+  )
+    return (
+      <WalletSignIn
+        purpose={isAuthenticated ? "link" : "login"}
+        label={isAuthenticated ? "Link wallet to trade" : "Sign in with wallet"}
+        disabled={disabled || isLoading || authBusy}
+        onBusyChange={setAuthBusy}
+        onComplete={() => {
+          /* Session subscriptions refresh after the verified proof. */
+        }}
+      />
+    );
   return (
     <Dialog
       open={open}
-      onOpenChange={(value) => {
-        if (!busy) setOpen(value);
+      onOpenChange={(v) => {
+        if (!connect.isRunning) setOpen(v);
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" disabled={disabled}>
+        <Button variant="outline" disabled={disabled || !session}>
           <Wallet aria-hidden="true" />
-          {connected
+          {linked && connected
             ? `${connected.account.address.slice(0, 4)}…${connected.account.address.slice(-4)}`
             : "Connect wallet"}
         </Button>
@@ -95,15 +139,10 @@ function ConnectedButton({
         overlayClassName="wallet-picker-overlay"
       >
         <DialogHeader className="wallet-picker-header">
-          <span className="wallet-picker-mark" aria-hidden="true">
-            <Wallet />
-          </span>
-          <DialogTitle>
-            {connected ? "Payment wallet" : "Connect a Solana wallet"}
-          </DialogTitle>
+          <DialogTitle>Your linked wallet</DialogTitle>
           <DialogDescription>
-            Connect a wallet linked in Account Connections. Connecting does not
-            authorize a payment.
+            Use a wallet verified on your signed-in profile. Connecting does not
+            approve a payment.
           </DialogDescription>
         </DialogHeader>
         <div className="wallet-picker-body">
@@ -113,35 +152,25 @@ function ConnectedButton({
                 className="wallet-picker-option"
                 variant="ghost"
                 key={wallet.name}
-                disabled={busy}
+                disabled={connect.isRunning}
                 onClick={() => {
-                  connect
+                  void connect
                     .dispatchAsync(wallet)
                     .then(() => setOpen(false))
                     .catch(() => {});
                 }}
               >
                 <span className="wallet-picker-identity">
-                  <span className="wallet-picker-icon">
-                    <Wallet aria-hidden="true" />
-                  </span>
+                  <Wallet aria-hidden="true" />
                   <span className="wallet-picker-name">{wallet.name}</span>
                 </span>
-                {busy ? (
-                  <LoaderCircle
-                    className="animate-spin motion-reduce:animate-none"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <ChevronRight aria-hidden="true" />
-                )}
+                <ChevronRight aria-hidden="true" />
               </Button>
             ))}
           </div>
           {!wallets.length && (
             <p className="wallet-picker-empty">
-              Open this page in a Solana wallet browser, or install a Wallet
-              Standard compatible wallet.
+              Open this page in a Wallet Standard compatible Solana browser.
             </p>
           )}
           {Boolean(connect.error) && (
@@ -154,12 +183,12 @@ function ConnectedButton({
               <code className="commerce-mint">{connected.account.address}</code>
               <Button
                 variant="ghost"
+                disabled={connect.isRunning}
                 onClick={() => {
                   void client.wallet.disconnect().then(() => setOpen(false));
                 }}
-                disabled={busy}
               >
-                Disconnect payment wallet
+                Disconnect wallet
               </Button>
             </>
           )}

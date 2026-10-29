@@ -5,10 +5,8 @@ import {
   useQuery,
   useAction as useConvexAction,
   useMutation,
-  useConvexAuth,
 } from "convex/react";
 import { useAction } from "@solana/react";
-import { useConnectedWallet } from "@solana/kit-plugin-wallet/react";
 import { ArrowDownUp, ArrowUpRight, ShieldCheck } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
@@ -28,7 +26,9 @@ import {
   CommerceWalletButton,
   CommerceWalletProvider,
   useCommerceWallet,
+  useCommerceIdentity,
 } from "./commerce-wallet";
+import { TokenPicker } from "./token-picker";
 
 export type TradeToken = {
   mint: string;
@@ -36,6 +36,8 @@ export type TradeToken = {
   name: string;
   decimals: number;
   tokenProgram: string;
+  icon?: string | null;
+  verified?: boolean;
 };
 const SOL = "So11111111111111111111111111111111111111112";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -127,8 +129,8 @@ function LiveSwap({
   client: CommerceWalletClient;
   outputToken?: TradeToken;
 }) {
-  const connected = useConnectedWallet(client),
-    { isAuthenticated } = useConvexAuth();
+  const { connected, isAuthenticated, linked, session } =
+    useCommerceIdentity(client);
   const config = useQuery(api.forumCommerce.getConfig, {}),
     tokens = useQuery(api.forumCommerce.searchTokens, {});
   const quoteAction = useConvexAction(api.forumSwaps.quote),
@@ -142,9 +144,7 @@ function LiveSwap({
     [outputMint, setOutputMint] = useState(outputToken?.mint ?? USDC),
     [amount, setAmount] = useState(""),
     [slippage, setSlippage] = useState(50);
-  const [extra, setExtra] = useState<TradeToken[]>([]),
-    [mintSearch, setMintSearch] = useState("");
-  const resolveMint = useConvexAction(api.forumCommerce.resolveMint);
+  const [extra, setExtra] = useState<TradeToken[]>([]);
   const [result, setResult] = useState<QuoteResult | null>(null),
     [selected, setSelected] = useState<Quote | null>(null),
     [prepared, setPrepared] = useState<ReviewedTransaction | null>(null),
@@ -159,20 +159,24 @@ function LiveSwap({
   const [now, setNow] = useState(() => Date.now());
   const dispatched = useRef(false),
     busyGuard = useRef(false),
-    identity = useRef(connected?.account.address);
+    identity = useRef("");
+  const revision = useRef(0),
+    attemptedQuote = useRef("");
+  const identityKey = `${isAuthenticated ? (session?.authUserId ?? "loading") : "guest"}:${connected?.account.address ?? ""}:${linked}`;
   const id = useId();
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (identity.current !== connected?.account.address) {
-      identity.current = connected?.account.address;
+    if (identity.current !== identityKey) {
+      identity.current = identityKey;
+      revision.current++;
       setResult(null);
       setSelected(null);
       setPrepared(null);
     }
-  }, [connected?.account.address]);
+  }, [identityKey]);
   const all = [
     ...(tokens ?? []),
     ...(outputToken ? [outputToken] : []),
@@ -180,7 +184,15 @@ function LiveSwap({
   ].filter((t, i, a) => a.findIndex((x) => x.mint === t.mint) === i);
   const input = all.find((t) => t.mint === inputMint),
     output = all.find((t) => t.mint === outputMint);
+  let rawAmount = "";
+  try {
+    if (input) rawAmount = parseTokenAmount(amount, input.decimals);
+  } catch {
+    /* Invalid amounts never reach the provider. */
+  }
+  const inputKey = `${identityKey}:${inputMint}:${outputMint}:${rawAmount}:${slippage}`;
   const clear = () => {
+    revision.current++;
     setResult(null);
     setSelected(null);
     setPrepared(null);
@@ -191,8 +203,10 @@ function LiveSwap({
     if (busyGuard.current || dispatched.current) return;
     busyGuard.current = true;
     clear();
+    attemptedQuote.current = inputKey;
+    const started = revision.current;
     try {
-      if (!connected || !input)
+      if (!connected || !input || !linked || !isAuthenticated)
         throw new Error("Connect a linked payment wallet.");
       const data = await quoteAction({
         wallet: connected.account.address,
@@ -204,7 +218,8 @@ function LiveSwap({
       });
       if (
         client.wallet.getState().connected?.account.address !==
-        connected.account.address
+          connected.account.address ||
+        revision.current !== started
       )
         return;
       setResult(data);
@@ -213,21 +228,25 @@ function LiveSwap({
           "No safe routes responded. Nothing was signed. Try later or use a smaller amount.",
         );
     } catch {
-      setError(
-        "Routes could not be verified. Check the amount, your linked wallet in Account Connections, and try later if the free data limit has been reached.",
-      );
+      if (revision.current === started)
+        setError(
+          "Routes could not be verified. Check the amount, your linked wallet in Account Connections, and try later if the free data limit has been reached.",
+        );
     } finally {
       busyGuard.current = false;
     }
   });
   const prepare = useAction(async (_signal: AbortSignal, q: Quote) => {
-    if (busyGuard.current || dispatched.current) return;
+    if (busyGuard.current || dispatched.current || !linked || !isAuthenticated)
+      return;
     busyGuard.current = true;
+    const started = revision.current;
     setError("");
     setSelected(q);
     try {
       const data = await prepareAction({ quoteId: q.quoteId });
       const walletNow = client.wallet.getState().connected;
+      if (_signal.aborted || started !== revision.current) return;
       if (
         walletNow?.account.address !== data.wallet ||
         !walletNow.supportedTransactionVersions.has(data.transactionVersion)
@@ -235,8 +254,11 @@ function LiveSwap({
         throw new Error(
           "Connected wallet changed or does not support this transaction version.",
         );
-      setPrepared(await verifyPreparedTransaction(data));
+      const verified = await verifyPreparedTransaction(data);
+      if (!_signal.aborted && started === revision.current)
+        setPrepared(verified);
     } catch {
+      if (started !== revision.current) return;
       setSelected(null);
       setPrepared(null);
       setResult(null);
@@ -308,40 +330,54 @@ function LiveSwap({
       );
     }
   });
-  const lookup = useAction(async () => {
-    if (!connected) return;
-    try {
-      const t = await resolveMint({
-        wallet: connected.account.address,
-        mint: mintSearch.trim(),
-      });
-      setExtra((xs) => [...xs.filter((x) => x.mint !== t.mint), t]);
-      setOutputMint(t.mint);
-      setMintSearch("");
-      clear();
-    } catch {
-      setError(
-        "Mint could not be verified, is unsupported, or the data limit has been reached.",
-      );
-    }
-  });
-  const busy =
-    routes.isRunning || prepare.isRunning || send.isRunning || lookup.isRunning;
-  const locked = busy || sent;
+  const busy = routes.isRunning || prepare.isRunning || send.isRunning;
+  const locked = prepare.isRunning || send.isRunning || sent;
   const canQuote =
     config?.swapsEnabled &&
     isAuthenticated &&
+    linked &&
     connected &&
     input &&
     output &&
-    amount &&
+    rawAmount &&
+    BigInt(rawAmount) > 0n &&
     inputMint !== outputMint &&
     !locked;
+  const quoteKey = canQuote ? inputKey : "";
+  const quoteDispatch = useRef(routes.dispatch);
+  useEffect(() => {
+    quoteDispatch.current = routes.dispatch;
+  }, [routes.dispatch]);
+  useEffect(() => {
+    if (
+      !quoteKey ||
+      locked ||
+      routes.isRunning ||
+      attemptedQuote.current === quoteKey
+    )
+      return;
+    const timer = setTimeout(() => {
+      attemptedQuote.current = quoteKey;
+      quoteDispatch.current();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [quoteKey, locked, routes.isRunning]);
+  const best = result?.quotes[0];
+  const fresh = !!best && best.expiresAt > now;
+  function pickToken(t: TradeToken, side: "input" | "output") {
+    setExtra((xs) => [...xs.filter((x) => x.mint !== t.mint), t]);
+    if (side === "input") setInputMint(t.mint);
+    else setOutputMint(t.mint);
+    clear();
+  }
   return (
     <section className="commerce-panel token-swap" aria-label="Token swap">
       <div className="commerce-heading">
-        <h2>Swap tokens</h2>
-        <span>Solana mainnet</span>
+        <h2>Market swap</h2>
+        <span className="swap-network">
+          <i aria-hidden="true" />
+          Solana mainnet
+        </span>
       </div>
       <CommerceWalletButton disabled={locked} />
       {!isAuthenticated && (
@@ -352,7 +388,8 @@ function LiveSwap({
           >
             Sign in
           </ForumLink>{" "}
-          and link your wallet to trade.
+          with any method, or use the same wallet sign-in above. One profile for
+          the forum and swaps.
         </p>
       )}
       {config && !config.swapsEnabled && (
@@ -375,24 +412,14 @@ function LiveSwap({
               clear();
             }}
           />
-          <label className="sr-only" htmlFor={`${id}-from`}>
-            Pay token
-          </label>
-          <select
-            id={`${id}-from`}
-            value={inputMint}
+          <TokenPicker
+            token={input}
+            tokens={all}
+            label="Pay token"
             disabled={locked}
-            onChange={(e) => {
-              setInputMint(e.target.value);
-              clear();
-            }}
-          >
-            {all.map((t) => (
-              <option value={t.mint} key={t.mint}>
-                {t.symbol}
-              </option>
-            ))}
-          </select>
+            wallet={linked ? connected?.account.address : undefined}
+            onSelect={(t) => pickToken(t, "input")}
+          />
         </div>
         {input && <code title={input.mint}>{short(input.mint)}</code>}
       </div>
@@ -411,42 +438,25 @@ function LiveSwap({
       </button>
       <div className="commerce-amount">
         <label htmlFor={`${id}-to`}>You receive</label>
-        <select
-          id={`${id}-to`}
-          value={outputMint}
-          disabled={locked}
-          onChange={(e) => {
-            setOutputMint(e.target.value);
-            clear();
-          }}
-        >
-          {all.map((t) => (
-            <option value={t.mint} key={t.mint}>
-              {t.symbol} · {t.name}
-            </option>
-          ))}
-        </select>
-        {output && <code className="commerce-mint">{output.mint}</code>}
+        <div>
+          <output id={`${id}-to`} className="swap-receive" aria-live="polite">
+            {routes.isRunning
+              ? "…"
+              : fresh && output
+                ? formatTokenAmount(best.outputAmountRaw, output.decimals)
+                : "0.00"}
+          </output>
+          <TokenPicker
+            token={output}
+            tokens={all}
+            label="Receive token"
+            disabled={locked}
+            wallet={linked ? connected?.account.address : undefined}
+            onSelect={(t) => pickToken(t, "output")}
+          />
+        </div>
+        {output && <code title={output.mint}>{short(output.mint)}</code>}
       </div>
-      <details className="commerce-details">
-        <summary>Find another token by mint</summary>
-        <label htmlFor={`${id}-mint`}>Exact Solana mint</label>
-        <Input
-          id={`${id}-mint`}
-          value={mintSearch}
-          disabled={locked}
-          onChange={(e) => setMintSearch(e.target.value)}
-          placeholder="Paste the full mint address"
-        />
-        <Button
-          variant="outline"
-          disabled={!connected || !isAuthenticated || !mintSearch || locked}
-          onClick={() => lookup.dispatch()}
-        >
-          Verify mint
-        </Button>
-        <p>Verified on-chain metadata is not a security audit.</p>
-      </details>
       <div className="commerce-inline">
         <label htmlFor={`${id}-slip`}>Slippage limit</label>
         <select
@@ -464,12 +474,28 @@ function LiveSwap({
         </select>
       </div>
       <Button
-        className="w-full"
-        disabled={!canQuote}
-        onClick={() => routes.dispatch()}
+        className="w-full swap-primary"
+        disabled={!canQuote || busy}
+        onClick={() =>
+          fresh && best && !prepared
+            ? prepare.dispatch(best)
+            : routes.dispatch()
+        }
       >
-        {routes.isRunning ? "Comparing routes…" : "Compare routes"}
+        {routes.isRunning
+          ? "Finding the best available route…"
+          : fresh && !prepared
+            ? "Review swap"
+            : result
+              ? "Refresh quote"
+              : "Compare routes"}
       </Button>
+      {best && !fresh && !sent && (
+        <p className="commerce-note">
+          Quote expired. Refresh to see a current receive amount before
+          reviewing.
+        </p>
+      )}
       {result && (
         <div className="commerce-routes">
           <div className="commerce-heading">

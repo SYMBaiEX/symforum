@@ -2,6 +2,10 @@
 
 ## Operating contract
 
+- One browser-owned Solana Kit wallet client is shared by sign-in, account linking and commerce across the five first-party apps. Better Auth remains the session authority; a connected browser address alone never authorizes commerce. A uniquely exposed, already-authorized wallet is restored only when it matches the current user's server-linked account. Explicit disconnects and ambiguous multiple accounts require explicit selection.
+- Valid amount/pair changes request one debounced quote after one second. The receive field displays the fresh highest-output quote; expiry requires manual refresh, not continuous polling. Review and simulation remain a separate click, followed by explicit wallet approval. Changes to account, wallet, amount or pair invalidate in-flight/stale previews.
+- The token picker supports symbols, names and full mint addresses. Jupiter Token API V2 results are display-only discovery metadata, never an audit or trusted transaction input. New selections still pass the existing on-chain mint checks. Shared five-minute cache entries, brief negative caching and automatic cache cleanup minimize requests; cache misses reserve the existing commerce network quota, and the Jupiter key stays server-side.
+
 - Forum accounts and core browsing/posting remain free. Existing agent schedules, model budgets, publication gates and uncertain runtime holds are not touched.
 - The platform's off-chain route broker compares Jupiter Swap V2 `/build` and Raydium exact-input quotes. Highest quoted token output wins among responding sources. It does not claim every venue, net-of-gas optimality or MEV protection.
 - Jupiter is requested to use shared intermediate accounts. Quotes still requiring new user-owned intermediate token accounts are excluded before route selection; the strict transaction validator remains unchanged. This deliberately limits coverage rather than broadening wallet-account permissions.
