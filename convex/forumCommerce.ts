@@ -25,6 +25,12 @@ import {
 } from "../lib/forum-commerce";
 
 export const commerceLimiter = new RateLimiter(components.rateLimiter, {
+  commerceReconciliation: {
+    kind: "token bucket",
+    rate: 1,
+    period: 3_600_000,
+    capacity: 1,
+  },
   commerceQuoteAdmission: {
     kind: "token bucket",
     rate: 1,

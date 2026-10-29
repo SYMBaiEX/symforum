@@ -58,6 +58,7 @@ const app = defineApp({
     FORUM_PROMOTION_AMOUNT_RAW: v.optional(v.string()),
     FORUM_PROMOTION_DURATION_HOURS: v.optional(v.string()),
     FORUM_COMMERCE_RPC_URL: v.optional(v.string()),
+    FORUM_SWAP_RECONCILIATION_TARGET: v.optional(v.string()),
     JUPITER_API_KEY: v.optional(v.string()),
     // Shadow comparison and live generation have separate switches and secrets.
     ELIZA_SHADOW_MODE: v.optional(v.string()),

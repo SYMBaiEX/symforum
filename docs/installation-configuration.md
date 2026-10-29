@@ -104,8 +104,10 @@ paid service, create a social grant, trigger a post or deploy backend code.
 New Telegram/X delivery intents store an exact routing binding. A queued intent
 cannot follow changed domains, chats, topics, account identities or token
 settings. Long-lived X activity/relay and trade state also fail closed on a
-routing mismatch. Re-adopt/re-authorize changed destinations through the relevant
-owner workflow; use a fresh database for a fork. Never copy production queues,
+routing mismatch. Re-authorize changed X identities through the owner workflow.
+Moving existing relay/trade state needs a separately reviewed migration that
+preserves cutoffs and holds; changing configuration alone cannot re-adopt it.
+Use a fresh database for a fork. Never copy production queues,
 private history, grants or operational ledgers to initialize another community.
 
 `INSTALLATION_LEGACY_BINDING` is a **server-only, one-time compatibility pin** for
