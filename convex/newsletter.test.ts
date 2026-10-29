@@ -161,8 +161,6 @@ describe("newsletter email link origin", () => {
 
     await t.mutation(api.newsletter.subscribe, {
       email: "pending@example.com",
-      token: "confirmation-token",
-      tokenHash: tokenHash("a"),
       siteUrl: "https://attacker.example/confirmation",
     });
     const confirmedId = await t.run(
@@ -182,8 +180,6 @@ describe("newsletter email link origin", () => {
     );
     await t.mutation(api.newsletter.subscribe, {
       email: "confirmed@example.com",
-      token: "manage-token",
-      tokenHash: tokenHash("c"),
       siteUrl: "https://attacker.example/manage",
     });
     const welcomeId = await t.run(
@@ -196,6 +192,9 @@ describe("newsletter email link origin", () => {
           dailyOptIn: true,
           weeklyOptIn: true,
           tokenHash: tokenHash("d"),
+          tokenVersion: 2,
+          tokenPurpose: "confirm",
+          tokenExpiresAt: Date.now() + 60_000,
           resendSyncStatus: "idle",
           createdAt: 1,
           updatedAt: 1,
@@ -728,5 +727,195 @@ describe("newsletter editorial analytics query fan-out", () => {
     expect(
       aggregatedRows.find((row) => row.issueId === routedIssueId),
     ).toMatchObject({ sourceClicks: 1, clicked: 1 });
+  });
+});
+
+describe("newsletter mailbox capabilities", () => {
+  test("public callers cannot select confirmation or management tokens", async () => {
+    const t = setup();
+    const attack = {
+      email: "victim@example.invalid",
+      token: "chosen",
+      tokenHash: "a".repeat(64),
+    };
+    expect(await t.mutation(api.newsletter.subscribe, attack)).toEqual({
+      ok: true,
+    });
+    expect(
+      await t.mutation(api.newsletter.subscribe, { email: attack.email }),
+    ).toEqual({ ok: true });
+    expect(
+      await t.mutation(api.newsletter.confirm, { tokenHash: attack.tokenHash }),
+    ).toEqual({ ok: false, subscriber: null });
+    const jobs = await t.run(
+      async (ctx) =>
+        await ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    const emailed = jobs.find(
+      (job) => job.name === "newsletterEmails:sendConfirmationEmail",
+    )!.args[0];
+    const hash = [
+      ...new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(emailed.token),
+        ),
+      ),
+    ]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    expect(
+      (await t.mutation(api.newsletter.confirm, { tokenHash: hash })).ok,
+    ).toBe(true);
+    expect(
+      (await t.mutation(api.newsletter.unsubscribe, { tokenHash: hash })).ok,
+    ).toBe(true);
+    expect(
+      (await t.mutation(api.newsletter.confirm, { tokenHash: hash })).ok,
+    ).toBe(false);
+  });
+  test("legacy links expire without changing subscription consent or preferences", async () => {
+    const t = setup();
+    const id = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("newsletterSubscribers", {
+          email: "existing@example.invalid",
+          emailNormalized: "existing@example.invalid",
+          source: "test",
+          status: "confirmed",
+          tokenHash: "a".repeat(64),
+          dailyOptIn: false,
+          weeklyOptIn: true,
+          resendSyncStatus: "idle",
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+    );
+    expect(
+      await t.query(api.newsletter.getByToken, { tokenHash: "a".repeat(64) }),
+    ).toBeNull();
+    await t.mutation(api.newsletter.subscribe, {
+      email: "existing@example.invalid",
+    });
+    const row = await t.run(
+      async (ctx) => await ctx.db.get("newsletterSubscribers", id),
+    );
+    expect(row).toMatchObject({
+      status: "confirmed",
+      dailyOptIn: false,
+      weeklyOptIn: true,
+      tokenVersion: 2,
+      tokenPurpose: "manage",
+    });
+    expect(row!.tokenHash).not.toBe("a".repeat(64));
+  });
+  test("a profile cannot claim or edit a different mailbox, including old linked rows", async () => {
+    const t = setup();
+    const userId = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("users", {
+          email: "attacker@example.invalid",
+          emailVerificationTime: Date.now(),
+        }),
+    );
+    const actor = t.withIdentity({
+      subject: userId,
+      issuer: "https://convex.test",
+    });
+    await actor.mutation(api.newsletter.requestViewerSubscription, {
+      email: "victim@example.invalid",
+    });
+    const row = await t.run(
+      async (ctx) => await ctx.db.query("newsletterSubscribers").first(),
+    );
+    expect(row!.userId).toBeUndefined();
+    await t.run(
+      async (ctx) =>
+        await ctx.db.patch("newsletterSubscribers", row!._id, { userId }),
+    );
+    expect(
+      (await actor.query(api.newsletter.viewerPreferences, {}))!.subscriptions,
+    ).toEqual([]);
+    await expect(
+      actor.mutation(api.newsletter.updateViewerTopics, {
+        subscriberId: row!._id,
+        dailyOptIn: true,
+        weeklyOptIn: true,
+      }),
+    ).rejects.toThrow(/not found/i);
+  });
+});
+
+describe("newsletter authorized and expired access", () => {
+  test("verified mailbox owners can still manage their own profile subscription", async () => {
+    const t = setup();
+    const userId = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("users", {
+          email: "reader@example.invalid",
+          emailVerificationTime: Date.now(),
+        }),
+    );
+    const actor = t.withIdentity({
+      subject: userId,
+      issuer: "https://convex.test",
+    });
+    await actor.mutation(api.newsletter.requestViewerSubscription, {
+      email: "reader@example.invalid",
+    });
+    const row = await t.run(
+      async (ctx) => await ctx.db.query("newsletterSubscribers").first(),
+    );
+    expect(row!.userId).toBe(userId);
+    await t.mutation(api.newsletter.confirm, { tokenHash: row!.tokenHash });
+    await actor.mutation(api.newsletter.updateViewerTopics, {
+      subscriberId: row!._id,
+      dailyOptIn: false,
+      weeklyOptIn: true,
+    });
+    expect(
+      (await actor.query(api.newsletter.viewerPreferences, {}))!
+        .subscriptions[0],
+    ).toMatchObject({
+      status: "confirmed",
+      dailyOptIn: false,
+      weeklyOptIn: true,
+    });
+  });
+  test("expired backend-issued links cannot read or change subscription state", async () => {
+    const t = setup();
+    await t.run(
+      async (ctx) =>
+        await ctx.db.insert("newsletterSubscribers", {
+          email: "expired@example.invalid",
+          emailNormalized: "expired@example.invalid",
+          source: "test",
+          status: "confirmed",
+          tokenHash: "e".repeat(64),
+          tokenVersion: 2,
+          tokenPurpose: "manage",
+          tokenExpiresAt: Date.now() - 1,
+          resendSyncStatus: "idle",
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+    );
+    expect(
+      await t.query(api.newsletter.getByToken, { tokenHash: "e".repeat(64) }),
+    ).toBeNull();
+    expect(
+      (
+        await t.mutation(api.newsletter.unsubscribe, {
+          tokenHash: "e".repeat(64),
+        })
+      ).ok,
+    ).toBe(false);
+    await expect(
+      t.mutation(api.newsletter.updateTopicsByToken, {
+        tokenHash: "e".repeat(64),
+        dailyOptIn: false,
+        weeklyOptIn: false,
+      }),
+    ).rejects.toThrow(/not found/i);
   });
 });

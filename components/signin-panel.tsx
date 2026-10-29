@@ -9,7 +9,8 @@ import { LegacySignInPanel } from "@/components/auth/legacy-signin-panel";
 import { IdentitySignIn } from "@/components/auth/identity-signin";
 
 export function SignInPanel() {
-  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <IdentitySignIn />;
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true")
+    return <IdentitySignIn />;
   return (
     <Suspense fallback={<PasswordPanelSkeleton />}>
       {process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" ? (
@@ -80,8 +81,14 @@ function PasswordPanel() {
         setPending(false);
         return;
       }
-      window.sessionStorage.setItem("symbaiex.auth.signup-handle", normalizedHandle);
-      window.sessionStorage.setItem("symbaiex.auth.signup-returnTo", redirectTo);
+      window.sessionStorage.setItem(
+        "symbaiex.auth.signup-handle",
+        normalizedHandle,
+      );
+      window.sessionStorage.setItem(
+        "symbaiex.auth.signup-returnTo",
+        redirectTo,
+      );
       // The API route must receive a document navigation so its WorkOS redirect is followed.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign(
@@ -134,19 +141,22 @@ function PasswordPanel() {
       ) : null}
       {status === "handle-unavailable" ? (
         <p role="status" className="mb-4 text-sm text-muted-foreground">
-          That handle is already in use. Choose another handle or migrate the existing account.
+          That handle is already in use. Choose another handle or migrate the
+          existing account.
         </p>
       ) : null}
       <form onSubmit={submit} className="flex flex-col gap-4">
         <label className="flex flex-col gap-2 text-sm font-medium">
-          {mode === "signUp" ? "Choose a handle" : "Email or SYM handle"}
+          {mode === "signUp" ? "Choose a handle" : "Email"}
           <div className="flex gap-2">
             <Input
               name="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              autoComplete={mode === "signUp" ? "username" : "username email"}
-              placeholder={mode === "signUp" ? "your-handle" : "handle or email"}
+              autoComplete={mode === "signUp" ? "username" : "email"}
+              placeholder={
+                mode === "signUp" ? "your-handle" : "you@example.com"
+              }
               required
             />
           </div>
@@ -177,11 +187,7 @@ function PasswordPanel() {
           verification. Existing SYM handles remain available for sign-in.
         </p>
       </form>
-      <Button
-        asChild
-        className="mt-4 w-full"
-        variant="ghost"
-      >
+      <Button asChild className="mt-4 w-full" variant="ghost">
         <a href="/account/migrate">Migrate an existing account</a>
       </Button>
     </div>

@@ -1,0 +1,11 @@
+{
+  "name": "crypto-browserify",
+  "version": "0.0.0-node-compat",
+  "private": true,
+  "main": "index.cjs",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT",
+  "description": "Private Node-only compatibility replacement; not the upstream browser polyfill"
+}

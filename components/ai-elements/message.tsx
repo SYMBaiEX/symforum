@@ -15,15 +15,16 @@ export function MessageResponse({
 }) {
   return (
     <div
-      className={cn(
-        "max-w-none text-sm leading-6 text-foreground",
-        className,
-      )}
+      className={cn("max-w-none text-sm leading-6 text-foreground", className)}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
+          // Replies can contain untrusted source text. Never auto-fetch model URLs.
+          img: ({ alt }) => (
+            <span>{alt ? `[Image: ${alt}]` : "[Image omitted]"}</span>
+          ),
           a: ({ children, ...props }) => (
             <a
               {...props}

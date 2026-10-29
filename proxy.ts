@@ -452,6 +452,7 @@ function applySecurityHeaders(
 ) {
   response.headers.set("Content-Security-Policy", policy.value);
   const isOAuthConnect =
+    ["/newsletter/confirm", "/newsletter/preferences", "/newsletter/unsubscribe"].includes(request?.nextUrl.pathname ?? "") ||
     request?.nextUrl.pathname === "/api/agents/x/callback" ||
     request?.nextUrl.pathname === "/control-panel/x-accounts" ||
     request?.nextUrl.pathname === "/forum/control-panel/x-accounts" ||

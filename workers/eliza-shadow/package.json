@@ -16,10 +16,12 @@
   "dependencies": {
     "@elizaos/core": "1.7.2",
     "@elizaos/plugin-sql": "1.7.2",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "crypto-browserify": "file:./vendor/node-crypto-compat"
   },
   "overrides": {
     "pdfjs-dist": "6.2.108",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "crypto-browserify": "file:./vendor/node-crypto-compat"
   }
 }

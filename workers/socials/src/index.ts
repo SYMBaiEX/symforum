@@ -1,3 +1,5 @@
+import { BodyReadError, readBoundedBody } from "../../../lib/bounded-body";
+
 const TYPEFULLY_WEBHOOK_PATH = "/webhooks/typefully";
 const HEALTH_PATH = "/health";
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -138,9 +140,14 @@ async function receiveTypefullyWebhook(
     return jsonResponse({ error: "Invalid webhook signature" }, 401);
   }
 
-  const rawBody = new Uint8Array(await request.arrayBuffer());
-  if (rawBody.byteLength > MAX_BODY_BYTES) {
-    return jsonResponse({ error: "Payload too large" }, 413);
+  let rawBody: Uint8Array;
+  try {
+    rawBody = await readBoundedBody(request, MAX_BODY_BYTES);
+  } catch (error) {
+    return jsonResponse(
+      { error: "Invalid webhook body" },
+      error instanceof BodyReadError ? error.status : 400,
+    );
   }
 
   const signedPayload = joinBytes(

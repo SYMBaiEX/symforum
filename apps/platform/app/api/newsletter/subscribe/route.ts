@@ -1,8 +1,4 @@
 import { convexRefs } from "@/lib/convex-refs";
-import {
-  createNewsletterToken,
-  newsletterTokenHash,
-} from "@/lib/newsletter-token";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { ConvexHttpClient } from "convex/browser";
 import { after, NextResponse } from "next/server";
@@ -29,23 +25,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const token = createNewsletterToken();
     const convex = new ConvexHttpClient(convexUrl);
-    const subscriber = await convex.mutation(convexRefs.newsletter.subscribe, {
+    await convex.mutation(convexRefs.newsletter.subscribe, {
       email: payload.email,
       source: typeof payload.source === "string" ? payload.source : "site",
-      token,
-      tokenHash: newsletterTokenHash(token),
     });
 
     return NextResponse.json(
       {
         ok: true,
-        subscriber,
         message:
-          subscriber.status === "confirmed"
-            ? "Check your inbox for a link to manage your subscription."
-            : "Check your inbox to confirm.",
+          "Check your inbox for a confirmation or subscription management link.",
       },
       { headers: { "Cache-Control": "no-store" } },
     );

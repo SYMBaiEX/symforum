@@ -6,6 +6,7 @@ import {
   jsonOk,
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
+import { BodyReadError, readBoundedBody } from "@/lib/bounded-body";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
       throw new AdminApiError(415, "Content-Type must be an image/* type");
     }
 
-    const bytes = await request.arrayBuffer();
+    const bytes = await readBoundedBody(request, MAX_IMAGE_BYTES);
     if (bytes.byteLength === 0) {
       throw new AdminApiError(400, "Empty image body");
     }
@@ -41,12 +42,14 @@ export async function POST(request: Request) {
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: { "Content-Type": contentType },
-      body: bytes,
+      body: bytes.buffer as ArrayBuffer,
     });
     if (!uploadResponse.ok) {
       throw new AdminApiError(502, "Failed to store image in Convex");
     }
-    const { storageId } = (await uploadResponse.json()) as { storageId: string };
+    const { storageId } = (await uploadResponse.json()) as {
+      storageId: string;
+    };
     if (!storageId) {
       throw new AdminApiError(502, "Convex did not return a storage id");
     }
@@ -62,6 +65,8 @@ export async function POST(request: Request) {
 
     return jsonOk({ url });
   } catch (error) {
+    if (error instanceof BodyReadError)
+      return apiError(new AdminApiError(error.status, error.message), request);
     return apiError(error, request);
   }
 }

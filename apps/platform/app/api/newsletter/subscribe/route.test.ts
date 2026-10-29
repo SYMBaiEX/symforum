@@ -45,7 +45,7 @@ describe("newsletter subscribe POST", () => {
     expect(mutation).not.toHaveBeenCalled();
   });
 
-  test("subscribes with a hashed confirmation token and no-store response", async () => {
+  test("requests a private emailed link without client-controlled tokens", async () => {
     const response = await POST(
       jsonRequest({ email: "reader@example.com", source: "footer" }),
     );
@@ -55,8 +55,6 @@ describe("newsletter subscribe POST", () => {
     expect(mutation).toHaveBeenCalledWith(expect.anything(), {
       email: "reader@example.com",
       source: "footer",
-      token: expect.stringMatching(/^sym_nl_/),
-      tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
     await expect(response.json()).resolves.toMatchObject({ ok: true });
   });

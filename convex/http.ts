@@ -1,3 +1,4 @@
+import { readBoundedBody } from "../lib/bounded-body";
 import { httpRouter, makeFunctionReference } from "convex/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -19,62 +20,6 @@ const http = httpRouter();
 addServiceAuthRoutes(http);
 addForumPluginRoutes(http);
 addTelegramAgentRoutes(http);
-http.route({
-  path: "/auth/handle-login",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const configuredSecret = env.AUTH_HANDLE_LOOKUP_SECRET;
-    const suppliedSecret = request.headers
-      .get("authorization")
-      ?.replace(/^Bearer\s+/i, "");
-    if (
-      !configuredSecret ||
-      configuredSecret.length < 32 ||
-      !suppliedSecret ||
-      !constantTimeEqual(suppliedSecret, configuredSecret)
-    ) {
-      return privateJson({ error: "not_found" }, 404);
-    }
-    if (
-      request.headers.get("content-type")?.split(";")[0].trim() !==
-      "application/json"
-    ) {
-      return privateJson({ error: "invalid_request" }, 400);
-    }
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength > 1024) {
-      return privateJson({ error: "invalid_request" }, 413);
-    }
-    let body: unknown;
-    try {
-      const text = await request.text();
-      if (text.length > 1024) {
-        return privateJson({ error: "invalid_request" }, 413);
-      }
-      body = JSON.parse(text);
-    } catch {
-      return privateJson({ error: "invalid_request" }, 400);
-    }
-    const handle =
-      typeof body === "object" && body !== null
-        ? (body as Record<string, unknown>).handle
-        : null;
-    if (
-      typeof handle !== "string" ||
-      handle.length > 32 ||
-      !/^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/i.test(handle)
-    ) {
-      return privateJson({ error: "invalid_request" }, 400);
-    }
-    const result = await ctx.runQuery(
-      internal.authKitIdentity.getVerifiedEmailForHandle,
-      { handle: handle.toLowerCase() },
-    );
-    return result
-      ? privateJson(result, 200)
-      : privateJson({ error: "not_found" }, 404);
-  }),
-});
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const FORUM_ATTACHMENT_ALLOWED_CONTENT_TYPES = new Set([
   "image/gif",
@@ -128,39 +73,75 @@ auth.addHttpRoutes(http);
 // Preserve legacy sessions and signed agent-key auth while human sessions move.
 // Only public RSA key fields are ever emitted from either key store.
 http.route({
-  path: "/api/identity/convex/jwks", method: "GET",
-  handler: httpAction(async ctx => {
-    const current = env.BETTER_AUTH_ENABLED === "true" ? await createIdentityAuth(ctx).api.getJwks() : { keys: [] };
+  path: "/api/identity/convex/jwks",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const current =
+      env.BETTER_AUTH_ENABLED === "true"
+        ? await createIdentityAuth(ctx).api.getJwks()
+        : { keys: [] };
     const legacy: unknown = JSON.parse(env.JWKS ?? '{"keys":[]}');
     return Response.json(publicIdentityKeys(current, legacy), {
-      headers: { "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" },
+      headers: {
+        "Cache-Control": "public, max-age=60",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   }),
 });
 identityComponent.registerRoutes(http, createIdentityAuth);
 
 http.route({
-  path: "/agent/self-register", method: "POST",
+  path: "/agent/self-register",
+  method: "POST",
   handler: httpAction(async (ctx, request) => {
     const secret = env.AGENT_JOIN_RELAY_SECRET;
-    const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-    if (env.AGENT_SELF_JOIN_ENABLED !== "true" || !secret || secret.length < 32 || !supplied || !constantTimeEqual(supplied, secret)) return privateJson({ error: "not_found" }, 404);
-    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") return privateJson({ error: "invalid_request" }, 415);
+    const supplied = request.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "");
+    if (
+      env.AGENT_SELF_JOIN_ENABLED !== "true" ||
+      !secret ||
+      secret.length < 32 ||
+      !supplied ||
+      !constantTimeEqual(supplied, secret)
+    )
+      return privateJson({ error: "not_found" }, 404);
+    if (
+      request.headers.get("content-type")?.split(";")[0] !== "application/json"
+    )
+      return privateJson({ error: "invalid_request" }, 415);
     const text = await request.text();
-    if (text.length > 8192) return privateJson({ error: "invalid_request" }, 413);
+    if (text.length > 8192)
+      return privateJson({ error: "invalid_request" }, 413);
     try {
       const body: unknown = JSON.parse(text);
-      if (!body || typeof body !== "object" || !("sourceHash" in body) || typeof body.sourceHash !== "string" || !("request" in body)) return privateJson({ error: "invalid_request" }, 400);
+      if (
+        !body ||
+        typeof body !== "object" ||
+        !("sourceHash" in body) ||
+        typeof body.sourceHash !== "string" ||
+        !("request" in body)
+      )
+        return privateJson({ error: "invalid_request" }, 400);
       const data = agentJoinRequest.parse(body.request);
       let result;
       if (data.action === "challenge") {
-        result = await ctx.runMutation(internal.agentJoin.begin, { publicKey: data.publicKey, sourceHash: body.sourceHash });
+        result = await ctx.runMutation(internal.agentJoin.begin, {
+          publicKey: data.publicKey,
+          sourceHash: body.sourceHash,
+        });
       } else {
         const { action: _action, ...registration } = data;
-        result = await ctx.runMutation(internal.agentJoin.register, { ...registration, sourceHash: body.sourceHash });
+        result = await ctx.runMutation(internal.agentJoin.register, {
+          ...registration,
+          sourceHash: body.sourceHash,
+        });
       }
       return privateJson(result, result.status === "rate_limited" ? 429 : 200);
-    } catch { return privateJson({ error: "registration_not_completed" }, 400); }
+    } catch {
+      return privateJson({ error: "registration_not_completed" }, 400);
+    }
   }),
 });
 
@@ -243,7 +224,10 @@ http.route({
       );
     let agentUserId;
     try {
-      agentUserId = await ctx.runQuery(internal.agentOAuth.currentEvidenceUserId, {});
+      agentUserId = await ctx.runQuery(
+        internal.agentOAuth.currentEvidenceUserId,
+        {},
+      );
     } catch {
       agentUserId = null;
     }
@@ -683,7 +667,10 @@ http.route({
         );
       }
 
-      const bytes = await request.arrayBuffer();
+      const bytes = await readBoundedBody(
+        request,
+        FORUM_ATTACHMENT_MAX_FILE_BYTES,
+      );
       if (bytes.byteLength === 0) {
         return forumAttachmentUploadJson(
           { error: "Attachment file is empty." },
@@ -860,7 +847,7 @@ async function readAgentAuthBody(request: Request): Promise<unknown> {
   ) {
     throw new Error("Request body is too large.");
   }
-  const bytes = await request.arrayBuffer();
+  const bytes = await readBoundedBody(request, AGENT_AUTH_MAX_BODY_BYTES);
   if (bytes.byteLength > AGENT_AUTH_MAX_BODY_BYTES) {
     throw new Error("Request body is too large.");
   }
@@ -882,7 +869,7 @@ async function readAgentDataBody(request: Request): Promise<unknown> {
     )
   )
     throw new Error("Content-Type must be application/json.");
-  const bytes = await request.arrayBuffer();
+  const bytes = await readBoundedBody(request, AGENT_DATA_MAX_BODY_BYTES);
   if (bytes.byteLength === 0) throw new Error("Request body is required.");
   if (bytes.byteLength > AGENT_DATA_MAX_BODY_BYTES)
     throw new Error("Request body is too large.");

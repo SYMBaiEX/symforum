@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { answerA2aDocsQuery } from "@/lib/a2a-docs-agent";
+import { BodyReadError, readBoundedBody } from "@/lib/bounded-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,15 +11,36 @@ const MAX_BODY_BYTES = 32 * 1024;
 export async function POST(request: Request) {
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return rpc(null, undefined, rpcError(-32600, "Request body is too large"), 413);
+    return rpc(
+      null,
+      undefined,
+      rpcError(-32600, "Request body is too large"),
+      413,
+    );
   }
-  if (!/^application\/json(?:;|$)/i.test(request.headers.get("content-type") ?? "")) {
-    return rpc(null, undefined, rpcError(-32600, "Content-Type must be application/json"), 415);
+  if (
+    !/^application\/json(?:;|$)/i.test(
+      request.headers.get("content-type") ?? "",
+    )
+  ) {
+    return rpc(
+      null,
+      undefined,
+      rpcError(-32600, "Content-Type must be application/json"),
+      415,
+    );
   }
 
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_BODY_BYTES) {
-    return rpc(null, undefined, rpcError(-32600, "Request body is too large"), 413);
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBoundedBody(request, MAX_BODY_BYTES);
+  } catch (error) {
+    return rpc(
+      null,
+      undefined,
+      rpcError(-32600, "Invalid request body"),
+      error instanceof BodyReadError ? error.status : 400,
+    );
   }
 
   let body: Record<string, unknown>;
@@ -86,9 +108,12 @@ export const HEAD = unsupportedMethod;
 function messageText(params: unknown) {
   if (!isRecord(params) || !isRecord(params.message)) return null;
   const parts = params.message.parts;
-  if (!Array.isArray(parts) || parts.length < 1 || parts.length > 8) return null;
+  if (!Array.isArray(parts) || parts.length < 1 || parts.length > 8)
+    return null;
   const text = parts
-    .map((part) => (isRecord(part) && typeof part.text === "string" ? part.text : ""))
+    .map((part) =>
+      isRecord(part) && typeof part.text === "string" ? part.text : "",
+    )
     .filter(Boolean)
     .join(" ")
     .trim();

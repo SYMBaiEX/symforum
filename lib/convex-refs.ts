@@ -3504,11 +3504,9 @@ export const convexRefs = {
       {
         email: string;
         source?: string;
-        token: string;
-        tokenHash: string;
         siteUrl?: string;
       },
-      NewsletterSubscriberRecord
+      { ok: true }
     >("newsletter:subscribe"),
     viewerPreferences: makeFunctionReference<
       "query",
@@ -3523,11 +3521,9 @@ export const convexRefs = {
       {
         email: string;
         source?: string;
-        token: string;
-        tokenHash: string;
         siteUrl?: string;
       },
-      NewsletterSubscriberRecord
+      { ok: true }
     >("newsletter:requestViewerSubscription"),
     updateViewerTopics: makeFunctionReference<
       "mutation",
