@@ -76,7 +76,9 @@ test.each(["/forum/general", "/general"])(
       `href="${path.startsWith("/forum") ? "/forum" : ""}/start-here"`,
     );
     expect(html).toContain('aria-label="Forum sections on mobile"');
-    expect(html).toContain(`href="${path.startsWith("/forum") ? "/forum" : ""}/symf"`);
+    expect(html).toContain(
+      `href="${path.startsWith("/forum") ? "/forum" : ""}/symf"`,
+    );
     expect(html).toContain(`redirectTo=${encodeURIComponent(path)}`);
     expect(html).not.toContain("<h1");
   },
@@ -104,4 +106,10 @@ test("compact navigation preserves named primary and permitted personal destinat
   expect(html).not.toContain('href="/forum/moderation"');
   for (const name of ["Feed", "News", "Community", "Boards"])
     expect(html).toContain(`aria-label="${name}"`);
+  for (const name of ["Start here", "$SYMF", "Swap tokens"]) {
+    expect(html).toContain(`aria-label="${name}"`);
+    expect(html).toContain(
+      `class="forum-nav-label min-w-0 flex-1">${name}</span>`,
+    );
+  }
 });

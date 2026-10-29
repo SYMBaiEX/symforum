@@ -301,7 +301,6 @@
 .forum-app-shell .forum-topbar .forum-global-search input { min-height: 36px; height: 36px; font-size: 13px; }
 .forum-app-shell .forum-left-rail { width: var(--forum-rail-width); padding: 12px 8px; scrollbar-width: thin; }
 .forum-app-shell .forum-left-rail .forum-rail-link { min-height: 36px; padding: 7px 10px; gap: 10px; border-radius: 7px; font-size: 13px; line-height: 20px; position: relative; }
-.forum-app-shell .forum-left-rail .forum-rail-link.is-active::before { content: ''; position: absolute; inset-block: 10px; left: 0; width: 2px; border-radius: 2px; background: hsl(var(--primary)); }
 .forum-app-shell .forum-left-rail .forum-rail-link > svg { width: 17px; height: 17px; flex-shrink: 0; }
 .forum-app-shell .forum-left-rail .forum-rail-link > span[aria-hidden] { width: 24px; height: 24px; border-radius: 6px; font-size: 10px; }
 .forum-app-shell .forum-rail-group { margin-top: 16px; }
