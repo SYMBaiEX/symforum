@@ -22,6 +22,19 @@ import {
 } from "../lib/forum-commerce";
 
 export const commerceLimiter = new RateLimiter(components.rateLimiter, {
+  commerceQuoteAdmission: {
+    kind: "token bucket",
+    rate: 1,
+    period: 1200,
+    capacity: 1,
+  },
+  commerceJupiter: { kind: "token bucket", rate: 1, period: 1200, capacity: 1 },
+  commerceJupiterKeyless: {
+    kind: "token bucket",
+    rate: 1,
+    period: 2400,
+    capacity: 1,
+  },
   commerceNetworkDaily: {
     kind: "fixed window",
     rate: 1000,
@@ -131,12 +144,29 @@ export const getWalletSession = query({
   },
 });
 export const reserveNetwork = internalMutation({
-  args: { wallet: v.string(), cost: v.number() },
+  args: {
+    wallet: v.string(),
+    cost: v.number(),
+    jupiter: v.optional(v.boolean()),
+  },
   returns: v.null(),
-  handler: async (ctx, { wallet, cost }) => {
+  handler: async (ctx, { wallet, cost, jupiter }) => {
     const actor = await commerceActor(ctx, wallet);
     if (!Number.isSafeInteger(cost) || cost < 1 || cost > 10)
       throw new ConvexError("Invalid request cost.");
+    if (jupiter) {
+      const gate = await commerceLimiter.limit(
+        ctx,
+        env.JUPITER_API_KEY ? "commerceJupiter" : "commerceJupiterKeyless",
+        {
+          key: "shared-key",
+        },
+      );
+      if (!gate.ok)
+        throw new ConvexError(
+          "Routing is busy within the free-tier limit. Wait a few seconds before trying again.",
+        );
+    }
     const perActor = await commerceLimiter.limit(ctx, "commerceActorNetwork", {
       key: actor.authUserId,
     });

@@ -24,6 +24,17 @@ import {
 import styles from "./forum-symf.module.css";
 import { SymfPriceChart } from "./symf-price-chart";
 import { SymfStats, SymfTrades, useSymfMarket } from "./symf-market-overview";
+import { TokenSwap } from "@/components/swap/token-swap";
+import { CommerceWalletProvider } from "@/components/swap/commerce-wallet";
+
+const symfTradeToken = {
+  mint: SYMF_TOKEN.mint,
+  symbol: "SYMF",
+  name: "SYMBaiEX Forum",
+  decimals: 6,
+  tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  icon: "/images/brand/symforum-icon-64.png",
+};
 
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 
@@ -133,67 +144,76 @@ export function ForumSymf() {
         </p>
       </section>
 
-      <section aria-labelledby="symf-chart-title" className={styles.chart}>
-        <div className={styles.chartHeader}>
-          <div className={styles.chartIdentity}>
-            <Image
-              src="/images/brand/symforum-icon-64.png"
-              width={40}
-              height={40}
-              alt=""
-              className={styles.tokenIcon}
-            />
-            <div>
-              <h2 id="symf-chart-title" className={styles.chartTitle}>
-                $SYMF chart
-              </h2>
-              <p className={styles.chartMeta}>
-                SYMF / SOL <span>PumpSwap</span>
-              </p>
+      <div className={styles.tradingLayout}>
+        <section aria-labelledby="symf-chart-title" className={styles.chart}>
+          <div className={styles.chartHeader}>
+            <div className={styles.chartIdentity}>
+              <Image
+                src="/images/brand/symforum-icon-64.png"
+                width={40}
+                height={40}
+                alt=""
+                className={styles.tokenIcon}
+              />
+              <div>
+                <h2 id="symf-chart-title" className={styles.chartTitle}>
+                  $SYMF chart
+                </h2>
+                <p className={styles.chartMeta}>
+                  SYMF / SOL <span>PumpSwap</span>
+                </p>
+              </div>
             </div>
-          </div>
-          <a
-            href={SYMF_CHART_URL}
-            {...external}
-            className={`${styles.textLink} focus-ring`}
-          >
-            Open full chart{" "}
-            <ArrowUpRight aria-hidden="true" className="size-3.5" />
-          </a>
-        </div>
-        {host === "plugin" ? (
-          <div className="flex min-h-60 flex-col items-center justify-center gap-4 p-6 text-center">
-            <p className="max-w-sm text-sm leading-6 text-muted-foreground">
-              Open the token page on the Forum website to use the interactive
-              chart.
-            </p>
-            <a
-              href={forumSiteUrl("/symf")}
-              {...external}
-              className={`${styles.primaryAction} focus-ring`}
-            >
-              Open live chart{" "}
-              <ArrowUpRight aria-hidden="true" className="size-4" />
-            </a>
-          </div>
-        ) : (
-          <SymfPriceChart light={resolvedTheme === "light"} />
-        )}
-        <div className={styles.chartFooter}>
-          <p>Market data by GeckoTerminal. Data may lag other providers.</p>
-          <p>
-            Full trading view:{" "}
             <a
               href={SYMF_CHART_URL}
               {...external}
-              className="focus-ring text-primary underline underline-offset-4"
+              className={`${styles.textLink} focus-ring`}
             >
-              DEX Screener
+              Open full chart{" "}
+              <ArrowUpRight aria-hidden="true" className="size-3.5" />
             </a>
-            .
-          </p>
-        </div>
-      </section>
+          </div>
+          {host === "plugin" ? (
+            <div className="flex min-h-60 flex-col items-center justify-center gap-4 p-6 text-center">
+              <p className="max-w-sm text-sm leading-6 text-muted-foreground">
+                Open the token page on the Forum website to use the interactive
+                chart.
+              </p>
+              <a
+                href={forumSiteUrl("/symf")}
+                {...external}
+                className={`${styles.primaryAction} focus-ring`}
+              >
+                Open live chart{" "}
+                <ArrowUpRight aria-hidden="true" className="size-4" />
+              </a>
+            </div>
+          ) : (
+            <SymfPriceChart light={resolvedTheme === "light"} />
+          )}
+          <div className={styles.chartFooter}>
+            <p>Market data by GeckoTerminal. Data may lag other providers.</p>
+            <p>
+              Full trading view:{" "}
+              <a
+                href={SYMF_CHART_URL}
+                {...external}
+                className="focus-ring text-primary underline underline-offset-4"
+              >
+                DEX Screener
+              </a>
+              .
+            </p>
+          </div>
+        </section>
+        {host === "website" && (
+          <aside className={styles.swapAside} aria-label="Swap SYMF">
+            <CommerceWalletProvider>
+              <TokenSwap outputToken={symfTradeToken} />
+            </CommerceWalletProvider>
+          </aside>
+        )}
+      </div>
 
       {host === "website" && <SymfTrades {...market} />}
 

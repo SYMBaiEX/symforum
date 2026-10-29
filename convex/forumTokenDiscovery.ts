@@ -84,6 +84,7 @@ export const reserve = internalMutation({
     await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
       wallet,
       cost: 1,
+      jupiter: true,
     });
     const next = {
       key,

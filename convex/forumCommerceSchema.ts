@@ -8,6 +8,16 @@ export const promotionStatus = v.union(
   v.literal("expired"),
 );
 export const forumCommerceTables = {
+  forumSwapRequests: defineTable({
+    wallet: v.string(),
+    authUserId: v.string(),
+    requestKey: v.string(),
+    lease: v.string(),
+    leaseUntil: v.number(),
+    payload: v.optional(v.string()),
+    quoteIds: v.array(v.id("forumSwapQuotes")),
+    expiresAt: v.number(),
+  }).index("by_wallet", ["wallet"]),
   forumTokenDiscoveryCache: defineTable({
     key: v.string(),
     payload: v.string(),
