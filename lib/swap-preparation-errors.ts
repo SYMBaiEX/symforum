@@ -26,6 +26,14 @@ export class SwapRpcError extends Error {
 }
 export function swapPreparationIssue(error: unknown): SwapPreparationIssue {
   if (error instanceof SwapRpcError) return error.code;
+  const data =
+    error && typeof error === "object" && "data" in error
+      ? error.data
+      : undefined;
+  const known = Object.entries(SWAP_PREPARATION_MESSAGES).find(
+    ([, message]) => message === data,
+  )?.[0];
+  if (known) return known as SwapPreparationIssue;
   const message = error instanceof Error ? error.message : "";
   if (message === "Quote expired. Review a fresh quote.")
     return "quote_expired";

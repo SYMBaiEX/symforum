@@ -934,6 +934,39 @@ describe("paid placements: capacity, receipts, ownership and moderation", () => 
   });
 });
 describe("verified token discovery and one-shot swaps", () => {
+  test("the Node preparation boundary preserves linked ownership and safe errors before RPC", async () => {
+    const t = setup(),
+      a = await actor(t, 105),
+      other = await actor(t, 106);
+    const request = {
+      wallet: a.wallet,
+      inputMint: "So11111111111111111111111111111111111111112",
+      outputMint: COMMERCE_MINT,
+      amountRaw: "1000000",
+      slippageBps: 50,
+      platformFeeBps: 25,
+    };
+    const args = {
+      treasury,
+      quoteJson: JSON.stringify({
+        request,
+        createdAt: Date.now() - 30000,
+        expiresAt: Date.now() - 5000,
+      }),
+    };
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      t.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("Sign in");
+    await expect(
+      other.client.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("Link and verify");
+    await expect(
+      a.client.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("quote expired");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   test("one operator unsigned diagnostic is bounded, fresh and cannot invoke a wallet or save a payment", async () => {
     const t = setup(),
       a = await actor(t, 98);

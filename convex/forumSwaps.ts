@@ -23,7 +23,6 @@ import { verifiedMint } from "../lib/swap-rpc";
 import { SOL_MINT } from "../lib/swap-router";
 import { COMMERCE_MINT } from "../lib/forum-commerce";
 import {
-  buildSwapTransaction,
   collectSwapQuotes,
   validateSwapRequest,
   type SwapRouteQuote,
@@ -561,11 +560,10 @@ export const prepare = action({
         wallet: saved.wallet,
         cost: 10,
       });
-      const result: PreparedSwap = await buildSwapTransaction(
-        JSON.parse(saved.quoteJson) as SwapRouteQuote,
+      const result: PreparedSwap = await ctx.runAction(
+        internal.forumCommerceNode.buildSwap,
         {
-          rpcUrl: config.rpcUrl,
-          jupiterApiKey: config.jupiterApiKey,
+          quoteJson: saved.quoteJson,
           treasury: saved.treasury,
         },
       );
@@ -638,7 +636,7 @@ export const reserveUnsignedDiagnostic = internalMutation({
     const once = await commerceLimiter.limit(
       ctx,
       "commerceUnsignedDiagnostic",
-      { key: "operator" },
+      { key: "operator-node-v1" },
     );
     if (!once.ok) return false;
     const provider = await commerceLimiter.limit(
@@ -676,95 +674,9 @@ export const unsignedDiagnostic = internalAction({
     kitCode: number | null;
     source: string | null;
   }> => {
-    let stage = "admission",
-      simulations = 0;
-    if (
-      !(await ctx.runMutation(
-        internal.forumSwaps.reserveUnsignedDiagnostic,
-        {},
-      ))
-    )
-      return {
-        ok: false,
-        code: "diagnostic_budget_reached",
-        stage,
-        simulations,
-        kitCode: null,
-        source: null,
-      };
-    const config = commerceConfig(env);
-    if (!config.rpcUrl || !config.treasury || !config.swapsEnabled)
-      throw new ConvexError("Swaps unavailable.");
-    const routerConfig = {
-      rpcUrl: config.rpcUrl,
-      treasury: config.treasury,
-      jupiterApiKey: config.jupiterApiKey,
-    };
-    const fetcher: typeof fetch = async (input, init) => {
-      const method =
-        init?.method === "POST"
-          ? JSON.parse(String(init.body)).method
-          : undefined;
-      stage = typeof method === "string" ? method : "quote";
-      if (method === "simulateTransaction") simulations++;
-      return fetch(input, init);
-    };
-    try {
-      const request = {
-        wallet,
-        inputMint: SOL_MINT,
-        outputMint: COMMERCE_MINT,
-        amountRaw: "1000000",
-        slippageBps: 50,
-        platformFeeBps: config.platformFeeBps,
-        supportsV1: true,
-      };
-      const result = await collectSwapQuotes(request, routerConfig, fetcher);
-      const quote = result.quotes.find((q) => q.provider === "jupiter");
-      if (!quote)
-        return {
-          ok: false,
-          code: "no_fresh_jupiter_route",
-          stage,
-          simulations,
-          kitCode: null,
-          source: null,
-        };
-      await buildSwapTransaction(quote, routerConfig, fetcher);
-      return {
-        ok: true,
-        code: "simulated",
-        stage,
-        simulations,
-        kitCode: null,
-        source: null,
-      };
-    } catch (error) {
-      const context =
-        error && typeof error === "object" && "context" in error
-          ? error.context
-          : null;
-      const kitCode =
-        context &&
-        typeof context === "object" &&
-        "__code" in context &&
-        typeof context.__code === "number"
-          ? context.__code
-          : null;
-      // Only code-owned file/line metadata. Never return an error message, provider body or stack.
-      const source =
-        error instanceof Error
-          ? (error.stack?.match(/lib\/swap-[a-z-]+\.ts:\d+:\d+/)?.[0] ?? null)
-          : null;
-      return {
-        ok: false,
-        code: swapPreparationIssue(error),
-        stage,
-        simulations,
-        kitCode,
-        source,
-      };
-    }
+    return ctx.runAction(internal.forumCommerceNode.unsignedDiagnostic, {
+      wallet,
+    });
   },
 });
 const receiptValidator = v.object({
