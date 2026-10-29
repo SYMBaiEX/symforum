@@ -11,7 +11,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { commerceActor } from "./forumCommerceAccess";
-import { refreshBenefitForActor } from "./forumCommerce";
+import { commerceLimiter, refreshBenefitForActor } from "./forumCommerce";
 import { commerceRpc } from "./forumCommerceRpc";
 import { commerceConfig, record } from "../lib/forum-commerce";
 import {
@@ -110,46 +110,239 @@ export const quote = action({
     const config = commerceConfig(env);
     if (!config.swapsEnabled || !config.rpcUrl || !config.treasury)
       throw new ConvexError("Swaps are not enabled.");
-    await ctx.runQuery(internal.forumCommerce.authorizeWallet, {
-      wallet: args.wallet,
-    });
-    const benefit = await refreshBenefitForActor(ctx, { wallet: args.wallet });
-    const platformFeeBps =
-      benefit.status === "verified" &&
-      benefit.eligible &&
-      benefit.expiresAt > Date.now()
-        ? 0
-        : config.platformFeeBps;
-    const request = {
+    const lease = crypto.randomUUID();
+    const cached = await ctx.runMutation(
+      internal.forumSwaps.claimQuoteRequest,
+      { ...args, lease },
+    );
+    if (cached !== null) return JSON.parse(cached);
+    try {
+      const benefit = await refreshBenefitForActor(ctx, {
+        wallet: args.wallet,
+      });
+      const platformFeeBps =
+        benefit.status === "verified" &&
+        benefit.eligible &&
+        benefit.expiresAt > Date.now()
+          ? 0
+          : config.platformFeeBps;
+      const request = {
+        ...args,
+        supportsV1: args.supportsV1 === true,
+        platformFeeBps,
+      };
+      validateSwapRequest(request);
+      await ctx.runQuery(internal.forumSwaps.checkMints, {
+        inputMint: args.inputMint,
+        outputMint: args.outputMint,
+      });
+      await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
+        wallet: args.wallet,
+        cost: 2,
+        jupiter: true,
+      });
+      const result = await collectSwapQuotes(request, {
+        rpcUrl: config.rpcUrl,
+        jupiterApiKey: config.jupiterApiKey,
+        treasury: config.treasury,
+      });
+      const quotes = await ctx.runMutation(internal.forumSwaps.saveQuotes, {
+        wallet: args.wallet,
+        quotesJson: JSON.stringify(result.quotes),
+      });
+      const response = {
+        quotes,
+        failures: result.failures,
+        benefitEligible: platformFeeBps === 0 && benefit.eligible,
+        benefitStatus: benefit.status,
+        platformFeeBps,
+      };
+      await ctx.runMutation(internal.forumSwaps.finishQuoteRequest, {
+        wallet: args.wallet,
+        lease,
+        payload: JSON.stringify(response),
+        quoteIds: quotes.map((q) => q.quoteId),
+      });
+      return response;
+    } catch (error) {
+      await ctx
+        .runMutation(internal.forumSwaps.finishQuoteRequest, {
+          wallet: args.wallet,
+          lease,
+          quoteIds: [],
+        })
+        .catch(() => {});
+      throw error;
+    }
+  },
+});
+/** Per-wallet read-only request coalescing. Never caches/replays a prepared or sent transaction. */
+export const claimQuoteRequest = internalMutation({
+  args: {
+    wallet: v.string(),
+    inputMint: v.string(),
+    outputMint: v.string(),
+    amountRaw: v.string(),
+    slippageBps: v.number(),
+    supportsV1: v.optional(v.boolean()),
+    lease: v.string(),
+  },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const actor = await commerceActor(ctx, args.wallet),
+      config = commerceConfig(env),
+      now = Date.now();
+    if (!config.swapsEnabled || !config.treasury)
+      throw new ConvexError("Swaps are not enabled.");
+    validateSwapRequest({
       ...args,
       supportsV1: args.supportsV1 === true,
-      platformFeeBps,
-    };
-    validateSwapRequest(request);
-    await ctx.runQuery(internal.forumSwaps.checkMints, {
-      inputMint: args.inputMint,
-      outputMint: args.outputMint,
+      platformFeeBps: config.platformFeeBps,
     });
-    await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
+    for (const status of ["held", "submitted"] as const) {
+      const held = await ctx.db
+        .query("forumSwapQuotes")
+        .withIndex("by_wallet_and_status", (q) =>
+          q.eq("wallet", args.wallet).eq("status", status),
+        )
+        .take(1);
+      if (held.length)
+        throw new ConvexError(
+          "A previous wallet request needs reconciliation. Do not create another transaction.",
+        );
+    }
+    for (const mint of [args.inputMint, args.outputMint]) {
+      const blocked = await ctx.db
+        .query("forumTradeTokens")
+        .withIndex("by_mint", (q) => q.eq("mint", mint))
+        .unique();
+      if (blocked?.status === "blocked")
+        throw new ConvexError("This token is unavailable for swaps.");
+    }
+    const key = JSON.stringify([
+      args.inputMint,
+      args.outputMint,
+      args.amountRaw,
+      args.slippageBps,
+      args.supportsV1 === true,
+      config.treasury,
+      config.platformFeeBps,
+    ]);
+    const row = await ctx.db
+      .query("forumSwapRequests")
+      .withIndex("by_wallet", (q) => q.eq("wallet", args.wallet))
+      .unique();
+    if (
+      row?.authUserId === actor.authUserId &&
+      row.requestKey === key &&
+      row.payload &&
+      row.expiresAt > now + 8000
+    ) {
+      const benefit = await ctx.db
+        .query("forumWalletBenefits")
+        .withIndex("by_wallet", (q) => q.eq("wallet", args.wallet))
+        .unique();
+      const fee =
+        benefit?.status === "verified" &&
+        benefit.eligible &&
+        benefit.expiresAt > now
+          ? 0
+          : config.platformFeeBps;
+      const payload = JSON.parse(row.payload) as { platformFeeBps: number };
+      const quotes = await Promise.all(
+        row.quoteIds.map((id) => ctx.db.get("forumSwapQuotes", id)),
+      );
+      if (
+        quotes.length > 0 &&
+        payload.platformFeeBps === fee &&
+        quotes.every(
+          (q) =>
+            q?.authUserId === actor.authUserId &&
+            q.wallet === args.wallet &&
+            q.status === "quoted" &&
+            q.expiresAt > now + 8000 &&
+            q.treasury === config.treasury,
+        )
+      )
+        return row.payload;
+    }
+    if (row && row.leaseUntil > now)
+      throw new ConvexError(
+        "A route request is already in progress for this wallet. Wait a few seconds.",
+      );
+    const gate = await commerceLimiter.limit(ctx, "commerceQuoteAdmission", {
+      key: "all",
+    });
+    if (!gate.ok)
+      throw new ConvexError(
+        "Routing is busy within the free-tier limit. Wait a few seconds before trying again.",
+      );
+    const next = {
       wallet: args.wallet,
-      cost: 2,
-    });
-    const result = await collectSwapQuotes(request, {
-      rpcUrl: config.rpcUrl,
-      jupiterApiKey: config.jupiterApiKey,
-      treasury: config.treasury,
-    });
-    const quotes = await ctx.runMutation(internal.forumSwaps.saveQuotes, {
-      wallet: args.wallet,
-      quotesJson: JSON.stringify(result.quotes),
-    });
-    return {
-      quotes,
-      failures: result.failures,
-      benefitEligible: platformFeeBps === 0 && benefit.eligible,
-      benefitStatus: benefit.status,
-      platformFeeBps,
+      authUserId: actor.authUserId,
+      requestKey: key,
+      lease: args.lease,
+      leaseUntil: now + 45000,
+      quoteIds: [],
+      expiresAt: 0,
     };
+    const id = row ? row._id : await ctx.db.insert("forumSwapRequests", next);
+    if (row) await ctx.db.replace("forumSwapRequests", row._id, next);
+    await ctx.scheduler.runAfter(
+      600000,
+      internal.forumSwaps.expireQuoteRequest,
+      { id },
+    );
+    return null;
+  },
+});
+export const finishQuoteRequest = internalMutation({
+  args: {
+    wallet: v.string(),
+    lease: v.string(),
+    payload: v.optional(v.string()),
+    quoteIds: v.array(v.id("forumSwapQuotes")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const actor = await commerceActor(ctx, args.wallet);
+    const row = await ctx.db
+      .query("forumSwapRequests")
+      .withIndex("by_wallet", (q) => q.eq("wallet", args.wallet))
+      .unique();
+    if (!row || row.authUserId !== actor.authUserId || row.lease !== args.lease)
+      return null;
+    if ((args.payload?.length ?? 0) > 20000 || args.quoteIds.length > 2)
+      throw new Error("Invalid quote cache.");
+    const quotes = await Promise.all(
+      args.quoteIds.map((id) => ctx.db.get("forumSwapQuotes", id)),
+    );
+    if (
+      quotes.some(
+        (q) =>
+          !q || q.authUserId !== actor.authUserId || q.wallet !== args.wallet,
+      )
+    )
+      throw new Error("Invalid quote owner.");
+    await ctx.db.patch("forumSwapRequests", row._id, {
+      payload: args.payload,
+      quoteIds: args.quoteIds,
+      leaseUntil: 0,
+      expiresAt: quotes.length
+        ? Math.min(...quotes.map((q) => q!.expiresAt))
+        : 0,
+    });
+    return null;
+  },
+});
+export const expireQuoteRequest = internalMutation({
+  args: { id: v.id("forumSwapRequests") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    const row = await ctx.db.get("forumSwapRequests", id);
+    if (row && row.leaseUntil <= Date.now() && row.expiresAt <= Date.now())
+      await ctx.db.delete("forumSwapRequests", id);
+    return null;
   },
 });
 export const checkMints = internalQuery({

@@ -158,10 +158,28 @@
   font-variant-numeric: tabular-nums;
 }
 .chart {
+  min-width: 0;
   overflow: hidden;
   border: 1px solid hsl(var(--row-border));
   border-radius: 16px;
   background: hsl(var(--card));
+}
+.tradingLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 370px);
+  gap: 20px;
+  align-items: start;
+}
+.swapAside {
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .tradingLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .swapAside {
+    width: min(100%, 520px);
+  }
 }
 .chartHeader {
   display: flex;

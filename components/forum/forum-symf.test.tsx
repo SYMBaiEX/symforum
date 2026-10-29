@@ -41,6 +41,8 @@ test.each(["dark", "light"])(
       "https://dexscreener.com/solana/BqkubRUbgk13q1imaVhKkSVZqrBoVXGc5LJi8JCL8CZr",
     );
     expect(html).toContain("GeckoTerminal");
+    expect(html).toContain('aria-label="Swap SYMF"');
+    expect(html).toContain("Loading wallet support");
   },
 );
 
@@ -53,5 +55,6 @@ test("embedded Forum app keeps its no-frames policy and links to the live websit
   expect(html).not.toContain("<iframe");
   expect(html).toContain('href="https://forum.symbaiex.com/symf"');
   expect(html).toContain("Open live chart");
+  expect(html).not.toContain('aria-label="Swap SYMF"');
   expect(html).toContain(SYMF_TOKEN.mint);
 });
