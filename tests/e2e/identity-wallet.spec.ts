@@ -330,11 +330,11 @@ test("multiple connected accounts require explicit selection before preparing", 
   ).toBeVisible();
   expect(count(run.requests, "/identity/challenge")).toBe(0);
   await expect(signButton(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Use 222222…2222" }).click();
+  await page.getByRole("button", { name: "Use 4vJ9JU…kLKi" }).click();
   await signButton(page).click();
   await expect(page.getByText("Signed in successfully")).toBeVisible();
   expect((await events(page)).at(-1)?.account).toBe(
-    "22222222222222222222222222222222",
+    "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
   );
 });
 
@@ -404,4 +404,41 @@ test("an exposed account signs in without issuing a failing reconnect RPC", asyn
     "signMessage",
   ]);
   expect(count(run.requests, "/sign-in/solana")).toBe(1);
+});
+
+for (const mode of ["accountchange", "changedmessage"])
+  test(`SDK ${mode} fails closed before any server proof exchange`, async ({
+    page,
+  }) => {
+    const run = await harness(page);
+    await open(page, "?" + mode);
+    await choose(page);
+    await signButton(page).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    expect(count(run.requests, "/sign-in/solana")).toBe(0);
+    await expect(page.getByLabel("Session state")).toHaveText("guest");
+  });
+
+test("SDK rejects a wallet-provided address/public-key mismatch before challenge allocation", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await open(page, "?badkey");
+  await choose(page);
+  await expect(page.getByRole("alert")).toBeVisible();
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+});
+
+test("SDK excludes wallets that do not support the intended mainnet chain", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await open(page, "?devnet");
+  await expect(page.getByText(/No compatible wallet found/)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Phantom Installed/ }),
+  ).toHaveCount(0);
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
 });

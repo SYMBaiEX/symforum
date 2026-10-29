@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { getWallets } from "@wallet-standard/app";
+import { getAddressDecoder } from "@solana/kit";
 import { IdentityProviders } from "../../../components/auth/identity-providers";
 import type { MessageWalletAccount } from "../../../lib/wallet-signin";
 import { identityClient } from "../../../packages/auth/src/identity-client";
@@ -25,22 +26,42 @@ function register() {
   const params = new URLSearchParams(window.location.search);
   const account: FixtureAccount = {
     address: "11111111111111111111111111111111",
-    publicKey: new Uint8Array(32),
-    chains: ["solana:mainnet"],
+    publicKey: params.has("badkey")
+      ? new Uint8Array(32).fill(1)
+      : new Uint8Array(32),
+    chains: params.has("devnet") ? ["solana:devnet"] : ["solana:mainnet"],
     features: ["solana:signMessage"],
   };
   let connected: readonly FixtureAccount[] = params.has("preconnected")
     ? [account]
     : [];
+  const listeners = new Set<
+    (event: { accounts: readonly FixtureAccount[] }) => void
+  >();
+  const secondAccount: FixtureAccount = {
+    ...account,
+    publicKey: new Uint8Array(32).fill(1),
+    address: getAddressDecoder().decode(new Uint8Array(32).fill(1)),
+  };
   return getWallets().register({
     version: "1.0.0",
     name: "Phantom",
     icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyOCIgaGVpZ2h0PSIyOCIvPg==",
-    chains: ["solana:mainnet"],
+    chains: params.has("devnet") ? ["solana:devnet"] : ["solana:mainnet"],
     get accounts() {
       return connected;
     },
     features: {
+      "standard:events": {
+        version: "1.0.0",
+        on: (
+          _event: string,
+          listener: (event: { accounts: readonly FixtureAccount[] }) => void,
+        ) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
       "standard:connect": {
         version: "1.0.0",
         connect: async () => {
@@ -62,15 +83,9 @@ function register() {
               );
             });
           connected = params.has("multi")
-            ? [
-                account,
-                {
-                  ...account,
-                  address: "22222222222222222222222222222222",
-                  publicKey: new Uint8Array(32).fill(1),
-                },
-              ]
+            ? [account, secondAccount]
             : [account];
+          for (const listener of listeners) listener({ accounts: connected });
           return { accounts: connected };
         },
       },
@@ -91,6 +106,22 @@ function register() {
                   account: selectedAccount.address,
                 });
                 if (params.has("messagecancel")) throw { code: 4001 };
+                if (!connected.includes(selectedAccount as FixtureAccount))
+                  throw new Error(
+                    "SDK must pass the wallet's raw account reference",
+                  );
+                if (params.has("accountchange")) {
+                  connected = [secondAccount];
+                  for (const listener of listeners)
+                    listener({ accounts: connected });
+                }
+                if (params.has("changedmessage"))
+                  return [
+                    {
+                      signedMessage: new Uint8Array([1]),
+                      signature: new Uint8Array(64),
+                    },
+                  ];
                 return [
                   { signedMessage: message, signature: new Uint8Array(64) },
                 ];
@@ -113,6 +144,9 @@ function register() {
                     code: -32603,
                   });
                 if (params.has("cancel")) throw { code: 4001 };
+                connected = [account];
+                for (const listener of listeners)
+                  listener({ accounts: connected });
                 return [
                   {
                     account: {

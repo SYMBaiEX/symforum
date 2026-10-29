@@ -7,7 +7,7 @@ export type WalletChallenge = {
 };
 
 type PublicKeyBytes = Readonly<ArrayLike<number>> & Iterable<number>;
-type WalletProof = {
+export type WalletProof = {
   account: { address: string; publicKey: PublicKeyBytes };
   signedMessage: Uint8Array;
   signature: Uint8Array;
@@ -20,39 +20,6 @@ export type MessageWalletAccount = {
   readonly chains: readonly string[];
   readonly features: readonly string[];
 };
-export type MessageSignWallet = {
-  name: string;
-  readonly accounts: readonly MessageWalletAccount[];
-  features: {
-    "standard:connect": {
-      connect: () => Promise<{ accounts: readonly MessageWalletAccount[] }>;
-    };
-    "solana:signMessage": {
-      signMessage: (input: {
-        account: MessageWalletAccount;
-        message: Uint8Array;
-      }) => Promise<readonly Omit<WalletProof, "account">[]>;
-    };
-  };
-};
-
-export function supportsMessageSigning(wallet: {
-  name: string;
-  accounts: readonly MessageWalletAccount[];
-  features: Readonly<Record<string, unknown>>;
-}): wallet is MessageSignWallet {
-  return (
-    typeof (
-      wallet.features["standard:connect"] as
-        MessageSignWallet["features"]["standard:connect"] | undefined
-    )?.connect === "function" &&
-    typeof (
-      wallet.features["solana:signMessage"] as
-        MessageSignWallet["features"]["solana:signMessage"] | undefined
-    )?.signMessage === "function"
-  );
-}
-
 export function isInternalWalletError(reason: unknown) {
   return (
     !!reason &&
@@ -62,15 +29,6 @@ export function isInternalWalletError(reason: unknown) {
   );
 }
 
-export type SignInWallet = {
-  name: string;
-  features: {
-    "solana:signIn": {
-      signIn: (input: WalletChallenge["input"]) => Promise<WalletProof[]>;
-    };
-  };
-};
-
 function encoded(bytes: Iterable<number>) {
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
@@ -78,7 +36,7 @@ function encoded(bytes: Iterable<number>) {
     .replace(/=+$/, "");
 }
 
-/** Invoke from the wallet-selection click, with no network await before signIn. */
+/** Validate before invoking any wallet signature method. */
 function validateChallenge(
   challenge: WalletChallenge,
   location: Pick<Location, "host" | "origin">,
@@ -125,79 +83,43 @@ function serializeProof(proof: WalletProof | undefined, nonce: string) {
   };
 }
 
-export function requestWalletProof(
-  wallet: SignInWallet,
+export function requestSiwsProof(
+  signIn: (input: WalletChallenge["input"]) => Promise<WalletProof>,
   challenge: WalletChallenge,
   location: Pick<Location, "host" | "origin">,
   now = Date.now(),
 ) {
   validateChallenge(challenge, location, now);
-  // No connect(), fetch(), or asynchronous preparation before the popup.
-  return wallet.features["solana:signIn"]
-    .signIn(challenge.input)
-    .then(([proof]) => serializeProof(proof, challenge.nonce));
-}
-
-function messageAccounts(accounts: readonly MessageWalletAccount[]) {
-  return accounts.filter(
-    (account) =>
-      account.publicKey.length === 32 &&
-      account.chains.some((chain) => chain.startsWith("solana:")) &&
-      account.features.includes("solana:signMessage"),
+  return signIn(challenge.input).then((proof) =>
+    serializeProof(proof, challenge.nonce),
   );
-}
-
-export function connectMessageWallet(wallet: MessageSignWallet) {
-  // Match the reference adapter: do not issue another connection request when
-  // the wallet already exposes a compatible account to this page. This only
-  // selects a public account; a fresh challenge and signature are still needed.
-  const existing = messageAccounts(wallet.accounts);
-  if (existing.length) return Promise.resolve(existing);
-  return wallet.features["standard:connect"].connect().then(({ accounts }) => {
-    const compatible = messageAccounts(accounts);
-    if (!compatible.length)
-      throw new Error("No message-signing Solana account was connected.");
-    return compatible;
-  });
 }
 
 /** Explicit message sign-in after connection; never an automatic retry. */
 export function requestMessageProof(
-  wallet: MessageSignWallet,
+  signMessage: (
+    message: Uint8Array,
+  ) => Promise<readonly Omit<WalletProof, "account">[]>,
   account: MessageWalletAccount,
   challenge: WalletChallenge,
   location: Pick<Location, "host" | "origin">,
   now = Date.now(),
 ) {
   validateChallenge(challenge, location, now);
-  if (
-    !wallet.accounts.some(
-      (current) =>
-        current.address === account.address &&
-        current.publicKey.length === account.publicKey.length &&
-        [...current.publicKey].every(
-          (byte, index) => byte === account.publicKey[index],
-        ) &&
-        current.features.includes("solana:signMessage"),
-    )
-  )
-    throw new Error("The connected wallet account changed. Start again.");
   const message = createSignInMessage({
     ...challenge.input,
     address: account.address,
   });
-  return wallet.features["solana:signMessage"]
-    .signMessage({ account, message })
-    .then(([output]) => {
-      if (!output) throw new Error("Wallet verification was cancelled.");
-      // Never accept prefixed/rewritten messages or alternate signature schemes.
-      if (
-        output.signedMessage.length !== message.length ||
-        !output.signedMessage.every((byte, index) => byte === message[index])
-      )
-        throw new Error("The wallet changed the sign-in message.");
-      return serializeProof({ ...output, account }, challenge.nonce);
-    });
+  return signMessage(message).then(([output]) => {
+    if (!output) throw new Error("Wallet verification was cancelled.");
+    // Never accept prefixed/rewritten messages or alternate signature schemes.
+    if (
+      output.signedMessage.length !== message.length ||
+      !output.signedMessage.every((byte, index) => byte === message[index])
+    )
+      throw new Error("The wallet changed the sign-in message.");
+    return serializeProof({ ...output, account }, challenge.nonce);
+  });
 }
 
 export function walletFailureMessage(
@@ -214,7 +136,7 @@ export function walletFailureMessage(
   if (code === -32002)
     return `A ${name} request is already open. Check the wallet extension.`;
   if (isInternalWalletError(reason) && method === "connect")
-    return `${name} could not connect this account. Check open wallet requests or choose another wallet.`;
+    return `${name} returned an internal connection error. Sign-in verification has not started.`;
   if (isInternalWalletError(reason) && method === "signMessage")
     return `${name} could not sign the message. Check that this account supports message signing, or choose another wallet.`;
   if (isInternalWalletError(reason))
