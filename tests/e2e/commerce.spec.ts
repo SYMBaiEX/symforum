@@ -1,0 +1,300 @@
+import { test, expect, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import {
+  address,
+  createTransactionMessage,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+  blockhash,
+  appendTransactionMessageInstruction,
+  compileTransaction,
+  getBase64EncodedWireTransaction,
+  getBase58Decoder,
+} from "@solana/kit";
+import { createHash } from "node:crypto";
+const wallet = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
+  SOL = "So11111111111111111111111111111111111111112",
+  USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+let bundle: string, css: string;
+test.beforeAll(() => {
+  css =
+    readFileSync("styles/forum-shared.css", "utf8") +
+    execFileSync(
+      "bun",
+      [
+        "-e",
+        `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("apps/platform/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
+      ],
+      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+    );
+  bundle = execFileSync(
+    "bun",
+    [
+      "-e",
+      `const result=await Bun.build({entrypoints:["tests/e2e/fixtures/commerce.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production"})},plugins:[{name:"commerce-isolation",setup(build){build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/commerce-convex.ts"}));build.onResolve({filter:/^next\\/navigation$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));}}]});if(!result.success)throw new Error(result.logs.join("\\n"));process.stdout.write(await result.outputs[0].text());`,
+    ],
+    { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 },
+  );
+});
+function prepared() {
+  const tx = compileTransaction(
+    appendTransactionMessageInstruction(
+      {
+        programAddress: address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+        data: new TextEncoder().encode("inert UI test"),
+      },
+      setTransactionMessageLifetimeUsingBlockhash(
+        {
+          blockhash: blockhash("11111111111111111111111111111111"),
+          lastValidBlockHeight: 99999n,
+        },
+        setTransactionMessageFeePayer(
+          address(wallet),
+          createTransactionMessage({ version: 0 }),
+        ),
+      ),
+    ),
+  );
+  return {
+    wallet,
+    transactionBase64: getBase64EncodedWireTransaction(tx),
+    transactionVersion: 0,
+    lastValidBlockHeight: 99999,
+    simulationSlot: 1,
+    estimatedNetworkFeeLamports: "5000",
+    messageHash: createHash("sha256")
+      .update(Uint8Array.from(tx.messageBytes))
+      .digest("hex"),
+  };
+}
+async function harness(page: Page, query = "") {
+  const requests: string[] = [];
+  const now = Date.now();
+  const intent = {
+    intentId: "intent-fixture",
+    wallet,
+    threadId: "thread-fixture",
+    categorySlug: "crypto",
+    treasury: "11111111111111111111111111111111",
+    mint: "5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump",
+    tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    decimals: 6,
+    amountRaw: "10000000000",
+    treasuryAmountRaw: "5000000000",
+    burnAmountRaw: "5000000000",
+    reference: USDC,
+    checkoutExpiresAt: now + 600000,
+    startsAt: now,
+    endsAt: now + 86400000,
+    status: "checkout",
+    signature: null,
+    issue: null,
+    prepared: false,
+  };
+  page.on("pageerror", (e) => {
+    throw e;
+  });
+  await page.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><output id="wallet-calls">0</output><script src="/fixture.js"></script>`,
+      });
+    if (url.pathname === "/fixture.js")
+      return route.fulfill({ contentType: "text/javascript", body: bundle });
+    const name = url.pathname.replace("/__commerce/", "");
+    requests.push(name);
+    let result: unknown;
+    if (name === "forumSwaps:quote")
+      result = {
+        quotes: [
+          {
+            quoteId: "quote-fixture",
+            provider: "jupiter",
+            inputMint: SOL,
+            outputMint: USDC,
+            amountRaw: "10000000",
+            swapAmountRaw: "9975000",
+            platformFeeRaw: "25000",
+            outputAmountRaw: "1000000",
+            minimumOutputAmountRaw: "995000",
+            priceImpactBps: 1,
+            platformFeeBps: 25,
+            routeLabels: ["Pool"],
+            expiresAt: now + 120000,
+          },
+        ],
+        failures: [],
+        platformFeeBps: 25,
+        benefitEligible: false,
+        benefitStatus: "verified",
+      };
+    else if (name === "forumSwaps:prepare")
+      result = query.includes("simulatefail")
+        ? null
+        : { quoteId: "quote-fixture", ...prepared() };
+    else if (name === "forumSwaps:confirm")
+      result = {
+        quoteId: "quote-fixture",
+        status: "confirmed",
+        signature: getBase58Decoder().decode(new Uint8Array(64).fill(1)),
+        issue: null,
+      };
+    else if (name === "forumPromotions:quotePromotion") result = intent;
+    else if (name === "forumPromotions:prepare")
+      result = { intentId: intent.intentId, ...prepared() };
+    else if (name === "forumPromotions:submitPromotion")
+      result = { ...intent, status: "scheduled" };
+    else if (
+      name.endsWith(":beginWalletRequest") ||
+      name.endsWith(":markUnknown")
+    )
+      result =
+        query.includes("beginfail") && name.endsWith(":beginWalletRequest")
+          ? null
+          : { status: "held" };
+    else
+      return route.fulfill({
+        status: 403,
+        body: "Unexpected external request blocked",
+      });
+    return route.fulfill({
+      status: result === null ? 400 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(result),
+    });
+  });
+  await page.goto(`http://127.0.0.1:43201/${query}`);
+  return requests;
+}
+async function connect(page: Page) {
+  await page
+    .getByRole("button", { name: "Connect wallet", exact: true })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Test Solana Wallet" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+test("comparison -> exact simulated review -> one wallet request -> finalized receipt", async ({
+  page,
+}) => {
+  const requests = await harness(page);
+  await connect(page);
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await page.getByRole("button", { name: "Compare routes" }).click();
+  await page
+    .getByRole("button", { name: /Jupiter.*Highest quoted output/ })
+    .click();
+  await expect(page.getByText("0.000025 SOL", { exact: true })).toBeVisible();
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await page.screenshot({
+    path: "tmp/forum-render-tests/commerce-desktop.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Approve in wallet" }).click();
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+  expect(requests.indexOf("forumSwaps:beginWalletRequest")).toBeLessThan(
+    requests.indexOf("forumSwaps:confirm"),
+  );
+});
+test("failed simulation never opens a wallet request", async ({ page }) => {
+  const requests = await harness(page, "?simulatefail");
+  await connect(page);
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await page.getByRole("button", { name: "Compare routes" }).click();
+  await page
+    .getByRole("button", { name: /Jupiter.*Highest quoted output/ })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "No wallet request was made",
+  );
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+});
+test("uncertain wallet request is held and cannot be resent", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?walletfail");
+  await connect(page);
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await page.getByRole("button", { name: "Compare routes" }).click();
+  await page
+    .getByRole("button", { name: /Jupiter.*Highest quoted output/ })
+    .click();
+  await page.getByRole("button", { name: "Approve in wallet" }).click();
+  await expect(page.getByRole("alert")).toContainText("Do not repeat");
+  await expect(
+    page.getByRole("button", { name: "Wallet request completed" }),
+  ).toBeDisabled();
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+  expect(requests.filter((r) => r === "forumSwaps:markUnknown")).toHaveLength(
+    1,
+  );
+});
+test("server refusal before the wallet boundary does not fabricate an uncertain wallet call", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?beginfail");
+  await connect(page);
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await page.getByRole("button", { name: "Compare routes" }).click();
+  await page
+    .getByRole("button", { name: /Jupiter.*Highest quoted output/ })
+    .click();
+  await page.getByRole("button", { name: "Approve in wallet" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "No wallet window was opened",
+  );
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+  expect(requests).not.toContain("forumSwaps:markUnknown");
+});
+test("promotion needs a separate explicit irreversible-burn consent", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?promotion");
+  await connect(page);
+  await page.getByRole("button", { name: "Check next available slot" }).click();
+  await expect(page.getByText("5,000 SYMF", { exact: true })).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Prepare and simulate", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Pay and burn in wallet" }),
+  ).toBeDisabled();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Pay and burn in wallet" }).click();
+  await expect(
+    page.getByText("Payment finalized. Your promotion is scheduled below."),
+  ).toBeVisible();
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+  expect(requests).toContain("forumPromotions:beginWalletRequest");
+});
+test("mobile layout fits the viewport and key navigation links remain usable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await harness(page, "?guest");
+  await expect(
+    page.getByRole("button", { name: "Compare routes" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: "Manage linked wallets" }),
+  ).toHaveAttribute("href", /account\/connections/);
+  await expect(
+    page.getByRole("link", { name: "About the official SYMF token" }),
+  ).toHaveAttribute("href", /symf/);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "tmp/forum-render-tests/commerce-mobile.png",
+    fullPage: true,
+  });
+});

@@ -339,6 +339,7 @@ const RESERVED_CATEGORY_SLUGS = new Set([
   "search",
   "saved",
   "subscriptions",
+  "swap",
   "todays-posts",
 ]);
 

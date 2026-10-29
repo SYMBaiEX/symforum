@@ -1,4 +1,5 @@
 "use client";
+import { BoardPromotions } from "@/components/swap/forum-commerce";
 import { forumExperienceRefs } from "./forum-experience-refs";
 import {
   FORUM_POST_KINDS,
@@ -235,6 +236,7 @@ function LiveForumThreadList({
   const [sourceUrl, setSourceUrl] = useState("");
   const [threadTitle, setThreadTitle] = useState("");
   const [threadBody, setThreadBody] = useState(prompt?.body ?? "");
+  const [promoteAfterPublish, setPromoteAfterPublish] = useState(false);
   const [threadAttachments, setThreadAttachments] = useState<
     ForumAttachmentDraft[]
   >([]);
@@ -395,7 +397,9 @@ function LiveForumThreadList({
         );
         return true;
       }
-      router.push(forumPath(categorySlug, result.threadSlug));
+      router.push(
+        `${forumPath(categorySlug, result.threadSlug)}${promoteAfterPublish ? "#promote-post" : ""}`,
+      );
       return true;
     } catch (caught) {
       if (isAuthRequiredError(caught)) {
@@ -662,6 +666,7 @@ function LiveForumThreadList({
           </div>
         </div>
       )}
+      <BoardPromotions categorySlug={categorySlug} />
       <ForumBodyGrid
         sidebar={
           <aside aria-label="Board information" className="min-w-0 space-y-5">
@@ -941,6 +946,16 @@ function LiveForumThreadList({
                 {threadPreviewOpen ? (
                   <ThreadPreviewPanel body={threadBody} />
                 ) : null}
+                <label className="flex items-start gap-2 px-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={promoteAfterPublish}
+                    onChange={(e) => setPromoteAfterPublish(e.target.checked)}
+                    className="mt-0.5 size-4"
+                  />
+                  Open promotion checkout after publishing. No payment is made
+                  when you publish; review the price and 50% burn separately.
+                </label>
               </ForumCompose>
             ) : isAuthenticated && !viewerCanCreateThread ? (
               <ForumStatusBox

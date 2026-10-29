@@ -14,6 +14,7 @@ import { xAgentTables } from "./xAgentSchema";
 import { xTelegramRelayTables } from "./xTelegramRelaySchema";
 import { telegramTradeTables } from "./telegramTradeSchema";
 import { telegramAgentTables } from "./telegramAgentSchema";
+import { forumCommerceTables } from "./forumCommerceSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -43,6 +44,7 @@ export default defineSchema({
   ...xTelegramRelayTables,
   ...telegramAgentTables,
   ...telegramTradeTables,
+  ...forumCommerceTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),

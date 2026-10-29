@@ -1,4 +1,5 @@
 "use client";
+import { ForumCommerceFrame } from "@/components/swap/forum-commerce";
 import { forumReplyBranches } from "./forum-reply-branches";
 import { forumExperienceRefs } from "./forum-experience-refs";
 import { convexRefs } from "@/lib/convex-refs";
@@ -1123,7 +1124,7 @@ function LiveForumThreadView({
   const hasPostPages = detail.replies.pagination.totalPages > 1;
 
   return (
-    <div className="space-y-3">
+    <ForumCommerceFrame threadId={thread._id}>
       <div className="space-y-2">
         {showHeading ? (
           <ForumPageHeader title={thread.title} view="boards" nested />
@@ -1945,7 +1946,7 @@ function LiveForumThreadView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ForumCommerceFrame>
   );
 }
 
