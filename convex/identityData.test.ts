@@ -125,6 +125,177 @@ async function walletProof(
   };
 }
 describe("canonical account migration and current sessions", () => {
+  async function telegramLogin(t: Test, subject: string, username?: string) {
+    const issued = await t.mutation(internal.identityData.nonce, {
+      provider: "telegram",
+      purpose: "login",
+      browserHash: "test-browser",
+      origin: "https://www.symbaiex.com",
+    });
+    return t.mutation(internal.identityData.consumeChallenge, {
+      provider: "telegram",
+      nonce: issued.nonce,
+      browserHash: "test-browser",
+      telegramSubject: subject,
+      ...(username ? { telegramUsername: username } : {}),
+    });
+  }
+  async function nativeUser(t: Test, id: string) {
+    return t.run((ctx) =>
+      ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "_id", value: id }],
+      }),
+    );
+  }
+  test("Telegram defaults use the verified handle and a later custom handle is retained", async () => {
+    const t = setup();
+    const first = await telegramLogin(t, "123456", "Verified_Trader");
+    expect(await nativeUser(t, first.authUserId!)).toMatchObject({
+      username: "verified_trader",
+      emailVerified: false,
+    });
+    const { client } = await authenticated(t, first.authUserId!);
+    const canonical = await client.mutation(
+      api.identityData.ensureIdentity,
+      {},
+    );
+    expect(await client.query(api.users.maybeViewer, {})).toMatchObject({
+      username: "verified_trader",
+      role: "reader",
+    });
+    await t.run((ctx) =>
+      ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "user",
+          where: [{ field: "_id", value: first.authUserId! }],
+          update: { username: "custom-reader" },
+        },
+      }),
+    );
+    await client.mutation(api.identityData.ensureIdentity, {});
+    expect(
+      (await telegramLogin(t, "123456", "new_telegram_name")).authUserId,
+    ).toBe(first.authUserId);
+    expect(await nativeUser(t, first.authUserId!)).toMatchObject({
+      username: "custom-reader",
+    });
+    expect(await client.query(api.users.maybeViewer, {})).toMatchObject({
+      _id: canonical.userId,
+      username: "custom-reader",
+    });
+  });
+  test("concurrent provider suggestions cannot steal a canonical handle or collide", async () => {
+    const t = setup();
+    const owner = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        username: "taken",
+        usernameNormalized: "taken",
+        role: "owner",
+      }),
+    );
+    const [one, two] = await Promise.all([
+      telegramLogin(t, "123", "taken"),
+      telegramLogin(t, "456", "taken"),
+    ]);
+    const a = await nativeUser(t, one.authUserId!),
+      b = await nativeUser(t, two.authUserId!);
+    expect(a?.username).toMatch(/^taken-/);
+    expect(b?.username).toMatch(/^taken-/);
+    expect(a?.username).not.toBe(b?.username);
+    expect(await t.run((ctx) => ctx.db.get("users", owner))).toMatchObject({
+      role: "owner",
+      username: "taken",
+    });
+  });
+  test("linking a provider never changes the current account's chosen handle", async () => {
+    const t = setup(),
+      user = await authUser(t, "reader@example.com", true, "my-name");
+    const issued = await t.mutation(internal.identityData.nonce, {
+      provider: "telegram",
+      purpose: "link",
+      browserHash: "browser",
+      authUserId: user._id,
+      origin: "https://www.symbaiex.com",
+    });
+    await t.mutation(internal.identityData.consumeChallenge, {
+      provider: "telegram",
+      nonce: issued.nonce,
+      browserHash: "browser",
+      authUserId: user._id,
+      telegramSubject: "123",
+      telegramUsername: "provider-name",
+    });
+    expect(await nativeUser(t, user._id)).toMatchObject({
+      username: "my-name",
+    });
+  });
+  test("older auto-named Telegram profiles receive a default without changing canonical IDs", async () => {
+    const t = setup(),
+      user = await authUser(t, "123@telegram.symbaiex.invalid", false);
+    const { client } = await authenticated(t, user._id);
+    const canonical = await client.mutation(
+      api.identityData.ensureIdentity,
+      {},
+    );
+    await t.run((ctx) =>
+      ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "account",
+          data: {
+            providerId: "telegram",
+            accountId: "123",
+            userId: user._id,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      }),
+    );
+    await telegramLogin(t, "123", "real_handle");
+    await client.mutation(api.identityData.ensureIdentity, {});
+    expect(await client.query(api.users.maybeViewer, {})).toMatchObject({
+      _id: canonical.userId,
+      username: "real_handle",
+      role: "reader",
+    });
+  });
+  test("an older chosen canonical handle is not overwritten during a default backfill", async () => {
+    const t = setup(),
+      user = await authUser(t, "123@telegram.symbaiex.invalid", false);
+    const canonical = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", {
+        username: "legacy-custom",
+        usernameNormalized: "legacy-custom",
+        usernameSource: "chosen",
+        role: "owner",
+      });
+      await ctx.db.insert("betterAuthIdentityLinks", {
+        authUserId: user._id,
+        userId: id,
+        linkedAt: Date.now(),
+      });
+      await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "account",
+          data: {
+            providerId: "telegram",
+            accountId: "123",
+            userId: user._id,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      });
+      return id;
+    });
+    await telegramLogin(t, "123", "provider_default");
+    expect((await nativeUser(t, user._id))?.username).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get("users", canonical))).toMatchObject({
+      username: "legacy-custom",
+      role: "owner",
+    });
+  });
   test("a unique verified email retains the existing canonical ID and role", async () => {
     const t = setup();
     const old = await t.run((ctx) =>

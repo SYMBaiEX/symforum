@@ -6,11 +6,61 @@ import {
   internalMutation,
   internalQuery,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { betterAuthUser } from "./betterAuthPrincipal";
 import { IDENTITY_ORIGINS, isRecoveryEmail } from "../lib/identity-config";
-import { randomBase64Url } from "./agentIdentityCrypto";
+import { randomBase64Url, sha256Base64Url } from "./agentIdentityCrypto";
 import { walletLoginInput, verifyWalletLogin } from "../lib/human-auth-proof";
+import {
+  identityHandleBase,
+  identityHandleCandidate,
+} from "../lib/identity-handles";
+
+async function availableInitialHandle(
+  ctx: MutationCtx,
+  provider: "solana" | "telegram",
+  accountId: string,
+  telegramUsername?: string,
+  authUserId?: string,
+) {
+  const mapping = authUserId
+    ? await ctx.db
+        .query("betterAuthIdentityLinks")
+        .withIndex("by_authUserId", (q) => q.eq("authUserId", authUserId))
+        .unique()
+    : null;
+  const fingerprint = (await sha256Base64Url(`${provider}:${accountId}`))
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  const base = identityHandleBase(
+    provider,
+    accountId,
+    fingerprint,
+    telegramUsername,
+  );
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const username = identityHandleCandidate(base, fingerprint, attempt);
+    const occupied = await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized", (q) =>
+        q.eq("usernameNormalized", username),
+      )
+      .unique();
+    if (occupied && occupied._id !== mapping?.userId) continue;
+    const native = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      where: [{ field: "username", value: username }],
+      paginationOpts: { numItems: 2, cursor: null },
+    });
+    if (
+      native.isDone &&
+      native.page.every((user: { _id: string }) => user._id === authUserId)
+    )
+      return username;
+  }
+  throw new ConvexError("Choose an available username in account settings.");
+}
 
 const limiter = new RateLimiter(components.rateLimiter, {
   nonce: { kind: "token bucket", rate: 10, period: 60_000, capacity: 10 },
@@ -218,6 +268,7 @@ export const consumeChallenge = internalMutation({
     signature: v.optional(v.string()),
     signedMessage: v.optional(v.string()),
     telegramSubject: v.optional(v.string()),
+    telegramUsername: v.optional(v.string()),
   },
   returns: v.object({
     purpose: v.union(v.literal("login"), v.literal("link")),
@@ -289,6 +340,12 @@ export const consumeChallenge = internalMutation({
           throw new ConvexError("Account connection limit reached.");
       }
       if (row.purpose === "login") {
+        const username = await availableInitialHandle(
+          ctx,
+          row.provider,
+          accountId,
+          args.telegramUsername,
+        );
         // Internal non-deliverable identifier required by Better Auth's user
         // schema; never exposed as a verified/recovery email or sent mail.
         const authUser = await ctx.runMutation(
@@ -303,6 +360,8 @@ export const consumeChallenge = internalMutation({
                     : "Telegram member",
                 email: accountId + "@" + row.provider + ".symbaiex.invalid",
                 emailVerified: false,
+                username,
+                displayUsername: username,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
               },
@@ -335,6 +394,37 @@ export const consumeChallenge = internalMutation({
         throw new ConvexError(
           "Use your primary sign-in method to complete verification.",
         );
+      if (!user.username) {
+        const mapping = await ctx.db
+          .query("betterAuthIdentityLinks")
+          .withIndex("by_authUserId", (q) => q.eq("authUserId", authUserId))
+          .unique();
+        const profile = mapping
+          ? await ctx.db.get("users", mapping.userId)
+          : null;
+        // Only fill a missing native handle for a new/unmapped or explicitly
+        // auto-named profile. Existing chosen/legacy handles are never renamed.
+        if (!mapping || profile?.usernameSource === "auto") {
+          const username = await availableInitialHandle(
+            ctx,
+            row.provider,
+            accountId,
+            args.telegramUsername,
+            authUserId,
+          );
+          await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+            input: {
+              model: "user",
+              where: [{ field: "_id", value: authUserId }],
+              update: {
+                username,
+                displayUsername: username,
+                updatedAt: Date.now(),
+              },
+            },
+          });
+        }
+      }
     }
     await ctx.db.patch("identityChallenges", row._id, {
       consumedAt: Date.now(),
