@@ -37,6 +37,9 @@ const SONNER_STYLE_HASHES = [
   "'sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo='",
   "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='",
 ];
+// Exact static stylesheet in https://oauth.telegram.org/js/telegram-login.js?6.
+// Permit only on the two pages that opt into Telegram login, never unsafe-inline.
+const TELEGRAM_LOGIN_STYLE_HASH = "'sha256-wWU/dU8CreLlh2OcTlCbLUzZkxQ/Bdo2f9+XuzLyR/0='";
 const proxy =
   process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true" && process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
     ? withSharedLegacySession(
@@ -96,7 +99,7 @@ async function proxyRequest(
     request,
     authKit?.headers ?? new Headers(),
   );
-  const policy = contentSecurityPolicy();
+  const policy = contentSecurityPolicy(request.nextUrl.pathname);
   const response =
     isSignInPage(request) &&
     (authKitConfigured ? authKit?.session.user : legacyAuthenticated)
@@ -418,9 +421,13 @@ type SecurityPolicy = {
   value: string;
 };
 
-function contentSecurityPolicy(): SecurityPolicy {
+function contentSecurityPolicy(pathname: string): SecurityPolicy {
   const nonce = randomNonce();
   const isDev = process.env.NODE_ENV === "development";
+  const styleHashes = [
+    ...SONNER_STYLE_HASHES,
+    ...(["/signin", "/account/connections"].includes(pathname) ? [TELEGRAM_LOGIN_STYLE_HASH] : []),
+  ];
   const policy = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -428,7 +435,7 @@ function contentSecurityPolicy(): SecurityPolicy {
     `style-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-inline'" : ""}`,
     isDev
       ? "style-src-elem 'self' 'unsafe-inline'"
-      : `style-src-elem 'self' 'nonce-${nonce}' ${SONNER_STYLE_HASHES.join(" ")}`,
+      : `style-src-elem 'self' 'nonce-${nonce}' ${styleHashes.join(" ")}`,
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",

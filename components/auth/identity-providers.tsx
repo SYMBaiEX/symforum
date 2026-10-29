@@ -1,27 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getWallets } from "@wallet-standard/app";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { WalletSignIn } from "./wallet-signin";
 import {
   identityClient,
   identityRequest,
 } from "@symbaiex/auth/identity-client";
-import type { walletLoginInput } from "@/lib/human-auth-proof";
 
 type Challenge = {
   nonce: string;
-  input?: ReturnType<typeof walletLoginInput>;
+  expiresAt: number;
   clientId?: string;
-};
-type WalletProof = {
-  account: { address: string; publicKey: Uint8Array };
-  signedMessage: Uint8Array;
-  signature: Uint8Array;
-};
-type SignInFeature = {
-  signIn: (
-    input: ReturnType<typeof walletLoginInput>,
-  ) => Promise<WalletProof[]>;
 };
 type TelegramLogin = {
   auth: (
@@ -33,11 +22,36 @@ function telegramLogin() {
   return (window as Window & { Telegram?: { Login?: TelegramLogin } }).Telegram
     ?.Login;
 }
-function encoded(bytes: Uint8Array) {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+let telegramSdk: Promise<TelegramLogin> | null = null;
+function loadTelegramLogin() {
+  const existing = telegramLogin();
+  if (existing) return Promise.resolve(existing);
+  if (telegramSdk) return telegramSdk;
+  telegramSdk = new Promise<TelegramLogin>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://oauth.telegram.org/js/telegram-login.js?6";
+    script.async = true;
+    script.nonce =
+      document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce ?? "";
+    const failed = () => {
+      clearTimeout(timeout);
+      script.remove();
+      reject(new Error("Telegram login could not load. Please try again."));
+    };
+    const timeout = setTimeout(failed, 15_000);
+    script.onerror = failed;
+    script.onload = () => {
+      const login = telegramLogin();
+      if (!login) return failed();
+      clearTimeout(timeout);
+      resolve(login);
+    };
+    document.head.appendChild(script);
+  }).catch((reason) => {
+    telegramSdk = null;
+    throw reason;
+  });
+  return telegramSdk;
 }
 
 export function IdentityProviders({
@@ -51,22 +65,7 @@ export function IdentityProviders({
 }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [walletNames, setWalletNames] = useState<string[]>([]);
   const [telegram, setTelegram] = useState<Challenge | null>(null);
-  const [telegramReady, setTelegramReady] = useState(false);
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://oauth.telegram.org/js/telegram-login.js?6";
-    script.async = true;
-    script.nonce =
-      document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce ?? "";
-    script.onload = () => setTelegramReady(true);
-    script.onerror = () => setTelegramReady(false);
-    document.head.appendChild(script);
-    return () => {
-      script.remove();
-    };
-  }, []);
   async function attempt(task: () => Promise<void>) {
     setError("");
     setPending(true);
@@ -82,34 +81,8 @@ export function IdentityProviders({
       setPending(false);
     }
   }
-  async function wallet(name: string) {
-    const selected = getWallets()
-      .get()
-      .find(
-        (wallet) => wallet.name === name && "solana:signIn" in wallet.features,
-      );
-    if (!selected)
-      throw new Error("Choose a wallet that supports Sign In With Solana.");
-    const challenge = await identityRequest<Challenge>("/identity/challenge", {
-      provider: "solana",
-      purpose,
-    });
-    if (!challenge.input) throw new Error("Restart wallet verification.");
-    const feature = selected.features["solana:signIn"] as SignInFeature;
-    const [proof] = await feature.signIn(challenge.input);
-    if (!proof) throw new Error("Wallet verification was cancelled.");
-    await identityRequest("/sign-in/solana", {
-      nonce: challenge.nonce,
-      address: proof.account.address,
-      publicKey: encoded(proof.account.publicKey),
-      signature: encoded(proof.signature),
-      signedMessage: encoded(proof.signedMessage),
-    });
-    await identityClient.getSession();
-    onComplete();
-  }
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <Button
           variant="outline"
@@ -133,52 +106,28 @@ export function IdentityProviders({
         >
           {purpose === "link" ? "Link Google" : "Continue with Google"}
         </Button>
-        <Button
-          variant="outline"
+        <WalletSignIn
+          purpose={purpose}
           disabled={pending}
-          onClick={() => {
-            const names = getWallets()
-              .get()
-              .filter((wallet) => "solana:signIn" in wallet.features)
-              .map((wallet) => wallet.name);
-            setWalletNames(names);
-            if (!names.length)
-              setError(
-                "Install or open a Solana wallet that supports Sign In With Solana.",
-              );
-          }}
-        >
-          {purpose === "link" ? "Link wallet" : "Solana wallet"}
-        </Button>
+          onBusyChange={setPending}
+          onComplete={onComplete}
+        />
       </div>
-      {walletNames.length > 0 && (
-        <div className="flex flex-wrap gap-2" aria-label="Choose a wallet">
-          {walletNames.map((name) => (
-            <Button
-              key={name}
-              variant="secondary"
-              disabled={pending}
-              onClick={() => void attempt(() => wallet(name))}
-            >
-              {name}
-            </Button>
-          ))}
-        </div>
-      )}
       <Button
         variant="outline"
         className="w-full"
-        disabled={pending || !telegramReady}
+        disabled={pending}
         onClick={() => {
-          if (!telegram) {
-            void attempt(async () =>
+          if (!telegram || telegram.expiresAt <= Date.now() + 5_000) {
+            void attempt(async () => {
+              await loadTelegramLogin();
               setTelegram(
                 await identityRequest<Challenge>("/identity/challenge", {
                   provider: "telegram",
                   purpose,
                 }),
-              ),
-            );
+              );
+            });
             return;
           }
           const login = telegramLogin();

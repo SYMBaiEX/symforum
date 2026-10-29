@@ -43,6 +43,25 @@ Relevant upstream sources:
 - https://labs.convex.dev/better-auth/framework-guides/next
 - https://core.telegram.org/bots/telegram-login
 
+### Wallet picker and browser verification
+
+Wallet login/linking uses the shared accessible dialog and Wallet Standard
+discovery. The challenge is prepared when the picker opens; selecting an
+installed wallet invokes `solana:signIn` directly from that click, without an
+intervening network request. A cancelled or expired attempt requires an explicit
+new request. Ethereum globals, transactions and spending permissions are not
+used. Server proof, ownership, browser binding and replay checks are unchanged.
+
+The Telegram SDK loads only when selected. Production CSP permits its exact
+static stylesheet hash on `/signin` and `/account/connections` only, without
+adding `unsafe-inline` or broadening script permissions.
+
+Isolated browser tests cover the dialog, user activation, duplicate clicks,
+cancellation, expiry, failed challenge, late wallet discovery and focus return.
+These tests use fake wallets and intercepted traffic, not a real extension.
+The reported Phantom extension error must still be verified in a live wallet;
+passing the signed-wallet HTTP test alone is not that verification.
+
 ## Maintained Better Auth 1.7 compatibility patch
 
 `patches/@convex-dev%2Fbetter-auth@0.12.6.patch` is applied by Bun's
