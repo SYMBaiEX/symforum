@@ -737,6 +737,11 @@ export default defineSchema({
     .index("by_status_and_createdAt", ["status", "createdAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_userId_and_createdAt", ["userId", "createdAt"]),
+  newsletterManagementLinks: defineTable({
+    subscriberId: v.id("newsletterSubscribers"),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+  }).index("by_tokenHash", ["tokenHash"]),
   newsletterIssues: defineTable({
     slug: v.string(),
     subject: v.string(),

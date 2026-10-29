@@ -731,6 +731,124 @@ describe("newsletter editorial analytics query fan-out", () => {
 });
 
 describe("newsletter mailbox capabilities", () => {
+  test("new public requests preserve valid management links without extending their expiry", async () => {
+    const t = setup();
+    const originalHash = "b".repeat(64);
+    const originalExpiry = Date.now() + 60_000;
+    const id = await t.run(async (ctx) =>
+      ctx.db.insert("newsletterSubscribers", {
+        email: "mailbox-owner@example.invalid",
+        emailNormalized: "mailbox-owner@example.invalid",
+        source: "test",
+        status: "confirmed",
+        tokenHash: originalHash,
+        tokenVersion: 2,
+        tokenPurpose: "manage",
+        tokenExpiresAt: originalExpiry,
+        resendSyncStatus: "idle",
+        createdAt: 1,
+        updatedAt: Date.now() - 4 * 60_000,
+      }),
+    );
+    await t.mutation(api.newsletter.subscribe, {
+      email: "mailbox-owner@example.invalid",
+    });
+    const state = await t.run(async (ctx) => ({
+      current: await ctx.db.get("newsletterSubscribers", id),
+      links: await ctx.db.query("newsletterManagementLinks").collect(),
+    }));
+    expect(state.current!.tokenHash).not.toBe(originalHash);
+    expect(state.links).toHaveLength(1);
+    expect(state.links[0]).toMatchObject({
+      subscriberId: id,
+      tokenHash: originalHash,
+      expiresAt: originalExpiry,
+    });
+    for (const tokenHash of [originalHash, state.current!.tokenHash]) {
+      expect(
+        await t.query(api.newsletter.getByToken, { tokenHash }),
+      ).toMatchObject({
+        status: "confirmed",
+      });
+    }
+    // An early cleanup cannot revoke it; expiration does not depend on cleanup.
+    await t.mutation(internal.newsletter.expireManagementLink, {
+      linkId: state.links[0]._id,
+    });
+    expect(
+      await t.query(api.newsletter.getByToken, { tokenHash: originalHash }),
+    ).not.toBeNull();
+    await t.run(async (ctx) =>
+      ctx.db.patch("newsletterManagementLinks", state.links[0]._id, {
+        expiresAt: Date.now() - 1,
+      }),
+    );
+    expect(
+      await t.query(api.newsletter.getByToken, { tokenHash: originalHash }),
+    ).toBeNull();
+    await t.mutation(internal.newsletter.expireManagementLink, {
+      linkId: state.links[0]._id,
+    });
+    expect(
+      await t.run(async (ctx) =>
+        ctx.db.get("newsletterManagementLinks", state.links[0]._id),
+      ),
+    ).toBeNull();
+  });
+
+  test("retained management links can unsubscribe but cannot confirm a later signup", async () => {
+    const t = setup();
+    const tokenHash = "c".repeat(64);
+    const id = await t.run(async (ctx) => {
+      const subscriberId = await ctx.db.insert("newsletterSubscribers", {
+        email: "previous-owner@example.invalid",
+        emailNormalized: "previous-owner@example.invalid",
+        source: "test",
+        status: "confirmed",
+        tokenHash: "d".repeat(64),
+        tokenVersion: 2,
+        tokenPurpose: "manage",
+        tokenExpiresAt: Date.now() + 60_000,
+        resendSyncStatus: "idle",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("newsletterManagementLinks", {
+        subscriberId,
+        tokenHash,
+        expiresAt: Date.now() + 60_000,
+      });
+      return subscriberId;
+    });
+    expect(
+      (await t.mutation(api.newsletter.unsubscribe, { tokenHash })).ok,
+    ).toBe(true);
+    await t.run(async (ctx) =>
+      ctx.db.patch("newsletterSubscribers", id, {
+        updatedAt: Date.now() - 4 * 60_000,
+      }),
+    );
+    await t.mutation(api.newsletter.subscribe, {
+      email: "previous-owner@example.invalid",
+    });
+    expect(await t.mutation(api.newsletter.confirm, { tokenHash })).toEqual({
+      ok: false,
+      subscriber: null,
+    });
+    await expect(
+      t.mutation(api.newsletter.updateTopicsByToken, {
+        tokenHash,
+        dailyOptIn: true,
+        weeklyOptIn: true,
+      }),
+    ).rejects.toThrow("Confirmed newsletter subscription not found");
+    expect(
+      await t.run(async (ctx) => ctx.db.get("newsletterSubscribers", id)),
+    ).toMatchObject({
+      status: "pending",
+    });
+  });
+
   test("public callers cannot select confirmation or management tokens", async () => {
     const t = setup();
     const attack = {

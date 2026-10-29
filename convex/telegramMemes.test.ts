@@ -13,6 +13,7 @@ import {
   memeFingerprint,
 } from "../lib/telegram-memes";
 const modules = import.meta.glob("./**/*.ts");
+let finishScheduled: (() => Promise<void>) | undefined;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(Date.parse("2026-10-28T07:00:00Z"));
@@ -30,13 +31,21 @@ beforeEach(() => {
   }))
     vi.stubEnv(k, v);
 });
-afterEach(() => {
-  vi.clearAllTimers();
-  vi.useRealTimers();
-  vi.unstubAllEnvs();
+afterEach(async () => {
+  // Advancing fake time can start workflow functions that outlive the test.
+  // Drain those before Vitest closes its worker; do not fire future timers.
+  try {
+    await finishScheduled?.();
+  } finally {
+    finishScheduled = undefined;
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
 });
 async function setup() {
   const t = convexTest(schema, modules);
+  finishScheduled = () => t.finishInProgressScheduledFunctions();
   agentTest.register(t);
   workflowTest.register(t);
   register(t);

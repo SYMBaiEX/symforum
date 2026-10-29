@@ -114,6 +114,12 @@ const sendManageSubscriptionEmailRef = makeFunctionReference<
   null
 >("newsletterEmails:sendManageSubscriptionEmail");
 
+const expireManagementLinkRef = makeFunctionReference<
+  "mutation",
+  { linkId: Id<"newsletterManagementLinks"> },
+  null
+>("newsletter:expireManagementLink");
+
 const sendWelcomeEmailRef = makeFunctionReference<
   "action",
   { subscriberId: Id<"newsletterSubscribers">; siteUrl: string },
@@ -982,6 +988,25 @@ async function upsertPendingSubscriber(
     }
     return { subscriber: existing, tokenStored: false };
   }
+  // A public request may email a fresh link, but cannot revoke a valid link
+  // already held by the mailbox owner. Retain only trusted management links
+  // until their original expiry; legacy caller-selected hashes stay invalid.
+  if (
+    existing.tokenVersion === 2 &&
+    existing.tokenPurpose === "manage" &&
+    (existing.tokenExpiresAt ?? 0) > now
+  ) {
+    const linkId = await ctx.db.insert("newsletterManagementLinks", {
+      subscriberId: existing._id,
+      tokenHash: existing.tokenHash,
+      expiresAt: existing.tokenExpiresAt!,
+    });
+    await ctx.scheduler.runAt(
+      existing.tokenExpiresAt!,
+      expireManagementLinkRef,
+      { linkId },
+    );
+  }
   await ctx.db.patch("newsletterSubscribers", existing._id, {
     ...capability,
     // Preserve consent and preferences while delivering a fresh private link.
@@ -997,6 +1022,19 @@ async function upsertPendingSubscriber(
 
 const CONFIRM_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const MANAGE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const expireManagementLink = internalMutation({
+  args: { linkId: v.id("newsletterManagementLinks") },
+  returns: v.null(),
+  handler: async (ctx, { linkId }) => {
+    const link = await ctx.db.get("newsletterManagementLinks", linkId);
+    if (link && link.expiresAt <= Date.now()) {
+      await ctx.db.delete("newsletterManagementLinks", linkId);
+    }
+    return null;
+  },
+});
+
 function ownsSubscriberMailbox(user: Doc<"users"> | null, email: string) {
   return Boolean(
     user &&
@@ -1065,11 +1103,29 @@ async function subscriberByTokenHash(
       q.eq("tokenHash", normalizeTokenHash(tokenHash)),
     )
     .unique();
-  // Pre-fix caller-selected capabilities have no trusted provenance. Expire them
-  // without changing subscription status; users can request a fresh emailed link.
-  return subscriber?.tokenVersion === 2 &&
+  // Pre-fix caller-selected capabilities have no trusted provenance.
+  if (
+    subscriber?.tokenVersion === 2 &&
     (subscriber.tokenExpiresAt ?? 0) > Date.now()
-    ? subscriber
+  )
+    return subscriber;
+
+  const link = await ctx.db
+    .query("newsletterManagementLinks")
+    .withIndex("by_tokenHash", (q) =>
+      q.eq("tokenHash", normalizeTokenHash(tokenHash)),
+    )
+    .unique();
+  if (!link || link.expiresAt <= Date.now()) return null;
+  const owner = await ctx.db.get("newsletterSubscribers", link.subscriberId);
+  return owner
+    ? {
+        ...owner,
+        tokenHash: link.tokenHash,
+        tokenVersion: 2 as const,
+        tokenPurpose: "manage" as const,
+        tokenExpiresAt: link.expiresAt,
+      }
     : null;
 }
 

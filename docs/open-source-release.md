@@ -9,12 +9,15 @@ not permission to change visibility or publish packages.
   signup callers. Legacy token arguments are ignored for old-client compatibility.
   Old unversioned links require a fresh emailed link; subscription consent and
   topic preferences remain unchanged. Profile access requires a matching verified
-  mailbox, including previously linked records.
+  mailbox, including previously linked records. Requesting another link preserves
+  existing trusted management links until their original expiry. Retained links
+  cannot confirm a new signup and are removed after expiry.
 - Public handle sign-in never resolves a private email into a redirect URL.
 - A shared streaming body reader rejects and cancels oversized requests before
   buffering the full body; the webhook retains raw-byte HMAC verification.
 - The owner AI console exposes only read tools. Explicit admin screens handle
-  updates, email sends and scheduling. Budget accounting remains enabled.
+  updates, email sends and scheduling. Budget accounting remains enabled. Model
+  output cannot load arbitrary remote images in the console.
 - Root, Eliza worker and gateway dependencies are audited independently,
   including development dependencies. The Node-only worker maps the browser
   crypto dependency to Node's built-in crypto API instead of the unpatched
@@ -28,6 +31,11 @@ not permission to change visibility or publish packages.
   reporting, conduct rules, PR guidance and code ownership are present.
 
 ## Required before the visibility change
+
+These checks apply to the exact commit selected for public release. Local
+verification and private production remediation do not authorize that release.
+GitHub Actions and automated dependency-update jobs are disabled; use the
+documented local verification commands.
 
 - [ ] Confirm the exact release commit's tests, typechecks, lint, five application
   builds, worker checks, clean container install and dependency audits.
