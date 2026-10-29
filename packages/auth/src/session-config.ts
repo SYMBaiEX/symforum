@@ -1,3 +1,5 @@
+import { installation } from "../../../lib/installation";
+import { installationIdentityOrigins } from "../../../lib/installation-config";
 type HumanAuthEnvironment = {
   [key: string]: string | undefined;
   NEXT_PUBLIC_WORKOS_ENABLED?: string;
@@ -41,14 +43,9 @@ export function humanAuthConfigurationProblems(
     return problems;
   }
 
-  const trustedHost = [
-    "symbaiex.com",
-    "www.symbaiex.com",
-    "forum.symbaiex.com",
-    "blog.symbaiex.com",
-    "news.symbaiex.com",
-    "newsletter.symbaiex.com",
-  ].includes(callback.hostname);
+  const trustedHost = installationIdentityOrigins(installation)
+    .filter(origin => origin.startsWith("https:"))
+    .some(origin => origin === callback.origin);
   const domain = environment.WORKOS_COOKIE_DOMAIN?.trim() ?? "";
   const localHost =
     callback.hostname === "localhost" ||
@@ -62,14 +59,14 @@ export function humanAuthConfigurationProblems(
     if (callback.protocol !== "https:") {
       problems.push("Production WorkOS callbacks require HTTPS");
     }
-    if (domain !== "symbaiex.com" && domain !== ".symbaiex.com") {
+    if (!installation.identity.cookieDomain || domain.replace(/^\./, "") !== installation.identity.cookieDomain) {
       problems.push(
-        "WORKOS_COOKIE_DOMAIN must be .symbaiex.com for shared production sessions",
+        `WORKOS_COOKIE_DOMAIN must be .${installation.identity.cookieDomain} for shared production sessions`,
       );
     }
   } else if (domain) {
     problems.push(
-      "WORKOS_COOKIE_DOMAIN must be empty outside trusted symbaiex.com hosts",
+      `WORKOS_COOKIE_DOMAIN must be empty outside trusted ${installation.identity.cookieDomain || "configured"} hosts`,
     );
   }
   return problems;

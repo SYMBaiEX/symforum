@@ -1,4 +1,6 @@
 "use node";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { generateText, Output } from "ai";
 import { makeFunctionReference } from "convex/server";
@@ -243,7 +245,7 @@ export const validateBelle = internalAction({
       try {
         generated = await ctx.runAction(generateDailyRef, {
           runDate: args.runDate, snapshotDate: args.snapshotDate,
-          siteUrl: "https://symbaiex.com",
+          siteUrl: PRIMARY_SITE_URL,
           shadowSourceRunKey: `pilot:belle:${args.nonce}`,
           ...(args.useElizaRuntime ? { forceElizaRuntimeGeneration: true } : { forceLegacyGeneration: true }),
         });

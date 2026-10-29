@@ -78,11 +78,13 @@ type Env = {
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
   readonly IDENTITY_SITE_URL: string | undefined;
+  readonly INSTALLATION_LEGACY_BINDING: string | undefined;
   readonly JUPITER_API_KEY: string | undefined;
   readonly JWKS: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
+  readonly NEXT_PUBLIC_INSTALLATION_CONFIG: string | undefined;
   readonly NVD_API_KEY: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
   readonly OPENROUTER_DAILY_BUDGET_USD: string | undefined;

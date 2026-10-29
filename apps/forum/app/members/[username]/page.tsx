@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../../lib/site-urls";
 import { PublicProfilePanel } from "@/components/public-profile-panel";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
@@ -19,7 +21,7 @@ export async function generateMetadata({
     },
     description: `SYMBaiEX forum profile for ${username}.`,
     alternates: {
-      canonical: `https://forum.symbaiex.com/members/${encodeURIComponent(
+      canonical: `${FORUM_SITE_URL}/members/${encodeURIComponent(
         username,
       )}`,
     },

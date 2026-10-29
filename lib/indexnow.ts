@@ -1,4 +1,5 @@
 import "server-only";
+import { installation } from "./installation";
 
 import { getCache } from "@vercel/functions";
 
@@ -15,8 +16,8 @@ const INDEXNOW_RUNTIME_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30;
 // IndexNow submissions are deliberately restricted to pages this application
 // can publish. Never submit an arbitrary URL supplied by an admin payload.
 export const INDEXNOW_ALLOWED_HOSTS = new Set([
-  "symbaiex.com",
-  "www.symbaiex.com",
+  new URL(installation.sites.primary).hostname,
+  ...installation.identity.cookieDomain ? [installation.identity.cookieDomain] : [],
 ]);
 
 export type IndexNowPayload = {

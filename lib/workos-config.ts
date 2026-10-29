@@ -1,6 +1,7 @@
+import { installation } from "./installation";
 /** Shared by Next.js discovery and Convex token verification. */
-export const WORKOS_AGENT_RESOURCE = "https://www.symbaiex.com/api/agent/mcp";
-export const WORKOS_PLUGIN_RESOURCE = "https://www.symbaiex.com/api/plugin/mcp";
+export const WORKOS_AGENT_RESOURCE = `${installation.sites.primary}/api/agent/mcp`;
+export const WORKOS_PLUGIN_RESOURCE = `${installation.sites.primary}/api/plugin/mcp`;
 export const WORKOS_PLUGIN_GRANT_CLAIM = "urn:symbaiex:forum-plugin-grant";
 export const WORKOS_PLUGIN_RESOURCE_CLAIM =
   "urn:symbaiex:forum-plugin-resource";
@@ -29,7 +30,7 @@ export function workosConfig(environment: {
     url.hash ||
     !(
       url.hostname.endsWith(".authkit.app") ||
-      url.hostname.endsWith(".symbaiex.com")
+      (Boolean(installation.identity.cookieDomain) && url.hostname.endsWith(`.${installation.identity.cookieDomain}`))
     )
   )
     throw new Error(
@@ -73,7 +74,7 @@ function normalizeAuthKitIssuer(value: string | undefined) {
     url.hash ||
     !(
       url.hostname.endsWith(".authkit.app") ||
-      url.hostname.endsWith(".symbaiex.com")
+      (Boolean(installation.identity.cookieDomain) && url.hostname.endsWith(`.${installation.identity.cookieDomain}`))
     )
   )
     throw new Error(

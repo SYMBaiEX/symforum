@@ -1,3 +1,7 @@
+import { installationBinding, installationMatches } from "./installation";
+import { installation } from "./installation";
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { createThread, saveMessages } from "@convex-dev/agent";
 import { HOUR, MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
@@ -89,7 +93,7 @@ export const accept = internalMutation({
       args.text.length > 1400 ||
       !Number.isSafeInteger(args.topicId) ||
       args.topicId < 0 ||
-      args.topicId === 7 ||
+      args.topicId === installation.telegram.topics.startHere ||
       !Number.isSafeInteger(args.messageId) ||
       args.messageId < 1 ||
       !/^\d{1,16}$/.test(args.senderId) ||
@@ -177,6 +181,7 @@ export const accept = internalMutation({
     if (!conversation) throw new Error("telegram_conversation_unavailable");
     const { text, ...fields } = args;
     const requestId = await ctx.db.insert("telegramAgentRequests", {
+      installationBinding,
       ...fields,
       key,
       prompt: text,
@@ -218,6 +223,7 @@ export const claim = internalMutation({
   returns: v.boolean(),
   handler: async (ctx, args): Promise<boolean> => {
     const row = await ctx.db.get("telegramAgentRequests", args.requestId);
+    if (row && !installationMatches(row)) return false;
     if (
       !row ||
       row.status !== "queued" ||
@@ -277,7 +283,7 @@ export const context = internalQuery({
   ),
   handler: async (ctx, args): Promise<TelegramContext | null> => {
     const request = await ctx.db.get("telegramAgentRequests", args.requestId);
-    if (!request) return null;
+    if (!request || !installationMatches(request)) return null;
     const agent = await ctx.db
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", request.agentSlug))
@@ -353,7 +359,7 @@ export const context = internalQuery({
               ? [
                   {
                     title: p.title.slice(0, 180),
-                    url: `https://forum.symbaiex.com/${p.categorySlug}/${posts.find((t) => t._id === p.threadId)?.slug ?? ""}`,
+                    url: `${FORUM_SITE_URL}/${p.categorySlug}/${posts.find((t) => t._id === p.threadId)?.slug ?? ""}`,
                     text: p.body.slice(0, 2400),
                   },
                 ]
@@ -406,6 +412,7 @@ export const claimDelivery = internalMutation({
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("telegramAgentRequests", args.requestId);
+    if (row && !installationMatches(row)) return false;
     const agent =
       row &&
       (await ctx.db

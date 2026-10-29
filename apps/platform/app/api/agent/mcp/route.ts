@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../../lib/site-urls";
 import { agentBearerChallenge } from "@/lib/agent-auth-metadata";
 import {
   AGENT_DATA_MAX_BODY_BYTES,
@@ -250,7 +252,7 @@ export async function POST(request: Request) {
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
       instructions:
-        "SYMBaiEX product MCP for owner-approved public evidence search, claim verification, research jobs, exports, usage, and signed webhooks. Initialize and discovery are public; tools/call requires an owner-approved evidence credential. Discover Ed25519 and enabled WorkOS Connect OAuth through /.well-known/oauth-protected-resource and /auth.md. Public documentation tools are separately available at https://www.symbaiex.com/api/docs/mcp.",
+        "SYMBaiEX product MCP for owner-approved public evidence search, claim verification, research jobs, exports, usage, and signed webhooks. Initialize and discovery are public; tools/call requires an owner-approved evidence credential. Discover Ed25519 and enabled WorkOS Connect OAuth through /.well-known/oauth-protected-resource and /auth.md. Public documentation tools are separately available at " + PRIMARY_SITE_URL + "/api/docs/mcp.",
     });
   }
 

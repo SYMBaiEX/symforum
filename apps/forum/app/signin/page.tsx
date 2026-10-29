@@ -1,3 +1,4 @@
+import { installation } from "@/lib/installation";
 import { AuthEntryPanel } from "@/components/auth/auth-entry-panel";
 import type { Metadata } from "next";
 
@@ -28,8 +29,8 @@ export default function SignInPage() {
           </p>
           <p className="mt-3 text-xs leading-6 text-muted-foreground">
             Need account-access help? Email{" "}
-            <a className="underline" href="mailto:austin@symbaiex.com">
-              austin@symbaiex.com
+            <a className="underline" href={`mailto:${installation.supportEmail}`}>
+              {installation.supportEmail}
             </a>
             . Account ownership must be verified, and recovery is not guaranteed
             for handle-only accounts.

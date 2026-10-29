@@ -9,7 +9,8 @@
     "deploy:dry:gateway": "wrangler deploy --dry-run --containers-rollout=none",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "types": "wrangler types --include-runtime false"
+    "types": "wrangler types --include-runtime false",
+    "deploy": "wrangler deploy --config wrangler.deploy.local.json"
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7"

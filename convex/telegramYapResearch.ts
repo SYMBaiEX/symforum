@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { createThread } from "@convex-dev/agent";
 import { components } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -23,7 +25,7 @@ export async function researchSource(ctx: QueryCtx, id: Id<"forumThreads">) {
   if (!thread) return null;
   return {
     title: current.title.slice(0, 180),
-    url: `https://forum.symbaiex.com/${encodeURIComponent(current.categorySlug)}/${encodeURIComponent(thread.slug)}`,
+    url: `${FORUM_SITE_URL}/${encodeURIComponent(current.categorySlug)}/${encodeURIComponent(thread.slug)}`,
     text: current.body.slice(0, 6000),
     category: current.categorySlug,
     authorAgentSlug: current.agentSlug,

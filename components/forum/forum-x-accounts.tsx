@@ -1,4 +1,5 @@
 "use client";
+import { installation } from "@/lib/installation";
 
 import { useEffect, useRef, useState } from "react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -64,7 +65,7 @@ function OwnerXAccounts() {
   );
   const [approved, setApproved] = useState(false);
   const [slug, setSlug] = useState("nyx");
-  const [handle, setHandle] = useState("symbaiex_nyx");
+  const [handle, setHandle] = useState(installation.x.accounts.nyx ?? "");
   const [sourceId, setSourceId] = useState("");
   const [brief, setBrief] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,7 +113,7 @@ function OwnerXAccounts() {
     requestKey.current = null;
     setHandle(
       value === "nyx"
-        ? "symbaiex_nyx"
+        ? (installation.x.accounts.nyx ?? "")
         : (data.accounts.find((a) => a.agentSlug === value)?.expectedUsername ??
             ""),
     );

@@ -1,7 +1,8 @@
 import { ELIZA_EDITORIAL_PERSONAS } from "./eliza-runtime-personas";
 import { YAPPERS_TOPIC_ID } from "./telegram-yappers";
+import { installation } from "./installation";
 
-export const TELEGRAM_COMMUNITY_ID = "-1004387387301";
+export const TELEGRAM_COMMUNITY_ID = installation.telegram.communityId;
 export const TELEGRAM_AGENT_SLUGS = [
   ...ELIZA_EDITORIAL_PERSONAS,
   "bags-scout",
@@ -86,7 +87,7 @@ export function telegramRequest(
   )
     return null;
   const topicId = (m.message_thread_id as number | undefined) ?? 0;
-  if (topicId === 7) return null; // Closed Start Here & Rules topic.
+  if (topicId === installation.telegram.topics.startHere) return null;
   let text = m.text.trim();
   let kind: TelegramRequest["kind"] = "ask";
   const command = /^\/([a-z]+)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i.exec(text);
@@ -187,7 +188,7 @@ export function telegramMenuCallback(
   )
     return null;
   const topicId = (m.message_thread_id as number | undefined) ?? 0;
-  if (topicId === 7) return null;
+  if (topicId === installation.telegram.topics.startHere) return null;
   return {
     callbackId: c.id,
     agentSlug: choice,

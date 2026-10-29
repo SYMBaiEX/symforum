@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -823,7 +825,7 @@ export const dispatch = internalMutation({
           },
         );
         if (artifact === null) return null;
-        const base = "https://www.symbaiex.com/api/agent/v1";
+        const base = PRIMARY_SITE_URL + "/api/agent/v1";
         const path =
           args.operation === "research_artifact"
             ? `/research-jobs/${researchJobId}/artifact`

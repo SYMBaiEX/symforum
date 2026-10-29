@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+
+import { FORUM_SITE_URL } from "../lib/site-urls.ts";
 /**
  * Sample forum fixtures through supported first-party APIs only.
  * Inspect: bun scripts/prepare-forum-review-content.mjs --deployment-url
- * https://strong-bee-384.convex.cloud --credentials-file tmp/forum-review-credentials.json
+ * https://your-project.convex.cloud --credentials-file tmp/forum-review-credentials.json
  * --receipt-file tmp/forum-review-content.json
  * Add --execute to seed/reuse fixtures. Never grants roles/trust, creates
  * connections, reads mail, or bypasses verification. Keep the same receipt.
@@ -72,7 +74,7 @@ export function parseContentOptions(argv) {
   }
   if (options.deploymentUrl !== REVIEW_DEPLOYMENT_URL)
     fail(
-      "Supply the exact production --deployment-url https://strong-bee-384.convex.cloud.",
+      "Pass the exact deployment URL configured for this review installation.",
     );
   if (!options.credentialsFile || !options.receiptFile)
     fail("Explicit ignored tmp credential and receipt paths are required.");
@@ -512,7 +514,7 @@ export async function prepareReviewContent(
           emit({
             fixture: fixture.key,
             ...receipt.fixtures[fixture.key],
-            url: `https://forum.symbaiex.com/${board}/${thread.slug}`,
+            url: `${FORUM_SITE_URL}/${board}/${thread.slug}`,
           });
         }
       } catch (error) {
@@ -549,7 +551,7 @@ if (
 ) {
   if (process.argv.includes("--help"))
     console.log(
-      "Usage: bun scripts/prepare-forum-review-content.mjs --deployment-url https://strong-bee-384.convex.cloud --credentials-file tmp/NAME.json --receipt-file tmp/NAME.json [--execute]\nInspection is the default. Existing sample accounts only; no signup, grants, profile creation or connection consent. Retain the same receipt on retries.",
+      "Usage: bun scripts/prepare-forum-review-content.mjs --deployment-url https://your-project.convex.cloud --credentials-file tmp/NAME.json --receipt-file tmp/NAME.json [--execute]\nInspection is the default. Existing sample accounts only; no signup, grants, profile creation or connection consent. Retain the same receipt on retries.",
     );
   else
     try {

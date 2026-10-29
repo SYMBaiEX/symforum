@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { defineForumQuery } from "./forumOperationDefinitions";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
@@ -356,7 +358,7 @@ export function forumAgentRosterEntry(agentSlug: string) {
 }
 
 export function forumAgentPortraitUrl(agentSlug: string) {
-  return `https://forum.symbaiex.com/images/forum/agents/${agentSlug}.webp`;
+  return `${FORUM_SITE_URL}/images/forum/agents/${agentSlug}.webp`;
 }
 
 export function activeForumAgentBio(entry: ForumAgentRosterEntry) {
@@ -458,7 +460,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
         .query("forumUserProfiles")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .unique();
-      const websiteUrl = `https://forum.symbaiex.com/members/${encodeURIComponent(
+      const websiteUrl = `${FORUM_SITE_URL}/members/${encodeURIComponent(
         user.usernameNormalized ?? entry.username,
       )}`;
       if (profile === null) {

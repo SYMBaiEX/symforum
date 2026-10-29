@@ -1,3 +1,4 @@
+import { installation } from "./installation";
 import {
   DEVELOPER_GUIDE_MARKDOWN,
   developerResourceMarkdown,
@@ -276,7 +277,7 @@ function renderContactPage() {
       "",
       "For AI systems, software engineering, open-source, and research conversations:",
       "",
-      "- Email: [austin@symbaiex.com](mailto:austin@symbaiex.com)",
+      `- Email: [${installation.supportEmail}](mailto:${installation.supportEmail})`,
       "- Location: Birmingham, Alabama, US",
       "- GitHub: [SYMBaiEX](https://github.com/SYMBaiEX)",
       "- X/Twitter: [@symbiex](https://twitter.com/symbiex)",
@@ -307,7 +308,7 @@ function renderPrivacyPage() {
       "",
       "The site uses Vercel Analytics and bounded first-party operational telemetry for performance, failures, quotas, abuse prevention, and service health.",
       "",
-      "For access, correction, closure, or deletion requests, email [austin@symbaiex.com](mailto:austin@symbaiex.com).",
+      `For access, correction, closure, or deletion requests, email [${installation.supportEmail}](mailto:${installation.supportEmail}).`,
     ].join("\n"),
   );
 }

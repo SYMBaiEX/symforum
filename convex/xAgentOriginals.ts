@@ -1,3 +1,4 @@
+import { installationBinding, installationMatches } from "./installation";
 import { v } from "convex/values";
 import { createThread } from "@convex-dev/agent";
 import { RateLimiter } from "@convex-dev/rate-limiter";
@@ -49,6 +50,7 @@ async function ownedActivity(ctx: MutationCtx, slug: string) {
   if (
     !r ||
     !r.enabled ||
+    !installationMatches(r) ||
     r.epoch !== a.epoch ||
     r.holdReason ||
     r.refreshClaimed
@@ -103,7 +105,7 @@ export const queueApproved = internalMutation({
   handler: async (ctx, { draftId }) => {
     const u = await requireOwner(ctx);
     const d = await ctx.db.get("xAgentDrafts", draftId);
-    if (!d || d.ownerUserId !== u._id || d.kind === "reply")
+    if (!d || !installationMatches(d) || d.ownerUserId !== u._id || d.kind === "reply")
       throw Error("Original draft unavailable.");
     const { a, r } = await ownedActivity(ctx, d.agentSlug);
     const key = `publish:${a._id}:${d._id}`;
@@ -120,6 +122,7 @@ export const queueApproved = internalMutation({
     )
       throw Error("Only a ready, current original draft can be published.");
     const operationId = await ctx.db.insert("xAgentOperations", {
+      installationBinding,
       accountId: a._id,
       epoch: a.epoch,
       key,
@@ -146,6 +149,7 @@ export async function admitOriginal(
   r: Doc<"xAgentActivity">,
 ) {
   if (
+    !installationMatches(r) ||
     !r.options.originals ||
     a.mode !== "automatic" ||
     env.ELIZA_RUNTIME_MODE !== "live" ||
@@ -209,6 +213,7 @@ export async function admitOriginal(
       "Only confirmed public posts by this identity and an optional currently public Forum source. No member histories.",
   });
   const draftId = await ctx.db.insert("xAgentDrafts", {
+      installationBinding,
     ownerUserId: a.ownerUserId,
     agentSlug: a.agentSlug,
     accountEpoch: a.epoch,
@@ -223,6 +228,7 @@ export async function admitOriginal(
     updatedAt: Date.now(),
   });
   await ctx.db.insert("xAgentOperations", {
+      installationBinding,
     accountId: a._id,
     epoch: a.epoch,
     key,

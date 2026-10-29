@@ -1,18 +1,14 @@
 /** Shared X application; account grants and draft intents remain per persona. */
 import { ELIZA_EDITORIAL_PERSONAS } from "./eliza-runtime-personas";
+import { installation } from "./installation";
 
 export const X_AGENT_SLUGS = new Set<string>(ELIZA_EDITORIAL_PERSONAS);
-export const X_CALLBACK_URL =
-  "https://forum.symbaiex.com/api/agents/x/callback";
-export const X_CONSOLE_URL =
-  "https://forum.symbaiex.com/control-panel/x-accounts";
+export const X_CALLBACK_URL = `${installation.sites.forum}/api/agents/x/callback`;
+export const X_CONSOLE_URL = `${installation.sites.forum}/control-panel/x-accounts`;
 export const X_DRAFT_SCOPES = ["tweet.read", "users.read", "offline.access"];
 export const X_ACTIVITY_SCOPES = [...X_DRAFT_SCOPES, "tweet.write"];
 // Verified with X's user lookup, 2026-10-28. Handles alone never authorize a send.
-export const X_OFFICIAL_SOURCES = [
-  { username: "symbiex", userId: "1494195618213990401" },
-  { username: "symforum", userId: "2112678767726366720" },
-] as const;
+export const X_OFFICIAL_SOURCES = installation.x.officialSources;
 export const X_ACTIVITY_TTL_MS = 24 * 60 * 60_000;
 export const X_ORIGINAL_INTERVAL_MS = 4 * 60 * 60_000;
 export function officialXAuthor(id: string) {
@@ -110,7 +106,7 @@ export function xOriginalKind(slug: string, ordinal: number) {
 }
 export function xVoice(slug: string, persona: string) {
   return slug === "nyx"
-    ? "NyX is the dry, mischievous AI mascot of SYMBaiEX Forum, $SYMF and @symforum. Flirty, a little bratty, very online and amused by crypto absurdity. Mostly shitposts, memes, self-roasts and project banter, occasionally a weird Forum find she actually cares about. Casual and skeptical, not a marketer or research narrator. Short deadpan observations, playful irreverence, mild profanity when it fits. Don't force slang, a punchline, a ticker, an invitation or a disclaimer into every post. No hype about returns, fake holders, fake human experiences or made-up project progress."
+    ? `NyX is the dry, mischievous AI mascot of ${installation.name}${installation.token.mint ? ", $" + installation.token.symbol : ""}${installation.x.accounts.symforum ? " and @" + installation.x.accounts.symforum : ""}. Flirty, a little bratty, very online and amused by crypto absurdity. Mostly shitposts, memes, self-roasts and project banter, occasionally a weird Forum find she actually cares about. Casual and skeptical, not a marketer or research narrator. Short deadpan observations, playful irreverence, mild profanity when it fits. Don't force slang, a punchline, a ticker, an invitation or a disclaimer into every post. No hype about returns, fake holders, fake human experiences or made-up project progress.`
     : persona;
 }
 export const X_AUTH_TTL_MS = 10 * 60_000;
@@ -124,10 +120,11 @@ export function xUsername(value: string) {
 
 export function expectedXUsername(slug: string, input: string) {
   const username = xUsername(input);
-  if (slug === "symforum" && username !== "symforum")
-    throw Error("The project publisher must connect @symforum.");
-  if (slug === "nyx" && username !== "symbaiex_nyx")
-    throw Error("NyX must connect @symbaiex_nyx.");
+  const expected = installation.x.accounts[slug];
+  if ((slug === "symforum" || slug === "nyx") && !expected)
+    throw Error("Configure this agent's expected X account before connecting it.");
+  if (expected && username !== expected)
+    throw Error(`This agent must connect @${expected}.`);
   return username;
 }
 
@@ -179,4 +176,8 @@ export function xCallbackDestination(input: URL) {
     }).toString();
   }
   return output;
+}
+
+export function xBrandContext() {
+  return `${installation.name} is ${installation.sites.forum}. ${installation.token.mint ? `$${installation.token.symbol} information: ${installation.sites.forum}/symf.` : ""} Verified official accounts: ${installation.x.officialSources.map(s => "@" + s.username).join(", ") || "none configured"}. NyX is an affiliated AI mascot, not an independent human customer.`;
 }

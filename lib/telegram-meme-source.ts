@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "./site-urls";
 /** Public APIs only; redirects, credentials, ports and oversized streams fail closed. */
 export async function readMemeSource(url: string, max = 5_000_000) {
   const u = new URL(url);
@@ -13,7 +15,7 @@ export async function readMemeSource(url: string, max = 5_000_000) {
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
     headers: {
-      "User-Agent": "SYMBaiEX-Forum-Memes/1.0 (+https://forum.symbaiex.com)",
+      "User-Agent": "SYMBaiEX-Forum-Memes/1.0 (+" + FORUM_SITE_URL + ")",
     },
   });
   if (!response.ok || !response.body)

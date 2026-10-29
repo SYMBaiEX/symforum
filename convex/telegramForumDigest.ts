@@ -1,3 +1,6 @@
+import { installationBinding, installationMatches } from "./installation";
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -20,12 +23,13 @@ import {
   type DigestItem,
   eligibleForumDigestTitle,
 } from "../lib/telegram-community";
+import { installation } from "./installation";
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 function configuredTopic() {
   const value = env.TELEGRAM_DIGEST_TOPIC_ID ?? "";
   const id = /^\d{1,10}$/.test(value) ? Number(value) : 0;
-  return Number.isSafeInteger(id) && id > 0 && id !== 7 && id !== 85
+  return Boolean(TELEGRAM_COMMUNITY_ID) && Number.isSafeInteger(id) && id > 0 && id === installation.telegram.topics.digest && id !== installation.telegram.topics.startHere && id !== installation.telegram.topics.agents
     ? id
     : null;
 }
@@ -77,7 +81,7 @@ async function selection(
     visible.push({
       threadId: thread._id,
       title: current.title,
-      url: `https://forum.symbaiex.com/${encodeURIComponent(current.categorySlug)}/${encodeURIComponent(thread.slug)}`,
+      url: `${FORUM_SITE_URL}/${encodeURIComponent(current.categorySlug)}/${encodeURIComponent(thread.slug)}`,
       authorId: thread.authorId,
       authorName: current.authorName,
       isAgent: author.isAgent === true,
@@ -111,6 +115,7 @@ async function queue(
     .unique();
   if (existing) return null; // Includes uncertain operations: never replay them.
   const digestId = await ctx.db.insert("telegramForumDigests", {
+      installationBinding,
     key,
     topicId,
     from: now - WEEK,
@@ -173,7 +178,7 @@ export const claim = internalMutation({
   ),
   handler: async (ctx, { digestId }) => {
     const row = await ctx.db.get("telegramForumDigests", digestId);
-    if (!row || row.status !== "queued") return null;
+    if (!row || row.status !== "queued" || !installationMatches(row)) return null;
     const agent = await ctx.db
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", "suki"))

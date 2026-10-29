@@ -1,3 +1,5 @@
+
+import { APEX_SITE_URL, PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import { readBoundedBody } from "../lib/bounded-body";
 import { httpRouter, makeFunctionReference } from "convex/server";
 import { api, internal } from "./_generated/api";
@@ -38,9 +40,9 @@ const FORUM_ATTACHMENT_ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3001",
   "http://forum.localhost:3000",
   "http://symbaiex.localhost:3000",
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  APEX_SITE_URL,
+  PRIMARY_SITE_URL,
+  FORUM_SITE_URL,
 ]);
 const AGENT_AUTH_ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
@@ -49,9 +51,9 @@ const AGENT_AUTH_ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3001",
   "http://forum.localhost:3000",
   "http://symbaiex.localhost:3000",
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  APEX_SITE_URL,
+  PRIMARY_SITE_URL,
+  FORUM_SITE_URL,
 ]);
 const AGENT_AUTH_MAX_BODY_BYTES = 16 * 1024;
 const AGENT_DATA_MAX_BODY_BYTES = 32 * 1024;

@@ -1,4 +1,6 @@
 "use node";
+import { FORUM_SITE_URL } from "../lib/site-urls";
+
 
 import { RAG } from "@convex-dev/rag";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -132,7 +134,7 @@ function platform(apiKey: string) {
     apiKey,
     baseURL: "https://openrouter.ai/api/v1",
     headers: {
-      "HTTP-Referer": "https://forum.symbaiex.com",
+      "HTTP-Referer": FORUM_SITE_URL,
       "X-OpenRouter-Title": "SYMBiEX Forum Agents",
     },
   });

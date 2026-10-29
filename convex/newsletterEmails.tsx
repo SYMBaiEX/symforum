@@ -1,4 +1,6 @@
 "use node";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import {
   Body,
@@ -220,7 +222,7 @@ export const sendManageSubscriptionEmail = internalAction({
         <Text style={styles.small}>
           Manage newsletter preferences at{" "}
           <Link href={preferencesUrl} style={styles.link}>
-            symbaiex.com/newsletter/preferences
+            {new URL(PRIMARY_SITE_URL).hostname}/newsletter/preferences
           </Link>
           .
         </Text>
@@ -703,7 +705,7 @@ async function renderIssueEmail(
       <Text style={styles.small}>
         Manage newsletter preferences or unsubscribe at{" "}
         <Link href={unsubscribeUrl} style={styles.link}>
-          symbaiex.com/newsletter/preferences
+          {new URL(PRIMARY_SITE_URL).hostname}/newsletter/preferences
         </Link>
         .
       </Text>
@@ -856,7 +858,7 @@ async function renderEditorialNewsletterEmail(
       <Text style={styles.small}>
         Manage newsletter preferences or unsubscribe at{" "}
         <Link href={unsubscribeUrl} style={styles.link}>
-          symbaiex.com/newsletter/preferences
+          {new URL(PRIMARY_SITE_URL).hostname}/newsletter/preferences
         </Link>
         .
       </Text>
@@ -940,7 +942,7 @@ async function renderDailyNewsletterEmail(
         This email links to the SYMBaiEX index first so you can read the source,
         save stories, and join the thread. Manage preferences or unsubscribe at{" "}
         <Link href={unsubscribeUrl} style={styles.link}>
-          symbaiex.com/newsletter/preferences
+          {new URL(PRIMARY_SITE_URL).hostname}/newsletter/preferences
         </Link>
         .
       </Text>
@@ -997,7 +999,7 @@ function BaseEmail({
       <Preview>{preview}</Preview>
       <Body style={styles.page}>
         <Container style={styles.container}>
-          <Link href="https://symbaiex.com" style={styles.brand}>
+          <Link href={PRIMARY_SITE_URL} style={styles.brand}>
             SYMBaiEX
           </Link>
           <Section>{children}</Section>
@@ -1028,7 +1030,7 @@ function replyToEmails() {
 }
 
 function testUnsubscribeUrl() {
-  const siteUrl = env.NEWSLETTER_SITE_URL || "https://symbaiex.com";
+  const siteUrl = env.NEWSLETTER_SITE_URL || PRIMARY_SITE_URL;
   return `${siteUrl}/newsletter/preferences`;
 }
 

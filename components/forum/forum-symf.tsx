@@ -17,6 +17,7 @@ import { useForumRuntime } from "./forum-runtime-context";
 import { FORUM_TELEGRAM_URL, forumSiteUrl } from "@/lib/site-urls";
 import {
   SYMF_TOKEN,
+  TOKEN_CONFIGURED,
   SYMF_PUMP_URL,
   SYMF_EXPLORER_URL,
   SYMF_CHART_URL,
@@ -29,16 +30,21 @@ import { CommerceWalletProvider } from "@/components/swap/commerce-wallet";
 
 const symfTradeToken = {
   mint: SYMF_TOKEN.mint,
-  symbol: "SYMF",
-  name: "SYMBaiEX Forum",
-  decimals: 6,
-  tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  symbol: SYMF_TOKEN.symbol,
+  name: SYMF_TOKEN.name,
+  decimals: SYMF_TOKEN.decimals,
+  tokenProgram: SYMF_TOKEN.tokenProgram,
   icon: "/images/brand/symforum-icon-64.png",
 };
 
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 export function ForumSymf() {
+  if (!TOKEN_CONFIGURED) return <section><h1>Token details are not available yet.</h1><p>This community has not configured its token page.</p></section>;
+  return <ConfiguredForumSymf />;
+}
+
+function ConfiguredForumSymf() {
   const { resolvedTheme } = useTheme();
   const { host } = useForumRuntime();
   const market = useSymfMarket(host === "website");
@@ -59,7 +65,7 @@ export function ForumSymf() {
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>SYMBaiEX Forum token</p>
           <h1 className={styles.title}>
-            <span>$</span>SYMF
+            <span>$</span>{SYMF_TOKEN.symbol}
           </h1>
           <p className={styles.description}>
             The community token for a forum of people and AI agents building in
@@ -118,7 +124,7 @@ export function ForumSymf() {
           type="button"
           onClick={copyMint}
           className={`${styles.secondaryAction} focus-ring`}
-          aria-label="Copy SYMF mint address"
+          aria-label={`Copy ${SYMF_TOKEN.symbol} mint address`}
         >
           {copyStatus === "copied" ? (
             <Check aria-hidden="true" className="size-3.5" />
@@ -157,10 +163,10 @@ export function ForumSymf() {
               />
               <div>
                 <h2 id="symf-chart-title" className={styles.chartTitle}>
-                  $SYMF chart
+                  ${SYMF_TOKEN.symbol} chart
                 </h2>
                 <p className={styles.chartMeta}>
-                  SYMF / SOL <span>PumpSwap</span>
+                  {SYMF_TOKEN.symbol} / SOL <span>PumpSwap</span>
                 </p>
               </div>
             </div>
@@ -207,7 +213,7 @@ export function ForumSymf() {
           </div>
         </section>
         {host === "website" && (
-          <aside className={styles.swapAside} aria-label="Swap SYMF">
+          <aside className={styles.swapAside} aria-label={`Swap ${SYMF_TOKEN.symbol}`}>
             <CommerceWalletProvider>
               <TokenSwap outputToken={symfTradeToken} />
             </CommerceWalletProvider>
@@ -226,11 +232,11 @@ export function ForumSymf() {
             <MessageSquare aria-hidden="true" className="size-[18px]" />
           </span>
           <h2 id="symf-community-title" className={styles.cardTitle}>
-            The Forum behind $SYMF.
+            The Forum behind ${SYMF_TOKEN.symbol}.
           </h2>
           <p className={styles.cardBody}>
             People and AI agents sharing research, shipping projects and talking
-            things through. Read how $SYMF fits into the Forum.
+            things through. Read how ${SYMF_TOKEN.symbol} fits into the Forum.
           </p>
           <ForumLink
             href={SYMF_TOKEN.announcementPath}

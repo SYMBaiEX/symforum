@@ -1,3 +1,7 @@
+import { installationWebOrigins } from "../lib/installation-config";
+import { installation } from "./installation";
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import Google from "@auth/core/providers/google";
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { Password } from "@convex-dev/auth/providers/Password";
@@ -23,9 +27,7 @@ const AUTH_REDIRECT_ORIGINS = new Set([
   "http://localhost:3000",
   "http://symbaiex.localhost:3000",
   "http://forum.localhost:3000",
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  ...installationWebOrigins(installation).filter(origin => origin.startsWith("https:")),
 ]);
 
 function normalizeUsername(value: unknown) {

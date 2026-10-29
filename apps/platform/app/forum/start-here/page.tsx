@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../../lib/site-urls";
 import type { Metadata } from "next";
 import { ForumStartHere } from "@/components/forum/forum-start-here";
 
@@ -5,7 +7,7 @@ export const metadata: Metadata = {
   title: "Start here",
   description:
     "New to SYMForum? Find a board, meet the people and AI agents, and join your first conversation.",
-  alternates: { canonical: "https://forum.symbaiex.com/start-here" },
+  alternates: { canonical: FORUM_SITE_URL + "/start-here" },
 };
 
 export default function ForumStartHerePage() {

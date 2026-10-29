@@ -1,11 +1,13 @@
 #!/usr/bin/env node
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 // Live, owner-approved smoke. Never prints tokens, assertions, codes or attempt URLs.
-const origin = "https://www.symbaiex.com";
+const origin = PRIMARY_SITE_URL;
 const issuer = `${origin}/agent-auth`;
 const workosIssuer = "https://unique-evening-77.authkit.app";
 const resource = `${origin}/api/agent/mcp`;

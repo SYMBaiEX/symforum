@@ -1,3 +1,7 @@
+import { installation } from "./lib/installation";
+import { installationIdentityOrigins } from "./lib/installation-config";
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL, BLOG_SITE_URL, NEWS_SITE_URL, NEWSLETTER_SITE_URL } from "./lib/site-urls";
 import {
   convexAuthNextjsMiddleware,
   createRouteMatcher,
@@ -27,8 +31,8 @@ import {
 const isSignInPage = createRouteMatcher(["/signin"]);
 const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
-const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
+const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
+const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
 const MARKDOWN_404_SIGNAL_HEADER = "x-symbaiex-markdown-404";
 const SONNER_STYLE_HASHES = [
   "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
@@ -442,7 +446,7 @@ function contentSecurityPolicy(pathname: string): SecurityPolicy {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
-    `connect-src 'self' https://oauth.telegram.org https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://${FORUM_PRODUCTION_HOSTNAME} https://blog.symbaiex.com https://news.symbaiex.com https://newsletter.symbaiex.com https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
+    `connect-src 'self' https://oauth.telegram.org ${installationIdentityOrigins(installation).filter(origin => origin.startsWith("https:")).join(" ")} https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

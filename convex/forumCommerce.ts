@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import {
@@ -666,7 +668,7 @@ export const setTokenBlocked = mutation({
         ...token,
         symbolNormalized: token.symbol,
         status: args.blocked ? "blocked" : "active",
-        proofUrl: "https://forum.symbaiex.com",
+        proofUrl: FORUM_SITE_URL,
         updatedAt: Date.now(),
         verifiedBy: actor.userId,
       });

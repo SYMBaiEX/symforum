@@ -84,3 +84,13 @@ provisioning are separate explicit operational steps, not part of these checks.
 Official references used for the pinned configuration: [Container class API](https://developers.cloudflare.com/containers/api/container-class/),
 [Wrangler container configuration](https://developers.cloudflare.com/workers/wrangler/configuration/#containers),
 and [instance types](https://developers.cloudflare.com/containers/platform/limits/).
+
+## Your deployment target
+
+The committed Wrangler file is a neutral template without an account ID.
+Generate the ignored `wrangler.deploy.local.json` with `bun run setup:worker
+eliza-shadow-gateway` from the repository root; see
+[installation configuration](../../docs/installation-configuration.md).
+Use that file explicitly for secret provisioning and `bun run deploy`. The
+helper does not deploy the Worker or container. Keep the restricted sibling
+Docker context, singleton and separate-secret checks unchanged.

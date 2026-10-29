@@ -3,9 +3,10 @@ import {
   isForumSubdomainSiteRoute,
 } from "@/lib/forum-subdomain-routing";
 
-const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
-const FORUM_PRODUCTION_ORIGIN = `https://${FORUM_PRODUCTION_HOSTNAME}`;
-const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
+import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
+const FORUM_PRODUCTION_ORIGIN = FORUM_SITE_URL;
+const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
 export function isForumHostname(hostname: string | undefined | null) {
   return isForumSubdomainHost(hostname);
 }

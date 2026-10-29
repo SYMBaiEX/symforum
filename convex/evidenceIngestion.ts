@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -19,7 +21,7 @@ import {
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_ITEMS_PER_RUN = 100;
-const USER_AGENT = "SYMBaiEX-Evidence-Ingestion/1.0 (+https://symbaiex.com)";
+const USER_AGENT = "SYMBaiEX-Evidence-Ingestion/1.0 (+" + PRIMARY_SITE_URL + ")";
 const ENRICHMENT_BACKFILL_SOURCES = [
   "nvd-cve-change-history",
   "cisa-kev",

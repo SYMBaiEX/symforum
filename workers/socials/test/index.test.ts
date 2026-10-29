@@ -200,7 +200,7 @@ describe("socials worker", () => {
       "script-src 'self'",
     );
     expect(response.headers.get("content-security-policy")).toContain(
-      "connect-src 'self' https://forum.symbaiex.com https://www.symbaiex.com",
+      "connect-src 'self';",
     );
     expect(response.headers.get("cache-control")).toBe(
       "no-cache, no-store, must-revalidate",

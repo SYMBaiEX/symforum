@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import type { ForumPluginPrincipal } from "./forumPluginPrincipal";
 import { FORUM_REQUEST_RATES } from "../lib/forum-usage-policy";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
@@ -1013,7 +1015,7 @@ export async function readForumPluginQuota(
     ownerLimitUnits: state.hardCapUnits,
     remainingUnits: Math.min(state.remainingUnits, state.agentRemainingUnits),
     resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1),
-    settingsUrl: "https://www.symbaiex.com/developer",
+    settingsUrl: PRIMARY_SITE_URL + "/developer",
   };
 }
 

@@ -607,7 +607,7 @@ export const sendAdminIssueTest = mutation({
       throw new Error("Newsletter issue not found");
     }
     const to = normalizeEmail(
-      args.to ?? admin.email ?? admin.contactEmail ?? "solsymbaiex@gmail.com",
+      args.to ?? admin.email ?? admin.contactEmail ?? "",
     );
     await ctx.scheduler.runAfter(0, sendIssueTestRef, {
       issueId: issue._id,

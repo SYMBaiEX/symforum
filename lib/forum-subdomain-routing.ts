@@ -1,4 +1,5 @@
-const FORUM_PRODUCTION_HOST = "forum.symbaiex.com";
+import { installation } from "./installation";
+const FORUM_PRODUCTION_HOST = new URL(installation.sites.forum).hostname;
 const FORUM_LOCAL_HOSTS = new Set([
   "forum.localhost",
   "forum.127.0.0.1",

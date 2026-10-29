@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../../../../lib/site-urls";
 import { FORUM_PLUGIN_RESOURCE } from "@/lib/forum-plugin-contract";
 import { workosPluginConfig } from "@/lib/workos-config";
 
@@ -11,7 +13,7 @@ export function GET() {
         scopes_supported: ["openid", "offline_access"],
         bearer_methods_supported: ["header"],
         resource_documentation:
-          "https://www.symbaiex.com/developers/forum-plugin",
+          PRIMARY_SITE_URL + "/developers/forum-plugin",
         ...(config ? { authorization_servers: [config.issuer] } : {}),
       },
       {

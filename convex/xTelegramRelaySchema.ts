@@ -9,6 +9,7 @@ export const relaySource = v.object({
 });
 export const xTelegramRelayTables = {
   xTelegramRelayConfig: defineTable({
+    installationBinding: v.optional(v.string()),
     key: v.literal("symforum"),
     enabled: v.boolean(),
     topicId: v.number(),
@@ -16,6 +17,7 @@ export const xTelegramRelayTables = {
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
   xTelegramDeliveries: defineTable({
+    installationBinding: v.optional(v.string()),
     postId: v.string(),
     topicId: v.number(),
     sourceCreatedAt: v.number(),

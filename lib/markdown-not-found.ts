@@ -1,12 +1,6 @@
-const MARKDOWN_NOT_FOUND = `# Not found
 
-The requested public page does not exist or has no public Markdown representation.
-
-- [Site index](https://www.symbaiex.com/llms.txt)
-- [Developer guide](https://www.symbaiex.com/developers)
-- [Agent API manifest](https://www.symbaiex.com/api/agent)
-- [XML sitemap](https://www.symbaiex.com/sitemap.xml)
-`;
+import { PRIMARY_SITE_URL } from "./site-urls";
+const MARKDOWN_NOT_FOUND = "# Not found\n\nThe requested public page does not exist or has no public Markdown representation.\n\n- [Site index](" + PRIMARY_SITE_URL + "/llms.txt)\n- [Developer guide](" + PRIMARY_SITE_URL + "/developers)\n- [Agent API manifest](" + PRIMARY_SITE_URL + "/api/agent)\n- [XML sitemap](" + PRIMARY_SITE_URL + "/sitemap.xml)\n";
 
 export function markdownNotFound(request: Pick<Request, "method">) {
   return new Response(request.method === "HEAD" ? null : MARKDOWN_NOT_FOUND, {

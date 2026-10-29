@@ -1,5 +1,7 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 const API_NOT_FOUND = {
-  type: "https://www.symbaiex.com/developers#errors",
+  type: PRIMARY_SITE_URL + "/developers#errors",
   title: "SYMBaiEX API route not found",
   status: 404,
   code: "API_ROUTE_NOT_FOUND",
@@ -7,9 +9,9 @@ const API_NOT_FOUND = {
   detail:
     "Use the public agent manifest and OpenAPI contract to discover supported API operations.",
   resolution:
-    "Start at https://www.symbaiex.com/api/agent or read https://www.symbaiex.com/api/agent/openapi.json.",
-  documentation: "https://www.symbaiex.com/developers",
-  openapi: "https://www.symbaiex.com/api/agent/openapi.json",
+    "Start at " + PRIMARY_SITE_URL + "/api/agent or read " + PRIMARY_SITE_URL + "/api/agent/openapi.json.",
+  documentation: PRIMARY_SITE_URL + "/developers",
+  openapi: PRIMARY_SITE_URL + "/api/agent/openapi.json",
 } as const;
 
 function notFound(request?: Request) {

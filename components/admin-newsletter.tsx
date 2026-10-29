@@ -1,4 +1,6 @@
 "use client";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
@@ -99,7 +101,7 @@ export function AdminNewsletter() {
     sendTimeLocal: "07:15",
     maxIndexedArticles: 40,
     maxNewsletterStories: 8,
-    siteUrl: "https://symbaiex.com",
+    siteUrl: PRIMARY_SITE_URL,
   });
   const [scheduleAt, setScheduleAt] = useState("");
   const [testEmail, setTestEmail] = useState("solsymbaiex@gmail.com");

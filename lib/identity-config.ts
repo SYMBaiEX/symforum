@@ -1,16 +1,8 @@
+import { installation } from "./installation";
+import { installationIdentityOrigins } from "./installation-config";
 export const IDENTITY_BASE_PATH = "/api/identity";
 export const IDENTITY_MARKER = "symbaiex-human-v1";
-export const IDENTITY_ORIGINS = [
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
-  "https://blog.symbaiex.com",
-  "https://news.symbaiex.com",
-  "https://newsletter.symbaiex.com",
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:3002",
-] as const;
+export const IDENTITY_ORIGINS = installationIdentityOrigins(installation);
 export function safeIdentityReturnTo(value: string | null | undefined) {
   if (
     !value ||

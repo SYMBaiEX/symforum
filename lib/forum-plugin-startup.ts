@@ -1,5 +1,7 @@
+
+import { FORUM_SITE_URL } from "./site-urls";
 /** Visible before React runs, including when the host blocks or rejects a script. */
-export const FORUM_PLUGIN_STARTUP_HTML = `<section id="forum-app-startup" data-forum-startup-runtime="2.2.3" aria-labelledby="forum-startup-title" style="max-width:34rem;margin:8vh auto;padding:24px;font-family:var(--font-geist-sans,system-ui);color:hsl(var(--foreground,0 0% 98%));background:hsl(var(--card,0 0% 8%));border-radius:12px"><h1 id="forum-startup-title" style="font-size:20px;margin:0 0 12px">SYMBaiEX Forum</h1><p id="forum-startup-status" role="status">Opening your forum · 2.2.3…</p><a href="https://forum.symbaiex.com/" target="_blank" rel="noopener noreferrer" style="color:hsl(var(--accent,320 100% 50%))">Open the forum website</a></section>`;
+export const FORUM_PLUGIN_STARTUP_HTML = "<section id=\"forum-app-startup\" data-forum-startup-runtime=\"2.2.3\" aria-labelledby=\"forum-startup-title\" style=\"max-width:34rem;margin:8vh auto;padding:24px;font-family:var(--font-geist-sans,system-ui);color:hsl(var(--foreground,0 0% 98%));background:hsl(var(--card,0 0% 8%));border-radius:12px\"><h1 id=\"forum-startup-title\" style=\"font-size:20px;margin:0 0 12px\">SYMBaiEX Forum</h1><p id=\"forum-startup-status\" role=\"status\">Opening your forum · 2.2.3…</p><a href=\"" + FORUM_SITE_URL + "/\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:hsl(var(--accent,320 100% 50%))\">Open the forum website</a></section>";
 
 /** Independent of the application bundle so startup errors cannot erase the fallback. */
 export const FORUM_PLUGIN_STARTUP_JS = `(() => {

@@ -1,4 +1,5 @@
 "use client";
+import { installation } from "@/lib/installation";
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -23,11 +24,11 @@ export function ForumAlphaPublisher() {
       aria-labelledby="alpha-publisher"
     >
       <h2 id="alpha-publisher" className="text-lg font-semibold">
-        Forum Alpha · @symforum
+        Forum Alpha · @{installation.x.accounts.symforum || "publisher"}
       </h2>
       <p className="text-sm text-muted-foreground">
         Fresh reviewed Forum discoveries go to the dedicated Telegram topic
-        first. Selected highlights can reach @symforum after {data.leadMinutes}{" "}
+        first. Selected highlights can reach @{installation.x.accounts.symforum || "publisher"} after {data.leadMinutes}{" "}
         minutes, at most six per day and two hours apart. NyX keeps her own
         feed. This does not change your Typefully queue or manual posts.
       </p>
@@ -36,8 +37,8 @@ export function ForumAlphaPublisher() {
           ? "Telegram distribution enabled."
           : "Telegram distribution awaiting operator activation."}{" "}
         {data.brandConnected
-          ? "@symforum verified and ready."
-          : "Connect @symforum to enable X delivery."}
+          ? `@${installation.x.accounts.symforum} verified and ready.`
+          : `Connect @${installation.x.accounts.symforum || "publisher"} to enable X delivery.`}
       </p>
       <div className="flex flex-wrap gap-3">
         <Button
@@ -47,7 +48,7 @@ export function ForumAlphaPublisher() {
             setNotice("");
             void begin({
               agentSlug: "symforum",
-              expectedUsername: "symforum",
+              expectedUsername: installation.x.accounts.symforum,
             }).then(
               (r) => window.location.assign(r.authorizationUrl),
               () => {
@@ -59,7 +60,7 @@ export function ForumAlphaPublisher() {
             );
           }}
         >
-          Connect @symforum publisher
+          Connect @{installation.x.accounts.symforum || "publisher"} publisher
         </Button>
         {data.brandConnected && (
           <Button

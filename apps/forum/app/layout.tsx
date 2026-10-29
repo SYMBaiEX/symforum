@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../lib/site-urls";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
@@ -33,7 +35,7 @@ export const metadata: Metadata = {
     url: FORUM_SITE_URL,
     images: [
       {
-        url: "https://www.symbaiex.com/opengraph-image",
+        url: PRIMARY_SITE_URL + "/opengraph-image",
         width: 1200,
         height: 630,
       },
@@ -73,7 +75,7 @@ export default function ForumRootLayout({
           <AuthKitConvexProvider>
             <SiteShell
               initialForumHost
-              initialPrimarySiteHref="https://www.symbaiex.com/"
+              initialPrimarySiteHref={PRIMARY_SITE_URL + "/"}
             >
               <div className="forum-surface relative z-10 min-h-dvh">
                 <ForumWebMcp />

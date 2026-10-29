@@ -1,3 +1,5 @@
+
+import { SYMF_TOKEN } from "./symf-token";
 import {
   AccountRole,
   address,
@@ -789,7 +791,7 @@ export async function buildPromotionTransaction(
   );
   requireCondition(
     config.treasury === intent.treasury &&
-      intent.mint === "5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump",
+      intent.mint === SYMF_TOKEN.mint,
   );
   address(intent.reference);
   const total = rawAmount(intent.amountRaw),

@@ -1,4 +1,6 @@
 "use node";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { reviseForumDraft } from "../lib/forum-editorial-revision";
 import {
@@ -1117,7 +1119,7 @@ export function buildDigestBody(args: {
         analysis && analysis.toLowerCase() !== summary.toLowerCase()
           ? analysis
           : "",
-        `[url=https://www.symbaiex.com/news/${story.hnItemId}]Read on SYMBaiEX News[/url]${directSource} · [url=https://news.ycombinator.com/item?id=${story.hnItemId}]Hacker News discussion[/url]`,
+        `[url=${PRIMARY_SITE_URL}/news/${story.hnItemId}]Read on SYMBaiEX News[/url]${directSource} · [url=https://news.ycombinator.com/item?id=${story.hnItemId}]Hacker News discussion[/url]`,
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -1125,7 +1127,7 @@ export function buildDigestBody(args: {
   });
   const remaining = sections.slice(3);
   const allNewsLink =
-    "[url=https://www.symbaiex.com/news]Open the complete SYMBaiEX News desk[/url]";
+    "[url=" + PRIMARY_SITE_URL + "/news]Open the complete SYMBaiEX News desk[/url]";
 
   const body = [
     `[b]The Canary Desk · ${displayDate(args.date)}[/b]`,
@@ -1262,11 +1264,11 @@ function safeBbcodeUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return "https://www.symbaiex.com/news";
+      return PRIMARY_SITE_URL + "/news";
     }
     return url.toString().replace(/\[/g, "%5B").replace(/\]/g, "%5D");
   } catch {
-    return "https://www.symbaiex.com/news";
+    return PRIMARY_SITE_URL + "/news";
   }
 }
 

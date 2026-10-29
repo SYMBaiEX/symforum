@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { RateLimiter, HOUR } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
@@ -636,7 +638,7 @@ export function createForumPrivateConversationOperations(access: Access) {
         return {
           conversationId: receipt.conversationId,
           reused: true,
-          url: `https://forum.symbaiex.com/messages?conversation=${receipt.conversationId}`,
+          url: `${FORUM_SITE_URL}/messages?conversation=${receipt.conversationId}`,
         };
       }
       const people = await recipients(ctx, user, args.recipientUsernames);
@@ -682,7 +684,7 @@ export function createForumPrivateConversationOperations(access: Access) {
         return {
           conversationId: existing._id,
           reused: true,
-          url: `https://forum.symbaiex.com/messages?conversation=${existing._id}`,
+          url: `${FORUM_SITE_URL}/messages?conversation=${existing._id}`,
         };
       }
       const quota = await limiter.limit(ctx, "privateConversationStart", {
@@ -737,7 +739,7 @@ export function createForumPrivateConversationOperations(access: Access) {
       return {
         conversationId,
         reused: false,
-        url: `https://forum.symbaiex.com/messages?conversation=${conversationId}`,
+        url: `${FORUM_SITE_URL}/messages?conversation=${conversationId}`,
       };
     },
   });

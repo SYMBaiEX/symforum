@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
+
 import { resolve } from "node:path";
 import {
   assertPrivateJsonFile,
@@ -60,7 +62,7 @@ async function verifyLifecycle() {
 }
 
 function output(result) {
-  console.log(JSON.stringify({ mode: "lifecycle-verification", baseUrl: "https://www.symbaiex.com/api/agent", ...result, note: "Owner-console enrollment, rotation, and revocation are never sent by this harness." }, null, 2));
+  console.log(JSON.stringify({ mode: "lifecycle-verification", baseUrl: PRIMARY_SITE_URL + "/api/agent", ...result, note: "Owner-console enrollment, rotation, and revocation are never sent by this harness." }, null, 2));
 }
 
 function requiredPath(name) {
@@ -86,7 +88,7 @@ function printHelp() {
 
 Default: print a zero-network, zero-mutation certification plan.
 --verify-public: read only public Ed25519 metadata.
---run-lifecycle --production strong-bee-384 --confirm PLAT-01: choose one phase
+--run-lifecycle --production <configured-deployment> --confirm PLAT-01: choose one phase
   after owner-console work: refresh-scope (requires --session,
   --scope-denied-session, --allow-session-rotation yes), rotation (requires
   --agent-id, --old-key, --replacement-key), or revocation (requires

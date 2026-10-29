@@ -1,4 +1,6 @@
 import "server-only";
+import { installation } from "../../../lib/installation";
+import { installationIdentityOrigins } from "../../../lib/installation-config";
 
 import {
   NextResponse,
@@ -10,15 +12,10 @@ export const SHARED_SESSION_COOKIE = "__Secure-symbaiex-session";
 export const SHARED_SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 const TOKEN_COOKIE = "__Host-__convexAuthJWT";
 const REFRESH_COOKIE = "__Host-__convexAuthRefreshToken";
-const TRUSTED_HOSTS = new Set([
-  "symbaiex.com",
-  "www.symbaiex.com",
-  "forum.symbaiex.com",
-  "blog.symbaiex.com",
-  "news.symbaiex.com",
-  "newsletter.symbaiex.com",
-]);
-const COOKIE_DOMAIN = ".symbaiex.com";
+const TRUSTED_HOSTS = new Set(installationIdentityOrigins(installation)
+  .filter(origin => origin.startsWith("https:"))
+  .map(origin => new URL(origin).hostname));
+const COOKIE_DOMAIN = installation.identity.cookieDomain ? `.${installation.identity.cookieDomain}` : "";
 const MAX_COOKIE_VALUE_LENGTH = 3_800;
 const PURPOSE = "symbaiex:legacy-human-session:v1";
 const encoder = new TextEncoder();
@@ -53,6 +50,7 @@ export function usesHumanSession(pathname: string) {
 
 function trustedRequest(request: NextRequest) {
   return (
+    Boolean(COOKIE_DOMAIN) &&
     request.nextUrl.protocol === "https:" &&
     !request.nextUrl.port &&
     TRUSTED_HOSTS.has(request.nextUrl.hostname) &&

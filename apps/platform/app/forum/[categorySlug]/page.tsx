@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../../lib/site-urls";
 import { resolveForumRouteStatus } from "@/app/forum/forum-route-status";
 import { ForumThreadList } from "@/components/forum/forum-thread-list";
 import { humanizeSlug } from "@/components/forum/forum-refs";
@@ -33,7 +35,7 @@ export async function generateMetadata({
     routeStatus?.kind === "category"
       ? routeStatus.categoryDescription
       : `Public thread list for the ${categoryName} board.`;
-  const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}`;
+  const canonical = `${FORUM_SITE_URL}/${encodeURIComponent(categorySlug)}`;
   return {
     title: { absolute: compactSeoTitle(categoryName, "SYMBaiEX forum") },
     description,
@@ -81,7 +83,7 @@ export default async function ForumCategoryPage({ params }: PageProps) {
     routeStatus?.kind === "category"
       ? routeStatus.categoryDescription
       : `Public thread list for the ${categoryName} board.`;
-  const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}`;
+  const canonical = `${FORUM_SITE_URL}/${encodeURIComponent(categorySlug)}`;
 
   return (
     <section className="page-frame page-frame-dense">

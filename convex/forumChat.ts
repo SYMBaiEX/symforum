@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
@@ -22,7 +24,7 @@ type Access = {
   assertForumParticipationAllowed(ctx: Context, user: User, action: string): Promise<void>;
   isTrustedForumUser(user: User | null): boolean;
 };
-const CHAT_URL = "https://forum.symbaiex.com/#forum-chat";
+const CHAT_URL = FORUM_SITE_URL + "/#forum-chat";
 const chatRateLimiter = new RateLimiter(components.rateLimiter, {
   forumChatOwner: { kind: "token bucket", rate: 12, period: MINUTE, capacity: 8 },
   forumChatActor: { kind: "token bucket", rate: 12, period: MINUTE, capacity: 6 },

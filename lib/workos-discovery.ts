@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 import { workosConfig } from "./workos-config";
 
 /** No endpoints are synthesized: AuthKit is the source of OAuth capabilities. */
@@ -91,7 +93,7 @@ export function oauthPublicConfiguration() {
     resource: config.audience,
     scopes: ["openid", "offline_access"],
     permission: "evidence",
-    ownerConnections: "https://www.symbaiex.com/agent/connect",
-    documentation: "https://www.symbaiex.com/auth.md",
+    ownerConnections: PRIMARY_SITE_URL + "/agent/connect",
+    documentation: PRIMARY_SITE_URL + "/auth.md",
   };
 }

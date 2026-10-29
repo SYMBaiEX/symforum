@@ -1,3 +1,4 @@
+import { installation } from "./installation";
 import { forumSiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
 export const SITE_BRAND = "SYMBaiEX";
@@ -119,7 +120,7 @@ export function siteStructuredData({
         contactPoint: {
           "@type": "ContactPoint",
           contactType: "general inquiries",
-          email: "austin@symbaiex.com",
+          email: installation.supportEmail || undefined,
           url: `${PRIMARY_SITE_URL}/contact`,
           availableLanguage: "English",
         },

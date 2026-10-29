@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 const OAUTH_DISCOVERY_PATHS = new Set([
   "oauth-authorization-server",
   "openid-configuration",
@@ -25,8 +27,8 @@ async function unsupportedWellKnown(
       : "The requested well-known resource is not published.",
     code: oauthProbe ? "OAUTH_NOT_SUPPORTED" : "WELL_KNOWN_NOT_FOUND",
     resolution: oauthProbe
-      ? "Use the documented owner-approved Ed25519 flow at https://www.symbaiex.com/auth.md and its first-party authentication metadata."
-      : "Discover published machine resources from https://www.symbaiex.com/.well-known/ai-catalog.json.",
+      ? "Use the documented owner-approved Ed25519 flow at " + PRIMARY_SITE_URL + "/auth.md and its first-party authentication metadata."
+      : "Discover published machine resources from " + PRIMARY_SITE_URL + "/.well-known/ai-catalog.json.",
   };
   return new Response(
     request.method === "HEAD" ? null : `${JSON.stringify(body)}\n`,

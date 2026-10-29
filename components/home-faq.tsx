@@ -1,3 +1,4 @@
+import { INSTALLATION_NAMESPACE } from "@/lib/site-urls";
 import { HOME_FAQS } from "@/lib/seo";
 import type { Route } from "next";
 import Link from "next/link";
@@ -88,19 +89,19 @@ export function HomeFaq() {
         <a
           aria-label="View SYMBaiEX's agent readiness report on Ora"
           className="focus-ring shrink-0 self-start rounded-xl opacity-85 transition-opacity hover:opacity-100 sm:self-auto"
-          href="https://ora.ai/score/symbaiex.com"
+          href={`https://ora.ai/score/${INSTALLATION_NAMESPACE}`}
           rel="noopener noreferrer"
           target="_blank"
         >
           {/* Ora serves this as a live SVG; bypassing image optimization keeps the score current. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            alt="Ora agent readiness score for symbaiex.com"
+            alt={`Ora agent readiness score for ${INSTALLATION_NAMESPACE}`}
             className="h-auto w-[11.75rem] sm:w-[13rem]"
             height={76}
             loading="lazy"
             referrerPolicy="no-referrer"
-            src="https://ora.ai/api/badge/symbaiex.com"
+            src={`https://ora.ai/api/badge/${INSTALLATION_NAMESPACE}`}
             width={236}
           />
         </a>

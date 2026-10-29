@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { RAG } from "@convex-dev/rag";
 import { embedRagQuery, embedRagText } from "./ragEmbeddings";
 import { getPublicEvidenceSource } from "./evidenceVisibility";
@@ -298,7 +300,7 @@ function platform(apiKey: string, model: string) {
     apiKey,
     baseURL: "https://openrouter.ai/api/v1",
     headers: {
-      "HTTP-Referer": "https://www.symbaiex.com",
+      "HTTP-Referer": PRIMARY_SITE_URL,
       "X-OpenRouter-Title": "SYMBaiEX Public Evidence Search",
     },
     fetch: async (input, init) => {

@@ -56,3 +56,7 @@ yarn-error.log*
 # Local browser/session artifacts
 output/
 .playwright-cli/
+
+# Per-installation deployment targets; generated locally, never shared
+/config/*.local.json
+**/wrangler.deploy.local.json

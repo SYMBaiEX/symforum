@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 const PRIVATE_ANALYTICS_PATHS = [
   "/admin",
   "/profile",
@@ -37,7 +39,7 @@ export function shouldSendVercelAnalyticsEvent(url: string) {
 
 function pathnameFromAnalyticsUrl(url: string) {
   try {
-    return new URL(url, "https://www.symbaiex.com").pathname;
+    return new URL(url, PRIMARY_SITE_URL).pathname;
   } catch {
     return url.split(/[?#]/, 1)[0] ?? "/";
   }

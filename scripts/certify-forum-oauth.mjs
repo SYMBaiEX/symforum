@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+
+import { installation } from "../lib/installation.ts";
+import { APEX_SITE_URL, PRIMARY_SITE_URL } from "../lib/site-urls.ts";
 /**
  * Opt-in real WorkOS certification. Never reads/writes credentials or .env files.
  * All registration credentials, PKCE material, codes and tokens live in memory.
@@ -11,8 +14,8 @@ import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-export const FORUM_RESOURCE = "https://www.symbaiex.com/api/plugin/mcp";
-export const EVIDENCE_RESOURCE = "https://www.symbaiex.com/api/agent/mcp";
+export const FORUM_RESOURCE = PRIMARY_SITE_URL + "/api/plugin/mcp";
+export const EVIDENCE_RESOURCE = PRIMARY_SITE_URL + "/api/agent/mcp";
 export const CLAIMS = {
   grant: "urn:symbaiex:forum-plugin-grant",
   resource: "urn:symbaiex:forum-plugin-resource",
@@ -64,7 +67,7 @@ function issuerOrigin(value) {
       !url.search &&
       !url.hash &&
       (url.hostname.endsWith(".authkit.app") ||
-        url.hostname.endsWith(".symbaiex.com")),
+        (Boolean(installation.identity.cookieDomain) && url.hostname.endsWith("." + installation.identity.cookieDomain))),
     "INVALID_ISSUER",
   );
   return url.origin;
@@ -76,7 +79,7 @@ export function parseOptions(argv) {
     withEvidence: false,
     checkRevocation: false,
     issuer: DEFAULT_ISSUER,
-    origin: "https://www.symbaiex.com",
+    origin: PRIMARY_SITE_URL,
   };
   const flags = {
     "--run": "run",
@@ -108,7 +111,7 @@ export function parseOptions(argv) {
   }
   result.issuer = issuerOrigin(result.issuer);
   ensure(
-    ["https://www.symbaiex.com", "https://symbaiex.com"].includes(
+    [PRIMARY_SITE_URL, APEX_SITE_URL].includes(
       result.origin,
     ),
     "INVALID_ORIGIN",
@@ -902,7 +905,7 @@ export async function certify(
 
 const HELP = `Usage: bun scripts/certify-forum-oauth.mjs [--discover-only | --run]
   --issuer HTTPS_ORIGIN      Expected WorkOS issuer (production issuer by default)
-  --origin HTTPS_ORIGIN      www.symbaiex.com (default) or symbaiex.com
+  --origin HTTPS_ORIGIN      configured primary origin (default)
   --with-evidence            Second normal evidence consent; proves reverse boundary
   --check-revocation         Pause for the owner to disconnect the forum connection
   --owner-id CONVEX_USER_ID  Optional expected immutable owner subject (never an email)

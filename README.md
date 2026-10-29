@@ -51,6 +51,7 @@ bun install --frozen-lockfile --ignore-scripts
 bun install --cwd workers/eliza-shadow --frozen-lockfile --ignore-scripts
 bun install --cwd workers/eliza-shadow-gateway --frozen-lockfile --ignore-scripts
 cp .env.example .env.local
+bun run setup:installation --local
 ```
 
 Configure **your own development Convex project**, then start its development
@@ -67,6 +68,12 @@ bun run dev:frontend
 Open `http://localhost:3000`. The other apps have separate commands in their
 `apps/*/package.json` files. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
 app map, development auth and verification workflow.
+
+For hosted deployments, start with the neutral
+[installation configuration](docs/installation-configuration.md). One public
+JSON variable supplies your own site URLs, community destinations, verified X
+identities and optional token metadata across Vercel and Convex. Missing settings
+use local URLs and inactive integrations, never our production accounts.
 
 Leave external API keys empty while working on ordinary UI and SDK changes.
 The sample paid model budget is zero. Do not copy production environment files,

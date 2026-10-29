@@ -1,3 +1,4 @@
+import { installation } from "@/lib/installation";
 import { StructuredData } from "@/components/structured-data";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -128,8 +129,8 @@ export default function PrivacyPage() {
         <PrivacySection title="Requests and contact">
           To request access, correction, account closure, or deletion of data
           that can legally and operationally be removed, email{" "}
-          <a className="underline" href="mailto:austin@symbaiex.com">
-            austin@symbaiex.com
+          <a className="underline" href={"mailto:" + installation.supportEmail}>
+            {installation.supportEmail}
           </a>
           . Public posts or security ledgers may need to retain limited records
           for moderation, integrity, or abuse prevention; requests are reviewed

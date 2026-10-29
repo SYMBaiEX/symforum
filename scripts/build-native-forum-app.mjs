@@ -88,8 +88,8 @@ const result = await Bun.build({
   splitting: false,
   define: {
     "process.env.NODE_ENV": '"production"',
-    "process.env.NEXT_PUBLIC_CONVEX_URL":
-      '"https://strong-bee-384.convex.cloud"',
+    "process.env.NEXT_PUBLIC_CONVEX_URL": "globalThis.__FORUM_PUBLIC_CONFIG__.convexUrl",
+    "process.env.NEXT_PUBLIC_INSTALLATION_CONFIG": "globalThis.__FORUM_PUBLIC_CONFIG__.installation",
   },
   plugins: [
     {

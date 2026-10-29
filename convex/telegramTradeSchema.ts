@@ -13,6 +13,7 @@ export const feedBuy = v.object({
 });
 export const telegramTradeTables = {
   telegramTradePools: defineTable({
+    installationBinding: v.optional(v.string()),
     pool: v.string(),
     headId: v.union(v.string(), v.null()),
     headAt: v.union(v.number(), v.null()),
@@ -20,6 +21,7 @@ export const telegramTradeTables = {
     updatedAt: v.number(),
   }).index("by_pool", ["pool"]),
   telegramTradeState: defineTable({
+    installationBinding: v.optional(v.string()),
     key: v.literal("symf"),
     startedAt: v.number(),
     coverageWarning: v.boolean(),
@@ -28,6 +30,7 @@ export const telegramTradeTables = {
     reason: v.optional(v.string()),
   }).index("by_key", ["key"]),
   telegramTradeEvents: defineTable({
+    installationBinding: v.optional(v.string()),
     ...feedBuy.fields,
     status: v.union(
       v.literal("queued"),
@@ -40,6 +43,7 @@ export const telegramTradeTables = {
     .index("by_key", ["key"])
     .index("by_status_and_occurredAt", ["status", "occurredAt"]),
   telegramTradeBatches: defineTable({
+    installationBinding: v.optional(v.string()),
     eventIds: v.array(v.id("telegramTradeEvents")),
     text: v.string(),
     status: v.union(v.literal("sending"), v.literal("sent"), v.literal("held")),

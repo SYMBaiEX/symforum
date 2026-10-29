@@ -1,3 +1,7 @@
+import { installationWebOrigins } from "./installation-config";
+import { installation } from "./installation";
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "./site-urls";
 import {
   FORUM_PLUGIN_METADATA_URL,
   FORUM_PLUGIN_RESOURCE,
@@ -7,9 +11,7 @@ import { workosPluginConfig } from "./workos-config";
 export const FORUM_PLUGIN_MAX_BODY_BYTES = 256 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_ORIGINS = new Set([
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  ...installationWebOrigins(installation).filter(origin => origin.startsWith("https:")),
   "https://chatgpt.com",
   "https://chat.openai.com",
   "http://localhost:3000",

@@ -69,6 +69,20 @@ async function setup() {
 }
 
 describe("Telegram durable admission and delivery", () => {
+  test("a queued intent from another installation cannot generate or send", async () => {
+    const t = await setup();
+    await t.mutation(internal.telegramAgents.accept, request);
+    const row = (await t.run(ctx => ctx.db.query("telegramAgentRequests").first()))!;
+    await t.run(ctx => ctx.db.patch("telegramAgentRequests", row._id, {installationBinding: "a different installation"}));
+    expect(await t.mutation(internal.telegramAgents.claim, {requestId: row._id})).toBe(false);
+    expect(await t.query(internal.telegramAgents.context, {requestId: row._id})).toBeNull();
+    await t.run(ctx => ctx.db.patch("telegramAgentRequests", row._id, {status: "ready"}));
+    expect(await t.mutation(internal.telegramAgents.claimDelivery, {requestId: row._id})).toBe(false);
+    expect((await t.run(ctx => ctx.db.get("telegramAgentRequests", row._id)))?.status).toBe("ready");
+    await t.run(ctx => ctx.db.patch("telegramAgentRequests", row._id, {status: "held", reason: "delivery_unknown"}));
+    expect(await t.mutation(internal.telegramAgents.claim, {requestId: row._id})).toBe(false);
+    expect((await t.run(ctx => ctx.db.get("telegramAgentRequests", row._id)))?.reason).toBe("delivery_unknown");
+  });
   test("a rejected review keeps bounded diagnostics and cannot be reopened", async () => {
     const t = await setup();
     await t.mutation(internal.telegramAgents.accept, request);

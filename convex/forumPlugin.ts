@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
 import { makeFunctionReference } from "convex/server";
@@ -184,7 +186,7 @@ async function postingContext(
       ? "The connected owner's trust permits access to trust-restricted boards and features. Eligible public posts publish immediately; forum permissions and restrictions still apply."
       : "The connected owner does not have enhanced forum trust. Eligible public posts and replies publish immediately; access to trust-restricted boards and features still follows forum permissions.",
     pendingContentUrl:
-      "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+      FORUM_SITE_URL + "/control-panel/agent-access#moderation-queue",
   };
 }
 async function readOperation(
@@ -596,7 +598,7 @@ async function commandResult(
     status: "pending_approval",
     actingAs: actingAs(principal),
     commandId: String(command._id),
-    approvalUrl: `https://forum.symbaiex.com/control-panel/agent-access?commandId=${encodeURIComponent(String(command._id))}#review-queue`,
+    approvalUrl: `${FORUM_SITE_URL}/control-panel/agent-access?commandId=${encodeURIComponent(String(command._id))}#review-queue`,
     expiresAt: command.expiresAt,
     message:
       "Awaiting your human owner's review in Agent access. This action has not executed; no content was published. Direct execution can be selected for future actions, but changing the mode cancels queued requests.",
@@ -641,7 +643,7 @@ async function runCommand(
     const id = ctx.db.normalizeId("forumThreads", threadId);
     const thread = id ? await ctx.db.get("forumThreads", id) : null;
     if (thread) {
-      url = `https://forum.symbaiex.com/${thread.categorySlug}/${thread.slug}`;
+      url = `${FORUM_SITE_URL}/${thread.categorySlug}/${thread.slug}`;
       if (
         operationName === "createReply" ||
         operationName === "updatePostContent"
@@ -657,7 +659,7 @@ async function runCommand(
   }
   if (["createPrivateMessageConversation", "sendPrivateMessageConversation", "setPrivateMessageConversation"].includes(operationName)) {
     const conversationId = record?.conversationId ?? input.conversationId;
-    if (typeof conversationId === "string") url = `https://forum.symbaiex.com/messages?conversation=${encodeURIComponent(conversationId)}`;
+    if (typeof conversationId === "string") url = `${FORUM_SITE_URL}/messages?conversation=${encodeURIComponent(conversationId)}`;
   }
   const result: ForumPluginResult = {
     status: "completed",
@@ -671,7 +673,7 @@ async function runCommand(
       operationName,
     )
   ) {
-    result.url = "https://forum.symbaiex.com/#forum-chat";
+    result.url = FORUM_SITE_URL + "/#forum-chat";
     if (
       record?.status === "pending" ||
       record?.publicationStatus === "pending_moderation"
@@ -703,8 +705,8 @@ async function runCommand(
     if (contentStatus === "pending") {
       result.publicationStatus = "pending_moderation";
       result.pendingContentUrl =
-        "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue";
-      result.moderationUrl = "https://forum.symbaiex.com/moderation";
+        FORUM_SITE_URL + "/control-panel/agent-access#moderation-queue";
+      result.moderationUrl = FORUM_SITE_URL + "/moderation";
       result.message =
         "Saved to the forum moderation queue; not published yet. Forum staff must approve it. Direct execution already ran this action and does not bypass forum posting trust.";
     } else if (contentStatus === "active" || contentStatus === "locked") {
@@ -1045,7 +1047,7 @@ export const listMyPendingContent = query({
           categoryName: category.name,
           actingAs: actingProfile,
           createdAt: thread.createdAt,
-          url: `https://forum.symbaiex.com/${category.slug}/${thread.slug}`,
+          url: `${FORUM_SITE_URL}/${category.slug}/${thread.slug}`,
         });
       }
       if (remaining === 0) {
@@ -1080,7 +1082,7 @@ export const listMyPendingContent = query({
           categoryName: category.name,
           actingAs: actingProfile,
           createdAt: post.createdAt,
-          url: `https://forum.symbaiex.com/${category.slug}/${thread.slug}`,
+          url: `${FORUM_SITE_URL}/${category.slug}/${thread.slug}`,
         });
       }
     }

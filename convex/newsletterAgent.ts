@@ -1,4 +1,6 @@
 "use node";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { isStepCount, NoObjectGeneratedError, Output, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
@@ -1968,7 +1970,7 @@ function normalizeSiteUrl(value: string) {
     const url = new URL(value);
     return url.origin;
   } catch {
-    return "https://www.symbaiex.com";
+    return PRIMARY_SITE_URL;
   }
 }
 

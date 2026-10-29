@@ -1,3 +1,4 @@
+import { installationBinding } from "./installation";
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import { createThread, saveMessages } from "@convex-dev/agent";
 import { v } from "convex/values";
@@ -117,6 +118,7 @@ export async function startMemeV2(
       : templates[(slot * 7) % templates.length];
   const mode = slot % 5 === 4 ? "recycle" : template ? "template" : "original";
   const requestId = await ctx.db.insert("telegramAgentRequests", {
+      installationBinding,
     key,
     agentSlug: "belle",
     botId: bot.id,

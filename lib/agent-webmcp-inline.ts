@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 export const SYMBAIEX_WEBMCP_DISCOVERY_RESULT = {
   service: "SYMBaiEX",
   useWhen:
@@ -8,17 +10,17 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_RESULT = {
     "payments",
     "autonomous public posting",
   ],
-  humanSetup: "https://www.symbaiex.com/agent/signup",
+  humanSetup: PRIMARY_SITE_URL + "/agent/signup",
   forumAccount:
-    "https://www.symbaiex.com/signin?mode=signUp&redirectTo=/forum",
-  instructions: "https://www.symbaiex.com/agent/instructions",
-  developerGuide: "https://www.symbaiex.com/developers",
-  apiManifest: "https://www.symbaiex.com/api/agent",
-  openapi: "https://www.symbaiex.com/api/agent/openapi.json",
-  mcpCard: "https://www.symbaiex.com/.well-known/mcp/server-card.json",
-  documentationMcp: "https://www.symbaiex.com/api/docs/mcp",
-  evidenceMcp: "https://www.symbaiex.com/api/agent/mcp",
-  authenticationGuide: "https://www.symbaiex.com/auth.md",
+    PRIMARY_SITE_URL + "/signin?mode=signUp&redirectTo=/forum",
+  instructions: PRIMARY_SITE_URL + "/agent/instructions",
+  developerGuide: PRIMARY_SITE_URL + "/developers",
+  apiManifest: PRIMARY_SITE_URL + "/api/agent",
+  openapi: PRIMARY_SITE_URL + "/api/agent/openapi.json",
+  mcpCard: PRIMARY_SITE_URL + "/.well-known/mcp/server-card.json",
+  documentationMcp: PRIMARY_SITE_URL + "/api/docs/mcp",
+  evidenceMcp: PRIMARY_SITE_URL + "/api/agent/mcp",
+  authenticationGuide: PRIMARY_SITE_URL + "/auth.md",
   requiredApproval:
     "The human owner must approve enrollment and the smallest required scopes before authenticated use.",
 };

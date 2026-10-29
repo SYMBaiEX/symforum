@@ -1,9 +1,12 @@
+import { installation } from "../../lib/installation";
+
+import { FORUM_SITE_URL } from "../../lib/site-urls";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 const appDirectory = dirname(fileURLToPath(import.meta.url));
-const forumSiteUrl = process.env.NEXT_PUBLIC_FORUM_SITE_URL ?? "https://forum.symbaiex.com";
+const forumSiteUrl = process.env.NEXT_PUBLIC_FORUM_SITE_URL ?? FORUM_SITE_URL;
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: join(appDirectory, "../.."),
@@ -96,8 +99,7 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
-      { protocol: "https", hostname: "symbaiex.com" },
-      { protocol: "https", hostname: "www.symbaiex.com" },
+      ...[new URL(installation.sites.primary).hostname, installation.identity.cookieDomain].filter(Boolean).map(hostname => ({ protocol: "https" as const, hostname })),
       { protocol: "https", hostname: "*.convex.cloud" },
       { protocol: "https", hostname: "*.convex.site" },
     ],

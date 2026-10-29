@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../../../../../../../lib/site-urls";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -153,9 +155,9 @@ function isAllowedOrigin(request: Request) {
     const parsed = new URL(origin);
     if (parsed.origin === new URL(request.url).origin) return true;
     return [
-      "https://symbaiex.com",
-      "https://www.symbaiex.com",
-      "https://forum.symbaiex.com",
+      PRIMARY_SITE_URL,
+      PRIMARY_SITE_URL,
+      FORUM_SITE_URL,
       "http://localhost:3000",
       "http://localhost:3001",
       "http://127.0.0.1:3000",

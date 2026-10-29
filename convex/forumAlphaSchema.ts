@@ -10,6 +10,7 @@ export const alphaStatus = v.union(
 );
 export const forumAlphaTables = {
   forumAlphaDeliveries: defineTable({
+    installationBinding: v.optional(v.string()),
     threadId: v.id("forumThreads"),
     title: v.string(),
     body: v.string(),
