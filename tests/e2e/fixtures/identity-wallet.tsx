@@ -1,5 +1,5 @@
 // Isolated UI harness. Fake wallets/proofs; every network request is intercepted.
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { getWallets } from "@wallet-standard/app";
 import { getAddressDecoder } from "@solana/kit";
@@ -7,6 +7,10 @@ import { IdentityProviders } from "../../../components/auth/identity-providers";
 import type { MessageWalletAccount } from "../../../lib/wallet-signin";
 import { identityClient } from "../../../packages/auth/src/identity-client";
 import { IdentityBootstrap } from "../../../packages/auth/src/identity-bootstrap";
+import {
+  getWalletDiagnostics,
+  subscribeWalletDiagnostics,
+} from "../../../lib/wallet-diagnostics";
 type FixtureAccount = ReturnType<
   ReturnType<typeof getWallets>["get"]
 >[number]["accounts"][number];
@@ -168,6 +172,10 @@ window.addEventListener("wallet-fixture:register", register);
 if (!window.location.search.includes("empty")) register();
 function Fixture() {
   const [done, setDone] = useState(false);
+  const diagnostics = useSyncExternalStore(
+    subscribeWalletDiagnostics,
+    getWalletDiagnostics,
+  );
   const session = identityClient.useSession();
   return (
     <>
@@ -183,6 +191,9 @@ function Fixture() {
       </output>
       <output id="wallet-events" aria-label="Wallet events">
         []
+      </output>
+      <output aria-label="Wallet diagnostics">
+        {JSON.stringify(diagnostics)}
       </output>
       {done && <p>Signed in successfully</p>}
     </>

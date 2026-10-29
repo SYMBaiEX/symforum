@@ -162,6 +162,89 @@ async function events(page: Page) {
 const count = (requests: string[], suffix: string) =>
   requests.filter((path) => path.endsWith(suffix)).length;
 
+test("opt-in diagnostics locate an internal connect failure without auth requests or automatic retries", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await open(page, "?connectinternal&walletDebug=1");
+  await choose(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "internal connection error",
+  );
+  const diagnostics = JSON.parse(
+    (await page.getByLabel("Wallet diagnostics").textContent()) ?? "[]",
+  );
+  expect(diagnostics.map((event: { stage: string }) => event.stage)).toEqual([
+    "selected",
+    "connect_requested",
+    "failed",
+  ]);
+  expect(diagnostics.at(-1)).toMatchObject({
+    wallet: "Phantom",
+    phase: "connect",
+    errorCode: -32603,
+    secureContext: true,
+    topLevel: true,
+    userActivated: true,
+  });
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+  ]);
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+});
+
+test("successful opt-in diagnostics report stages without proof or account data", async ({
+  page,
+}) => {
+  await harness(page);
+  await open(page, "?walletDebug=1");
+  await choose(page);
+  await signButton(page).click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  const text =
+    (await page.getByLabel("Wallet diagnostics").textContent()) ?? "[]";
+  const diagnostics = JSON.parse(text);
+  expect(diagnostics.map((event: { stage: string }) => event.stage)).toEqual([
+    "selected",
+    "connect_requested",
+    "connect_succeeded",
+    "challenge_requested",
+    "challenge_ready",
+    "signature_requested",
+    "signature_succeeded",
+    "proof_requested",
+    "proof_verified",
+    "session_confirmed",
+  ]);
+  expect(text).not.toContain("11111111111111111111111111111111");
+  expect(text).not.toContain("fixtureNonce");
+  expect(text).not.toContain("fixture-session");
+});
+
+test("expired diagnostic challenge never reports a signature request that was not sent", async ({
+  page,
+}) => {
+  const run = await harness(page, { expired: true });
+  await open(page, "?walletDebug=1");
+  await choose(page);
+  await signButton(page).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  const diagnostics = JSON.parse(
+    (await page.getByLabel("Wallet diagnostics").textContent()) ?? "[]",
+  );
+  expect(
+    diagnostics.some(
+      (entry: { stage: string }) => entry.stage === "signature_requested",
+    ),
+  ).toBe(false);
+  expect(diagnostics.at(-1)).toMatchObject({ stage: "failed", phase: "sign" });
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+  ]);
+});
+
 test("connects first, prepares a fresh challenge, signs explicitly and updates the real subscribed session", async ({
   page,
 }) => {
