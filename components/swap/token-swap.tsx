@@ -15,7 +15,12 @@ import { Input } from "@/components/ui/input";
 import { ForumLink } from "@/components/forum/forum-link";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { forumSiteUrl } from "@/lib/site-urls";
-import { parseTokenAmount, formatTokenAmount } from "@/lib/swap-amounts";
+import {
+  parseTokenAmount,
+  formatTokenAmount,
+  normalizeTokenAmount,
+} from "@/lib/swap-amounts";
+import { publicSwapPreparationError } from "@/lib/swap-preparation-errors";
 import {
   requestReviewedTransaction,
   verifyPreparedTransaction,
@@ -267,14 +272,12 @@ function LiveSwap({
       const verified = await verifyPreparedTransaction(data);
       if (!_signal.aborted && started === revision.current)
         setPrepared(verified);
-    } catch {
+    } catch (reason) {
       if (started !== revision.current) return;
       setSelected(null);
       setPrepared(null);
       setResult(null);
-      setError(
-        "This route could not pass preparation and simulation, or its quote expired. No wallet request was made. Request fresh routes.",
-      );
+      setError(publicSwapPreparationError(reason));
     } finally {
       busyGuard.current = false;
     }
@@ -436,7 +439,7 @@ function LiveSwap({
             value={amount}
             disabled={locked}
             onChange={(e) => {
-              setAmount(e.target.value);
+              setAmount(normalizeTokenAmount(e.target.value));
               clear();
             }}
           />

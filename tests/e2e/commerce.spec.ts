@@ -233,6 +233,27 @@ test("failed simulation never opens a wallet request", async ({ page }) => {
   await expect(page.locator("#wallet-calls")).toHaveText("0");
   expect(requests).not.toContain("forumSwaps:beginWalletRequest");
 });
+test("a leading decimal is normalized and automatically quoted exactly once", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized");
+  const quoteBodies: unknown[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/__commerce/forumSwaps:quote"))
+      quoteBodies.push(request.postDataJSON());
+  });
+  await page.getByLabel("You pay", { exact: true }).fill(".5");
+  await expect(page.getByLabel("You pay", { exact: true })).toHaveValue("0.5");
+  await expect(
+    page.getByRole("button", { name: "Review swap", exact: true }),
+  ).toBeEnabled();
+  await expect.poll(() => quoteBodies.length).toBe(1);
+  expect(quoteBodies[0]).toMatchObject({ amountRaw: "500000000" });
+  await page.waitForTimeout(1500);
+  expect(quoteBodies).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:prepare");
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+});
 test("uncertain wallet request is held and cannot be resent", async ({
   page,
 }) => {

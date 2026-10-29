@@ -3,6 +3,7 @@ import { getTransactionDecoder } from "@solana/kit";
 import {
   action,
   env,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -14,6 +15,13 @@ import { commerceActor } from "./forumCommerceAccess";
 import { commerceLimiter, refreshBenefitForActor } from "./forumCommerce";
 import { commerceRpc } from "./forumCommerceRpc";
 import { commerceConfig, record } from "../lib/forum-commerce";
+import {
+  swapPreparationIssue,
+  SWAP_PREPARATION_MESSAGES,
+} from "../lib/swap-preparation-errors";
+import { verifiedMint } from "../lib/swap-rpc";
+import { SOL_MINT } from "../lib/swap-router";
+import { COMMERCE_MINT } from "../lib/forum-commerce";
 import {
   buildSwapTransaction,
   collectSwapQuotes,
@@ -495,9 +503,22 @@ export const prepared = internalMutation({
   },
 });
 export const preparationFailed = internalMutation({
-  args: { quoteId: v.id("forumSwapQuotes") },
+  args: {
+    quoteId: v.id("forumSwapQuotes"),
+    issue: v.optional(
+      v.union(
+        v.literal("rpc_blocked"),
+        v.literal("rpc_rate_limited"),
+        v.literal("rpc_unavailable"),
+        v.literal("quote_expired"),
+        v.literal("simulation_failed"),
+        v.literal("insufficient_tokens"),
+        v.literal("preparation_not_completed"),
+      ),
+    ),
+  },
   returns: v.null(),
-  handler: async (ctx, { quoteId }) => {
+  handler: async (ctx, { quoteId, issue }) => {
     const actor = await commerceActor(ctx),
       row = await ctx.db.get("forumSwapQuotes", quoteId);
     if (!row || row.authUserId !== actor.authUserId)
@@ -505,7 +526,7 @@ export const preparationFailed = internalMutation({
     if (row.status === "preparing")
       await ctx.db.patch("forumSwapQuotes", quoteId, {
         status: "failed",
-        issue: "preparation_not_completed",
+        issue: issue ?? "preparation_not_completed",
       });
     return null;
   },
@@ -553,11 +574,60 @@ export const prepare = action({
         ...result,
       });
     } catch (error) {
-      await ctx.runMutation(internal.forumSwaps.preparationFailed, args);
+      const issue = swapPreparationIssue(error);
+      await ctx.runMutation(internal.forumSwaps.preparationFailed, {
+        ...args,
+        issue,
+      });
       if (error instanceof ConvexError) throw error;
-      throw new ConvexError(
-        "No safe, simulated swap could be prepared. Request fresh routes.",
-      );
+      throw new ConvexError(SWAP_PREPARATION_MESSAGES[issue]);
+    }
+  },
+});
+/** Operator-only diagnostics: fixed public mints, no wallet, transaction or provider body. */
+export const reserveRpcHealthCheck = internalMutation({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const gate = await commerceLimiter.limit(ctx, "commerceRpcHealth", {
+      key: "all",
+    });
+    if (!gate.ok) return false;
+    const daily = await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
+      key: "all",
+      count: 2,
+    });
+    return daily.ok;
+  },
+});
+export const rpcHealthCheck = internalAction({
+  args: {},
+  returns: v.object({
+    ok: v.boolean(),
+    code: v.string(),
+    verifiedMints: v.number(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{ ok: boolean; code: string; verifiedMints: number }> => {
+    if (!(await ctx.runMutation(internal.forumSwaps.reserveRpcHealthCheck, {})))
+      return {
+        ok: false,
+        code: "health_check_budget_reached",
+        verifiedMints: 0,
+      };
+    const { rpcUrl } = commerceConfig(env);
+    if (!rpcUrl)
+      return { ok: false, code: "rpc_not_configured", verifiedMints: 0 };
+    let verifiedMints = 0;
+    try {
+      for (const mint of [SOL_MINT, COMMERCE_MINT]) {
+        await verifiedMint(rpcUrl, mint);
+        verifiedMints++;
+      }
+      return { ok: true, code: "verified", verifiedMints };
+    } catch (error) {
+      return { ok: false, code: swapPreparationIssue(error), verifiedMints };
     }
   },
 });
