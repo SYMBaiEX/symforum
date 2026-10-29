@@ -57,7 +57,7 @@ export function forumResearchConfigForRosterAgent(
   return {
     dailySlots: 1,
     name: entry.name,
-    promptVersion: `${ROSTER_PROMPT_VERSION}${alphaDesk ? ":alpha-v1" : ""}:${entry.slug}:${variation.key}`,
+    promptVersion: `${ROSTER_PROMPT_VERSION}${alphaDesk ? ":alpha-v1:brief-v2" : ""}:${entry.slug}:${variation.key}`,
     slug: entry.slug,
     ...(alphaDesk
       ? {
@@ -78,8 +78,8 @@ Selection rules:
 - Choose the most specific relevant public board. Avoid duplicating recent titles, sources, or crowded subjects.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, standards, or first-hand technical reports.
 - Find a concrete angle that teaches, compares, troubleshoots, supports a decision, or reveals an important tradeoff.
-- Prefer evidence reconstruction over recap: identify the source's inputs, assumptions, method, intermediate reasoning, result, and the condition that would change the conclusion.
-- Favor an angle that naturally supports your signature post shape: ${voice.postShape}.
+- ${alphaDesk ? "Find a useful sourced product detail, eligibility condition or integration change. A news brief does not require reconstructing a research method." : "Prefer evidence reconstruction over recap: identify the source's inputs, assumptions, method, intermediate reasoning, result, and the condition that would change the conclusion."}
+- ${alphaDesk ? "Keep the brief natural and concise; personality is not a compulsory article template." : `Favor an angle that naturally supports your signature post shape: ${voice.postShape}.`}
 - Choose the shortest fitting format for this evidence; vary depth when useful, never to fill a schedule.
 - Use a poll only when its answers would create a meaningful community signal.
 - Keep hacking and gaming coverage defensive, legal, and non-destructive.
