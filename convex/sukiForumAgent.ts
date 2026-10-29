@@ -1,12 +1,21 @@
 "use node";
 
 import { APICallError, generateText, Output, ToolLoopAgent } from "ai";
+import { alphaPublicFetch } from "../lib/alpha-public-fetch";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { v } from "convex/values";
+import {
+  ALPHA_RESEARCH_FEEDS,
+  ALPHA_DISCOVERY_TTL_MS,
+  alphaPublisherUrl,
+  alphaCandidateBoards,
+  alphaPagePublishedAt,
+  type ResearchFeed,
+} from "../lib/forum-alpha-editorial";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalAction, type ActionCtx } from "./_generated/server";
+import { env, internalAction, type ActionCtx } from "./_generated/server";
 import {
   OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
@@ -335,6 +344,8 @@ export function findRecentLexicalOverlap<ThreadId extends string>(
 }
 
 export type ArticleSnapshot = ResearchCandidate & {
+  originalPublishedAt?: number;
+  secureResearch?: boolean;
   articleTitle: string;
   articleDescription: string;
   articleText: string;
@@ -347,6 +358,7 @@ export type ArticleSnapshot = ResearchCandidate & {
 };
 
 type FetchedArticleContent = {
+  publishedAt?: number;
   title?: string;
   description?: string;
   text: string;
@@ -384,6 +396,7 @@ export type ForumResearchRunResult =
     };
 
 export type ForumResearchAgentConfig = {
+  researchPool?: "solana-alpha";
   dailySlots: number;
   name: string;
   promptVersion: string;
@@ -485,10 +498,18 @@ export async function runForumResearchSlot(
       );
     }
 
-    const candidates = await collectResearchCandidates(ctx);
+    const candidates = await collectResearchCandidates(
+      ctx,
+      config.researchPool,
+    );
     const sourceSelectionNow = Date.now();
     const recentCandidates = candidates.filter((candidate) =>
-      isRecentEnough(candidate.publishedAt, sourceSelectionNow),
+      config.researchPool === "solana-alpha"
+        ? alphaCandidateBoards(candidate, sourceSelectionNow).includes(
+            config.forcedCategorySlug as
+              "crypto" | "crypto-pumpfun" | "crypto-bags",
+          )
+        : isRecentEnough(candidate.publishedAt, sourceSelectionNow),
     );
     // Exclude recently used and reserved sources before paid model work. The
     // query checks bounded key batches and stops after finding the existing
@@ -528,9 +549,26 @@ export async function runForumResearchSlot(
     }).slice(0, TOPIC_MODEL_CANDIDATE_LIMIT);
     // Original evidence must exist before paying to choose an angle. Probe a
     // bounded, host-diverse shortlist, then reuse these exact fetched snapshots.
-    const verifiedSourceSnapshots = await fetchAvailableForumTopicSources(
+    const fetchedSourceSnapshots = await fetchAvailableForumTopicSources(
       rankedCandidates,
+      config.researchPool === "solana-alpha",
     );
+    const verifiedSourceSnapshots =
+      config.researchPool === "solana-alpha"
+        ? fetchedSourceSnapshots.filter((snapshot) =>
+            alphaCandidateBoards(
+              {
+                ...snapshot,
+                publishedAt:
+                  snapshot.originalPublishedAt ?? snapshot.publishedAt,
+              },
+              Date.now(),
+            ).includes(
+              config.forcedCategorySlug as
+                "crypto" | "crypto-pumpfun" | "crypto-bags",
+            ),
+          )
+        : fetchedSourceSnapshots;
     if (verifiedSourceSnapshots.length === 0) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
@@ -756,6 +794,7 @@ export async function runForumResearchSlot(
     const snapshots = await fetchArticleSnapshots(
       selectedCandidates,
       verifiedSourceSnapshots,
+      config.researchPool === "solana-alpha",
     );
     if (snapshots.some((snapshot) => snapshot.sourceFetchSucceeded !== true)) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
@@ -1189,6 +1228,20 @@ export async function runForumResearchSlot(
         reason: "automated-quality-gates-passed",
       },
     );
+    const alphaSourcePublishedAt =
+      config.researchPool === "solana-alpha"
+        ? Math.min(
+            ...snapshots.map(
+              (s) => s.originalPublishedAt ?? s.publishedAt ?? 0,
+            ),
+          )
+        : undefined;
+    if (
+      config.researchPool === "solana-alpha" &&
+      (!alphaSourcePublishedAt ||
+        Date.now() - alphaSourcePublishedAt > 24 * 60 * 60_000)
+    )
+      throw new Error("Alpha source expired before publication");
     const publicationArgs = {
       agentSlug: config.slug,
       runKey: claim.runKey,
@@ -1228,6 +1281,7 @@ export async function runForumResearchSlot(
         ? await ctx.runMutation(internal.forum.publishSukiForumThread, {
             ...publicationArgs,
             categorySlug: category.slug,
+            alphaSourcePublishedAt,
             prefixSlug: effectiveSelection.prefixSlug,
             poll:
               effectiveSelection.includePoll && draft.poll !== null
@@ -1334,10 +1388,13 @@ export const runDailySlot = internalAction({
 
 export async function collectResearchCandidates(
   ctx: ActionCtx,
+  pool?: "solana-alpha",
 ): Promise<ResearchCandidate[]> {
-  const feedCacheEntries = RESEARCH_FEEDS.map((feed) => ({
+  const feeds: readonly ResearchFeed[] =
+    pool === "solana-alpha" ? ALPHA_RESEARCH_FEEDS : RESEARCH_FEEDS;
+  const feedCacheEntries = feeds.map((feed) => ({
     feed,
-    cacheKey: hashKey(feed.url),
+    cacheKey: hashKey(`${pool ? "alpha-v1:" : ""}${feed.url}`),
   }));
   const cachedRows = await ctx.runQuery(
     internal.sukiForumAgentData.readResearchCaches,
@@ -1359,8 +1416,23 @@ export async function collectResearchCandidates(
           // Refetch malformed or stale cache payloads.
         }
       }
+      let backoffMs = ALPHA_DISCOVERY_TTL_MS;
+      if (
+        pool &&
+        !(await ctx.runMutation(
+          internal.sukiForumAgentData.claimAlphaDiscoveryRead,
+          { feedUrl: feed.url },
+        ))
+      ) {
+        return { candidates: [] as ResearchCandidate[], cacheWrite: undefined };
+      }
       try {
-        const response = await fetchPublicUrl(feed.url, {
+        const response = await (
+          pool
+            ? (url: string, init: RequestInit) =>
+                alphaPublicFetch(url, init, MAX_FEED_BYTES)
+            : fetchPublicUrl
+        )(feed.url, {
           headers: {
             accept:
               "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9",
@@ -1368,6 +1440,15 @@ export async function collectResearchCandidates(
           },
         });
         if (!response.ok) {
+          const delay = response.headers.get("retry-after");
+          if (pool && delay) {
+            const milliseconds = /^\d+$/.test(delay)
+              ? Number(delay) * 1000
+              : Date.parse(delay) - Date.now();
+            if (Number.isFinite(milliseconds))
+              backoffMs = Math.max(backoffMs, milliseconds);
+          }
+          await response.body?.cancel();
           throw new Error(`Feed returned HTTP ${response.status}`);
         }
         const xml = await readBoundedText(response, MAX_FEED_BYTES);
@@ -1375,6 +1456,7 @@ export async function collectResearchCandidates(
           boardSlugs: [...feed.boardSlugs],
           feedUrl: feed.url,
           sourceName: feed.name,
+          publisherUrls: Boolean(pool),
         });
         const now = Date.now();
         return {
@@ -1385,11 +1467,25 @@ export async function collectResearchCandidates(
             feedUrl: feed.url,
             payloadJson: JSON.stringify(candidates),
             fetchedAt: now,
-            expiresAt: now + RESEARCH_CACHE_TTL_MS,
+            expiresAt:
+              now + (pool ? ALPHA_DISCOVERY_TTL_MS : RESEARCH_CACHE_TTL_MS),
           },
         };
       } catch {
-        return { candidates: [] as ResearchCandidate[], cacheWrite: undefined };
+        const now = Date.now();
+        return {
+          candidates: [] as ResearchCandidate[],
+          cacheWrite: pool
+            ? {
+                cacheKey,
+                sourceName: feed.name,
+                feedUrl: feed.url,
+                payloadJson: "[]",
+                fetchedAt: now,
+                expiresAt: now + backoffMs,
+              }
+            : undefined,
+        };
       }
     }),
   );
@@ -1410,6 +1506,15 @@ export async function collectResearchCandidates(
   return groups
     .flatMap((group) => group.candidates)
     .sort((left, right) => (right.publishedAt ?? 0) - (left.publishedAt ?? 0))
+    .map((candidate) =>
+      pool
+        ? {
+            ...candidate,
+            boardSlugs: alphaCandidateBoards(candidate, Date.now()),
+          }
+        : candidate,
+    )
+    .filter((candidate) => !pool || candidate.boardSlugs.length > 0)
     .filter((candidate) => {
       if (seen.has(candidate.sourceKey)) {
         return false;
@@ -1503,6 +1608,7 @@ export function parseFeedXml(
     boardSlugs: string[];
     feedUrl: string;
     sourceName: string;
+    publisherUrls?: boolean;
   },
 ): ResearchCandidate[] {
   const parser = new XMLParser({
@@ -1517,7 +1623,8 @@ export function parseFeedXml(
   const itemRows = feedItemRows(parsed).slice(0, 20);
   return itemRows.flatMap((row, index) => {
     const title = compactText(decodeHtmlEntities(textValue(row.title)), 220);
-    const url = feedItemUrl(row, source.feedUrl);
+    const rawUrl = feedItemUrl(row, source.feedUrl);
+    const url = source.publisherUrls ? alphaPublisherUrl(rawUrl ?? "") : rawUrl;
     if (!title || !url || !isSafePublicUrl(url)) {
       return [];
     }
@@ -1615,7 +1722,11 @@ function feedItemImageUrl(row: Record<string, unknown>, articleUrl: string) {
 
 export async function fetchArticleSnapshot(
   candidate: ResearchCandidate,
-  options: { allowUrl?: (url: string) => boolean; signal?: AbortSignal } = {},
+  options: {
+    allowUrl?: (url: string) => boolean;
+    signal?: AbortSignal;
+    secureResearch?: boolean;
+  } = {},
 ): Promise<ArticleSnapshot> {
   const content = await fetchArticleContent(candidate, options);
   return articleSnapshotForCandidate(candidate, content);
@@ -1625,6 +1736,7 @@ export async function fetchArticleSnapshot(
 export async function fetchArticleSnapshots(
   candidates: ResearchCandidate[],
   reusableSnapshots: readonly ArticleSnapshot[] = [],
+  secureResearch = false,
 ): Promise<ArticleSnapshot[]> {
   const contentByUrl = new Map<
     string,
@@ -1645,6 +1757,7 @@ export async function fetchArticleSnapshots(
       snapshot.sourceFetchSucceeded
         ? {
             title: snapshot.articleTitle,
+            publishedAt: snapshot.originalPublishedAt,
             description: snapshot.articleDescription,
             text: snapshot.articleText,
             imageUrl: snapshot.imageUrl,
@@ -1666,10 +1779,13 @@ export async function fetchArticleSnapshots(
       }
       let contentPromise = contentByUrl.get(canonical);
       if (contentPromise === undefined) {
-        contentPromise = fetchArticleContent(candidate);
+        contentPromise = fetchArticleContent(candidate, { secureResearch });
         contentByUrl.set(canonical, contentPromise);
       }
-      return articleSnapshotForCandidate(candidate, await contentPromise);
+      return {
+        ...articleSnapshotForCandidate(candidate, await contentPromise),
+        secureResearch,
+      };
     }),
   );
 }
@@ -1677,6 +1793,7 @@ export async function fetchArticleSnapshots(
 /** At most six original URLs, two concurrent requests, no extra inference. */
 export async function fetchAvailableForumTopicSources(
   candidates: readonly ResearchCandidate[],
+  secureResearch = false,
 ): Promise<ArticleSnapshot[]> {
   const hosts = new Map<string, ResearchCandidate[]>();
   const urls = new Set<string>();
@@ -1706,6 +1823,8 @@ export async function fetchAvailableForumTopicSources(
   for (let offset = 0; offset < probes.length; offset += 2) {
     const snapshots = await fetchArticleSnapshots(
       probes.slice(offset, offset + 2),
+      [],
+      secureResearch,
     );
     verified.push(
       ...snapshots.filter((snapshot) => snapshot.sourceFetchSucceeded === true),
@@ -1716,10 +1835,19 @@ export async function fetchAvailableForumTopicSources(
 
 async function fetchArticleContent(
   candidate: ResearchCandidate,
-  options: { allowUrl?: (url: string) => boolean; signal?: AbortSignal } = {},
+  options: {
+    allowUrl?: (url: string) => boolean;
+    signal?: AbortSignal;
+    secureResearch?: boolean;
+  } = {},
 ): Promise<FetchedArticleContent | null> {
   try {
-    const response = await fetchPublicUrl(
+    const response = await (
+      options.secureResearch
+        ? (url: string, init: RequestInit) =>
+            alphaPublicFetch(url, init, MAX_ARTICLE_BYTES)
+        : fetchPublicUrl
+    )(
       candidate.url,
       {
         headers: {
@@ -1736,6 +1864,7 @@ async function fetchArticleContent(
     const html = await readBoundedText(response, MAX_ARTICLE_BYTES);
     const metadata = htmlMetadata(html, candidate.url);
     return {
+      publishedAt: alphaPagePublishedAt(html),
       title: metadata.title || undefined,
       description: metadata.description || undefined,
       text: compactText(stripArticleHtml(html), 6_000),
@@ -1759,6 +1888,7 @@ function articleSnapshotForCandidate(
 ): ArticleSnapshot {
   return {
     ...candidate,
+    originalPublishedAt: content?.publishedAt,
     articleTitle: content?.title ?? candidate.title,
     articleDescription: content?.description ?? candidate.summary,
     articleText: content?.text ?? candidate.summary,
@@ -1795,7 +1925,12 @@ export async function cacheResearchImage(
     };
   }
   try {
-    const response = await fetchPublicUrl(snapshot.imageUrl, {
+    const response = await (
+      snapshot.secureResearch
+        ? (url: string, init: RequestInit) =>
+            alphaPublicFetch(url, init, MAX_IMAGE_BYTES)
+        : fetchPublicUrl
+    )(snapshot.imageUrl, {
       headers: {
         accept: "image/avif,image/webp,image/png,image/jpeg,image/gif",
         "user-agent": USER_AGENT,
@@ -2031,6 +2166,7 @@ export function forumDraftPrompt(args: {
           id: snapshot.id,
           source: snapshot.sourceName,
           title: snapshot.articleTitle,
+          publishedAt: snapshot.originalPublishedAt,
           description: snapshot.articleDescription,
           evidence: forumRevisionEvidenceExcerpt(
             snapshot.articleText,
@@ -2078,6 +2214,7 @@ export function forumDraftPrompt(args: {
         source: snapshot.sourceName,
         sourceUrl: snapshot.url,
         title: snapshot.articleTitle,
+        publishedAt: snapshot.originalPublishedAt,
         description: snapshot.articleDescription,
         articleText: snapshot.articleText,
         hasCacheableImage: Boolean(snapshot.imageUrl),
@@ -3355,3 +3492,21 @@ export function isRetryableError(error: unknown) {
 }
 
 class ForumAgentConfigurationError extends Error {}
+
+/** Shared free web discovery; no model call and no per-agent polling loop. */
+export const refreshAlphaDiscovery = internalAction({
+  args: {},
+  returns: v.object({
+    count: v.number(),
+    newestAt: v.union(v.number(), v.null()),
+  }),
+  handler: async (ctx) => {
+    if (env.FORUM_ALPHA_EDITORIAL_ENABLED !== "true")
+      return { count: 0, newestAt: null };
+    const candidates = await collectResearchCandidates(ctx, "solana-alpha");
+    return {
+      count: candidates.length,
+      newestAt: candidates[0]?.publishedAt ?? null,
+    };
+  },
+});

@@ -193,7 +193,11 @@ export async function admitOriginal(
         Number(/agent|hardware|retro|robot|security|weird|game/i.test(x.title)),
     );
     for (const t of candidates)
-      if (!used.has(t._id) && (await researchSource(ctx, t._id))) {
+      if (
+        !t.categorySlug.startsWith("crypto") &&
+        !used.has(t._id) &&
+        (await researchSource(ctx, t._id))
+      ) {
         sourceThreadId = t._id;
         break;
       }

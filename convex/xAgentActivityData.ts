@@ -1,3 +1,4 @@
+import { ALPHA_PUBLISHER_SLUG } from "../lib/forum-alpha-editorial";
 import { v } from "convex/values";
 import { createThread } from "@convex-dev/agent";
 import { RateLimiter, DAY, HOUR } from "@convex-dev/rate-limiter";
@@ -68,6 +69,8 @@ export async function configureActivity(
     originals?: boolean;
   },
 ) {
+  if (a.agentSlug === ALPHA_PUBLISHER_SLUG)
+    throw Error("Project publisher uses Telegram-first coverage only.");
   if (!a.connected || !writeScope(a))
     throw Error("Reconnect X with posting permission first.");
   if (options.comments && !options.aiRepliesApproved)

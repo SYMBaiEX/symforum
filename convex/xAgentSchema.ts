@@ -59,6 +59,8 @@ export const xAgentTables = {
     connectedAt: v.optional(v.number()),
     updatedAt: v.number(),
     originalOrdinal: v.optional(v.number()),
+    publisherRefreshClaim: v.optional(v.id("forumAlphaDeliveries")),
+    publisherHold: v.optional(v.string()),
   })
     .index("by_agentSlug", ["agentSlug"])
     .index("by_ownerUserId", ["ownerUserId"])

@@ -61,6 +61,9 @@ type Env = {
   readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
   readonly EVIDENCE_WEBHOOK_SIGNING_SECRET: string | undefined;
   readonly FORUM_AGENT_DAILY_PUBLICATION_LIMIT: string | undefined;
+  readonly FORUM_ALPHA_DISTRIBUTION_ENABLED: string | undefined;
+  readonly FORUM_ALPHA_EDITORIAL_ENABLED: string | undefined;
+  readonly FORUM_ALPHA_LEAD_MINUTES: string | undefined;
   readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;
   readonly FORUM_FROM_EMAIL: string | undefined;
   readonly FORUM_REPLY_TO: string | undefined;
@@ -86,6 +89,7 @@ type Env = {
   readonly SOLANA_TRACKER_API_KEY: string | undefined;
   readonly TELEGRAM_AGENTS_ENABLED: string | undefined;
   readonly TELEGRAM_AGENT_BOTS: string | undefined;
+  readonly TELEGRAM_ALPHA_TOPIC_ID: string | undefined;
   readonly TELEGRAM_DIGEST_ENABLED: string | undefined;
   readonly TELEGRAM_DIGEST_TOPIC_ID: string | undefined;
   readonly TELEGRAM_LOGIN_CLIENT_ID: string | undefined;

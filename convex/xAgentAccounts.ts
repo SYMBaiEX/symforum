@@ -1,3 +1,7 @@
+import {
+  ALPHA_PUBLISHER_SLUG,
+  ALPHA_X_USER_ID,
+} from "../lib/forum-alpha-editorial";
 import { v } from "convex/values";
 import { createThread } from "@convex-dev/agent";
 import { RateLimiter, HOUR } from "@convex-dev/rate-limiter";
@@ -228,6 +232,10 @@ export const prepareAuthorization = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await owner(ctx);
+    if (args.agentSlug === ALPHA_PUBLISHER_SLUG && args.activity)
+      throw Error(
+        "Project coverage uses its own publisher, not agent activity.",
+      );
     if (args.activity?.comments && !args.activity.aiRepliesApproved)
       throw Error("X approval is required for automatic AI replies.");
     if (env.X_AGENTS_ENABLED !== "true")
@@ -236,7 +244,10 @@ export const prepareAuthorization = internalMutation({
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
       .unique();
-    if (!agent?.enabled || !X_AGENT_SLUGS.has(args.agentSlug))
+    if (
+      args.agentSlug !== ALPHA_PUBLISHER_SLUG &&
+      (!agent?.enabled || !X_AGENT_SLUGS.has(args.agentSlug))
+    )
       throw Error("Agent unavailable.");
     await limiter.limit(ctx, "xConnect", { key: user._id, throws: true });
     const expectedUsername = expectedXUsername(
@@ -256,6 +267,8 @@ export const prepareAuthorization = internalMutation({
       mode: prior?.mode ?? ("drafts" as const),
       updatedAt: Date.now(),
       grant: undefined,
+      publisherRefreshClaim: undefined,
+      publisherHold: undefined,
     };
     const accountId =
       prior?._id ?? (await ctx.db.insert("xAgentAccounts", values));
@@ -360,7 +373,8 @@ export const completeAuthorization = internalMutation({
       throw Error("Authorization was canceled or expired.");
     if (
       expectedXUsername(a.agentSlug, args.username) !== a.expectedUsername ||
-      (a.xUserId && a.xUserId !== args.xUserId)
+      (a.xUserId && a.xUserId !== args.xUserId) ||
+      (a.agentSlug === ALPHA_PUBLISHER_SLUG && args.xUserId !== ALPHA_X_USER_ID)
     )
       throw Error("Wrong X account. Connect the expected account.");
     const duplicate = await ctx.db
