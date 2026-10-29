@@ -18,8 +18,31 @@ export type CommerceWalletClient = ReturnType<
   typeof createCommerceWalletClient
 >;
 export type ReviewedTransaction = PreparedSwap & { wallet: string };
+type WalletFailurePhase = "account" | "feature" | "request" | "response";
+type WalletResponseIssue = "result_count" | "signature_bytes" | null;
 
-/** Validate the exact simulated message before enabling the separate wallet-approval click. */
+/** Only fixed categories/numeric codes may leave the wallet boundary. Never raw errors. */
+export class CommerceWalletRequestError extends Error {
+  readonly code: number | null;
+  constructor(
+    readonly phase: WalletFailurePhase,
+    cause?: unknown,
+    readonly responseIssue: WalletResponseIssue = null,
+  ) {
+    super("Wallet outcome requires verification. Do not repeat this payment.");
+    this.name = "CommerceWalletRequestError";
+    this.code =
+      cause &&
+      typeof cause === "object" &&
+      "code" in cause &&
+      typeof cause.code === "number" &&
+      Number.isSafeInteger(cause.code)
+        ? cause.code
+        : null;
+  }
+}
+
+/** Validate the exact simulated message before the one-shot wallet request. */
 export async function verifyPreparedTransaction(prepared: ReviewedTransaction) {
   const transaction = getTransactionDecoder().decode(
     getBase64Encoder().encode(prepared.transactionBase64),
@@ -59,33 +82,54 @@ export async function requestReviewedTransaction(
     !current.account.chains.includes("solana:mainnet") ||
     !current.supportedTransactionVersions.has(prepared.transactionVersion)
   )
-    throw new Error(
-      "The connected wallet changed or cannot sign this transaction version.",
-    );
-  const feature = getWalletAccountFeature(
-    current.account,
-    "solana:signAndSendTransaction",
-  ) as SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
+    throw new CommerceWalletRequestError("account");
+  let feature: SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
+  let account: ReturnType<typeof getWalletAccountForUiWalletAccount>;
+  try {
+    feature = getWalletAccountFeature(
+      current.account,
+      "solana:signAndSendTransaction",
+    ) as typeof feature;
+    account = getWalletAccountForUiWalletAccount(current.account);
+  } catch (cause) {
+    throw new CommerceWalletRequestError("feature", cause);
+  }
   // Exactly one Wallet Standard request; never resend or switch signing methods on error.
-  const results = await feature.signAndSendTransaction({
-    account: getWalletAccountForUiWalletAccount(current.account),
-    transaction: Uint8Array.from(
-      getBase64Encoder().encode(prepared.transactionBase64),
-    ),
-    chain: "solana:mainnet",
-    options: {
-      skipPreflight: false,
-      maxRetries: 0,
-      commitment: "confirmed",
-      preflightCommitment: "confirmed",
-      minContextSlot: prepared.simulationSlot,
-    },
-  });
+  let results: unknown;
+  try {
+    results = await feature.signAndSendTransaction({
+      account,
+      transaction: Uint8Array.from(
+        getBase64Encoder().encode(prepared.transactionBase64),
+      ),
+      chain: "solana:mainnet",
+      options: {
+        skipPreflight: false,
+        maxRetries: 0,
+        commitment: "confirmed",
+        preflightCommitment: "confirmed",
+        minContextSlot: prepared.simulationSlot,
+      },
+    });
+  } catch (cause) {
+    throw new CommerceWalletRequestError("request", cause);
+  }
+  if (!Array.isArray(results) || results.length !== 1)
+    throw new CommerceWalletRequestError("response", undefined, "result_count");
+  const signature: unknown = results[0]?.signature;
+  // Extensions/iframes can return genuine bytes from a different JS realm.
+  // instanceof rejects those. Keep the exact Uint8Array/64-byte requirement.
   if (
-    results.length !== 1 ||
-    !(results[0].signature instanceof Uint8Array) ||
-    results[0].signature.length !== 64
+    !ArrayBuffer.isView(signature) ||
+    Object.prototype.toString.call(signature) !== "[object Uint8Array]" ||
+    signature.byteLength !== 64 ||
+    !("length" in signature) ||
+    signature.length !== 64
   )
-    throw new Error("Wallet outcome is uncertain. Do not repeat this payment.");
-  return getBase58Decoder().decode(results[0].signature);
+    throw new CommerceWalletRequestError(
+      "response",
+      undefined,
+      "signature_bytes",
+    );
+  return getBase58Decoder().decode(Uint8Array.from(signature as Uint8Array));
 }

@@ -32,7 +32,7 @@ test.beforeAll(() => {
     "bun",
     [
       "-e",
-      `const result=await Bun.build({entrypoints:["tests/e2e/fixtures/commerce.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production"})},plugins:[{name:"commerce-isolation",setup(build){build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/commerce-convex.ts"}));build.onResolve({filter:/^next\\/navigation$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));}}]});if(!result.success)throw new Error(result.logs.join("\\n"));process.stdout.write(await result.outputs[0].text()); const css=(await Promise.all(result.outputs.filter(o=>o.path.endsWith(".css")).map(o=>o.text()))).join("\\n");process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(css)+"}));");`,
+      `const result=await Bun.build({entrypoints:["tests/e2e/fixtures/commerce.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"commerce-isolation",setup(build){build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/commerce-convex.ts"}));build.onResolve({filter:/^next\\/navigation$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));}}]});if(!result.success)throw new Error(result.logs.join("\\n"));process.stdout.write(await result.outputs[0].text()); const css=(await Promise.all(result.outputs.filter(o=>o.path.endsWith(".css")).map(o=>o.text()))).join("\\n");process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(css)+"}));");`,
     ],
     { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 },
   );
@@ -258,14 +258,26 @@ test("double clicks still open only one wallet request", async ({ page }) => {
   expect(requests.filter((r) => r === "forumSwaps:prepare")).toHaveLength(1);
   await expect(page.locator("#wallet-calls")).toHaveText("1");
 });
-test("an existing uncertain hold blocks new buying and automatic quote spend", async ({
+test("an existing hold offers clickable recovery without new buying or quote spend", async ({
   page,
 }) => {
   const requests = await harness(page, "?authorized&held");
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await expect(
     page.getByRole("button", { name: "Check previous swap" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Check previous swap" }).click();
+  await expect(
+    page
+      .getByRole("group")
+      .filter({ has: page.getByText("Recent operations", { exact: true }) }),
+  ).toHaveAttribute("open", "");
+  await expect(
+    page.getByRole("link", { name: "View wallet transactions" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Receipt signature for held-fixture" }),
+  ).toBeVisible();
   await page.waitForTimeout(1500);
   expect(requests).not.toContain("forumSwaps:quote");
   expect(requests).not.toContain("forumSwaps:prepare");
@@ -318,8 +330,14 @@ test("uncertain wallet request is held and cannot be resent", async ({
   await reviewSwap(page);
   await expect(page.getByRole("alert")).toContainText("Do not repeat");
   await expect(
-    page.getByRole("button", { name: "Wallet request completed" }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "Check previous swap" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Check previous swap" }).click();
+  await expect(
+    page.getByText("A previous wallet request needs verification.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await expect(page.locator("#wallet-calls")).toHaveText("1");
   expect(requests.filter((r) => r === "forumSwaps:markUnknown")).toHaveLength(
     1,

@@ -16,7 +16,7 @@ window.addEventListener('message', event => {
   if (m.method === 'ui/notifications/initialized') frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:{status:'completed',actingAs:null,data:{}}}},'*');
   if (m.method === 'tools/call') reply((${JSON.stringify(fixtures).replaceAll("<", "\\u003c")})[m.params.name] || {isError:true,content:[],structuredContent:{code:'AUTH_REQUIRED',error:'Connect a profile to continue.'}});
 });
-frame.srcdoc = ${JSON.stringify(FORUM_PLUGIN_APP_HTML).replaceAll("<", "\\u003c")};
+frame.src = '/forum-fixture';
 </script>`;
 
 for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
@@ -28,6 +28,7 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
     await page.route("**/*", route => {
       const url = route.request().url();
       if (url === "http://127.0.0.1:43191/") return route.fulfill({ contentType: "text/html", body: html });
+      if (url === "http://127.0.0.1:43191/forum-fixture") return route.fulfill({contentType: "text/html", body: FORUM_PLUGIN_APP_HTML});
       if (url === "https://www.symbaiex.com/api/plugin/assets/current/forum.js")
         return route.fulfill({ contentType: "text/javascript", body: FORUM_PLUGIN_APP_SCRIPT });
       return route.abort();
@@ -38,6 +39,21 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
     expect(await app.locator("html").evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(viewport.width);
     await expect(app.getByText("The connection could not continue")).toHaveCount(0);
     await expect(app.locator("#forum-app-startup")).toHaveCount(0);
+    if (viewport.width >= 1280) {
+      await app.getByRole("button", { name: "Collapse navigation" }).click();
+      const rail = app.getByRole("complementary", { name: "Forum navigation" });
+      for (const name of ["Start here", "$SYMF", "Swap tokens"]) {
+        const link = rail.getByRole("link", { name, exact: true });
+        await expect(link).toBeVisible();
+        await expect(link.locator("svg")).toBeVisible();
+        await expect(link.locator(".forum-nav-label")).toBeHidden();
+        expect(await link.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      }
+      const active = rail.locator('[aria-current="page"]').first();
+      expect(await active.evaluate(el => getComputedStyle(el, "::before").content)).toBe("none");
+      await page.screenshot({ path: "tmp/forum-render-tests/navigation-collapsed.png" });
+      await app.getByRole("button", { name: "Expand navigation" }).click();
+    }
     // Validate all rendered internal links against the real shared route catalog.
     for (const href of await app.locator("a[href]").evaluateAll(elements => elements.map(a => a.getAttribute("href")))) {
       if (!href || !href.startsWith("/forum")) continue;
@@ -65,7 +81,8 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
 
 test("blocked UI bundle leaves a visible recovery message", async ({ page }) => {
   await page.route("**/*", route => route.request().url() === "http://127.0.0.1:43191/"
-    ? route.fulfill({ contentType: "text/html", body: html }) : route.abort());
+    ? route.fulfill({ contentType: "text/html", body: html }) : route.request().url() === "http://127.0.0.1:43191/forum-fixture"
+    ? route.fulfill({contentType: "text/html", body: FORUM_PLUGIN_APP_HTML}) : route.abort());
   await page.goto("http://127.0.0.1:43191/");
   const app = page.frameLocator('iframe[title="Forum fixture"]');
   await expect(app.getByRole("status")).toContainText("could not start");

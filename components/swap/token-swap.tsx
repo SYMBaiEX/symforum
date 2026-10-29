@@ -24,6 +24,7 @@ import { publicSwapPreparationError } from "@/lib/swap-preparation-errors";
 import {
   requestReviewedTransaction,
   verifyPreparedTransaction,
+  CommerceWalletRequestError,
   type CommerceWalletClient,
   type ReviewedTransaction,
 } from "@/lib/commerce-wallet-client";
@@ -181,6 +182,7 @@ function LiveSwap({
         ["held", "submitted"].includes(row.status),
     ) ?? false;
   const id = useId();
+  const history = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -350,9 +352,16 @@ function LiveSwap({
             ? "wallet"
             : "authorization",
         code,
+        walletPhase:
+          reason instanceof CommerceWalletRequestError ? reason.phase : null,
+        responseIssue:
+          reason instanceof CommerceWalletRequestError
+            ? reason.responseIssue
+            : null,
       });
       if (walletInvoked)
         await hold({ quoteId: selected.quoteId }).catch(() => {});
+      setNotice("");
       setError(
         returnedSignature
           ? "Your wallet returned a transaction signature, but its receipt could not be checked. Use Check receipt below; do not submit another swap."
@@ -399,6 +408,7 @@ function LiveSwap({
   });
   const busy =
     routes.isRunning || prepare.isRunning || send.isRunning || buy.isRunning;
+  const needsRecovery = unresolved || (sent && !finalized && !busy);
   const locked = prepare.isRunning || send.isRunning || buy.isRunning || sent;
   const [visible, setVisible] = useState(true);
   useEffect(() => {
@@ -552,8 +562,17 @@ function LiveSwap({
       </div>
       <Button
         className="w-full swap-primary"
-        disabled={!canQuote || busy || sent || unresolved}
+        disabled={needsRecovery ? busy : !canQuote || busy || sent}
+        aria-controls={needsRecovery ? `${id}-history` : undefined}
         onClick={() => {
+          if (needsRecovery) {
+            if (history.current) {
+              history.current.open = true;
+              history.current.scrollIntoView({ block: "nearest" });
+              history.current.querySelector("summary")?.focus();
+            }
+            return;
+          }
           if (purchaseActive.current || dispatched.current || unresolved)
             return;
           purchaseActive.current = true;
@@ -562,12 +581,12 @@ function LiveSwap({
       >
         {send.isRunning
           ? "Waiting for wallet / receipt…"
-          : sent
-            ? finalized
-              ? "Swap complete"
-              : "Wallet request completed"
-            : unresolved
-              ? "Check previous swap"
+          : needsRecovery
+            ? "Check previous swap"
+            : sent
+              ? finalized
+                ? "Swap complete"
+                : "Wallet request completed"
               : prepare.isRunning
                 ? "Preparing swap…"
                 : routes.isRunning || buy.isRunning
@@ -726,10 +745,39 @@ function LiveSwap({
       <ForumLink className="commerce-account" href="/account/connections">
         Manage linked wallets
       </ForumLink>
-      {!!mine?.length && (
-        <details className="commerce-details">
+      {(!!mine?.length || needsRecovery) && (
+        <details
+          className="commerce-details"
+          id={`${id}-history`}
+          ref={history}
+        >
           <summary>Recent operations</summary>
-          {mine.map((row) => (
+          {needsRecovery && (
+            <div className="commerce-note" role="status">
+              <p>
+                A previous wallet request needs verification. New swaps are
+                paused to avoid a duplicate payment; this button never resends
+                it.
+              </p>
+              <p>
+                If wallet Activity has a transaction signature, paste it below
+                and choose Check receipt. If Activity is empty, the hold needs
+                an independent expiry and transaction-history check. An empty
+                Activity list alone does not clear it.
+              </p>
+              {connected && (
+                <a
+                  href={`https://solscan.io/account/${connected.account.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  View wallet transactions
+                </a>
+              )}
+            </div>
+          )}
+          {(mine ?? []).map((row) => (
             <div className="commerce-history" key={row.quoteId}>
               <span>
                 {short(row.inputMint)} / {short(row.outputMint)} · {row.status}
@@ -757,7 +805,14 @@ function LiveSwap({
                       signature:
                         row.signature ?? recoverySignatures[row.quoteId],
                     })
-                      .then((r) => setNotice(`Receipt status: ${r.status}.`))
+                      .then((r) => {
+                        if (
+                          r.status === "confirmed" &&
+                          row.quoteId === selected?.quoteId
+                        )
+                          setFinalized(true);
+                        setNotice(`Receipt status: ${r.status}.`);
+                      })
                       .catch(() =>
                         setError(
                           "Receipt check unavailable. No transaction was resent.",

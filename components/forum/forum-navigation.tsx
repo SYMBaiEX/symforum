@@ -507,7 +507,7 @@ export function ForumNavigationLayout({
           Start here
         </ForumRailLink>
         <ForumRailLink href="/forum/symf" icon={Coins}>
-          ${SYMF_TOKEN.symbol}
+          {`$${SYMF_TOKEN.symbol}`}
         </ForumRailLink>
         <ForumRailLink href="/forum/swap" icon={ArrowLeftRight}>
           Swap tokens
@@ -710,11 +710,12 @@ function ForumRailLink({
     <ForumLink
       href={href}
       title={typeof children === "string" ? children : undefined}
+      aria-label={typeof children === "string" ? children : undefined}
       aria-current={active ? "page" : undefined}
       className={cn("forum-rail-link", active && "is-active")}
     >
       <Icon aria-hidden="true" className="size-[19px] shrink-0" />
-      <span className="min-w-0 flex-1">{children}</span>
+      <span className="forum-nav-label min-w-0 flex-1">{children}</span>
     </ForumLink>
   );
 }
