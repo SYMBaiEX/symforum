@@ -1,5 +1,6 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
+import { swapReconciliationAudit } from "./forumSwapReconciliationSchema";
 export const promotionStatus = v.union(
   v.literal("checkout"),
   v.literal("submitted"),
@@ -126,6 +127,7 @@ export const forumCommerceTables = {
     estimatedNetworkFeeLamports: v.optional(v.string()),
     simulationSlot: v.optional(v.number()),
     transactionVersion: v.optional(v.number()),
+    reconciliation: v.optional(swapReconciliationAudit),
     signature: v.optional(v.string()),
     issue: v.optional(v.string()),
   })
