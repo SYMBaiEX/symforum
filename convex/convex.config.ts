@@ -47,6 +47,15 @@ const app = defineApp({
     OPENROUTER_API_KEY: v.optional(v.string()),
     OPENROUTER_DAILY_BUDGET_USD: v.optional(v.string()),
     SOLANA_TRACKER_API_KEY: v.optional(v.string()),
+    // Commerce remains off until explicit treasury/provider/economic setup.
+    FORUM_SWAPS_ENABLED: v.optional(v.string()),
+    FORUM_PROMOTIONS_ENABLED: v.optional(v.string()),
+    FORUM_COMMERCE_TREASURY: v.optional(v.string()),
+    FORUM_PLATFORM_FEE_BPS: v.optional(v.string()),
+    FORUM_PROMOTION_AMOUNT_RAW: v.optional(v.string()),
+    FORUM_PROMOTION_DURATION_HOURS: v.optional(v.string()),
+    FORUM_COMMERCE_RPC_URL: v.optional(v.string()),
+    JUPITER_API_KEY: v.optional(v.string()),
     // Shadow comparison and live generation have separate switches and secrets.
     ELIZA_SHADOW_MODE: v.optional(v.string()),
     ELIZA_SHADOW_WORKER_URL: v.optional(v.string()),

@@ -6499,11 +6499,11 @@ describe("forum privacy regressions", () => {
       name: "Owner",
     });
 
-    for (const slug of ["help", "calendar"]) {
+    for (const slug of ["help", "calendar", "swap"]) {
       await expect(
         asOwner.mutation(api.forum.upsertForumCategory, {
           slug,
-          name: slug === "help" ? "Help" : "Calendar",
+          name: slug.charAt(0).toUpperCase() + slug.slice(1),
           description: `This board would shadow the ${slug} route.`,
           kind: "board",
           status: "active",

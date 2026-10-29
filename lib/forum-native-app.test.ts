@@ -32,7 +32,9 @@ describe("automatic native forum parity", () => {
   test("excludes first-party Next server runtime from the host browser bundle", () => {
     // AuthKit's component entry imports server tracing. A native browser has
     // no Node process, so even syntactically valid JS crashes before mounting.
-    expect(FORUM_NATIVE_APP_JS).not.toMatch(/process\.env\.(?:NEXT_OTEL_PERFORMANCE_PREFIX|NEXT_RUNTIME|__NEXT_DEV_SERVER)/);
+    expect(FORUM_NATIVE_APP_JS).not.toMatch(
+      /process\.env\.(?:NEXT_OTEL_PERFORMANCE_PREFIX|NEXT_RUNTIME|__NEXT_DEV_SERVER)/,
+    );
   });
   test("advertises a content-addressed UI revision so client caches cannot pin an older renderer", () => {
     const revision = createHash("sha256")
@@ -59,7 +61,11 @@ describe("automatic native forum parity", () => {
     );
     for (const route of FORUM_NATIVE_ROUTES)
       expect(imports).toContain(route.source.replace(".tsx", ""));
-    expect(FORUM_NATIVE_ROUTES).toHaveLength(28);
+    expect(FORUM_NATIVE_ROUTES).toHaveLength(29);
+    expect(FORUM_NATIVE_ROUTES).toContainEqual({
+      path: "/forum/swap",
+      source: "apps/forum/app/forum/swap/page.tsx",
+    });
     expect(FORUM_NATIVE_ROUTES).toContainEqual({
       path: "/forum/symf",
       source: "apps/forum/app/forum/symf/page.tsx",
@@ -74,17 +80,30 @@ describe("automatic native forum parity", () => {
     // application code has not executed yet. Test the actual emitted bundle.
     const name = FORUM_NATIVE_APP_JS.match(/\bvar ([\w$]+)=/)?.[1];
     expect(name).toBeTruthy();
-    expect(() => new Script(`const ${name} = { hostBootstrap: true };\n${FORUM_NATIVE_APP_JS}`)).not.toThrow();
+    expect(
+      () =>
+        new Script(
+          `const ${name} = { hostBootstrap: true };\n${FORUM_NATIVE_APP_JS}`,
+        ),
+    ).not.toThrow();
   });
   test("keeps MCP HTML small and links the exact native UI assets on an already allowed origin", () => {
     expect(Buffer.byteLength(FORUM_PLUGIN_APP_HTML)).toBeLessThan(10_000);
     expect(FORUM_PLUGIN_APP_HTML).not.toContain(FORUM_NATIVE_APP_JS);
-    expect(FORUM_PLUGIN_APP_HTML).toContain(`src="${FORUM_PLUGIN_ASSET_ORIGIN}/api/plugin/assets/current/forum.js"`);
-    expect(FORUM_PLUGIN_APP_HTML).not.toContain(FORUM_PLUGIN_APP_RESOURCE.uri.split("forum-")[1]);
+    expect(FORUM_PLUGIN_APP_HTML).toContain(
+      `src="${FORUM_PLUGIN_ASSET_ORIGIN}/api/plugin/assets/current/forum.js"`,
+    );
+    expect(FORUM_PLUGIN_APP_HTML).not.toContain(
+      FORUM_PLUGIN_APP_RESOURCE.uri.split("forum-")[1],
+    );
     expect(FORUM_PLUGIN_APP_SCRIPT).toContain(FORUM_NATIVE_APP_JS);
-    expect(FORUM_PLUGIN_APP_SCRIPT).toContain(JSON.stringify(FORUM_PLUGIN_APP_CSS));
+    expect(FORUM_PLUGIN_APP_SCRIPT).toContain(
+      JSON.stringify(FORUM_PLUGIN_APP_CSS),
+    );
     expect(() => new Script(FORUM_PLUGIN_APP_SCRIPT)).not.toThrow();
-    expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp.resourceDomains).toContain(FORUM_PLUGIN_ASSET_ORIGIN);
+    expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp.resourceDomains).toContain(
+      FORUM_PLUGIN_ASSET_ORIGIN,
+    );
     expect(FORUM_PLUGIN_APP_CSS).toContain(FORUM_NATIVE_APP_CSS);
     expect(FORUM_NATIVE_APP_CSS).toContain("KaTeX_Main");
     expect(FORUM_PLUGIN_APP_CSS).toContain("font/woff2;base64");

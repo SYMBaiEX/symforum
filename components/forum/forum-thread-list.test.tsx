@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("convex-helpers/react/cache/hooks", () => ({ useQuery: mocks.query }));
 vi.mock("convex/react", () => ({
+  useQuery: () => undefined,
   useConvex: () => ({ query: mocks.pointInTimeQuery }),
   useMutation: () => vi.fn(),
   useConvexAuth: () => ({

@@ -28,6 +28,14 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
+  readonly FORUM_SWAPS_ENABLED: string | undefined;
+  readonly FORUM_PROMOTIONS_ENABLED: string | undefined;
+  readonly FORUM_COMMERCE_TREASURY: string | undefined;
+  readonly FORUM_PLATFORM_FEE_BPS: string | undefined;
+  readonly FORUM_PROMOTION_AMOUNT_RAW: string | undefined;
+  readonly FORUM_PROMOTION_DURATION_HOURS: string | undefined;
+  readonly FORUM_COMMERCE_RPC_URL: string | undefined;
+  readonly JUPITER_API_KEY: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENT_JOIN_RELAY_SECRET: string | undefined;

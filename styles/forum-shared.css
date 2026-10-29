@@ -512,3 +512,59 @@
 .forum-app-shell .forum-messenger-search input:focus-visible{outline:none;box-shadow:none}
 .forum-app-shell .forum-messenger-search:focus-within{outline:none;box-shadow:inset 0 0 0 1px hsl(var(--muted-foreground)/.5)}
 @media(max-width:767.999px){.forum-messenger-list-heading>button{width:40px;height:40px;min-height:40px}}
+
+/* Trading uses the forum's existing surface, spacing and control tokens. */
+.commerce-page{display:grid;gap:24px;max-width:1080px;margin-inline:auto}
+.commerce-page>header h1{font-size:28px;line-height:1.2;letter-spacing:-.035em;font-weight:700;margin-bottom:8px}
+.commerce-page>header p,.commerce-guide p{max-width:64ch;color:hsl(var(--muted-foreground));line-height:1.65;font-size:14px}
+.commerce-swap-layout{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:40px;align-items:start}
+.commerce-panel{display:flex;flex-direction:column;gap:14px;min-width:0;padding:20px;background:hsl(var(--card));border:1px solid hsl(var(--border)/.75);border-radius:var(--forum-panel-radius,16px)}
+.commerce-panel h2,.commerce-promoted h2{font-size:16px;line-height:1.35;font-weight:650;letter-spacing:-.025em;display:flex;align-items:center;gap:8px}
+.commerce-panel h2 svg,.commerce-panel p svg,.commerce-review h3 svg{width:16px;height:16px;flex-shrink:0;display:inline-block;vertical-align:middle}
+.commerce-panel p,.commerce-panel small,.commerce-panel label,.commerce-account{font-size:12px;line-height:1.6;color:hsl(var(--muted-foreground))}
+.commerce-panel button,.commerce-panel select,.commerce-panel input{font:inherit}
+.commerce-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.commerce-heading>span{color:hsl(var(--muted-foreground));font-size:11px}
+.commerce-amount{display:grid;gap:8px;padding:14px;background:hsl(var(--muted)/.35);border-radius:var(--forum-control-radius,10px)}
+.commerce-amount>div{display:flex;gap:8px;align-items:center;min-width:0}
+.commerce-amount input{width:100%;min-width:0;background:transparent;border:0;box-shadow:none;font-size:24px!important;letter-spacing:-.035em;font-variant-numeric:tabular-nums;padding:0;height:44px}
+.commerce-panel select{min-height:44px;max-width:100%;border:1px solid hsl(var(--input));border-radius:var(--forum-control-radius,10px);padding:8px 10px;background:hsl(var(--card));color:hsl(var(--foreground));font-size:13px}
+.commerce-amount code{font-size:11px;color:hsl(var(--muted-foreground));overflow-wrap:anywhere}
+.commerce-mint{display:block;overflow-wrap:anywhere;word-break:break-all;font-size:10px;line-height:1.7;color:hsl(var(--muted-foreground));font-family:var(--font-geist-mono,monospace)}
+.commerce-reverse{width:44px;height:44px;border:1px solid hsl(var(--border));border-radius:50%;align-self:center;margin-block:-6px;background:hsl(var(--card));display:grid;place-items:center;color:hsl(var(--muted-foreground))}
+.commerce-reverse svg{width:16px;height:16px}
+.commerce-reverse:disabled{opacity:.45;cursor:not-allowed}
+.commerce-inline{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.commerce-details{display:grid;gap:8px;font-size:12px;border-top:1px solid hsl(var(--border)/.65);padding-top:8px}
+.commerce-details summary{min-height:36px;display:flex;align-items:center;cursor:pointer;color:hsl(var(--muted-foreground));font-weight:500}
+.commerce-details[open]>*:not(summary){margin-top:8px}
+.commerce-route{width:100%;display:flex;align-items:start;justify-content:space-between;text-align:left;gap:12px;padding:12px;border:1px solid hsl(var(--border));border-radius:var(--forum-control-radius,10px);background:hsl(var(--card));min-height:64px}
+.commerce-route[aria-pressed=true]{border-color:hsl(var(--accent));background:hsl(var(--accent)/.06)}
+.commerce-route:disabled{opacity:.6;cursor:not-allowed}
+.commerce-route>span{display:grid;gap:4px;min-width:0}
+.commerce-route>span:last-child{text-align:right;overflow-wrap:anywhere}
+.commerce-route strong{font-size:12px;font-weight:600}.commerce-route small{font-size:10px}
+.commerce-routes{display:grid;gap:8px}
+.commerce-review{display:grid;gap:12px;padding:14px;border:1px solid hsl(var(--border));border-radius:var(--forum-control-radius,10px)}
+.commerce-review h3{font-size:13px;font-weight:600;display:flex;gap:6px;align-items:center}
+.commerce-review dl{display:grid;gap:8px;font-size:11px;line-height:1.6}
+.commerce-review dl>div{display:flex;justify-content:space-between;gap:12px}
+.commerce-review dt{color:hsl(var(--muted-foreground));flex:1}.commerce-review dd{font-weight:500;text-align:right;max-width:65%;overflow-wrap:anywhere}
+.commerce-panel .commerce-note{padding:10px;background:hsl(var(--accent)/.08);border-radius:8px;color:hsl(var(--foreground))}
+.commerce-panel .commerce-error{padding:10px;border-left:2px solid hsl(var(--primary));color:hsl(var(--foreground));background:hsl(var(--primary)/.05)}
+.commerce-benefit{border-top:1px solid hsl(var(--border));padding-top:12px;display:flex;align-items:center;gap:8px;font-size:11px;line-height:1.6;color:hsl(var(--muted-foreground))}
+.commerce-benefit>span{flex:1}.commerce-benefit>button{font-size:11px;padding-inline:8px}
+.commerce-receipt{display:flex;align-items:center;gap:6px;font-size:12px;text-decoration:underline}.commerce-receipt svg{width:14px;height:14px}
+.commerce-guide{display:grid;gap:12px;padding-top:12px}.commerce-guide h2{font-size:22px;font-weight:600;letter-spacing:-.035em}.commerce-guide h3{font-size:14px;font-weight:600;margin-top:12px}.commerce-guide>a{font-size:13px}
+.commerce-thread-layout{display:grid;grid-template-columns:minmax(0,1fr) 326px;gap:20px;align-items:start}
+.commerce-thread-aside{min-width:0;display:grid;gap:16px}
+.forum-main>.forum-surface>.forum-thread-page:has(.commerce-thread-layout){max-width:var(--forum-content-width)}
+.commerce-thread-aside .commerce-panel{padding:16px;gap:12px}
+.commerce-post-token{padding:0 4px;display:grid;gap:8px}.commerce-post-token h2{font-size:13px;font-weight:600}.commerce-post-token p{font-size:11px;color:hsl(var(--muted-foreground));line-height:1.6}
+.commerce-promotion-price{display:flex;justify-content:space-between;align-items:center;gap:12px}.commerce-promotion-price strong{font-size:21px;letter-spacing:-.03em;font-weight:650}.commerce-promotion-price span{font-size:12px;color:hsl(var(--muted-foreground))}
+.commerce-panel .commerce-consent{display:flex;gap:10px;align-items:start;font-size:12px;color:hsl(var(--foreground));cursor:pointer}.commerce-consent input{width:18px;height:18px;flex-shrink:0;margin-top:2px;accent-color:hsl(var(--primary))}
+.commerce-recovery,.commerce-history{display:grid;gap:8px;font-size:12px}.commerce-history{padding-block:10px;border-bottom:1px solid hsl(var(--border));overflow-wrap:anywhere}
+.commerce-promoted{display:grid;gap:8px;padding:16px;border:1px solid hsl(var(--accent)/.4);border-radius:var(--forum-panel-radius,16px);background:hsl(var(--card));margin-block:16px}
+.commerce-promoted-row{display:flex;align-items:center;gap:10px;min-height:44px;font-size:13px;padding:8px;border-radius:8px}.commerce-promoted-row:hover{background:hsl(var(--muted)/.5)}.commerce-promoted-row svg{width:16px;height:16px;color:hsl(var(--muted-foreground));flex-shrink:0}.commerce-promoted-row>span{flex:1;min-width:0;overflow-wrap:anywhere}.commerce-promoted-row small{font-size:10px;background:hsl(var(--accent)/.1);padding:3px 6px;border-radius:4px;color:hsl(var(--accent))}
+@media(max-width:1100px){.commerce-thread-layout{grid-template-columns:minmax(0,1fr)}.commerce-thread-aside{position:static;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.commerce-post-token{grid-column:1/-1}}
+@media(max-width:640px){.commerce-swap-layout{grid-template-columns:minmax(0,1fr);gap:24px}.commerce-thread-aside{grid-template-columns:minmax(0,1fr)}.commerce-panel{padding:16px}.commerce-page>header h1{font-size:24px}.commerce-route{gap:8px}}
