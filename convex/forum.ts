@@ -1,3 +1,4 @@
+import { queueAlphaPublication } from "./forumAlphaDistribution";
 import {
   compactFeedExcerpt,
   forumThreadEditorialDigestValues,
@@ -11972,6 +11973,7 @@ export const publishSukiForumThread = internalMutation({
         sourceUrl: v.optional(v.string()),
       }),
     ),
+    alphaSourcePublishedAt: v.optional(v.number()),
     candidateCount: v.number(),
     contentFormat: v.optional(v.string()),
     topicFingerprint: v.optional(v.string()),
@@ -12355,6 +12357,13 @@ export const publishSukiForumThread = internalMutation({
       });
     }
     await enqueueForumAgentMemoryIndex(ctx.scheduler, threadId);
+    await queueAlphaPublication(ctx, {
+      threadId,
+      promptVersion: run.promptVersion,
+      qualityScore: args.qualityScore,
+      sourcePublishedAt: args.alphaSourcePublishedAt,
+      sourceUrls: sources.map((s) => s.sourceUrl),
+    });
 
     return {
       categorySlug: category.slug,
@@ -12671,7 +12680,9 @@ export const publishTokenForumContribution = internalMutation({
       tokenRun.title === undefined ||
       tokenRun.body === undefined
     ) {
-      throw new Error("Token publication requires a fresh complete stored snapshot");
+      throw new Error(
+        "Token publication requires a fresh complete stored snapshot",
+      );
     }
     const [run, agent, category, canonical] = await Promise.all([
       ctx.db
@@ -12700,7 +12711,9 @@ export const publishTokenForumContribution = internalMutation({
       agent === null ||
       !agent.enabled
     ) {
-      throw new Error("Token forum agent or matching publication run is unavailable");
+      throw new Error(
+        "Token forum agent or matching publication run is unavailable",
+      );
     }
     const user = await ctx.db.get("users", agent.userId);
     if (
@@ -12748,7 +12761,9 @@ export const publishTokenForumContribution = internalMutation({
       }
     }
     if (rendered.title !== tokenRun.title || rendered.body !== tokenRun.body) {
-      throw new Error("Token publication does not match its deterministic stored facts");
+      throw new Error(
+        "Token publication does not match its deterministic stored facts",
+      );
     }
     const sources = [
       {
@@ -12980,7 +12995,9 @@ export const publishTokenForumContribution = internalMutation({
       .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sources[0].sourceKey))
       .unique();
     if (sourceUse !== null && sourceUse.threadId !== thread._id) {
-      throw new Error("Token source ledger conflicts with its canonical thread");
+      throw new Error(
+        "Token source ledger conflicts with its canonical thread",
+      );
     }
     if (sourceUse === null) {
       await ctx.db.insert("forumAgentSourceUses", {

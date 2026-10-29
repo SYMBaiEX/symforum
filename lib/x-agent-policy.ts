@@ -124,6 +124,8 @@ export function xUsername(value: string) {
 
 export function expectedXUsername(slug: string, input: string) {
   const username = xUsername(input);
+  if (slug === "symforum" && username !== "symforum")
+    throw Error("The project publisher must connect @symforum.");
   if (slug === "nyx" && username !== "symbaiex_nyx")
     throw Error("NyX must connect @symbaiex_nyx.");
   return username;

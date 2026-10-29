@@ -1,4 +1,7 @@
 import { v } from "convex/values";
+import { RateLimiter, MINUTE } from "@convex-dev/rate-limiter";
+import { components } from "./_generated/api";
+import { ALPHA_RESEARCH_FEEDS } from "../lib/forum-alpha-editorial";
 import { forumDailyPublicationLimit } from "../lib/forum-agent-cadence";
 import { env, internalMutation, internalQuery } from "./_generated/server";
 
@@ -9,6 +12,26 @@ const MAX_RESEARCH_CACHE_BATCH_SIZE = 20;
 const FORUM_AGENT_RESERVATION_TTL_MS = 20 * 60 * 1_000;
 const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
 const MAX_FAILED_RUNS_PER_DAY = 12;
+
+const alphaDiscoveryLimiter = new RateLimiter(components.rateLimiter, {
+  alphaDiscovery: {
+    kind: "token bucket",
+    rate: 1,
+    period: 15 * MINUTE,
+    capacity: 1,
+  },
+});
+export const claimAlphaDiscoveryRead = internalMutation({
+  args: { feedUrl: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { feedUrl }) => {
+    if (!ALPHA_RESEARCH_FEEDS.some((feed) => feed.url === feedUrl))
+      throw new Error("Unknown alpha discovery feed");
+    return (
+      await alphaDiscoveryLimiter.limit(ctx, "alphaDiscovery", { key: feedUrl })
+    ).ok;
+  },
+});
 
 export const reserveResearchTopic = internalMutation({
   args: {

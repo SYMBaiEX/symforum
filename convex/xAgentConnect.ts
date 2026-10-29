@@ -1,4 +1,5 @@
 "use node";
+import { ALPHA_PUBLISHER_SLUG } from "../lib/forum-alpha-editorial";
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -71,7 +72,7 @@ export const begin = action({
     const url = xAuthorizationUrl(
       state,
       await pkceChallenge(verifier),
-      Boolean(args.activity),
+      Boolean(args.activity) || args.agentSlug === ALPHA_PUBLISHER_SLUG,
     );
     url.searchParams.set("client_id", c.clientId);
     return { authorizationUrl: url.toString() };
@@ -128,9 +129,11 @@ export const finish = action({
         token.expires_in <= 0 ||
         token.expires_in > 86400 ||
         String(token.token_type).toLowerCase() !== "bearer" ||
-        !(pending.activity ? X_ACTIVITY_SCOPES : X_DRAFT_SCOPES).every((s) =>
-          (token.scope as string).split(" ").includes(s),
-        )
+        !(
+          pending.activity || pending.agentSlug === ALPHA_PUBLISHER_SLUG
+            ? X_ACTIVITY_SCOPES
+            : X_DRAFT_SCOPES
+        ).every((s) => (token.scope as string).split(" ").includes(s))
       )
         throw Error("Invalid X account grant.");
       const me = await jsonResponse(

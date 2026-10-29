@@ -5,6 +5,7 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { ForumAlphaPublisher } from "./forum-alpha-publisher";
 import { ForumLoading, ForumStatusBox } from "./forum-primitives";
 import { validXDraft, xDraftLength } from "@/lib/x-agent-policy";
 
@@ -88,8 +89,10 @@ function OwnerXAccounts() {
     void finish({ state, code })
       .then(
         (result) => {
-          setSlug(result.agentSlug);
-          setHandle(result.username);
+          if (result.agentSlug !== "symforum") {
+            setSlug(result.agentSlug);
+            setHandle(result.username);
+          }
           setNotice(
             `Connected @${result.username}. Check posting mode and official-account activity below.`,
           );
@@ -262,6 +265,7 @@ function OwnerXAccounts() {
           connection.
         </p>
       </div>
+      <ForumAlphaPublisher />
       <section
         className="forum-panel space-y-4 p-5"
         aria-labelledby="official-x-activity"

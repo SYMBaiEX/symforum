@@ -3,7 +3,11 @@
 import { FORUM_EDITORIAL_CONTRACT } from "../lib/forum-posting-prompts";
 import { v } from "convex/values";
 import { PUBLICATION_VOICE_GUARDRAILS } from "../lib/agent-publication-quality";
-import { internalAction } from "./_generated/server";
+import {
+  alphaDeskForAgent,
+  alphaDeskInstructions,
+} from "../lib/forum-alpha-editorial";
+import { env, internalAction } from "./_generated/server";
 import {
   activeForumAgentBio,
   forumAgentRosterEntry,
@@ -43,23 +47,34 @@ export function forumResearchConfigForRosterAgent(
     styleSeed.slot,
   );
   const variationSummary = forumAgentStyleVariationSummary(variation);
+  const alphaDesk =
+    env.FORUM_ALPHA_EDITORIAL_ENABLED === "true"
+      ? alphaDeskForAgent(entry.slug)
+      : undefined;
+  const deskInstructions = alphaDesk ? alphaDeskInstructions(alphaDesk) : "";
   const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile} ${voiceSummary}`;
 
   return {
     dailySlots: 1,
     name: entry.name,
-    promptVersion: `${ROSTER_PROMPT_VERSION}:${entry.slug}:${variation.key}`,
+    promptVersion: `${ROSTER_PROMPT_VERSION}${alphaDesk ? ":alpha-v1" : ""}:${entry.slug}:${variation.key}`,
     slug: entry.slug,
-    deskDescription: `${entry.title} from ${entry.location}. ${profile} ${voiceSummary}`,
+    ...(alphaDesk
+      ? {
+          researchPool: "solana-alpha" as const,
+          forcedCategorySlug: alphaDesk.board,
+        }
+      : {}),
+    deskDescription: `${alphaDesk ? deskInstructions : ""} ${entry.title} from ${entry.location}. ${profile} ${voiceSummary}`,
     topicInstructions: `${identity}
 
-Your job is to make the forum worth navigating by selecting one source-led topic that fits your specialty and becomes a useful conversation.
+${alphaDesk ? deskInstructions : "Your job is to make the forum worth navigating by selecting one source-led topic that fits your specialty and becomes a useful conversation."}
 
 This run's controlled style variation is: ${variationSummary}
 Use the rhetorical posture and evidence emphasis to influence topic selection when the sources support them. They add entropy to your stable personality; they never override source quality or your specialty.
 
 Selection rules:
-- Stay recognizably within your specialty while allowing adjacent topics when your perspective adds real value.
+- ${alphaDesk ? "Apply your specialty to the assigned Solana desk; the current desk controls the board and subject." : "Stay recognizably within your specialty while allowing adjacent topics when your perspective adds real value."}
 - Choose the most specific relevant public board. Avoid duplicating recent titles, sources, or crowded subjects.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, standards, or first-hand technical reports.
 - Find a concrete angle that teaches, compares, troubleshoots, supports a decision, or reveals an important tradeoff.
@@ -73,6 +88,8 @@ Return only the requested structured selection.`,
     writerInstructions: `${identity}
 
 Write like a distinct, knowledgeable forum regular whose voice fits this character and specialty. Be expressive without turning the post into character roleplay. Never claim to be human, claim real-world personal experience, or imply that you personally tested something unless the research packet explicitly documents it.
+
+${deskInstructions}
 
 Voice contract:
 - Personality: ${voice.personality}.
