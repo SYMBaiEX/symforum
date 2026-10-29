@@ -146,11 +146,17 @@ export function humanIdentityPlugin(backend: GenericCtx<DataModel>) {
             throw new APIError("UNAUTHORIZED", {
               message: "Unable to verify this account.",
             });
+          const current = await getSessionFromCtx(ctx, {
+            disableCookieCache: true,
+          });
           const id = await backend.runMutation(
             internal.identityData.migratePassword,
             {
               legacyUserId: legacy.user._id,
               passwordHash: await ctx.context.password.hash(ctx.body.password),
+              ...(current && isFreshIdentitySession(current.session.createdAt)
+                ? { authUserId: current.user.id }
+                : {}),
             },
           );
           const user = await ctx.context.internalAdapter.findUserById(id);

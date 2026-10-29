@@ -64,7 +64,8 @@ export const ensureIdentity = mutation({
       if (
         authUser.emailVerified &&
         isRecoveryEmail(authUser.email) &&
-        authUser.email !== profile.email
+        (authUser.email !== profile.email ||
+          profile.emailVerificationTime === undefined)
       ) {
         const matches = await ctx.db
           .query("users")
@@ -475,7 +476,11 @@ export const unlinkAccount = internalMutation({
 
 /** Called only after the old password was verified by legacy Convex Auth. */
 export const migratePassword = internalMutation({
-  args: { legacyUserId: v.id("users"), passwordHash: v.string() },
+  args: {
+    legacyUserId: v.id("users"),
+    passwordHash: v.string(),
+    authUserId: v.optional(v.string()),
+  },
   returns: v.string(),
   handler: async (ctx, args) => {
     const user = await ctx.db.get("users", args.legacyUserId);
@@ -493,14 +498,30 @@ export const migratePassword = internalMutation({
       model: "user",
       where: [{ field: "username", value: user.usernameNormalized }],
     });
-    if (occupied)
+    if (occupied && occupied._id !== args.authUserId)
       throw new ConvexError(
         "Account recovery is required. No accounts were merged.",
       );
     const now = Date.now();
-    const created = await ctx.runMutation(
-      components.betterAuth.adapter.create,
-      {
+    let current = args.authUserId
+      ? await ctx.runQuery(components.betterAuth.adapter.findOne, {
+          model: "user",
+          where: [{ field: "_id", value: args.authUserId }],
+        })
+      : null;
+    if (args.authUserId) {
+      const linked = await ctx.db
+        .query("betterAuthIdentityLinks")
+        .withIndex("by_authUserId", (q) => q.eq("authUserId", args.authUserId!))
+        .unique();
+      if (!current || linked || current.twoFactorEnabled === true)
+        throw new ConvexError(
+          "Sign out before migrating a separate existing profile. No profiles were merged.",
+        );
+    }
+    const created =
+      current ??
+      (await ctx.runMutation(components.betterAuth.adapter.create, {
         input: {
           model: "user",
           data: {
@@ -513,26 +534,46 @@ export const migratePassword = internalMutation({
             updatedAt: now,
           },
         },
+      }));
+    if (current && !current.username) {
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "user",
+          where: [{ field: "_id", value: current._id }],
+          update: { username: user.usernameNormalized, updatedAt: now },
+        },
+      });
+      current = { ...current, username: user.usernameNormalized };
+    }
+    const credential = await ctx.runQuery(
+      components.betterAuth.adapter.findOne,
+      {
+        model: "account",
+        where: [
+          { field: "userId", value: created._id },
+          { field: "providerId", value: "credential" },
+        ],
       },
     );
-    await ctx.runMutation(components.betterAuth.adapter.create, {
-      input: {
-        model: "account",
-        data: {
-          providerId: "credential",
-          accountId: created._id,
-          userId: created._id,
-          password: args.passwordHash,
-          createdAt: now,
-          updatedAt: now,
+    if (!credential)
+      await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "account",
+          data: {
+            providerId: "credential",
+            accountId: created._id,
+            userId: created._id,
+            password: args.passwordHash,
+            createdAt: now,
+            updatedAt: now,
+          },
         },
-      },
-    });
+      });
     await ctx.db.insert("betterAuthIdentityLinks", {
       authUserId: created._id,
       userId: user._id,
       linkedAt: now,
-      authUsername: user.usernameNormalized,
+      authUsername: current?.username ?? user.usernameNormalized,
     });
     const oldAccounts = await ctx.db
       .query("authAccounts")

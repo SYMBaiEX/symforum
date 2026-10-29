@@ -23,6 +23,10 @@ budgets, publishing gates, data caps, or uncertain-outcome holds have been chang
    by its missing WORKOS_CLIENT_ID, which the existing auth configuration reads.
    Read-only codegen did not deploy functions. Additive API/component/env
    declarations are present locally, but must be regenerated before release.
+4. GitHub Actions did not start the PR jobs: the account reports failed recent
+   payments or an insufficient spending limit. No billing settings were changed,
+   no paid upgrade was requested, and checks were not bypassed. Vercel's five
+   preview builds completed; that is not a production auth cutover.
 
 Relevant upstream sources:
 
@@ -48,6 +52,10 @@ Relevant upstream sources:
   proof route. It saves the current verifier inside Better Auth, retains the
   canonical profile/role, and only then retires the old password verifier.
   Migrated accounts cannot use old human credentials as an unlink/reset bypass.
+  If a newly proven native identity has not yet been mapped to any application
+  profile, a fresh native session plus the old password may bind it to the old
+  profile. This avoids orphaning a first Google/email sign-in. Two already-mapped
+  application profiles are never silently merged.
   Do not flip these accounts back to legacy password auth after migration:
   forward-fix the new sign-in or recover through another verified method.
 - Legacy signed agent-key, WorkOS machine OAuth and service JWT paths remain
@@ -137,8 +145,20 @@ revocation across all five hosts. They are not proof of live Google/Telegram
 configuration, wallet approval, real email delivery or production cutover.
 Local app builds with the new flag are not live deployment.
 
-Local checks before the release hold: 3,366 tests passed across 332 files;
+Local checks on latest main before the release hold: 3,369 tests passed across 332 files;
 all five app builds with the new frontend flag passed; root and Convex
 type checks passed; lint had no errors and one existing cron-timing warning.
 The dependency audit still fails, and live provider/browser verification is
 not complete. Re-run checks after any compatibility change.
+
+One earlier concurrent full-suite/build run passed all assertions but returned
+a Vitest console-RPC teardown error in telegramMemes.test.ts. That file passed
+in isolation, then the entire suite passed without concurrent builds. No error
+suppression or test exclusion was added.
+
+A bounded, complete read-only production account inventory on October 28 found
+156 canonical profiles: 110 non-agent profiles (which may include test accounts),
+46 agent profiles, 105 handle-only profiles and 5 verified real recovery emails.
+No verified email required case normalization and no verified email group was
+duplicated. These are profile counts, not verified counts of unique people.
+No account rows or external WorkOS users were changed.

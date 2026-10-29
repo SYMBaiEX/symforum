@@ -355,3 +355,69 @@ test("legacy password migration retains the user ID and role, retires the old ve
   });
   expect(await legacy.query(api.users.maybeViewer, {})).toBeNull();
 });
+test("mailbox proof plus old password links a previously unmapped native identity without orphaning it", async () => {
+  const t = setup(),
+    password = "oldpass8";
+  const provider = Password() as unknown as {
+    options: { crypto: { hashSecret: (value: string) => Promise<string> } };
+  };
+  const hash = await provider.options.crypto.hashSecret(password);
+  const original = await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      email: "reader@example.com",
+      username: "link-reader",
+      usernameNormalized: "link-reader",
+      role: "owner",
+    });
+    await ctx.db.insert("authAccounts", {
+      userId,
+      provider: "password",
+      providerAccountId: "link-reader@users.symbaiex.local",
+      secret: hash,
+    });
+    return userId;
+  });
+  await request(t, "/email-otp/send-verification-otp", {
+    email: "reader@example.com",
+    type: "sign-in",
+  });
+  const otp = mail.messages[0].text.match(/\b(\d{6})\b/)![1];
+  const verified = await request(t, "/sign-in/email-otp", {
+    email: "reader@example.com",
+    otp,
+  });
+  const before = await (
+    await request(t, "/get-session", undefined, cookies(verified))
+  ).json();
+  const migrated = await request(
+    t,
+    "/sign-in/legacy",
+    { username: "link-reader", password },
+    cookies(verified),
+  );
+  expect(migrated.status).toBe(200);
+  const after = await (
+    await request(t, "/get-session", undefined, cookies(migrated))
+  ).json();
+  expect(after.user.id).toBe(before.user.id);
+  const token = await (
+    await request(t, "/convex/token", undefined, cookies(migrated))
+  ).json();
+  const payload = JSON.parse(
+    atob(token.token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
+  );
+  const viewer = t.withIdentity({
+    issuer: payload.iss,
+    subject: payload.sub,
+    sessionId: payload.sessionId,
+    authSystem: payload.authSystem,
+  });
+  expect(
+    await viewer.mutation(api.identityData.ensureIdentity, {}),
+  ).toMatchObject({ userId: original, created: false });
+  expect(await t.run((ctx) => ctx.db.get("users", original))).toMatchObject({
+    role: "owner",
+    email: "reader@example.com",
+    emailVerificationTime: expect.any(Number),
+  });
+});
