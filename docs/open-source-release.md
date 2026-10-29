@@ -30,6 +30,12 @@ not permission to change visibility or publish packages.
 - MIT code licensing, asset notices, contribution guidance, private security
   reporting, conduct rules, PR guidance and code ownership are present.
 
+The secret scanner has executable negative controls. Its historical deployment
+exception matches one public identifier in one document; it does not exclude
+that document from scanning. Run `bun run security:check` before the history scan.
+Remote attachment downloads retain their verified public DNS pin in both Node
+lookup callback modes, including automatic address-family selection.
+
 ## Required before the visibility change
 
 These checks apply to the exact commit selected for public release. Local
@@ -38,19 +44,72 @@ GitHub Actions and automated dependency-update jobs are disabled; use the
 documented local verification commands.
 
 - [ ] Confirm the exact release commit's tests, typechecks, lint, five application
-  builds, worker checks, clean container install and dependency audits.
+      builds, worker checks, clean container install and dependency audits.
 - [ ] Confirm tree/history secret scans on all exposed branches/tags, not only
-  the default branch. Keep private operator files and detailed audit proofs out
-  of release artifacts.
+      the default branch. Keep private operator files and detailed audit proofs out
+      of release artifacts.
 - [ ] Review and deploy the relevant application security changes; use synthetic
-  and non-sending checks to verify the live boundaries. Preserve independent auth
-  cutover flags, agent budgets, schedules and all uncertain-operation holds.
+      and non-sending checks to verify the live boundaries. Preserve independent auth
+      cutover flags, agent budgets, schedules and all uncertain-operation holds.
 - [ ] Configure and verify branch rules and required maintainer reviews. The current
-  private-repository plan returned 403 for protection/ruleset access. Do not
-  claim protections are enabled without readback.
+      private-repository plan returned 403 for protection/ruleset access. Do not
+      claim protections are enabled without readback.
 - [ ] Verify native secret scanning, push protection and private vulnerability
-  reporting as supported by the selected repository plan/visibility.
+      reporting as supported by the selected repository plan/visibility.
 - [ ] Have the owner separately authorize public release. Keep private until then.
 
 Use [SECURITY.md](../SECURITY.md) for reports. Do not publish private audit details
 or open exploit reports while a vulnerable deployment remains active.
+
+## Local release record
+
+Keep a private record of the selected full commit ID, tool versions, commands,
+exit codes, dependency audit results and container image ID. A branch name or a
+previous successful run does not identify the release candidate. After merging,
+verify that the candidate is on `origin/main` and that relevant production
+deployments use it. Do not reset another contributor's dirty checkout to do so.
+
+Run `bun run verify`, `bun run eliza:check`, `bun run eliza:test`, the Python SDK
+tests, `bun run security:check` and `bun run security:secrets`. Scan a clean tracked
+tree and generated browser bundles too. Enumerate remote branches, tags and pull
+request heads before the history scan; inspect any scanner exclusions and triage
+findings privately. Never publish scanner reports that may contain credentials.
+
+Build the worker with a clean dependency install:
+
+```sh
+docker build --platform linux/amd64 --no-cache \
+  -t symbaiex-eliza-release-check workers/eliza-shadow
+```
+
+Assess the resulting image's OS and application packages with a current local
+vulnerability database. Record unavailable or unfixed findings rather than
+suppressing them. Use synthetic fixtures and disabled networking for container
+tests. Do not attach production environment files, credentials or databases, push
+an audit image, or start a live agent as part of this check.
+
+## GitHub settings after release authorization
+
+The private plan currently blocks branch-protection and ruleset APIs with 403.
+Keep this limitation visible until a successful readback. The prepared
+[branch policy](../.github/release-branch-protection.json) requires one code-owner
+review, dismisses stale approvals, requires approval after the last push and
+resolved discussions, and blocks force pushes and deletion. It deliberately
+requires no Actions checks. Review the maintainer roster in
+[CODEOWNERS](../.github/CODEOWNERS) before enforcing this policy; a sole maintainer
+cannot approve their own changes.
+
+After the owner separately authorizes visibility and the plan supports the
+controls, a repository administrator can apply the prepared policy:
+
+```sh
+gh api --method PUT repos/SYMBaiEX/symbaiex-blog/branches/main/protection \
+  --input .github/release-branch-protection.json
+gh api repos/SYMBaiEX/symbaiex-blog/branches/main/protection
+```
+
+Enable and read back native secret scanning, push protection and private
+vulnerability reporting where supported. Confirm dependency vulnerability alerts
+remain enabled. Keep Actions and automated dependency-update jobs disabled.
+These instructions neither change visibility nor claim that blocked settings
+have been applied.
