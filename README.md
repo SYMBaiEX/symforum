@@ -105,7 +105,7 @@ All three dependency locks are audited, including development tooling.
 
 For secret scanning, install Gitleaks 8.30.1 and run `bun run security:secrets`.
 Release verification scans reachable history and a tracked-file snapshot.
-GitHub Actions are intentionally skipped; maintainers run the documented checks
+GitHub Actions and automatic dependency-update jobs are disabled for this repository; maintainers run the documented checks
 locally and review their results. Existing workflow definitions remain pinned
 for reference, but hosted CI is not a release gate.
 

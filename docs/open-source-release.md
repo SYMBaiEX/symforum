@@ -20,7 +20,7 @@ not permission to change visibility or publish packages.
   crypto dependency to Node's built-in crypto API instead of the unpatched
   browser cryptography dependency. Its bundled upstream browser-only fallback
   is not a supported runtime; do not repurpose this worker for a browser build.
-- Third-party workflow actions and container bases are pinned; Dependabot and
+- Third-party workflow actions and container bases are pinned;
   history/tree secret scanning is documented as a local release check. Tests are
   not blanket-excluded from secret scanning. GitHub Actions are intentionally
   skipped at the owner's request; they are not a release gate.

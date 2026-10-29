@@ -16,6 +16,8 @@ export const authCallback: typeof handleCallback = (request) => {
 };
 
 export async function authSignIn(request: Request) {
+  const native = nativeAuthEntry(request, "signIn");
+  if (native) return native;
   assertHumanAuthConfiguration(process.env);
   const url = new URL(request.url);
   const identifier = (url.searchParams.get("identifier") ?? "").trim();
@@ -33,6 +35,8 @@ export async function authSignIn(request: Request) {
 }
 
 export async function authSignUp(request: Request) {
+  const native = nativeAuthEntry(request, "signUp");
+  if (native) return native;
   assertHumanAuthConfiguration(process.env);
   const url = new URL(request.url);
   const email = validEmail(url.searchParams.get("email") ?? "");
@@ -75,4 +79,21 @@ function cleanReturnTo(value: string | null, fallback: string) {
     return fallback;
   }
   return value;
+}
+
+// Old shared auth links must follow the active provider, without invoking an
+// unconfigured WorkOS client after a native/Better Auth cutover.
+function nativeAuthEntry(request: Request, mode: "signIn" | "signUp") {
+  if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true") return null;
+  const source = new URL(request.url);
+  const target = new URL("/signin", source.origin);
+  target.searchParams.set("mode", mode);
+  target.searchParams.set(
+    "redirectTo",
+    cleanReturnTo(source.searchParams.get("returnTo"), "/"),
+  );
+  const response = NextResponse.redirect(target, 303);
+  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
 }
