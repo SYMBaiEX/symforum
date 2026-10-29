@@ -83,10 +83,10 @@ export function ForumAlphaPublisher() {
       <details className="text-sm">
         <summary className="cursor-pointer">Verify a project tag</summary>
         <p className="mt-3 text-muted-foreground">
-          Check that the original project website links this X account. Only
-          stories citing that exact website host will use the tag; verification
-          expires after 30 days. News sites and token metadata are not project
-          identity proof.
+          Check that the original project website links this X account. A story
+          must cite that website host or explicitly name the verified project to
+          use its tag. Verification expires after 30 days. News sites and token
+          metadata are not project identity proof.
         </p>
         <form
           className="mt-3 space-y-3"
