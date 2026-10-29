@@ -152,7 +152,7 @@ export function connectMessageWallet(wallet: MessageSignWallet) {
   });
 }
 
-/** Explicit compatibility path, never an automatic second signing attempt. */
+/** Explicit message sign-in after connection; never an automatic retry. */
 export function requestMessageProof(
   wallet: MessageSignWallet,
   account: MessageWalletAccount,
@@ -209,7 +209,7 @@ export function walletFailureMessage(
   if (isInternalWalletError(reason) && method === "signMessage")
     return `${name} could not sign the message. Check that this account supports message signing, or choose another wallet.`;
   if (isInternalWalletError(reason))
-    return `${name} returned an internal signing error. This does not necessarily mean the wallet is locked. You can use the explicit message sign-in option, or choose another wallet.`;
+    return `${name} returned an internal signing error. This does not necessarily mean the wallet is locked. Choose another wallet or start a fresh request.`;
   // Never surface arbitrary extension error bodies, wallet contents or URLs.
   return "Wallet sign-in did not complete. Prepare a new request and try again.";
 }

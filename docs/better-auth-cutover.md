@@ -46,38 +46,57 @@ Relevant upstream sources:
 ### Wallet picker and browser verification
 
 Wallet login/linking uses the shared accessible dialog and Wallet Standard
-discovery. The challenge is prepared when the picker opens; selecting an
-installed wallet invokes `solana:signIn` directly from that click, without an
-intervening network request. A cancelled or expired attempt requires an explicit
-new request. Ethereum globals, transactions and spending permissions are not
-used. Server proof, ownership, browser binding and replay checks are unchanged.
+discovery. Selecting a connect/message-capable wallet invokes `standard:connect`
+directly from that click, prepares a fresh server challenge after account
+selection, then requires a separate explicit click to sign the canonical SIWS
+message with `solana:signMessage`. The combined `solana:signIn` RPC is not forced
+on these wallets. SIWS-only wallets prepare a challenge after selection and invoke
+`solana:signIn` directly from a separate signing click. Opening the picker alone
+does not allocate a challenge. Cancellation or expiry requires a new explicit
+selection. Ethereum globals, transactions and spending permissions are not used.
+Server proof, ownership, browser binding and replay checks are unchanged.
 
 The Telegram SDK loads only when selected. Production CSP permits its exact
 static stylesheet hash on `/signin` and `/account/connections` only, without
 adding `unsafe-inline` or broadening script permissions.
 
 Isolated browser tests cover the dialog, user activation, duplicate clicks,
-cancellation, expiry, failed challenge, late wallet discovery and focus return.
-These tests use fake wallets and intercepted traffic, not a real extension.
-The reported Phantom extension error must still be verified in a live wallet;
-passing the signed-wallet HTTP test alone is not that verification.
+cancellation, expiry, failed challenge, message-only and SIWS-only discovery,
+multiple accounts, session confirmation and focus return. They execute the real
+Better Auth client/session atom, with fake wallets, an isolated Convex boundary
+and fully intercepted traffic. Passing these tests or the signed-wallet HTTP
+test does not prove the real extension completes authentication.
 
 The real Phantom flow subsequently reached its confirmation prompt but reported
 an internal signing error afterward; the checked production challenges were
 not consumed. This is not evidence that the wallet was still locked, nor proof
-of the underlying extension failure. For this specific wallet-request error,
-the picker offers an explicit connect-then-message compatibility option. It
-never automatically retries signing. Connection does not authenticate; a fresh
-server challenge and a second user click are required to sign the canonical
-SIWS message. Multiple connected accounts require an explicit account choice.
+of the underlying extension failure. The former recovery-only connect/message
+route is now the normal path for compatible wallets. It never automatically
+retries signing. Connection does not authenticate; a fresh server challenge and
+a second user click are required to sign the canonical SIWS message. Multiple
+connected accounts require an explicit account choice.
 Changed accounts/messages, stale challenges and cancelled requests fail closed.
 The same backend verifier and account/linking ownership checks are used, with
 no new endpoint, provider permission, database write path or production setting.
 
 Wallet-request, server-verification and session-confirmation errors are shown
 separately. A successful wallet response is not reported as a completed login
-until a native session with a user is returned. Real-extension completion of
-the compatibility route remains unverified until the actual approval succeeds.
+until a native session with both session and user IDs is returned. Real-extension
+completion remains unverified until the actual approval succeeds.
+
+An app lifecycle regression was reproduced before the fix: the signed-out
+session's focus refresh sets `isPending`, causing the root identity bootstrap to
+unmount the public sign-in form and its active wallet flow. Only exact `/signin`
+now remains mounted through session/identity refreshes. Other routes still wait
+for verified Convex auth and canonical identity bootstrap; ownership failures
+remain blocked. Custom wallet/Telegram proof exchanges explicitly refetch the
+subscribed Better Auth session atom before completion. An independent
+`getSession()` response does not notify that atom; initial-only `hydrateSession`
+is not a substitute. The existing Convex JWT bridge and reviewed dependency
+patch remain unchanged; no provider type assertion or additional compatibility
+patch was introduced. Regression tests keep the flow alive during a real guest
+focus refetch and check the subscribed session becomes authenticated after proof
+exchange, while missing sessions fail closed.
 
 ## Maintained Better Auth 1.7 compatibility patch
 
@@ -165,7 +184,8 @@ must be at least 12 characters; valid migrated passwords remain usable. A privat
 email cap is separate from agent budgets: 3 per address per 10 minutes, 100
 globally per day. New canonical profiles share the existing 20/hour signup bucket.
 
-Solana uses Wallet Standard solana:signIn and the official SIWS verifier.
+Solana uses Wallet Standard connect/message signing (or `solana:signIn` for
+SIWS-only wallets) and the official SIWS verifier.
 Challenges bind the exact domain, URI, mainnet chain, purpose, issue/expiry times,
 browser and one-use nonce. No RPC subscription, transaction, funds or private key.
 

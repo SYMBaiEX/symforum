@@ -25,6 +25,7 @@ import {
 } from "./query-cache";
 import { authKitProviderProps } from "./provider-state";
 import { identityClient } from "./identity-client";
+import { IdentityBootstrap } from "./identity-bootstrap";
 
 export {
   CONVEX_QUERY_CACHE_EXPIRATION_MS,
@@ -86,31 +87,6 @@ function useIdentityAuthForConvex() {
     return result.data?.token ?? null;
   }, [sessionId]);
   return { isLoading: isPending, isAuthenticated: Boolean(sessionId), fetchAccessToken };
-}
-
-function IdentityBootstrap({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const { data } = identityClient.useSession();
-  const ensure = useMutation(api.identityData.ensureIdentity);
-  const [ready, setReady] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    if (!isAuthenticated || !data?.user.id) return;
-    let active = true;
-    setError(false);
-    void ensure({}).then(() => { if (active) setReady(data.user.id); })
-      .catch(() => { if (active) setError(true); });
-    return () => { active = false; };
-  }, [isAuthenticated, data?.user.id, data?.user.email, data?.user.emailVerified, data?.user.username, ensure]);
-  if (error && pathname.startsWith("/signin")) return children;
-  if (error) return <main className="mx-auto max-w-lg p-8" role="alert">
-    <h1 className="text-xl font-semibold">Your existing account needs verification</h1>
-    <p className="mt-3">Nothing was merged or removed. Use your existing-account sign-in to keep your profile and content.</p>
-    <a href="/signin?method=legacy" className="mt-4 block underline">Verify existing account</a>
-  </main>;
-  if (isLoading || (isAuthenticated && ready !== data?.user.id)) return <p role="status" className="p-6">Verifying your account…</p>;
-  return children;
 }
 
 function ConvexUnavailable() {

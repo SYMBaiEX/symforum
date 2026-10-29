@@ -5,6 +5,7 @@ import { WalletSignIn } from "./wallet-signin";
 import {
   identityClient,
   identityRequest,
+  refreshIdentitySession,
 } from "@symbaiex/auth/identity-client";
 
 type Challenge = {
@@ -150,7 +151,7 @@ export function IdentityProviders({
                   idToken: result.id_token,
                 });
                 setTelegram(null);
-                await identityClient.getSession();
+                await refreshIdentitySession();
                 onComplete();
               });
             },
