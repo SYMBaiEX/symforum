@@ -1,6 +1,9 @@
 // UI fixture only. No real auth provider, credentials, or production endpoint.
 export const identityClient = {
-  getSession: async () => ({}),
+  getSession: async () =>
+    new URLSearchParams(window.location.search).has("sessionfail")
+      ? { data: null, error: { message: "Fixture only" } }
+      : { data: { user: { id: "fixture-user" } }, error: null },
   linkSocial: async () => ({}),
   signIn: { social: async () => ({}) },
 };

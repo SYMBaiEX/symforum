@@ -26,7 +26,12 @@ test.beforeAll(() => {
 
 async function harness(
   page: Page,
-  options: { expired?: boolean; fail?: boolean; deferred?: boolean } = {},
+  options: {
+    expired?: boolean;
+    fail?: boolean;
+    deferred?: boolean;
+    proofFail?: boolean;
+  } = {},
 ) {
   page.on("pageerror", (error) => {
     throw error;
@@ -43,7 +48,7 @@ async function harness(
     if (url.origin === "http://127.0.0.1:43192" && url.pathname === "/")
       return route.fulfill({
         contentType: "text/html",
-        body: '<div id="root"></div><script src="/fixture.js"></script>',
+        body: '<meta charset="utf-8"><div id="root"></div><script src="/fixture.js"></script>',
       });
     if (url.pathname === "/fixture.js")
       return route.fulfill({ contentType: "text/javascript", body: bundle });
@@ -53,15 +58,16 @@ async function harness(
       if (options.fail)
         return route.fulfill({ status: 503, body: "unavailable" });
       const now = Date.now();
+      const nonce = `fixtureNonce12345678${requests.length}`;
       return route.fulfill({
         json: {
-          nonce: "fixtureNonce12345678",
+          nonce,
           expiresAt: now + 300_000,
           clientId: "12345",
           input: {
             domain: url.host,
             uri: url.origin + "/auth/wallet",
-            nonce: "fixtureNonce12345678",
+            nonce,
             chainId: "solana:mainnet",
             version: "1",
             statement: "Sign in. No transaction.",
@@ -74,7 +80,9 @@ async function harness(
       });
     }
     if (url.pathname === "/api/identity/sign-in/solana")
-      return route.fulfill({ json: { authenticated: true } });
+      return options.proofFail
+        ? route.fulfill({ status: 503, body: "unavailable" })
+        : route.fulfill({ json: { authenticated: true } });
     if (url.origin === "https://oauth.telegram.org")
       return route.fulfill({
         contentType: "text/javascript",
@@ -190,5 +198,144 @@ test("Telegram SDK loads only after Telegram is chosen", async ({ page }) => {
   ).toBeEnabled();
   expect(
     run.requests.filter((path) => path === "/js/telegram-login.js"),
+  ).toHaveLength(1);
+});
+
+test("internal SIWS failure offers an explicit connect-then-message path, with no automatic retry", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await page.goto("http://127.0.0.1:43192/?internal");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await expect(page.getByRole("alert")).toContainText("internal signing error");
+  let events = JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  );
+  expect(events.map((event: { action: string }) => event.action)).toEqual([
+    "signIn",
+  ]);
+  await page
+    .getByRole("button", { name: "Connect Phantom for message sign-in" })
+    .click();
+  const sign = page.getByRole("button", {
+    name: "Sign in with Phantom",
+    exact: true,
+  });
+  await expect(sign).toBeEnabled();
+  events = JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  );
+  expect(events.map((event: { action: string }) => event.action)).toEqual([
+    "signIn",
+    "connect",
+  ]);
+  expect(
+    run.requests.filter((path) => path.endsWith("/identity/challenge")),
+  ).toHaveLength(2);
+  expect(
+    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
+  ).toHaveLength(0);
+  await sign.click({ clickCount: 2 });
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  events = JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  );
+  expect(events.map((event: { action: string }) => event.action)).toEqual([
+    "signIn",
+    "connect",
+    "signMessage",
+  ]);
+  expect(
+    events.every((event: { userActivated: boolean }) => event.userActivated),
+  ).toBe(true);
+  expect(
+    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
+  ).toHaveLength(1);
+});
+
+test("server verification failures are not mislabeled as a locked Phantom", async ({
+  page,
+}) => {
+  await harness(page, { proofFail: true });
+  await page.goto("http://127.0.0.1:43192/");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "server could not verify",
+  );
+  await expect(
+    page.getByRole("button", { name: "Connect Phantom for message sign-in" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("alert")).not.toContainText("locked");
+});
+
+test("multiple connected accounts require an explicit choice", async ({
+  page,
+}) => {
+  await harness(page);
+  await page.goto("http://127.0.0.1:43192/?internal&multi");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await page
+    .getByRole("button", { name: "Connect Phantom for message sign-in" })
+    .click();
+  await expect(
+    page.getByText("Choose the Solana account you want to sign in with."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in with Phantom", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Use 222222…2222" }).click();
+  await page
+    .getByRole("button", { name: "Sign in with Phantom", exact: true })
+    .click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  const events = JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  );
+  expect(events.at(-1).account).toBe("22222222222222222222222222222222");
+});
+
+test("cancelling the compatibility signature never posts or retries", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await page.goto("http://127.0.0.1:43192/?internal&messagecancel");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await page
+    .getByRole("button", { name: "Connect Phantom for message sign-in" })
+    .click();
+  await page
+    .getByRole("button", { name: "Sign in with Phantom", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("cancelled");
+  expect(
+    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
+  ).toHaveLength(0);
+  const events = JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  );
+  expect(events.map((event: { action: string }) => event.action)).toEqual([
+    "signIn",
+    "connect",
+    "signMessage",
+  ]);
+});
+
+test("a failed session confirmation is not reported as a successful sign-in", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await page.goto("http://127.0.0.1:43192/?sessionfail");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "session could not be confirmed",
+  );
+  await expect(page.getByText("Signed in successfully")).toHaveCount(0);
+  expect(
+    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
   ).toHaveLength(1);
 });
