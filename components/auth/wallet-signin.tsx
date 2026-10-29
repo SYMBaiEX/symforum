@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { getWallets } from "@wallet-standard/app";
+import { ClientProvider, useClient } from "@solana/react";
+import {
+  useConnect,
+  useSignIn,
+  useSelectAccount,
+  useWallets,
+  useIsWalletReady,
+} from "@solana/kit-plugin-wallet/react";
+import type { UiWallet, UiWalletAccount } from "@wallet-standard/ui";
 import { LoaderCircle, Wallet } from "lucide-react";
 import {
   identityRequest,
@@ -19,81 +27,86 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  requestWalletProof,
-  connectMessageWallet,
-  requestMessageProof,
-  supportsMessageSigning,
+  requestSiwsProof,
   walletFailureMessage,
-  type MessageSignWallet,
-  type MessageWalletAccount,
-  type SignInWallet,
   type WalletChallenge,
 } from "@/lib/wallet-signin";
+import {
+  createIdentityWalletClient,
+  requestIdentityMessageProof,
+  type IdentityWalletClient,
+} from "@/lib/identity-wallet-client";
 
-type RegisteredWallet = ReturnType<
-  ReturnType<typeof getWallets>["get"]
->[number];
-type CompatibleWallet = RegisteredWallet & (MessageSignWallet | SignInWallet);
-function supportsSignIn(
-  wallet: RegisteredWallet,
-): wallet is RegisteredWallet & SignInWallet {
-  return (
-    typeof (
-      wallet.features["solana:signIn"] as
-        SignInWallet["features"]["solana:signIn"] | undefined
-    )?.signIn === "function"
-  );
-}
-function compatible(wallet: RegisteredWallet): wallet is CompatibleWallet {
-  return (
-    wallet.chains.some((chain) => chain.startsWith("solana:")) &&
-    (supportsMessageSigning(wallet) || supportsSignIn(wallet))
-  );
-}
 type PreparedRequest =
   | {
       method: "message";
-      wallet: RegisteredWallet & MessageSignWallet;
-      account: MessageWalletAccount;
+      wallet: UiWallet;
+      account: UiWalletAccount;
       challenge: WalletChallenge;
     }
   | {
       method: "signIn";
-      wallet: RegisteredWallet & SignInWallet;
+      wallet: UiWallet;
       challenge: WalletChallenge;
     };
 type Phase =
   "idle" | "connecting" | "preparing" | "signing" | "verification" | "session";
 
-export function WalletSignIn({
-  purpose,
-  disabled,
-  onBusyChange,
-  onComplete,
-}: {
+type WalletSignInProps = {
   purpose: "login" | "link";
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
   onComplete: () => void;
-}) {
+};
+
+export function WalletSignIn(props: WalletSignInProps) {
+  const [client, setClient] = useState<IdentityWalletClient | null>(null);
+  useEffect(() => {
+    const owned = createIdentityWalletClient();
+    setClient(owned);
+    return () => owned[Symbol.dispose]();
+  }, []);
+  // Construct after mount, so SSR and discarded Strict Mode renders never
+  // register browser wallet listeners or share state between requests.
+  if (!client)
+    return (
+      <Button type="button" variant="outline" disabled>
+        <Wallet data-icon="inline-start" />
+        {props.purpose === "link" ? "Link wallet" : "Solana wallet"}
+      </Button>
+    );
+  return (
+    <ClientProvider client={client}>
+      <WalletPicker {...props} />
+    </ClientProvider>
+  );
+}
+
+function WalletPicker({
+  purpose,
+  disabled,
+  onBusyChange,
+  onComplete,
+}: WalletSignInProps) {
+  const client = useClient<IdentityWalletClient>();
+  const wallets = useWallets(client);
+  const ready = useIsWalletReady(client);
+  const connect = useConnect(client);
+  const signIn = useSignIn(client);
+  const selectAccount = useSelectAccount(client);
   const [open, setOpen] = useState(false);
-  const [wallets, setWallets] = useState<CompatibleWallet[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [selected, setSelected] = useState<CompatibleWallet | null>(null);
-  const [accounts, setAccounts] = useState<readonly MessageWalletAccount[]>([]);
+  const [selected, setSelected] = useState<UiWallet | null>(null);
+  const [accounts, setAccounts] = useState<readonly UiWalletAccount[]>([]);
   const [prepared, setPrepared] = useState<PreparedRequest | null>(null);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
+  const active = useRef(true);
 
   useEffect(() => {
-    const registry = getWallets();
-    const update = () => setWallets(registry.get().filter(compatible));
-    update();
-    const offRegister = registry.on("register", update);
-    const offUnregister = registry.on("unregister", update);
+    active.current = true;
     return () => {
-      offRegister();
-      offUnregister();
+      active.current = false;
     };
   }, []);
 
@@ -106,29 +119,25 @@ export function WalletSignIn({
     setError("");
   }
 
-  async function prepare(
-    wallet: CompatibleWallet,
-    account?: MessageWalletAccount,
-  ) {
+  async function prepare(wallet: UiWallet, account?: UiWalletAccount) {
+    if (account) selectAccount(account);
     setPhase("preparing");
     const challenge = await identityRequest<WalletChallenge>(
       "/identity/challenge",
       { provider: "solana", purpose },
     );
+    if (!active.current) return;
     if (!challenge.input)
       throw new Error("Wallet verification is unavailable.");
-    if (supportsMessageSigning(wallet) && account)
+    if (wallet.features.includes("solana:signMessage") && account)
       setPrepared({ method: "message", wallet, account, challenge });
-    else if (supportsSignIn(wallet))
+    else if (wallet.features.includes("solana:signIn"))
       setPrepared({ method: "signIn", wallet, challenge });
     else throw new Error("A message-signing account is required.");
     setAccounts([]);
   }
 
-  async function choose(
-    wallet: CompatibleWallet,
-    account?: MessageWalletAccount,
-  ) {
+  async function choose(wallet: UiWallet, account?: UiWalletAccount) {
     if (inFlight.current) return;
     inFlight.current = true;
     setSelected(wallet);
@@ -141,26 +150,44 @@ export function WalletSignIn({
       // Connect directly from the selection click, before any network await.
       // The next, separate click signs the fresh server challenge. Phantom's
       // combined signIn RPC is not forced on wallets with message signing.
-      if (supportsMessageSigning(wallet)) {
+      if (wallet.features.includes("solana:signMessage")) {
         connecting = !account;
         setPhase("connecting");
-        const choices = account
+        const exposed = wallet.accounts.filter(
+          (a) =>
+            a.chains.includes("solana:mainnet") &&
+            a.features.includes("solana:signMessage"),
+        );
+        const authorized = account
           ? [account]
-          : await connectMessageWallet(wallet);
+          : exposed.length
+            ? exposed
+            : await connect.dispatchAsync(wallet);
+        if (!active.current) return;
+        const choices = authorized.filter(
+          (a) =>
+            a.chains.includes("solana:mainnet") &&
+            a.features.includes("solana:signMessage"),
+        );
+        if (!choices.length)
+          throw new Error("No message-signing Solana account was connected.");
         connecting = false;
         if (choices.length === 1) await prepare(wallet, choices[0]);
         else setAccounts(choices);
       } else await prepare(wallet);
     } catch (reason) {
-      setError(
-        connecting
-          ? walletFailureMessage(reason, wallet.name, "connect")
-          : "Could not prepare secure sign-in. Select your wallet to start a new request.",
-      );
+      if (active.current)
+        setError(
+          connecting
+            ? walletFailureMessage(reason, wallet.name, "connect")
+            : "Could not prepare secure sign-in. Select your wallet to start a new request.",
+        );
     } finally {
       inFlight.current = false;
-      setPhase("idle");
-      onBusyChange(false);
+      if (active.current) {
+        setPhase("idle");
+        onBusyChange(false);
+      }
     }
   }
 
@@ -176,41 +203,47 @@ export function WalletSignIn({
     try {
       const proof =
         request.method === "message"
-          ? await requestMessageProof(
-              request.wallet,
+          ? await requestIdentityMessageProof(
+              client,
               request.account,
               request.challenge,
               window.location,
             )
-          : await requestWalletProof(
-              request.wallet,
+          : await requestSiwsProof(
+              (input) => signIn.dispatchAsync(request.wallet, input),
               request.challenge,
               window.location,
             );
+      if (!active.current) return;
       current = "verification";
       setPhase(current);
       await identityRequest("/sign-in/solana", proof);
+      if (!active.current) return;
       current = "session";
       setPhase(current);
       await refreshIdentitySession();
+      if (!active.current) return;
       setOpen(false);
       onComplete();
     } catch (reason) {
-      setError(
-        current === "signing"
-          ? walletFailureMessage(
-              reason,
-              request.wallet.name,
-              request.method === "message" ? "signMessage" : "signIn",
-            )
-          : current === "verification"
-            ? "The server could not verify this sign-in. No accounts were merged. Select your wallet to start a new request."
-            : "Wallet approval succeeded, but the session could not be confirmed. Refresh the page before retrying.",
-      );
+      if (active.current)
+        setError(
+          current === "signing"
+            ? walletFailureMessage(
+                reason,
+                request.wallet.name,
+                request.method === "message" ? "signMessage" : "signIn",
+              )
+            : current === "verification"
+              ? "The server could not verify this sign-in. No accounts were merged. Select your wallet to start a new request."
+              : "Wallet approval succeeded, but the session could not be confirmed. Refresh the page before retrying.",
+        );
     } finally {
       inFlight.current = false;
-      setPhase("idle");
-      onBusyChange(false);
+      if (active.current) {
+        setPhase("idle");
+        onBusyChange(false);
+      }
     }
   }
 
@@ -218,7 +251,7 @@ export function WalletSignIn({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" disabled={disabled}>
+        <Button type="button" variant="outline" disabled={disabled || !ready}>
           <Wallet data-icon="inline-start" />
           {purpose === "link" ? "Link wallet" : "Solana wallet"}
         </Button>
@@ -259,7 +292,7 @@ export function WalletSignIn({
                 )}
                 <span className="truncate">{wallet.name}</span>
               </span>
-              {busy && selected === wallet ? (
+              {busy && selected?.name === wallet.name ? (
                 <LoaderCircle
                   aria-hidden="true"
                   data-icon="inline-end"

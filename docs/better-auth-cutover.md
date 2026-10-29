@@ -45,6 +45,33 @@ Relevant upstream sources:
 
 ### Wallet picker and browser verification
 
+The maintained frontend now uses Solana Kit 8.6.0, the wallet plugin 0.22.0
+and `@solana/react` 8.6.0, following the current Foundation frontend skill.
+React/React DOM are pinned consistently to 19.3.1 across all five apps and
+shared packages, satisfying the wallet hooks' React 19.3 peer requirement.
+The shared native forum bundle is regenerated against that same React version.
+
+The wallet client is constructed after mount and disposed with its owner. SDK
+hooks own discovery, connection lifecycle and wallet/account change subscriptions;
+the sign-in view no longer maintains its own Wallet Standard registry listeners.
+Only the intended `solana:mainnet` chain is accepted. This auth-only client has no
+RPC plugin, transaction payer, automatic reconnection or wallet-address storage.
+Existing exposed accounts are selected through the SDK without another connect
+request; multiple accounts still require an explicit selection before a challenge.
+
+The SDK's signature-only message helper discards `signedMessage`. To preserve the
+existing exact-byte gate, the proof boundary resolves the SDK's public account
+feature and passes its registered raw account object to the wallet. Proofs bind
+the SDK's hardened immutable account snapshot, and the active account is checked
+before and after signing. The original canonical-message, nonce, browser, origin,
+purpose, expiry, cryptographic, ownership and session-confirmation checks remain.
+SIWS-only wallets use the SDK's `useSignIn` action with the same server challenge.
+
+References: https://solana.com/skills and the linked Foundation frontend guide;
+https://github.com/anza-xyz/kit-plugins/tree/main/packages/kit-plugin-wallet.
+Package versions and peer requirements were checked against the published npm
+manifests and release source, not inferred solely from cached documentation.
+
 Wallet login/linking uses the shared accessible dialog and Wallet Standard
 discovery. Selecting a connect/message-capable wallet invokes `standard:connect`
 directly from that click, prepares a fresh server challenge after account
@@ -63,7 +90,8 @@ adding `unsafe-inline` or broadening script permissions.
 Isolated browser tests cover the dialog, user activation, duplicate clicks,
 cancellation, expiry, failed challenge, message-only and SIWS-only discovery,
 multiple accounts, session confirmation and focus return. They execute the real
-Better Auth client/session atom, with fake wallets, an isolated Convex boundary
+Better Auth client/session atom and real Solana Kit wallet client/hooks, with
+fake extension wallets, an isolated Convex boundary
 and fully intercepted traffic. Passing these tests or the signed-wallet HTTP
 test does not prove the real extension completes authentication.
 
