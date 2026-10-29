@@ -934,6 +934,141 @@ describe("paid placements: capacity, receipts, ownership and moderation", () => 
   });
 });
 describe("verified token discovery and one-shot swaps", () => {
+  test("the Node preparation boundary preserves linked ownership and safe errors before RPC", async () => {
+    const t = setup(),
+      a = await actor(t, 105),
+      other = await actor(t, 106);
+    const request = {
+      wallet: a.wallet,
+      inputMint: "So11111111111111111111111111111111111111112",
+      outputMint: COMMERCE_MINT,
+      amountRaw: "1000000",
+      slippageBps: 50,
+      platformFeeBps: 25,
+    };
+    const args = {
+      treasury,
+      quoteJson: JSON.stringify({
+        request,
+        createdAt: Date.now() - 30000,
+        expiresAt: Date.now() - 5000,
+      }),
+    };
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      t.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("Sign in");
+    await expect(
+      other.client.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("Link and verify");
+    await expect(
+      a.client.action(internal.forumCommerceNode.buildSwap, args),
+    ).rejects.toThrow("quote expired");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  test("one operator unsigned diagnostic is bounded, fresh and cannot invoke a wallet or save a payment", async () => {
+    const t = setup(),
+      a = await actor(t, 98);
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("amount")).toBe("997500");
+      return new Response("unavailable", { status: 503 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      t.action(internal.forumSwaps.unsignedDiagnostic, { wallet: a.wallet }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "no_fresh_jupiter_route",
+      simulations: 0,
+    });
+    await expect(
+      t.action(internal.forumSwaps.unsignedDiagnostic, { wallet: a.wallet }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "diagnostic_budget_reached",
+      simulations: 0,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumSwapQuotes").take(1)),
+    ).toEqual([]);
+  });
+  test("operator RPC health checks are fixed-mint, bounded and never prepare a swap", async () => {
+    const t = setup();
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe("getAccountInfo");
+        expect([
+          "So11111111111111111111111111111111111111112",
+          COMMERCE_MINT,
+        ]).toContain(request.params[0]);
+        return new Response("private upstream error", { status: 403 });
+      },
+    );
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      t.action(internal.forumSwaps.rpcHealthCheck, {}),
+    ).resolves.toEqual({ ok: false, code: "rpc_blocked", verifiedMints: 0 });
+    await expect(
+      t.action(internal.forumSwaps.rpcHealthCheck, {}),
+    ).resolves.toEqual({
+      ok: false,
+      code: "health_check_budget_reached",
+      verifiedMints: 0,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumSwapQuotes").take(1)),
+    ).toEqual([]);
+  });
+  test("a classified pre-wallet failure is owner-only and cannot overwrite a held outcome", async () => {
+    const t = setup(),
+      a = await actor(t, 96),
+      other = await actor(t, 97);
+    const quoteId = await t.run((ctx) =>
+      ctx.db.insert("forumSwapQuotes", {
+        authUserId: a.authUserId,
+        userId: a.userId,
+        wallet: a.wallet,
+        provider: "jupiter",
+        quoteJson: "{}",
+        treasury,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 25000,
+        platformFeeBps: 25,
+        status: "preparing",
+      }),
+    );
+    await expect(
+      other.client.mutation(internal.forumSwaps.preparationFailed, {
+        quoteId,
+        issue: "rpc_blocked",
+      }),
+    ).rejects.toThrow("Quote not found");
+    await a.client.mutation(internal.forumSwaps.preparationFailed, {
+      quoteId,
+      issue: "rpc_blocked",
+    });
+    expect(
+      await t.run((ctx) => ctx.db.get("forumSwapQuotes", quoteId)),
+    ).toMatchObject({ status: "failed", issue: "rpc_blocked" });
+    await t.run((ctx) =>
+      ctx.db.patch("forumSwapQuotes", quoteId, {
+        status: "held",
+        issue: "wallet_outcome_unknown",
+      }),
+    );
+    await a.client.mutation(internal.forumSwaps.preparationFailed, {
+      quoteId,
+      issue: "rpc_unavailable",
+    });
+    expect(
+      await t.run((ctx) => ctx.db.get("forumSwapQuotes", quoteId)),
+    ).toMatchObject({ status: "held", issue: "wallet_outcome_unknown" });
+  });
   test("prepared wire limits count decoded bytes, not base64 characters", async () => {
     const t = setup(),
       a = await actor(t, 95);
