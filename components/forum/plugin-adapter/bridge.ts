@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../lib/site-urls";
 import { App } from "@modelcontextprotocol/ext-apps";
 import { OpenAIExtensions } from "@openai/mcp-extensions/app";
 import { JSONRPCMessageSchema, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
@@ -258,7 +260,7 @@ export class ForumHostBridge {
     return result;
   }
   async openLink(url: string) {
-    const target = new URL(url, "https://forum.symbaiex.com");
+    const target = new URL(url, FORUM_SITE_URL);
     if (!["https:", "http:"].includes(target.protocol))
       throw new Error("This link cannot be opened.");
     if (this.host.openExternal) this.host.openExternal({ href: target.href });

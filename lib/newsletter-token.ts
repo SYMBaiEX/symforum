@@ -1,3 +1,5 @@
+
+import { APEX_SITE_URL } from "./site-urls";
 import { createHash, randomBytes } from "node:crypto";
 
 export function createNewsletterToken() {
@@ -15,6 +17,6 @@ export function newsletterSiteUrlFromRequest(requestUrl: string) {
   try {
     return new URL(requestUrl).origin;
   } catch {
-    return "https://symbaiex.com";
+    return APEX_SITE_URL;
   }
 }

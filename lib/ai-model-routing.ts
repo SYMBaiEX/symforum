@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "./site-urls";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   APICallError,
@@ -93,7 +95,7 @@ export class ModelSpendBudgetExceededError extends Error {
 }
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const OPENROUTER_SITE_URL = "https://forum.symbaiex.com";
+const OPENROUTER_SITE_URL = FORUM_SITE_URL;
 const OPENROUTER_APP_NAME = "SYMBiEX Forum Agents";
 
 function providerErrorCode(error: APICallError): number | undefined {

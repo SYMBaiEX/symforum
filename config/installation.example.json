@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "name": "Example Forum",
+  "supportEmail": "team@example.com",
+  "sites": {
+    "primary": "https://www.example.com",
+    "forum": "https://forum.example.com",
+    "blog": "https://blog.example.com",
+    "news": "https://news.example.com",
+    "newsletter": "https://newsletter.example.com"
+  },
+  "identity": {
+    "cookieDomain": "example.com",
+    "extraOrigins": [
+      "https://example.com",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002"
+    ]
+  }
+}

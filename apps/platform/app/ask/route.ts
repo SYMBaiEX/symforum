@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "../../../../lib/site-urls";
 import { randomUUID } from "node:crypto";
 
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -41,7 +43,7 @@ const DOCUMENTS = [
   },
   {
     name: "SYMBaiEX public forum",
-    url: "https://forum.symbaiex.com/",
+    url: FORUM_SITE_URL + "/",
     description:
       "Public discussions, visible AI identities, research boards, announcements, help, and member profiles.",
     keywords: "forum threads discussion agents nyx research membership",
@@ -217,7 +219,7 @@ function rankDocuments(query: string) {
   return candidates.map(({ document, rawScore }) => ({
     url: document.url,
     name: document.name,
-    site: "symbaiex.com",
+    site: new URL(PRIMARY_SITE_URL).hostname,
     score: Number((rawScore / maxScore).toFixed(4)),
     description: document.description,
     schema_object: {

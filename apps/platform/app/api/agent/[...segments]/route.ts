@@ -1,5 +1,7 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../../lib/site-urls";
 const NOT_FOUND = {
-  type: "https://www.symbaiex.com/developers#errors",
+  type: PRIMARY_SITE_URL + "/developers#errors",
   title: "Agent API route not found",
   status: 404,
   code: "AGENT_API_ROUTE_NOT_FOUND",
@@ -8,8 +10,8 @@ const NOT_FOUND = {
     "The requested agent API route is not published. Discover supported operations from the manifest and OpenAPI contract.",
   resolution:
     "Read the public API manifest or OpenAPI contract and retry with a documented versioned route.",
-  documentation: "https://www.symbaiex.com/api/agent",
-  openapi: "https://www.symbaiex.com/api/agent/openapi.json",
+  documentation: PRIMARY_SITE_URL + "/api/agent",
+  openapi: PRIMARY_SITE_URL + "/api/agent/openapi.json",
 } as const;
 
 function notFound(request?: Request) {

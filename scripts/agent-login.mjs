@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
+
 import {
   chmodSync,
   existsSync,
@@ -18,7 +20,7 @@ const sessionPath = resolve(
 const apiBaseUrl = (
   args["api-base-url"] ??
   process.env.SYMBAIEX_AGENT_API_BASE_URL ??
-  "https://www.symbaiex.com/api/agent"
+  PRIMARY_SITE_URL + "/api/agent"
 ).replace(/\/$/, "");
 
 if (args.refresh) {

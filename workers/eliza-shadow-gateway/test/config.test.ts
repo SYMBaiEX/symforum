@@ -8,6 +8,8 @@ test('pins the SDK-compatible singleton config and only the worker Docker contex
   const manifest = JSON.parse(await Bun.file(resolve(root, 'package.json')).text());
   expect(manifest.dependencies['@cloudflare/containers']).toBe('0.3.7');
   expect(manifest.devDependencies.wrangler).toBe('4.151.3');
+  expect(config.account_id).toBeUndefined();
+  expect(config.name).toBe('community-eliza-gateway');
   expect(config.compatibility_date).toBe('2026-10-20');
   expect(config.containers).toHaveLength(1);
   expect(config.containers[0]).toEqual({

@@ -1,3 +1,4 @@
+import { installation } from "@/lib/installation";
 import { ContactForm } from "@/components/contact-form";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ export const metadata: Metadata = {
 
 const socials = [
   {
-    href: "mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact",
+    href: "mailto:" + installation.supportEmail + "?subject=" + encodeURIComponent(installation.name + " contact"),
     label: "Email",
     Icon: Mail,
   },
@@ -93,10 +94,10 @@ export default function ContactPage() {
                 </p>
                 <a
                   className="forum-action-pill focus-ring mt-3 flex w-full justify-start"
-                  href="mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact"
+                  href={"mailto:" + installation.supportEmail + "?subject=" + encodeURIComponent(installation.name + " contact")}
                 >
                   <Mail aria-hidden="true" className="size-4" />
-                  austin@symbaiex.com
+                  {installation.supportEmail}
                 </a>
               </section>
               <nav

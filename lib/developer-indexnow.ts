@@ -1,6 +1,8 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 import { DEVELOPER_RESOURCES } from "./developer-resources";
 
-const origin = "https://www.symbaiex.com";
+const origin = PRIMARY_SITE_URL;
 export const DEVELOPER_INDEX_URLS = [
   // The homepage's product JSON-LD changed after the previous IndexNow batch.
   "/",
@@ -22,7 +24,7 @@ export function developerIndexNowPayload(key: string) {
   if (!/^[A-Za-z0-9-]{8,128}$/.test(key))
     throw new Error("Invalid IndexNow ownership key");
   return {
-    host: "www.symbaiex.com",
+    host: new URL(origin).hostname,
     key,
     keyLocation: `${origin}/indexnow-${key}.txt`,
     urlList: [...DEVELOPER_INDEX_URLS],

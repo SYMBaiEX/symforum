@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
 import { HOUR, MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { components, internal } from "./_generated/api";
@@ -131,7 +133,7 @@ function ceremony(attemptToken: string, code: string) {
     user_code: code,
     expires_in: CODE_TTL / 1000,
     interval: 5,
-    verification_uri: `https://www.symbaiex.com/agent/claim?claim_attempt_token=${encodeURIComponent(attemptToken)}`,
+    verification_uri: `${PRIMARY_SITE_URL}/agent/claim?claim_attempt_token=${encodeURIComponent(attemptToken)}`,
   };
 }
 

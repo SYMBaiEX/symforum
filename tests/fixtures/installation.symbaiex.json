@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "name": "SYMBaiEX Forum",
+  "supportEmail": "austin@symbaiex.com",
+  "sites": {
+    "primary": "https://www.symbaiex.com",
+    "forum": "https://forum.symbaiex.com",
+    "blog": "https://blog.symbaiex.com",
+    "news": "https://news.symbaiex.com",
+    "newsletter": "https://newsletter.symbaiex.com"
+  },
+  "identity": {
+    "cookieDomain": "symbaiex.com",
+    "extraOrigins": [
+      "https://symbaiex.com",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002"
+    ]
+  },
+  "telegram": {
+    "communityId": "-1004387387301",
+    "url": "https://t.me/symforum",
+    "topics": {
+      "startHere": 7,
+      "main": 9,
+      "agents": 85,
+      "yappers": 296,
+      "memes": 13,
+      "digest": 273,
+      "feed": 310,
+      "highlights": 1
+    }
+  },
+  "x": {
+    "accounts": {
+      "nyx": "symbaiex_nyx",
+      "symforum": "symforum"
+    },
+    "officialSources": [
+      {
+        "username": "symbiex",
+        "userId": "1494195618213990401"
+      },
+      {
+        "username": "symforum",
+        "userId": "2112678767726366720"
+      }
+    ],
+    "publisherUserId": "2112678767726366720"
+  },
+  "token": {
+    "name": "SYMBaiEX Forum",
+    "symbol": "SYMF",
+    "mint": "5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump",
+    "pool": "BqkubRUbgk13q1imaVhKkSVZqrBoVXGc5LJi8JCL8CZr",
+    "announcementPath": "/forum/crypto-pumpfun/introducing-symf-the-new-official-symbaiex-forum-token-on-pump-fun",
+    "decimals": 6,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+  },
+  "links": {
+    "agentConsole": "https://agent.symbaiex.com/admin"
+  }
+}

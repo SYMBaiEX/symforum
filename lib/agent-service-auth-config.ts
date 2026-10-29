@@ -1,8 +1,10 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 /** An additive issuer; never changes or impersonates the WorkOS issuer. */
-export const SERVICE_AUTH_ISSUER = "https://www.symbaiex.com/agent-auth";
-export const SERVICE_AUTH_RESOURCE = "https://www.symbaiex.com/api/agent/mcp";
+export const SERVICE_AUTH_ISSUER = PRIMARY_SITE_URL + "/agent-auth";
+export const SERVICE_AUTH_RESOURCE = PRIMARY_SITE_URL + "/api/agent/mcp";
 export const SERVICE_AUTH_METADATA =
-  "https://www.symbaiex.com/.well-known/oauth-authorization-server/agent-auth";
+  PRIMARY_SITE_URL + "/.well-known/oauth-authorization-server/agent-auth";
 export const SERVICE_AUTH_CLAIM = "urn:workos:agent-auth:grant-type:claim";
 export const SERVICE_AUTH_JWT = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 export const SERVICE_AUTH_TOKEN_KIND = "urn:symbaiex:service-auth:token-kind";
@@ -39,7 +41,7 @@ export function serviceAuthMetadata() {
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: ["evidence"],
     agent_auth: {
-      skill: "https://www.symbaiex.com/auth.md",
+      skill: PRIMARY_SITE_URL + "/auth.md",
       identity_endpoint: `${SERVICE_AUTH_ISSUER}/identity`,
       claim_endpoint: `${SERVICE_AUTH_ISSUER}/identity/claim`,
       identity_types_supported: ["service_auth"],

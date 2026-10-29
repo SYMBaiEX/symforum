@@ -53,7 +53,10 @@
     "test:forum:render": "playwright test --config playwright.forum.config.ts",
     "dev:wallet": "bun --no-env-file scripts/wallet-debug.mjs",
     "security:check": "node scripts/check-secret-scanner.mjs",
-    "security:secrets": "gitleaks git --redact --no-banner --log-opts=\"--all --full-history\" ."
+    "security:secrets": "gitleaks git --redact --no-banner --log-opts=\"--all --full-history\" .",
+    "setup:installation": "bun scripts/configure-installation.mjs",
+    "check:installation": "bun scripts/configure-installation.mjs --check",
+    "setup:worker": "bun scripts/configure-worker.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.53",

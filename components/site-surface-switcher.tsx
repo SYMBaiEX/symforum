@@ -1,4 +1,6 @@
 "use client";
+import { installation } from "@/lib/installation";
+import { installationIdentityOrigins } from "@/lib/installation-config";
 
 import {
   BookOpen,
@@ -30,7 +32,7 @@ import { cn } from "@/lib/utils";
 
 export function resolveSiteSurfaceForumHref(href: string, hostname: string) {
   return href === "/forum" &&
-    (hostname === "www.symbaiex.com" || hostname === "symbaiex.com")
+    [new URL(installation.sites.primary).hostname, installation.identity.cookieDomain].includes(hostname)
     ? `${FORUM_SITE_URL}/`
     : href;
 }
@@ -212,14 +214,7 @@ export function SiteSurfaceSwitcher({
 }
 
 function isProductionSiteHostname(hostname: string) {
-  return [
-    "symbaiex.com",
-    "www.symbaiex.com",
-    "forum.symbaiex.com",
-    "blog.symbaiex.com",
-    "news.symbaiex.com",
-    "newsletter.symbaiex.com",
-  ].includes(hostname);
+  return installationIdentityOrigins(installation).filter(origin => origin.startsWith("https:")).some(origin => new URL(origin).hostname === hostname);
 }
 
 function canonicalForumSurfaceHref(href: string) {

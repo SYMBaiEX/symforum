@@ -1,3 +1,6 @@
+import { installation, installationMatches } from "./installation";
+
+import { FORUM_TELEGRAM_URL } from "../lib/site-urls";
 import { v } from "convex/values";
 import { env, query } from "./_generated/server";
 import { telegramBotRegistry } from "../lib/telegram-agent-policy";
@@ -12,7 +15,7 @@ const event = v.object({
 });
 type PublicEvent = typeof event.type;
 function receipt(agentSlug: string, action: PublicEvent["action"], at: number, topicId: number, messageId: number): PublicEvent {
-  return { id: `telegram:${topicId}:${messageId}`, agentSlug, platform: "telegram", action, status: "confirmed", at, topicId, messageId, url: `https://t.me/symforum/${topicId}/${messageId}` };
+  return { id: `telegram:${topicId}:${messageId}`, agentSlug, platform: "telegram", action, status: "confirmed", at, topicId, messageId, url: `${FORUM_TELEGRAM_URL}/${topicId}/${messageId}` };
 }
 
 /** Anonymous by design: strict metadata projection, never a generic ledger reader.
@@ -39,8 +42,8 @@ export const publicActivity = query({
         .withIndex("by_kind_and_createdAt", q => q.eq("kind", kind).gte("createdAt", now - 23 * 3600000))
         .order("desc").take(12);
       for (const row of requests) {
-        const expectedTopic = kind === "yap" ? 296 : 13;
-        if (!telegramAgents.includes(row.agentSlug) || registry.get(row.agentSlug)?.id !== row.botId || row.status !== "sent" || row.topicId !== expectedTopic || !Number.isSafeInteger(row.sentMessageId) || row.sentMessageId! < 1 || !Number.isFinite(row.updatedAt) || row.updatedAt > now || row.updatedAt < now - 23 * 3600000) continue;
+        const expectedTopic = kind === "yap" ? installation.telegram.topics.yappers : installation.telegram.topics.memes;
+        if (!installationMatches(row) || !telegramAgents.includes(row.agentSlug) || registry.get(row.agentSlug)?.id !== row.botId || row.status !== "sent" || row.topicId !== expectedTopic || !Number.isSafeInteger(row.sentMessageId) || row.sentMessageId! < 1 || !Number.isFinite(row.updatedAt) || row.updatedAt > now || row.updatedAt < now - 23 * 3600000) continue;
         // Only v4 autonomous public-source conversations, never member questions.
         // Reuse the same current source / ancestor / report gate as publication.
         if (kind === "yap" && !(await requestResearch(ctx, row))) continue;
@@ -50,11 +53,11 @@ export const publicActivity = query({
     }
     if (telegramAgents.includes("belle")) {
       const digests = await ctx.db.query("telegramForumDigests").withIndex("by_createdAt", q => q.gte("createdAt", now - 23 * 3600000)).order("desc").take(4);
-      for (const row of digests) if (!row.preview && row.status === "sent" && row.topicId === 273 && Number.isSafeInteger(row.sentMessageId) && row.sentMessageId! > 0 && row.updatedAt <= now && row.updatedAt >= now - 23 * 3600000) rows.push(receipt("belle", "digest", row.updatedAt, row.topicId, row.sentMessageId!));
+      for (const row of digests) if (installationMatches(row) && !row.preview && row.status === "sent" && row.topicId === installation.telegram.topics.digest && Number.isSafeInteger(row.sentMessageId) && row.sentMessageId! > 0 && row.updatedAt <= now && row.updatedAt >= now - 23 * 3600000) rows.push(receipt("belle", "digest", row.updatedAt, row.topicId, row.sentMessageId!));
     }
     const x = await ctx.db.query("xAgentAccounts").withIndex("by_agentSlug", q => q.eq("agentSlug", "nyx")).unique();
     // Connection only. Never read or expose private X drafts or invent publications.
-    const xConnected = env.X_AGENTS_ENABLED === "true" && x?.connected === true && (x.mode === "drafts" || x.mode === "automatic") && x.username?.toLowerCase() === "symbaiex_nyx";
+    const xConnected = env.X_AGENTS_ENABLED === "true" && x?.connected === true && (x.mode === "drafts" || x.mode === "automatic") && x.username?.toLowerCase() === installation.x.accounts.nyx;
     const seen = new Set<string>();
     return { policy: "public-activity-v1" as const, checkedAt: now, telegramAgents, xConnected, events: rows.sort((a,b) => b.at-a.at).filter(e => !seen.has(e.id) && !!seen.add(e.id)).slice(0,24) };
   },

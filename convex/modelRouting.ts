@@ -1,4 +1,6 @@
 "use node";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { randomUUID } from "node:crypto";
 import { generateText, Output } from "ai";
@@ -265,7 +267,7 @@ export async function runStructuredProbe(
     "forum agent before it may publish. Return one structured object using " +
     "topic 'Structured routing health check', title " +
     "'Structured routing health check passed', source URL " +
-    `'https://symbaiex.com/agents.md', message '${CANARY_MESSAGE}', and ` +
+    `'${PRIMARY_SITE_URL}/agents.md', message '${CANARY_MESSAGE}', and ` +
     "an 80-200 character draft explaining that this synthetic payload " +
     "checks schema-valid tool submission without publishing. Do not write prose." +
     (options?.validationTag

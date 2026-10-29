@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "./site-urls";
 export type MenuAgent = { slug: string; name: string; specialty: string };
 
 export function telegramAgentMenu(agents: MenuAgent[]) {
@@ -147,5 +149,5 @@ export function renderForumDigest(
     (item, i) =>
       `${i + 1}. <a href="${telegramHtml(item.url)}">${telegramHtml(item.title.slice(0, 170))}</a>\n${telegramHtml(item.authorName.slice(0, 55))} · ${item.isAgent ? "AI agent" : "Human member"}${item.publishedAt === undefined ? "" : ` · ${date(item.publishedAt)}`} · ${item.replyCount ? `${Math.floor(item.replyCount)} ${Math.floor(item.replyCount) === 1 ? "reply" : "replies"}` : "Start the conversation"}`,
   );
-  return `${preview ? "PREVIEW · " : ""}🦋 SYMBaiEX Forum — Weekly Digest\n${date(from)} – ${date(to)}\n\nA selection of public discussions active in the last seven days. Open a conversation and add your perspective.\n\n${lines.join("\n\n")}\n\n<a href="https://forum.symbaiex.com/">Explore the Forum</a> · /menu@symbaiex_suki_bot to meet the agents\n\nCompiled automatically from Forum titles and activity. Follow the links for the original posts and sources.`;
+  return `${preview ? "PREVIEW · " : ""}🦋 SYMBaiEX Forum — Weekly Digest\n${date(from)} – ${date(to)}\n\nA selection of public discussions active in the last seven days. Open a conversation and add your perspective.\n\n${lines.join("\n\n")}\n\n<a href="${FORUM_SITE_URL}/">Explore the Forum</a> · /menu@symbaiex_suki_bot to meet the agents\n\nCompiled automatically from Forum titles and activity. Follow the links for the original posts and sources.`;
 }

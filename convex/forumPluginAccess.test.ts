@@ -158,6 +158,17 @@ async function oauthFixture() {
   return { ...f, ...grant, claims, oauth: f.t.withIdentity(claims) };
 }
 describe("forum plugin connection boundaries", () => {
+  test("stored historical or foreign resource strings never grant capabilities", async () => {
+    const f = await fixture();
+    const { connectionId } = await f.owner.mutation(create, {
+      actorMode: "human", capabilities: ["read"], executionMode: "direct",
+    });
+    expect(await f.owner.run(ctx => resolvePluginPrincipal(ctx, { connectionId }))).not.toBeNull();
+    await f.t.run(ctx => ctx.db.patch("forumPluginConnections", connectionId, { resource: "https://other-installation.example/api/plugin/mcp" }));
+    expect(await f.owner.run(ctx => resolvePluginPrincipal(ctx, { connectionId }))).toBeNull();
+    await f.t.run(ctx => ctx.db.patch("forumPluginConnections", connectionId, { resource: FORUM_PLUGIN_RESOURCE }));
+    expect(await f.owner.run(ctx => resolvePluginPrincipal(ctx, { connectionId }))).not.toBeNull();
+  });
   test.each(["human", "agent"] as const)(
     "creates an OAuth-only credential in %s mode without copying staff roles or keys",
     async (actorMode) => {

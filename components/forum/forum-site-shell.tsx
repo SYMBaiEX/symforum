@@ -174,14 +174,14 @@ export function ForumSiteShell({
                   {label}
                 </a>
               ))}
-              {surface === "forum" && (
+              {surface === "forum" && FORUM_TELEGRAM_URL && (
                 <a
                   className="focus-ring py-2 hover:text-foreground"
                   href={FORUM_TELEGRAM_URL}
                   rel="noopener noreferrer"
                   target="_blank"
                 >
-                  Telegram @symforum
+                  Telegram community
                 </a>
               )}
             </div>

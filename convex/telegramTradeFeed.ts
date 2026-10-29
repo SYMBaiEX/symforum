@@ -1,10 +1,11 @@
+import { installationBinding, installationMatches } from "./installation";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { env, internalMutation, internalQuery } from "./_generated/server";
 import schema from "./schema";
 import { feedBuy } from "./telegramTradeSchema";
-import { SYMF_FEED_TOPIC, renderFeedBuys } from "../lib/telegram-trade-feed";
+import { SYMF_FEED_TOPIC, SYMF_MINT, renderFeedBuys } from "../lib/telegram-trade-feed";
 import {
   telegramBotRegistry,
   TELEGRAM_COMMUNITY_ID,
@@ -15,6 +16,7 @@ const limiter = new RateLimiter(components.rateLimiter, {
 });
 export function tradeFeedEnabled() {
   return (
+    Boolean(TELEGRAM_COMMUNITY_ID) && Boolean(SYMF_MINT) && SYMF_FEED_TOPIC > 0 &&
     env.TELEGRAM_TRADE_FEED_ENABLED === "true" &&
     env.TELEGRAM_TRADE_FEED_TOPIC_ID === String(SYMF_FEED_TOPIC) &&
     env.TELEGRAM_AGENTS_ENABLED === "true" &&
@@ -30,6 +32,7 @@ export const begin = internalMutation({
       .query("telegramTradeState")
       .withIndex("by_key", (q) => q.eq("key", "symf"))
       .unique();
+    if (current && !installationMatches(current)) return null;
     if (current?.retryAfterAt && current.retryAfterAt > Date.now()) return null;
     if (
       !tradeFeedEnabled() ||
@@ -42,6 +45,7 @@ export const begin = internalMutation({
       .unique();
     if (!state) {
       const id = await ctx.db.insert("telegramTradeState", {
+      installationBinding,
         key: "symf",
         startedAt: Date.now() - 5 * MINUTE,
         coverageWarning: false,
@@ -69,11 +73,12 @@ export const record = internalMutation({
       .query("telegramTradeState")
       .withIndex("by_key", (q) => q.eq("key", "symf"))
       .unique();
-    if (!state) return null;
+    if (!state || !installationMatches(state)) return null;
     const prior = await ctx.db
       .query("telegramTradePools")
       .withIndex("by_pool", (q) => q.eq("pool", args.pool))
       .unique();
+    if (prior && !installationMatches(prior)) return null;
     const gap =
       prior?.gap === true ||
       (!prior &&
@@ -94,8 +99,8 @@ export const record = internalMutation({
       gap,
       updatedAt: Date.now(),
     };
-    if (prior) await ctx.db.patch("telegramTradePools", prior._id, pool);
-    else await ctx.db.insert("telegramTradePools", pool);
+    if (prior) await ctx.db.patch("telegramTradePools", prior._id, { ...pool, installationBinding });
+    else await ctx.db.insert("telegramTradePools", { ...pool, installationBinding });
     if (gap)
       await ctx.db.patch("telegramTradeState", state._id, {
         coverageWarning: true,
@@ -115,6 +120,7 @@ export const record = internalMutation({
           .unique())
       )
         await ctx.db.insert("telegramTradeEvents", {
+      installationBinding,
           ...buy,
           status: "queued",
           createdAt: Date.now(),
@@ -162,7 +168,7 @@ export const claim = internalMutation({
       .query("telegramTradeEvents")
       .withIndex("by_status_and_occurredAt", (q) => q.eq("status", "queued"))
       .take(8);
-    if (!rows.length) return null;
+    if (!rows.length || rows.some(row => !installationMatches(row))) return null;
     const state = await ctx.db
       .query("telegramTradeState")
       .withIndex("by_key", (q) => q.eq("key", "symf"))
@@ -176,6 +182,7 @@ export const claim = internalMutation({
     for (const row of rows)
       await ctx.db.patch("telegramTradeEvents", row._id, { status: "sending" });
     const batchId = await ctx.db.insert("telegramTradeBatches", {
+      installationBinding,
       eventIds: rows.map((r) => r._id),
       text,
       status: "sending",

@@ -1,3 +1,5 @@
+
+import { APEX_SITE_URL } from "../lib/site-urls";
 import { v } from "convex/values";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -73,7 +75,7 @@ export function trustedNewsletterSiteUrl(
   // Keep this compatibility argument explicit while ensuring a public caller
   // can never choose an email-link origin.
   void callerSiteUrl;
-  const fallback = "https://symbaiex.com";
+  const fallback = APEX_SITE_URL;
   for (const candidate of [newsletterSiteUrl, siteUrl]) {
     if (!candidate) {
       continue;

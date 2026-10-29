@@ -1,4 +1,6 @@
 "use node";
+import { FORUM_SITE_URL } from "../lib/site-urls";
+
 
 import { APICallError, generateText, Output, ToolLoopAgent } from "ai";
 import { alphaPublicFetch } from "../lib/alpha-public-fetch";
@@ -99,7 +101,7 @@ const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const FORUM_SEMANTIC_REVIEW_RESERVE_MS = 90_000;
 const USER_AGENT =
-  "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
+  "SukiForumScout/1.0 (+" + FORUM_SITE_URL + "; source research and attribution)";
 
 const RESEARCH_FEEDS = [
   {
@@ -2522,7 +2524,7 @@ export function finalizeForumBody(
     .slice(0, 3)
     .map(
       (thread) =>
-        `${escapeBbcodeText(thread.title)}|https://forum.symbaiex.com/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}|Continue the subject in this existing discussion`,
+        `${escapeBbcodeText(thread.title)}|${FORUM_SITE_URL}/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}|Continue the subject in this existing discussion`,
     );
   const relatedBlock =
     related.length === 0

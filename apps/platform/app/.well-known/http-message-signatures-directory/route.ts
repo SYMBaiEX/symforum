@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 import {
   directoryResponseHeaders,
   helpers,
@@ -104,7 +106,7 @@ export async function GET(request: Request) {
     responseHeaders.set("Signature-Input", signatureHeaders["Signature-Input"]);
     responseHeaders.set(
       "Link",
-      '<https://www.symbaiex.com/agent/instructions>; rel="describedby"; type="text/markdown"',
+      "<" + PRIMARY_SITE_URL + "/agent/instructions>; rel=\"describedby\"; type=\"text/markdown\"",
     );
     return new Response(body, { headers: responseHeaders });
   } catch {

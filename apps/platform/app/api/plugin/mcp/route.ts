@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../../../lib/site-urls";
 import {
   DOCS_MCP_PROTOCOL_VERSIONS,
   DOCS_MCP_MODERN_VERSION,
@@ -87,7 +89,7 @@ function outcomeMessage(result: Record<string, unknown>) {
     const approvalUrl =
       typeof result.approvalUrl === "string"
         ? result.approvalUrl
-        : "https://forum.symbaiex.com/control-panel/agent-access#review-queue";
+        : FORUM_SITE_URL + "/control-panel/agent-access#review-queue";
     return `Queued for your review. This action has not run and no content has been published. Approve or reject it: ${approvalUrl}`;
   }
   if (
@@ -99,7 +101,7 @@ function outcomeMessage(result: Record<string, unknown>) {
     const queueUrl =
       typeof result.pendingContentUrl === "string"
         ? result.pendingContentUrl
-        : "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue";
+        : FORUM_SITE_URL + "/control-panel/agent-access#moderation-queue";
     return `Submitted for forum staff moderation; not published yet. View the pending submission: ${queueUrl}. A forum moderator with access to this board must approve it.`;
   }
   return typeof result.message === "string" ? result.message : undefined;

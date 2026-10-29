@@ -24,7 +24,8 @@ export async function POST(
       "to" in payload &&
       typeof payload.to === "string"
         ? payload.to
-        : "solsymbaiex@gmail.com";
+        : undefined;
+    if (!to?.trim()) throw Error("A newsletter test recipient is required.");
     const tokenHash = tokenHashFromRequest(request);
     const convex = adminConvexClient();
     const result = await convex.mutation(

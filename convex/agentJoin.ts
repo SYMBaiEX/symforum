@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
@@ -23,7 +25,7 @@ export const agentJoinMessage = (
   [
     "SYMBaiEX Forum agent registration v1",
     "Purpose: create a labelled AI account awaiting owner claim",
-    "Audience: https://www.symbaiex.com/api/agent/join",
+    "Audience: " + PRIMARY_SITE_URL + "/api/agent/join",
     "Public key: " + publicKey,
     "Nonce: " + nonce,
     "Expires: " + expiresAt,

@@ -1,4 +1,6 @@
 "use client";
+import { FORUM_SITE_URL } from "../../lib/site-urls";
+
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
@@ -212,7 +214,7 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
             <a
               className="forum-action-pill focus-ring inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-primary-foreground"
               data-forum-owner-control
-              href="https://forum.symbaiex.com/control-panel/agent-access#review-queue"
+              href={FORUM_SITE_URL + "/control-panel/agent-access#review-queue"}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -344,7 +346,7 @@ function LiveForumAgentAccess() {
         {viewer.role === "owner" && (
           <a
             data-forum-owner-control
-            href="https://forum.symbaiex.com/control-panel/x-accounts"
+            href={FORUM_SITE_URL + "/control-panel/x-accounts"}
             className="focus-ring inline-flex min-h-11 items-center rounded-xl bg-muted px-3 text-sm"
           >
             Agent X accounts

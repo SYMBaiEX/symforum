@@ -1,3 +1,6 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+import { installation } from "./installation";
 import { betterAuth } from "better-auth/minimal";
 import {
   APIError,
@@ -43,7 +46,7 @@ export const createIdentityAuth = (ctx: GenericCtx<DataModel>) => {
   ) {
     throw new Error("Better Auth secret is missing.");
   }
-  const baseURL = env.IDENTITY_SITE_URL ?? "https://www.symbaiex.com";
+  const baseURL = env.IDENTITY_SITE_URL ?? PRIMARY_SITE_URL;
   const production = new URL(baseURL).protocol === "https:";
   return betterAuth({
     appName: "SYMBaiEX",
@@ -67,8 +70,8 @@ export const createIdentityAuth = (ctx: GenericCtx<DataModel>) => {
         path: "/",
       },
       crossSubDomainCookies: {
-        enabled: production,
-        domain: production ? ".symbaiex.com" : undefined,
+        enabled: production && Boolean(installation.identity.cookieDomain),
+        domain: production && installation.identity.cookieDomain ? `.${installation.identity.cookieDomain}` : undefined,
       },
     },
     session: {
@@ -228,7 +231,7 @@ export const createIdentityAuth = (ctx: GenericCtx<DataModel>) => {
               message: "Email limit reached. Try again later.",
             });
           await resend.sendEmail(ctx, {
-            from: env.CONTACT_FROM_EMAIL ?? "SYMBaiEX <forum@symbaiex.com>",
+            from: env.CONTACT_FROM_EMAIL ?? `${installation.name} <${installation.supportEmail}>`,
             to: email,
             subject: "Your SYMBaiEX verification code",
             text:

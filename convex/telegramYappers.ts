@@ -1,3 +1,4 @@
+import { installation, installationBinding, installationMatches } from "./installation";
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import { createThread } from "@convex-dev/agent";
 import { v } from "convex/values";
@@ -35,6 +36,8 @@ const cadence = new RateLimiter(components.rateLimiter, {
 
 export function yappersEnabled() {
   return (
+    Boolean(installation.telegram.communityId) &&
+    YAPPERS_TOPIC_ID > 0 &&
     env.TELEGRAM_YAPPERS_ENABLED === "true" &&
     env.TELEGRAM_YAPPERS_TOPIC_ID === String(YAPPERS_TOPIC_ID) &&
     env.TELEGRAM_AGENTS_ENABLED === "true" &&
@@ -45,6 +48,7 @@ export function yappersEnabled() {
 export function validYap(row: Doc<"telegramAgentRequests">, now: number) {
   if (
     !yappersEnabled() ||
+    !installationMatches(row) ||
     row.topicId !== YAPPERS_TOPIC_ID ||
     row.kind !== "yap" ||
     typeof row.yapDay !== "string" ||
@@ -183,6 +187,7 @@ async function enqueue(
         "Only confirmed autonomous agent posts from this public Yappers round. No member or private history.",
     }));
   const requestId = await ctx.db.insert("telegramAgentRequests", {
+      installationBinding,
     key,
     agentSlug: agent.slug,
     botId: bot.id,

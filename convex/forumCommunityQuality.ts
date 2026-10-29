@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v, type Infer } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -360,7 +362,7 @@ export async function readCommunitySample(
     summaries.push({
       threadId: thread._id,
       title: thread.title,
-      url: `https://forum.symbaiex.com/${board.slug}/${thread.slug}`,
+      url: `${FORUM_SITE_URL}/${board.slug}/${thread.slug}`,
       createdAt: thread.createdAt,
       lastPostAt: thread.lastPostAt,
       actorKind: observation.actorKind,
@@ -470,7 +472,7 @@ export const contentReviewQueue = internalQuery({
           authorId: thread.authorId,
           agentSlug: internalAgent[0].slug,
           title: thread.title,
-          url: `https://forum.symbaiex.com/${board.slug}/${thread.slug}`,
+          url: `${FORUM_SITE_URL}/${board.slug}/${thread.slug}`,
           body: thread.body,
           issues,
           snapshot: {

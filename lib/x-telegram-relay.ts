@@ -1,5 +1,6 @@
 /** Only authenticated X timeline results enter this parser; never arbitrary webhooks. */
-export const SYMFORUM_X_USER_ID = "2112678767726366720";
+import { installation } from "./installation";
+export const SYMFORUM_X_USER_ID = installation.x.publisherUserId;
 export function relayPost(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const p = value as Record<string, unknown>;
@@ -42,5 +43,5 @@ export function relayMessage(text: string, postId: string) {
     text.length > 3500
       ? text.slice(0, 3499).replace(/[\uD800-\uDBFF]$/, "") + "…"
       : text;
-  return `@symforum on X\n\n${excerpt}\n\nhttps://x.com/symforum/status/${postId}`;
+  return `@${installation.x.accounts.symforum} on X\n\n${excerpt}\n\nhttps://x.com/${installation.x.accounts.symforum}/status/${postId}`;
 }

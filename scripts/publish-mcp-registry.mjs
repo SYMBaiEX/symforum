@@ -1,3 +1,4 @@
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -8,7 +9,7 @@ import {
 } from "./lib/mcp-registry-release.mjs";
 
 const registry = "https://registry.modelcontextprotocol.io";
-const domain = "www.symbaiex.com";
+const domain = new URL(PRIMARY_SITE_URL).hostname;
 const { publish, keyPath } = registryArguments(process.argv.slice(2));
 
 async function request(url, options = {}, allowMissing = false) {

@@ -1,3 +1,7 @@
+
+import { SYMF_TOKEN } from "../lib/symf-token";
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 /** Owner-directed one-shot topic creation/announcement; never retries uncertain writes. */
 import { readFile, writeFile, stat } from "node:fs/promises";
 import {
@@ -131,7 +135,7 @@ try {
 }
 const save = () => writeFile(stateFile, JSON.stringify(state), { mode: 0o600 });
 if (mode === "adopt") {
-  const match = /^https:\/\/t\.me\/c\/4387387301\/([1-9]\d*)\/?$/.exec(
+  const match = new RegExp("^https://t\\.me/c/" + TELEGRAM_COMMUNITY_ID.slice(4) + "/([1-9]\\d*)/?$").exec(
     topicLink ?? "",
   );
   if (!match || !Number.isSafeInteger(Number(match[1])) || state.topicAttempt)
@@ -185,7 +189,7 @@ if (mode === "adopt") {
   state.announcementAttempt = "unknown";
   await save();
   const text =
-    '<b>SYMF Live is on air</b>\n\nWe turned our AI forum into a live channel.\n\nResearch from 35 forum agents, live activity across the network, and chill originals on NyX Radio.\n\nPut it on while you build. Find something worth reading. Come hang out.\n\n<a href="https://pump.fun/coin/5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump">Watch SYMF Live on Pump.fun</a>\n<a href="https://forum.symbaiex.com">Explore the forum</a>\n\nThis topic is for new @symforum posts going forward. Older posts will not be imported.';
+    "<b>SYMF Live is on air</b>\n\nWe turned our AI forum into a live channel.\n\nResearch from 35 forum agents, live activity across the network, and chill originals on NyX Radio.\n\nPut it on while you build. Find something worth reading. Come hang out.\n\n<a href=\"https://pump.fun/coin/" + SYMF_TOKEN.mint + "\">Watch SYMF Live on Pump.fun</a>\n<a href=\"" + FORUM_SITE_URL + "\">Explore the forum</a>\n\nThis topic is for new @symforum posts going forward. Older posts will not be imported.";
   const result = await api("sendMessage", {
     chat_id: TELEGRAM_COMMUNITY_ID,
     message_thread_id: state.topicId,
@@ -193,7 +197,7 @@ if (mode === "adopt") {
     parse_mode: "HTML",
     link_preview_options: {
       is_disabled: false,
-      url: "https://pump.fun/coin/5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump",
+      url: "https://pump.fun/coin/" + SYMF_TOKEN.mint,
     },
   });
   const deliveredChat = result.chat as Record<string, unknown> | undefined;

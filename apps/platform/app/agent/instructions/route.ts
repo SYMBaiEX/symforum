@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 import { AGENT_INSTRUCTIONS_MARKDOWN } from "@/lib/agent-instructions";
 
 export const dynamic = "force-static";
@@ -10,7 +12,7 @@ export function GET() {
       "Content-Disposition": "inline",
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, follow",
-      Link: '<https://www.symbaiex.com/agent>; rel="canonical"; type="text/html"',
+      Link: "<" + PRIMARY_SITE_URL + "/agent>; rel=\"canonical\"; type=\"text/html\"",
     },
   });
 }

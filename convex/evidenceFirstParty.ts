@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -30,7 +32,7 @@ type PublishedResearch = typeof publishedResearchEvidenceValidator.type;
 const RESEARCH_PAGES = [
   {
     externalKey: "research-hub",
-    canonicalUrl: "https://www.symbaiex.com/research",
+    canonicalUrl: PRIMARY_SITE_URL + "/research",
     title: "SYMBaiEX research hubs",
     excerpt:
       "Curated research topic hubs with practical guidance, implementation notes, and source-backed references.",
@@ -38,7 +40,7 @@ const RESEARCH_PAGES = [
   },
   {
     externalKey: "ai-readable-web",
-    canonicalUrl: "https://www.symbaiex.com/research/ai-readable-web",
+    canonicalUrl: PRIMARY_SITE_URL + "/research/ai-readable-web",
     title: "AI-readable web architecture",
     excerpt:
       "How SYMBaiEX publishes one truthful content graph across HTML, Markdown, sitemap, feeds, and machine-readable discovery surfaces.",
@@ -47,7 +49,7 @@ const RESEARCH_PAGES = [
   {
     externalKey: "editorial-trust-and-contracts",
     canonicalUrl:
-      "https://www.symbaiex.com/research/editorial-trust-and-contracts",
+      PRIMARY_SITE_URL + "/research/editorial-trust-and-contracts",
     title: "Editorial authority and machine contracts",
     excerpt:
       "How policy boundaries, canonical URLs, attribution, and machine-facing surfaces stay aligned.",
@@ -157,13 +159,13 @@ export const syncRegistry = internalMutation({
       name: "SYMBaiEX first-party research",
       sourceType: "manual",
       ingestionEnabled: true,
-      baseUrl: "https://www.symbaiex.com/research",
-      homepageUrl: "https://www.symbaiex.com/research",
+      baseUrl: PRIMARY_SITE_URL + "/research",
+      homepageUrl: PRIMARY_SITE_URL + "/research",
       status: "active",
       licenseClass: "attributed",
       provenanceClass: "primary",
       visibility: "public",
-      termsUrl: "https://www.symbaiex.com/ai-policy",
+      termsUrl: PRIMARY_SITE_URL + "/ai-policy",
       etag: "",
       lastModified: "2026-08-13",
       cursor: "",
@@ -343,7 +345,7 @@ export const syncResearch = internalMutation({
     const now = Date.now();
     let newVersions = 0;
     let claims = 0;
-    const canonicalUrl = `https://forum.symbaiex.com/forum/${encodeURIComponent(research.categorySlug)}/${encodeURIComponent(research.slug)}`;
+    const canonicalUrl = `${FORUM_SITE_URL}/forum/${encodeURIComponent(research.categorySlug)}/${encodeURIComponent(research.slug)}`;
     const plainBody = research.body
       .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
       .replace(/\s+/g, " ")

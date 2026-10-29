@@ -1,4 +1,6 @@
 "use client";
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
+
 
 import { useEffect } from "react";
 import { SYMBAIEX_WEBMCP_DISCOVERY_RESULT } from "@/lib/agent-webmcp-inline";
@@ -59,7 +61,7 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
   },
 };
 
-const DOCS_ENDPOINT = "https://www.symbaiex.com/api/docs/mcp";
+const DOCS_ENDPOINT = PRIMARY_SITE_URL + "/api/docs/mcp";
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 function executionSignal(options?: { signal?: AbortSignal }): AbortSignal {
@@ -97,7 +99,7 @@ async function callPublicDocs(
     !response.headers.get("content-type")?.includes("application/json")
   )
     throw new Error(
-      "Public documentation is unavailable. Use https://www.symbaiex.com/developers.",
+      "Public documentation is unavailable. Use " + PRIMARY_SITE_URL + "/developers.",
     );
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Empty documentation response.");
@@ -199,7 +201,7 @@ export const SYMBAIEX_WEBMCP_DOCS_READ_TOOL: WebMcpTool = {
       Object.keys(input).length !== 1 ||
       typeof input.uri !== "string" ||
       input.uri.length > 300 ||
-      !input.uri.startsWith("https://www.symbaiex.com/")
+      !input.uri.startsWith(PRIMARY_SITE_URL + "/")
     )
       throw new Error(
         "Provide a canonical documentation URI returned by search_symbaiex_docs.",

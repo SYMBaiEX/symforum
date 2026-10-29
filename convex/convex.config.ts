@@ -12,6 +12,9 @@ import betterAuth from "@convex-dev/better-auth/convex.config";
 
 const app = defineApp({
   env: {
+    NEXT_PUBLIC_INSTALLATION_CONFIG: v.optional(v.string()),
+    // One-time compatibility scope for pre-migration intents. Never auto-update.
+    INSTALLATION_LEGACY_BINDING: v.optional(v.string()),
     BETTER_AUTH_ENABLED: v.optional(v.string()),
     BETTER_AUTH_SECRET: v.optional(v.string()),
     BETTER_AUTH_GOOGLE_CLIENT_ID: v.optional(v.string()),

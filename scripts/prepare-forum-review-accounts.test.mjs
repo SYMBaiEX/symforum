@@ -244,7 +244,7 @@ test("unsafe mode, non-ignored path and wrong deployment fail before client crea
           "--credentials-file",
           path,
         ]),
-      /exact production/,
+      /same exact HTTPS/,
     );
     assert.throws(
       () =>

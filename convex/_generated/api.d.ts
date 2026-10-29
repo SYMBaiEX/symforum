@@ -135,6 +135,7 @@ import type * as identity from "../identity.js";
 import type * as identityData from "../identityData.js";
 import type * as identityPlugin from "../identityPlugin.js";
 import type * as identitySchema from "../identitySchema.js";
+import type * as installation from "../installation.js";
 import type * as interactions from "../interactions.js";
 import type * as migrations from "../migrations.js";
 import type * as modelRouting from "../modelRouting.js";
@@ -342,6 +343,7 @@ declare const fullApi: ApiFromModules<{
   identityData: typeof identityData;
   identityPlugin: typeof identityPlugin;
   identitySchema: typeof identitySchema;
+  installation: typeof installation;
   interactions: typeof interactions;
   migrations: typeof migrations;
   modelRouting: typeof modelRouting;

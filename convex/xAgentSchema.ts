@@ -78,6 +78,7 @@ export const xAgentTables = {
     .index("by_stateHash", ["stateHash"])
     .index("by_expiresAt", ["expiresAt"]),
   xAgentDrafts: defineTable({
+    installationBinding: v.optional(v.string()),
     ownerUserId: v.id("users"),
     agentSlug: v.string(),
     accountEpoch: v.number(),
@@ -99,6 +100,7 @@ export const xAgentTables = {
     .index("by_key", ["key"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   xAgentActivity: defineTable({
+    installationBinding: v.optional(v.string()),
     accountId: v.id("xAgentAccounts"),
     enabled: v.boolean(),
     epoch: v.number(),
@@ -117,6 +119,7 @@ export const xAgentTables = {
     .index("by_accountId", ["accountId"])
     .index("by_enabled_and_nextPollAt", ["enabled", "nextPollAt"]),
   xAgentOperations: defineTable({
+    installationBinding: v.optional(v.string()),
     accountId: v.id("xAgentAccounts"),
     epoch: v.number(),
     key: v.string(),

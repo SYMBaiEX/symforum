@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -19,8 +21,8 @@ import {
 export const UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY =
   "universal-search-projections-v1";
 
-const PRIMARY_ORIGIN = "https://www.symbaiex.com";
-const FORUM_ORIGIN = "https://forum.symbaiex.com";
+const PRIMARY_ORIGIN = PRIMARY_SITE_URL;
+const FORUM_ORIGIN = FORUM_SITE_URL;
 const DEFAULT_BACKFILL_PAGE_SIZE = 25;
 const MAX_BACKFILL_PAGE_SIZE = 50;
 // paginate includes the row that crosses its byte limit. Reserve headroom for

@@ -5,12 +5,12 @@
  *
  * Inspect first (no network, directory creation, or credential generation):
  * bun scripts/prepare-forum-review-accounts.mjs \
- *   --deployment-url https://strong-bee-384.convex.cloud \
+ *   --deployment-url https://your-project.convex.cloud \
  *   --credentials-file tmp/forum-review-credentials.json
  *
  * Explicitly initialize the three sample accounts (or reuse a same-password account):
  * bun scripts/prepare-forum-review-accounts.mjs \
- *   --deployment-url https://strong-bee-384.convex.cloud \
+ *   --deployment-url https://your-project.convex.cloud \
  *   --credentials-file tmp/forum-review-credentials.json --execute --initialize-accounts
  *
  * On later runs, omit --initialize-accounts for sign-in only. The production
@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 
-export const REVIEW_DEPLOYMENT_URL = "https://strong-bee-384.convex.cloud";
+export const REVIEW_DEPLOYMENT_URL = process.env.FORUM_REVIEW_DEPLOYMENT_URL?.trim() || process.env.NEXT_PUBLIC_CONVEX_URL?.trim() || "";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const groupPrefixes = {
   member: "member",
@@ -95,7 +95,7 @@ export function parseReviewOptions(argv) {
   }
   if (options.deploymentUrl !== REVIEW_DEPLOYMENT_URL)
     fail(
-      "Supply the exact production --deployment-url https://strong-bee-384.convex.cloud; no environment fallback or other target is allowed.",
+      "Set FORUM_REVIEW_DEPLOYMENT_URL (or NEXT_PUBLIC_CONVEX_URL) and pass the same exact HTTPS --deployment-url; no unconfirmed target is allowed.",
     );
   if (!options.credentialsFile)
     fail("Explicit --credentials-file tmp/NAME.json is required.");
@@ -441,7 +441,7 @@ if (
 ) {
   if (process.argv.slice(2).includes("--help")) {
     console.log(
-      "Usage: bun scripts/prepare-forum-review-accounts.mjs --deployment-url https://strong-bee-384.convex.cloud --credentials-file tmp/NAME.json [--execute] [--initialize-accounts] [--member-contact-email ADDRESS] [--request-member-email-verification] [--staff-contact-email ADDRESS] [--request-staff-email-verification]\nDefault is inspection only. --execute signs in existing sample accounts with mode-0600 credential persistence. Add --initialize-accounts for explicit supported Password signUp (same-password existing accounts are reused; collisions are not reset). No unknown sign-in failure starts sign-up. Email is sent only with its explicit verification-request flag. Reuse the same credential file on retries.",
+      "Usage: bun scripts/prepare-forum-review-accounts.mjs --deployment-url https://your-project.convex.cloud --credentials-file tmp/NAME.json [--execute] [--initialize-accounts] [--member-contact-email ADDRESS] [--request-member-email-verification] [--staff-contact-email ADDRESS] [--request-staff-email-verification]\nDefault is inspection only. --execute signs in existing sample accounts with mode-0600 credential persistence. Add --initialize-accounts for explicit supported Password signUp (same-password existing accounts are reused; collisions are not reset). No unknown sign-in failure starts sign-up. Email is sent only with its explicit verification-request flag. Reuse the same credential file on retries.",
     );
   } else {
     try {

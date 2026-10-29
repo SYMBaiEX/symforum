@@ -1,4 +1,6 @@
 "use node";
+import { FORUM_SITE_URL } from "../lib/site-urls";
+
 
 import {
   Body,
@@ -279,13 +281,13 @@ function BaseEmail({
 
 function forumSiteUrl() {
   return normalizeForumSiteUrl(
-    env.FORUM_SITE_URL || "https://forum.symbaiex.com",
+    env.FORUM_SITE_URL || FORUM_SITE_URL,
   );
 }
 
 function normalizeForumSiteUrl(siteUrl: string) {
   const normalized = siteUrl.trim();
-  return (normalized || "https://forum.symbaiex.com").replace(/\/+$/, "");
+  return (normalized || FORUM_SITE_URL).replace(/\/+$/, "");
 }
 
 function forumReplyToEmails() {

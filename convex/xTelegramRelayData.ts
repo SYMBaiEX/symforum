@@ -1,3 +1,4 @@
+import { installationBinding, installationMatches } from "./installation";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -18,7 +19,7 @@ const config = (ctx: Pick<QueryCtx, "db">) =>
 export const enabled = internalQuery({
   args: {},
   returns: v.boolean(),
-  handler: async (ctx) => (await config(ctx))?.enabled === true,
+  handler: async (ctx) => ((c) => !!c?.enabled && installationMatches(c))(await config(ctx)),
 });
 // Operator-only, one-time activation. Server time is the immutable no-backfill cutoff.
 export const initialize = internalMutation({
@@ -31,6 +32,7 @@ export const initialize = internalMutation({
       throw Error("Relay already configured; never reset its cutoff");
     const now = Date.now();
     await ctx.db.insert("xTelegramRelayConfig", {
+      installationBinding,
       key: "symforum",
       enabled: true,
       topicId,
@@ -63,7 +65,7 @@ export async function enqueueRelay(
   }>,
 ) {
   const c = await config(ctx);
-  if (!c?.enabled || posts.length > 5) return;
+  if (!c?.enabled || !installationMatches(c) || posts.length > 5) return;
   let ordinal = 0;
   // Each fetched page arrives newest-first. Deliver its posts in chronological order.
   for (const p of posts
@@ -90,6 +92,7 @@ export async function enqueueRelay(
     )
       continue;
     const id = await ctx.db.insert("xTelegramDeliveries", {
+      installationBinding,
       postId: p.id,
       topicId: c.topicId,
       sourceCreatedAt: p.createdAt,
@@ -111,9 +114,10 @@ export const claim = internalMutation({
   handler: async (ctx, { id }) => {
     const c = await config(ctx);
     const d = await ctx.db.get("xTelegramDeliveries", id);
-    if (!d || d.status !== "queued") return null;
+    if (!d || d.status !== "queued" || !installationMatches(d)) return null;
     if (
       !c?.enabled ||
+      !installationMatches(c) ||
       c.topicId !== d.topicId ||
       env.TELEGRAM_AGENTS_ENABLED !== "true"
     ) {

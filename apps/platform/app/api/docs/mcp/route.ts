@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../../lib/site-urls";
 import { publicDocumentation } from "@/lib/public-documentation";
 import {
   DOCS_MCP_MODERN_VERSION,
@@ -176,7 +178,7 @@ export async function POST(request: Request) {
       supportedVersions: [DOCS_MCP_MODERN_VERSION],
       capabilities: { tools: {}, resources: {} },
       instructions:
-        "Public read-only SYMBaiEX documentation. Search with docs_search, list with docs_list, and read returned URIs with docs_get. Evidence tools are a separate authenticated server at https://www.symbaiex.com/api/agent/mcp.",
+        "Public read-only SYMBaiEX documentation. Search with docs_search, list with docs_list, and read returned URIs with docs_get. Evidence tools are a separate authenticated server at " + PRIMARY_SITE_URL + "/api/agent/mcp.",
       ttl: 300,
       cacheScope: "public",
     });

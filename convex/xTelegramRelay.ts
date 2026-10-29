@@ -1,3 +1,4 @@
+import { installation } from "./installation";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, env } from "./_generated/server";
@@ -37,7 +38,7 @@ export const deliver = internalAction({
             text: relayMessage(d.text, d.postId),
             link_preview_options: {
               is_disabled: false,
-              url: `https://x.com/symforum/status/${d.postId}`,
+              url: `https://x.com/${installation.x.accounts.symforum}/status/${d.postId}`,
             },
           }),
         },

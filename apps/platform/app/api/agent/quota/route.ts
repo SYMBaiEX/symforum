@@ -1,12 +1,14 @@
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../../../../../../lib/site-urls";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const ALLOWED_ORIGINS = new Set([
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  PRIMARY_SITE_URL,
+  PRIMARY_SITE_URL,
+  FORUM_SITE_URL,
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",

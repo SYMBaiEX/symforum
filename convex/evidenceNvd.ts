@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -732,7 +734,7 @@ async function fetchNvd(endpoint: string) {
   try {
     const response = await fetch(endpoint, {
       headers: {
-        "User-Agent": "SYMBaiEX-Evidence-NVD/1.0 (+https://www.symbaiex.com)",
+        "User-Agent": "SYMBaiEX-Evidence-NVD/1.0 (+" + PRIMARY_SITE_URL + ")",
         ...nvdRequestHeaders(endpoint),
       },
       redirect: "error",

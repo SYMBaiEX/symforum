@@ -1,18 +1,12 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "symbaiex-socials",
+  "name": "community-socials",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-21",
   "workers_dev": false,
   "secrets": {
     "required": ["TYPEFULLY_WEBHOOK_SECRET"],
   },
-  "routes": [
-    {
-      "pattern": "socials.symbaiex.com",
-      "custom_domain": true,
-    },
-  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -27,8 +21,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "symbaiex-socials-events",
-      "database_id": "f745f681-62d5-4fbe-ab50-04ba84576fff",
+      "database_name": "community-social-events",
       "migrations_dir": "migrations",
     },
   ],

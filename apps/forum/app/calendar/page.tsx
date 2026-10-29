@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../lib/site-urls";
 import { ForumCalendarPage } from "@/components/forum/forum-calendar-page";
 import { normalizeForumCalendarMonthParam } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
@@ -13,7 +15,7 @@ export const metadata: Metadata = {
   title: "Forum Calendar",
   description: "Calendar events for the SYMBaiEX forum.",
   alternates: {
-    canonical: "https://forum.symbaiex.com/calendar",
+    canonical: FORUM_SITE_URL + "/calendar",
   },
 };
 

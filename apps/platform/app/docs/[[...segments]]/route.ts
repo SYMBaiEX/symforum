@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 import { primarySiteUrl } from "@/lib/site-urls";
 
 const DOCUMENTATION_ALIASES = new Map<string, string>([
@@ -22,7 +24,7 @@ export async function GET(
         error: "The requested documentation alias is not available.",
         code: "DOCUMENTATION_ALIAS_NOT_FOUND",
         resolution:
-          "Start at https://www.symbaiex.com/developers and follow a published canonical resource link.",
+          "Start at " + PRIMARY_SITE_URL + "/developers and follow a published canonical resource link.",
       },
       {
         status: 404,

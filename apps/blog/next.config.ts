@@ -1,3 +1,4 @@
+import { installation } from "../../lib/installation";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { NextConfig } from "next";
@@ -17,8 +18,8 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
-      { protocol: "https", hostname: "symbaiex.com" },
-      { protocol: "https", hostname: "www.symbaiex.com" },
+      { protocol: "https", hostname: new URL(installation.sites.primary).hostname },
+      { protocol: "https", hostname: new URL(installation.sites.blog).hostname },
       { protocol: "https", hostname: "*.convex.cloud" },
       { protocol: "https", hostname: "*.convex.site" },
     ],

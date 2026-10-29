@@ -10,7 +10,9 @@ Use Bun **1.4.2**, Node **22.13+**, Git and your own Convex development project.
 Python **3.11+** is needed for Python SDK work. Docker is optional for worker
 container checks. Follow the installation commands in [README.md](README.md).
 
-Use `.env.example` as a template for `.env.local`. Empty provider keys are
+Use `.env.example` as a template for `.env.local`, then run
+`bun run setup:installation --local`. For your own hosted URLs and optional
+integrations, follow [installation configuration](docs/installation-configuration.md). Empty provider keys are
 intentional. Never copy a maintainer's env file or point your checkout at the
 production backend. Keep the Better Auth, WorkOS, external posting and paid
 features disabled until you deliberately configure a separate development setup.

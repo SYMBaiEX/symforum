@@ -1,14 +1,16 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 /** Cryptographic and wire-format helpers shared by the agent auth provider. */
 
 export const AGENT_LOGIN_DOMAIN = "SYMBIEX_AGENT_LOGIN_V1";
 export const AGENT_LOGIN_PURPOSE = "agent-login";
 export const AGENT_MCP_RESOURCE_AUDIENCE =
-  "https://www.symbaiex.com/api/agent/mcp";
-export const LEGACY_AGENT_LOGIN_AUDIENCE = "https://www.symbaiex.com";
+  PRIMARY_SITE_URL + "/api/agent/mcp";
+export const LEGACY_AGENT_LOGIN_AUDIENCE = PRIMARY_SITE_URL;
 
 const AGENT_LOGIN_ALLOWED_ORIGINS = new Set([
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
+  PRIMARY_SITE_URL,
+  PRIMARY_SITE_URL,
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",

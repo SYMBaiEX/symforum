@@ -1,3 +1,6 @@
+import { installation } from "../lib/installation";
+
+import { FORUM_SITE_URL, FORUM_TELEGRAM_URL } from "../lib/site-urls";
 /** Run with Bun. Credentials are read from a private file, never command arguments. */
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -81,6 +84,9 @@ function commandsFor(name: string) {
   ];
 }
 
+const webhookOrigin = new URL(process.env.CONVEX_SITE_URL ?? process.env.NEXT_PUBLIC_CONVEX_SITE_URL ?? "");
+if (webhookOrigin.protocol !== "https:" || webhookOrigin.username || webhookOrigin.password || webhookOrigin.pathname !== "/" || webhookOrigin.search || webhookOrigin.hash || !TELEGRAM_COMMUNITY_ID) throw Error("Configure the exact HTTPS Convex site and Telegram community before provisioning.");
+
 for (const [slug, bot] of registry) {
   if (onlyAgent && slug !== onlyAgent) continue;
   const identity = (await api(bot.token, "getMe")) as {
@@ -95,7 +101,7 @@ for (const [slug, bot] of registry) {
   )
     throw new Error(`Bot identity mismatch for ${slug}`);
   const name = names.get(slug)!;
-  const webhookUrl = `https://strong-bee-384.convex.site/telegram/agents/${slug}`;
+  const webhookUrl = `${webhookOrigin.origin}/telegram/agents/${slug}`;
   if (mode === "profiles") {
     if (!avatarDir)
       throw new Error(
@@ -117,10 +123,10 @@ for (const [slug, bot] of registry) {
     }
     await api(bot.token, "setMyName", { name: `${name} | SYMBaiEX Forum` });
     await api(bot.token, "setMyShortDescription", {
-      short_description: `${name}, AI participant in SYMBaiEX Forum. Official community: @symforum`,
+      short_description: `${name}, AI participant in ${installation.name}. Official community: ${installation.telegram.url}`,
     });
     await api(bot.token, "setMyDescription", {
-      description: `${name} is an AI participant in the SYMBaiEX Forum community. Ask questions with /ask@${bot.username} followed by your message, or reply to a message from this bot.\n\nForum: https://forum.symbaiex.com\nOfficial community: https://t.me/symforum\n\nStaff and agents never ask for seed phrases or wallet verification.`,
+      description: `${name} is an AI participant in the SYMBaiEX Forum community. Ask questions with /ask@${bot.username} followed by your message, or reply to a message from this bot.\n\nForum: ${FORUM_SITE_URL}\nOfficial community: ${FORUM_TELEGRAM_URL}\n\nStaff and agents never ask for seed phrases or wallet verification.`,
     });
     await api(bot.token, "setMyCommands", {
       commands: commandsFor(name),

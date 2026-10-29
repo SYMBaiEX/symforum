@@ -1,3 +1,4 @@
+import { installationBinding, installationMatches } from "./installation";
 import {
   ALPHA_PUBLISHER_SLUG,
   ALPHA_X_USER_ID,
@@ -497,6 +498,7 @@ export const requestDraft = mutation({
         "Owner-only one-off draft. No member messages, Telegram history or moderation data.",
     });
     const id = await ctx.db.insert("xAgentDrafts", {
+      installationBinding,
       key,
       ownerUserId: user._id,
       agentSlug: args.agentSlug,
@@ -536,7 +538,7 @@ export const claimDraft = internalMutation({
   ),
   handler: async (ctx, { draftId }) => {
     const d = await ctx.db.get("xAgentDrafts", draftId);
-    if (!d || d.status !== "queued") return null;
+    if (!d || d.status !== "queued" || !installationMatches(d)) return null;
     const user = await ctx.db.get("users", d.ownerUserId);
     const agent = await ctx.db
       .query("forumAgents")

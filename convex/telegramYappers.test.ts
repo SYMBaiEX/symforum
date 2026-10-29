@@ -138,7 +138,7 @@ function transport(timeout = false, draftText?: string) {
         return Response.json({
           ok: true,
           result: {
-            url: `https://strong-bee-384.convex.site/telegram/agents/${url.includes("123456789") ? "suki" : url.includes("555555555") ? "belle" : "nyx"}`,
+            url: `https://convex.test/telegram/agents/${url.includes("123456789") ? "suki" : url.includes("555555555") ? "belle" : "nyx"}`,
           },
         });
       if (url.endsWith("getChatMember"))

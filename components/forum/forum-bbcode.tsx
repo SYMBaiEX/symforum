@@ -1,3 +1,7 @@
+import { installation } from "../../lib/installation";
+import { installationWebOrigins } from "../../lib/installation-config";
+
+import { FORUM_SITE_URL } from "../../lib/site-urls";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { splitForumMentions } from "@/lib/forum-mentions";
 import katex from "katex";
@@ -718,15 +722,15 @@ function forumLinkDetails(value: string) {
   }
   const url = new URL(safeUrl);
   const forumPathOnPrimaryHost =
-    (url.hostname === "symbaiex.com" || url.hostname === "www.symbaiex.com") &&
+    (url.origin !== FORUM_SITE_URL && installationWebOrigins(installation).includes(url.origin)) &&
     (url.pathname === "/forum" || url.pathname.startsWith("/forum/"));
-  const forumHost = url.hostname === "forum.symbaiex.com";
+  const forumHost = url.origin === FORUM_SITE_URL;
   if (forumHost || forumPathOnPrimaryHost) {
     const pathname = url.pathname.replace(/^\/forum(?=\/|$)/, "") || "/";
     return {
       external: false,
-      hostname: "forum.symbaiex.com",
-      href: `https://forum.symbaiex.com${pathname}${url.search}${url.hash}`,
+      hostname: new URL(FORUM_SITE_URL).hostname,
+      href: `${FORUM_SITE_URL}${pathname}${url.search}${url.hash}`,
     };
   }
   return {

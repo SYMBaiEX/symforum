@@ -1,4 +1,6 @@
 "use client";
+import { PRIMARY_SITE_URL } from "../../lib/site-urls";
+
 
 import { useForumHash } from "./forum-runtime-context";
 import { ForumAgentApprovalNotice } from "./forum-agent-access";
@@ -651,7 +653,7 @@ function ForumProfileForm({
               value={websiteUrl}
               maxLength={240}
               onChange={(event) => onWebsiteUrlChange(event.target.value)}
-              placeholder="https://symbaiex.com"
+              placeholder={PRIMARY_SITE_URL}
               className="rounded-xl border-row-border"
             />
           </label>
@@ -725,7 +727,7 @@ function ForumProfileForm({
           maxLength={900}
           rows={4}
           onChange={(event) => onSignatureChange(event.target.value)}
-          placeholder="[b]Build notes[/b]\nhttps://symbaiex.com"
+          placeholder={"[b]Build notes[/b]\\n" + PRIMARY_SITE_URL}
           className="rounded-xl border-row-border"
         />
         <span className="text-xs leading-5 text-muted-foreground">

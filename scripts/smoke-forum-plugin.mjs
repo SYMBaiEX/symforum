@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+
+import { installation } from "../lib/installation.ts";
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
+import { FORUM_PLUGIN_RESOURCE, FORUM_PLUGIN_METADATA_URL } from "../lib/forum-plugin-contract.ts";
 /** Public-only checks. Never accepts credentials, cookies, or an authenticated action. */
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -6,7 +10,7 @@ import { randomUUID } from "node:crypto";
 const options = process.argv.slice(2);
 if (options.includes("--help")) {
   console.log(
-    "Usage: bun scripts/smoke-forum-plugin.mjs [--origin https://www.symbaiex.com] [--issuer https://your.authkit.app]\nDefaults: FORUM_PLUGIN_ORIGIN, FORUM_PLUGIN_EXPECTED_ISSUER (or WORKOS_AUTHKIT_ISSUER). All calls are unauthenticated.",
+    "Usage: bun scripts/smoke-forum-plugin.mjs [--origin " + PRIMARY_SITE_URL + "] [--issuer https://your.authkit.app]\nDefaults: FORUM_PLUGIN_ORIGIN, FORUM_PLUGIN_EXPECTED_ISSUER (or WORKOS_AUTHKIT_ISSUER). All calls are unauthenticated.",
   );
   process.exit(0);
 }
@@ -39,7 +43,7 @@ function originUrl(value, httpsOnly = false) {
 const origin = originUrl(
   values.origin ??
     process.env.FORUM_PLUGIN_ORIGIN ??
-    "https://www.symbaiex.com",
+    PRIMARY_SITE_URL,
 );
 const expectedIssuerValue =
   values.issuer ??
@@ -55,22 +59,12 @@ const generated = JSON.parse(
     "utf8",
   ),
 );
-const contract = readFileSync(
-  new URL("../lib/forum-plugin-contract.ts", import.meta.url),
-  "utf8",
-);
-const resource = contract.match(/FORUM_PLUGIN_RESOURCE\s*=\s*"([^"]+)"/)?.[1];
-const metadataUrl = contract.match(
-  /FORUM_PLUGIN_METADATA_URL\s*=\s*"([^"]+)"/,
-)?.[1];
-if (!resource || !metadataUrl)
-  throw new Error(
-    "Forum plugin resource constants could not be read from the shared contract.",
-  );
+const resource = FORUM_PLUGIN_RESOURCE;
+const metadataUrl = FORUM_PLUGIN_METADATA_URL;
 const resourcePath = new URL(resource).pathname;
 const metadataPath = new URL(metadataUrl).pathname;
 let appUri;
-const evidenceResource = "https://www.symbaiex.com/api/agent/mcp";
+const evidenceResource = PRIMARY_SITE_URL + "/api/agent/mcp";
 const checks = [];
 const discoveredIds = { boardIds: [], threadIds: [] };
 let sequence = 0;
@@ -211,7 +205,7 @@ await check("forum OAuth resource and issuer metadata", async () => {
   const issuer = originUrl(payload.authorization_servers[0], true);
   const hostname = new URL(issuer).hostname;
   assert(
-    hostname.endsWith(".authkit.app") || hostname.endsWith(".symbaiex.com"),
+    hostname.endsWith(".authkit.app") || (Boolean(installation.identity.cookieDomain) && hostname.endsWith("." + installation.identity.cookieDomain)),
     "Forum metadata advertises an unsupported issuer domain.",
   );
   if (expectedIssuer)
@@ -368,7 +362,7 @@ await check("native in-ChatGPT forum resource", async () => {
     "Compact native forum loading document is missing.",
   );
   const assetUrl = content.text.match(/<script defer src="([^"]+)"/i)?.[1];
-  assert(assetUrl === "https://www.symbaiex.com/api/plugin/assets/current/forum.js", "Forum UI must load through its stable owned asset URL.");
+  assert(assetUrl === PRIMARY_SITE_URL + "/api/plugin/assets/current/forum.js", "Forum UI must load through its stable owned asset URL.");
   const assetResponse = await fetch(assetUrl, { credentials: "omit", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20_000) });
   assert(assetResponse.ok && assetResponse.headers.get("content-type")?.includes("text/javascript") && assetResponse.headers.get("cache-control") === "no-store", "Current forum UI asset is unavailable or can be pinned by caching.");
   const script = await assetResponse.text();

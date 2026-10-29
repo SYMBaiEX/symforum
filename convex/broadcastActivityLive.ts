@@ -1,3 +1,4 @@
+import { installation, installationMatches } from "./installation";
 import { v } from "convex/values";
 import { env, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -106,8 +107,8 @@ export const liveActivity = query({
       ? [...enabled.keys()].filter(slug => registry.has(slug)) : [];
     const telegramSet = new Set(telegram);
     const x = await ctx.db.query("xAgentAccounts").withIndex("by_agentSlug", q => q.eq("agentSlug", "nyx")).unique();
-    const xApproved = env.X_AGENTS_ENABLED === "true" && enabled.has("nyx") && x?.expectedUsername.toLowerCase() === "symbaiex_nyx" && (x.mode === "drafts" || x.mode === "automatic");
-    const xConnected = xApproved && x?.connected === true && x.username?.toLowerCase() === "symbaiex_nyx";
+    const xApproved = env.X_AGENTS_ENABLED === "true" && enabled.has("nyx") && x?.expectedUsername.toLowerCase() === installation.x.accounts.nyx && (x.mode === "drafts" || x.mode === "automatic");
+    const xConnected = xApproved && x?.connected === true && x.username?.toLowerCase() === installation.x.accounts.nyx;
     const events: Event[] = [];
     const add = (id: string, slug: string, service: Event["platform"], verb: Action, state: Status, at: number, url: string | null = null) => {
       if (!enabled.has(slug) || !Number.isFinite(at) || at < 0) return;
@@ -120,9 +121,9 @@ export const liveActivity = query({
       const requests = await ctx.db.query("telegramAgentRequests")
         .withIndex("by_agentSlug_and_createdAt", q => q.eq("agentSlug", slug)).order("desc").take(perAgent);
       for (const row of requests) {
-        if (row.botId !== registry.get(slug)?.id || !Number.isSafeInteger(row.topicId) || row.topicId < 0 || row.topicId === 7) continue;
+        if (!installationMatches(row) || row.botId !== registry.get(slug)?.id || !Number.isSafeInteger(row.topicId) || row.topicId < 0 || row.topicId === installation.telegram.topics.startHere) continue;
         const verb: Action = ({ask:"telegram-request",prompt:"telegram-request",help:"telegram-help",menu:"telegram-menu",yap:"telegram-community",meme:"telegram-meme"} as const)[row.kind];
-        if (!verb || (row.kind === "yap" && row.topicId !== 296) || (row.kind === "meme" && (slug !== "belle" || row.topicId !== 13))) continue;
+        if (!verb || (row.kind === "yap" && row.topicId !== installation.telegram.topics.yappers) || (row.kind === "meme" && (slug !== "belle" || row.topicId !== installation.telegram.topics.memes))) continue;
         add("tg:" + row._id + ":accepted", slug, "telegram", verb, "queued", row.createdAt);
         if (row.status === "queued") continue;
         const sent = row.status === "sent" && Number.isSafeInteger(row.sentMessageId) && row.sentMessageId! > 0;
@@ -136,7 +137,7 @@ export const liveActivity = query({
     if (telegramSet.has("belle")) {
       const digests = await ctx.db.query("telegramForumDigests").withIndex("by_createdAt").order("desc").take(3);
       for (const row of digests) {
-        if (row.preview || row.topicId !== 273) continue;
+        if (!installationMatches(row) || row.preview || row.topicId !== installation.telegram.topics.digest) continue;
         const sent = row.status === "sent" && Number.isSafeInteger(row.sentMessageId) && row.sentMessageId! > 0;
         const state: Status = sent ? "delivered" : row.status === "held" || row.status === "sent" ? "held" : row.status === "sending" ? "running" : row.status;
         add("digest:" + row._id, "belle", "telegram", "telegram-digest", state, row.updatedAt);
@@ -183,7 +184,7 @@ export const liveActivity = query({
       add("model:" + row._id, row.agentSlug, kind.platform, kind.action, row.outcomeUnknown ? "held" : row.status === "pending" ? "queued" : row.status, row.updatedAt);
     }
     if (xApproved && x) {
-      add("x-account:" + x._id, "nyx", "x", "x-connection", xConnected ? "connected" : "disconnected", x.updatedAt, "https://x.com/symbaiex_nyx");
+      add("x-account:" + x._id, "nyx", "x", "x-connection", xConnected ? "connected" : "disconnected", x.updatedAt, `https://x.com/${installation.x.accounts.nyx}`);
       const drafts = (await Promise.all((["queued", "generating", "draft", "held", "archived", "publishing", "published"] as const).map(state =>
         ctx.db.query("xAgentDrafts").withIndex("by_status_and_updatedAt", q => q.eq("status", state)).order("desc").take(2)
       ))).flat();

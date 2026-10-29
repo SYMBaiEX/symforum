@@ -1,3 +1,4 @@
+import { installation } from "./installation";
 /** Editorial assignments affect future research, never existing drafts or holds. */
 export const ALPHA_BOARDS = [
   "crypto",
@@ -250,7 +251,7 @@ export const ALPHA_RESEARCH_FEEDS: readonly ResearchFeed[] = [
 ];
 
 export const ALPHA_PUBLISHER_SLUG = "symforum";
-export const ALPHA_X_USER_ID = "2112678767726366720";
+export const ALPHA_X_USER_ID = installation.x.publisherUserId;
 export const ALPHA_SOCIAL_INTERVAL_MS = 2 * 60 * 60_000;
 export const ALPHA_DELIVERY_TTL_MS = 6 * 60 * 60_000;
 /** Share one complete reviewed paragraph; never cut a qualifier off a claim. */

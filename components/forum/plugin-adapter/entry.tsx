@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "../../../lib/site-urls";
 import { createRoot } from "react-dom/client";
 import {
   Component,
@@ -105,7 +107,7 @@ function CurrentPage() {
   }>();
   useEffect(() => {
     let cancelled = false;
-    const parsed = new URL(url, "https://forum.symbaiex.com");
+    const parsed = new URL(url, FORUM_SITE_URL);
     const match = matchForumRoute(routes, parsed.pathname);
     if (parsed.pathname === "/signin") {
       setPage({ url, content: <PluginConnection /> });
@@ -145,7 +147,7 @@ function CurrentPage() {
   }, [url]);
   useEffect(() => {
     if (page?.url === url) {
-      const hash = new URL(fullRoute, "https://forum.symbaiex.com").hash;
+      const hash = new URL(fullRoute, FORUM_SITE_URL).hash;
       if (hash)
         document
           .getElementById(decodeURIComponent(hash.slice(1)))
@@ -267,7 +269,7 @@ function App() {
       <ForumRuntimeContext.Provider
         value={{
           host: "plugin",
-          routeHash: new URL(route, "https://forum.symbaiex.com").hash,
+          routeHash: new URL(route, FORUM_SITE_URL).hash,
           actingAs: actingAs.userId
             ? (actingAs as {
                 userId: string;
@@ -291,7 +293,7 @@ function App() {
           <ForumSiteShell
             footerRef={footerRef}
             forumHost={false}
-            primarySiteHref="https://www.symbaiex.com"
+            primarySiteHref={PRIMARY_SITE_URL}
           >
             <ForumLayout>
               {error ? (

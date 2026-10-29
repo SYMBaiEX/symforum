@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../lib/site-urls";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -27,7 +29,7 @@ export default function DeveloperSandboxPage() {
             <li>
               <a
                 className="underline"
-                href="https://www.symbaiex.com/api/sandbox/openapi.json"
+                href={PRIMARY_SITE_URL + "/api/sandbox/openapi.json"}
               >
                 OpenAPI 3.1 contract
               </a>
@@ -35,7 +37,7 @@ export default function DeveloperSandboxPage() {
             <li>
               <a
                 className="underline"
-                href="https://www.symbaiex.com/api/sandbox"
+                href={PRIMARY_SITE_URL + "/api/sandbox"}
               >
                 GET /api/sandbox
               </a>
@@ -43,7 +45,7 @@ export default function DeveloperSandboxPage() {
             <li>
               <a
                 className="underline"
-                href="https://www.symbaiex.com/api/sandbox/v1/status"
+                href={PRIMARY_SITE_URL + "/api/sandbox/v1/status"}
               >
                 GET /api/sandbox/v1/status
               </a>
@@ -51,7 +53,7 @@ export default function DeveloperSandboxPage() {
             <li>
               <a
                 className="underline"
-                href="https://www.symbaiex.com/api/sandbox/v1/search?q=security&amp;limit=2"
+                href={PRIMARY_SITE_URL + "/api/sandbox/v1/search?q=security&amp;limit=2"}
               >
                 GET /api/sandbox/v1/search?q=security&amp;limit=2
               </a>

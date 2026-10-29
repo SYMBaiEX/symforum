@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "symbaiex-eliza-shadow-gateway",
-  "account_id": "c2fadb05722ca3df6528265a674ca69e",
+  "name": "community-eliza-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-20",
   "compatibility_flags": ["nodejs_compat"],

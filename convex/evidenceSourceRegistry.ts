@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 /**
  * Public, code-owned contract for scheduled evidence adapters.
  *
@@ -110,9 +112,9 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
   {
     key: "symbaiex-first-party-research",
     name: "SYMBaiEX first-party research",
-    officialApiUrl: "https://www.symbaiex.com/research",
-    officialTermsUrl: "https://www.symbaiex.com/ai-policy",
-    officialAttributionUrl: "https://www.symbaiex.com/research",
+    officialApiUrl: PRIMARY_SITE_URL + "/research",
+    officialTermsUrl: PRIMARY_SITE_URL + "/ai-policy",
+    officialAttributionUrl: PRIMARY_SITE_URL + "/research",
     licenseClass: "attributed",
     accessClass: "first-party",
     capability:

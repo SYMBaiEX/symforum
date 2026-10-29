@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../lib/site-urls";
 import "server-only";
 import { createHmac } from "node:crypto";
 import {
@@ -77,7 +79,7 @@ export async function agentJoinPOST(request: Request) {
   const data = await response.json();
   if (data.claimToken) {
     const claimUrl =
-      "https://www.symbaiex.com/agents/claim#" +
+      PRIMARY_SITE_URL + "/agents/claim#" +
       encodeURIComponent(data.claimToken);
     return Response.json(
       { ...data, claimToken: undefined, claimUrl },

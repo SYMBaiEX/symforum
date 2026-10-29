@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../../../../../../lib/site-urls";
 const FIXTURES = [
   {
     id: "sandbox-document-cisa-kev",
@@ -5,7 +7,7 @@ const FIXTURES = [
     title: "Synthetic CISA KEV evidence document",
     excerpt:
       "Deterministic fixture for SDK parsing and search integration tests.",
-    canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
+    canonicalUrl: PRIMARY_SITE_URL + "/developers/sandbox#fixtures",
   },
   {
     id: "sandbox-claim-release-security",
@@ -13,7 +15,7 @@ const FIXTURES = [
     title: "Synthetic release security claim",
     excerpt:
       "Supported by a synthetic version-bound citation in the sandbox only.",
-    canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
+    canonicalUrl: PRIMARY_SITE_URL + "/developers/sandbox#fixtures",
   },
   {
     id: "sandbox-entity-open-source",
@@ -21,7 +23,7 @@ const FIXTURES = [
     title: "Synthetic open-source project entity",
     excerpt:
       "Public fixture with no connection to production data or identities.",
-    canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
+    canonicalUrl: PRIMARY_SITE_URL + "/developers/sandbox#fixtures",
   },
 ] as const;
 
@@ -39,8 +41,8 @@ export async function GET(
       writesEnabled: false,
       authenticationRequired: false,
       operations: ["GET /v1/status", "GET /v1/search?q=<query>&limit=<1-10>"],
-      documentation: "https://www.symbaiex.com/developers/sandbox",
-      openapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
+      documentation: PRIMARY_SITE_URL + "/developers/sandbox",
+      openapi: PRIMARY_SITE_URL + "/api/sandbox/openapi.json",
     });
   }
   if (path === "v1/status") {
@@ -117,7 +119,7 @@ function sandboxError(code: string, message: string, status: number) {
       error: message,
       code,
       resolution:
-        "Read https://www.symbaiex.com/developers/sandbox and use only the documented synthetic read operations.",
+        "Read " + PRIMARY_SITE_URL + "/developers/sandbox and use only the documented synthetic read operations.",
     },
     status,
   );

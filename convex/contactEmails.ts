@@ -49,12 +49,12 @@ export const sendContactRequestEmail = internalAction({
     }
 
     try {
+      const from = env.CONTACT_FROM_EMAIL || env.NEWSLETTER_FROM_EMAIL;
+      const to = env.CONTACT_NOTIFICATION_TO;
+      if (!from || !to) throw Error("Configure CONTACT_FROM_EMAIL and CONTACT_NOTIFICATION_TO before contact delivery.");
       const resendEmailId = await resend.sendEmail(ctx, {
-        from:
-          env.CONTACT_FROM_EMAIL ||
-          env.NEWSLETTER_FROM_EMAIL ||
-          "SYMBaiEX <contact@symbaiex.com>",
-        to: env.CONTACT_NOTIFICATION_TO || "solsymbaiex@gmail.com",
+        from,
+        to,
         replyTo: [request.email],
         subject: contactSubject(request.subject),
         text: contactText(request),

@@ -1,4 +1,5 @@
 "use client";
+import { installation } from "@/lib/installation";
 
 import { asRoute } from "@/lib/typed-route";
 
@@ -73,12 +74,13 @@ const ownerNavItems = [
     icon: KeyRound,
   },
   {
-    href: "https://agent.symbaiex.com/admin",
+    href: installation.links.agentConsole,
     label: "Model host",
     note: "Power + model API",
     icon: Cpu,
   },
 ] as const;
+const configuredOwnerNavItems = ownerNavItems.filter(item => Boolean(item.href));
 
 export function HeaderNav({
   compact = false,
@@ -403,7 +405,7 @@ function MobileNavMenu({
               Owner console
             </DropdownMenuLabel>
             <DropdownMenuGroup>
-              {(ownerAccess ? ownerNavItems : ownerNavItems.slice(0, 1)).map(
+              {(ownerAccess ? configuredOwnerNavItems : configuredOwnerNavItems.slice(0, 1)).map(
                 (item) => (
                   <MobileNavItem
                     active={resolveActive(item.href)}
@@ -472,7 +474,7 @@ function DesktopOwnerMenu({
           Owner routes
         </DropdownMenuLabel>
         <DropdownMenuGroup>
-          {(ownerAccess ? ownerNavItems : ownerNavItems.slice(0, 1)).map(
+          {(ownerAccess ? configuredOwnerNavItems : configuredOwnerNavItems.slice(0, 1)).map(
             (item) => {
               const Icon = item.icon;
               return (

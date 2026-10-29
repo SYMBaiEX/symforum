@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import { v } from "convex/values";
 import {
   getPublicEvidenceSource,
@@ -15,8 +17,8 @@ import {
   universalSearchProjectionReady,
 } from "./universalSearchProjection";
 
-const PRIMARY_ORIGIN = "https://www.symbaiex.com";
-const FORUM_ORIGIN = "https://forum.symbaiex.com";
+const PRIMARY_ORIGIN = PRIMARY_SITE_URL;
+const FORUM_ORIGIN = FORUM_SITE_URL;
 const SOURCE_CANDIDATE_LIMIT = 50;
 const MAX_FORUM_CATEGORY_ANCESTORS = 10;
 const MAX_RESULTS = 50;

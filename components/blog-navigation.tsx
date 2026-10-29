@@ -1,5 +1,6 @@
 "use client";
 
+import { installation } from "@/lib/installation";
 import {
   Archive,
   BookOpen,
@@ -37,7 +38,7 @@ export function BlogNavigation() {
   const signInHref = `/signin?${new URLSearchParams({ redirectTo: pathname ?? "/blog" })}`;
 
   useEffect(() => {
-    if (window.location.hostname === "blog.symbaiex.com") {
+    if (window.location.hostname === new URL(installation.sites.blog).hostname) {
       setNewsletterHref(newsletterSiteUrl("/newsletter#newsletter-subscribe"));
     }
   }, []);

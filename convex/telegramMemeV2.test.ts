@@ -116,7 +116,7 @@ function transport(
         return Response.json({
           ok: true,
           result: {
-            url: "https://strong-bee-384.convex.site/telegram/agents/belle",
+            url: "https://convex.test/telegram/agents/belle",
           },
         });
       if (url.endsWith("getChatMember"))

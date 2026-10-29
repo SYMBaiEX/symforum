@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../../lib/site-urls";
 import { resolveForumRouteStatus } from "../../forum-route-status";
 import { ForumThreadView } from "@/components/forum/forum-thread-view";
 import { humanizeSlug } from "@/components/forum/forum-refs";
@@ -33,7 +35,7 @@ export async function generateMetadata({
     routeStatus?.kind === "thread"
       ? routeStatus.threadExcerpt
       : `Public thread in the ${humanizeSlug(categorySlug)} board.`;
-  const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
+  const canonical = `${FORUM_SITE_URL}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
   return {
     title: { absolute: compactSeoTitle(title, "SYMBaiEX forum") },
     description,
@@ -89,7 +91,7 @@ export default async function ForumThreadPage({ params }: PageProps) {
     routeStatus?.kind === "thread"
       ? routeStatus.threadExcerpt
       : `Public thread in the ${humanizeSlug(categorySlug)} board.`;
-  const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
+  const canonical = `${FORUM_SITE_URL}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
 
   return (
     <section className="page-frame page-frame-dense">
@@ -111,10 +113,10 @@ export default async function ForumThreadPage({ params }: PageProps) {
             author: { "@type": "Person", name: "SYMBaiEX forum member" },
           },
           breadcrumbStructuredData([
-            { name: "Forum", url: "https://forum.symbaiex.com/" },
+            { name: "Forum", url: FORUM_SITE_URL + "/" },
             {
               name: humanizeSlug(categorySlug),
-              url: `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}`,
+              url: `${FORUM_SITE_URL}/${encodeURIComponent(categorySlug)}`,
             },
             { name: title, url: canonical },
           ]),

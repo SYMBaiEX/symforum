@@ -1,3 +1,4 @@
+import { installation } from "./installation";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -427,7 +428,7 @@ export const sendCode = internalAction({
         from:
           env.CONTACT_FROM_EMAIL ||
           env.NEWSLETTER_FROM_EMAIL ||
-          "SYMBaiEX <contact@symbaiex.com>",
+          `${installation.name} <${installation.supportEmail}>`,
         to: challenge.email,
         subject: "Verify your SYMBaiEX account email",
         text: `Your SYMBaiEX email verification code is ${code}. It expires in 15 minutes. If you did not request this, you can ignore this email.`,

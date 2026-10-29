@@ -1,3 +1,4 @@
+
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -34,7 +35,10 @@ export const forumPluginTables = {
     actorMode: pluginActorModeValidator,
     transport: v.union(v.literal("browser"), v.literal("oauth")),
     kind: v.literal("forum-plugin"),
-    resource: v.literal("https://www.symbaiex.com/api/plugin/mcp"),
+    // Schema evaluation has no deployment environment. Keep historical resource
+    // values; every authorized use checks the exact configured resource in
+    // forumPluginPrincipal before granting capabilities.
+    resource: v.string(),
     issuer: v.string(),
     subject: v.optional(v.string()),
     externalAuthHash: v.optional(v.string()),

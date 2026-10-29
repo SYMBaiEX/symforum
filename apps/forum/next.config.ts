@@ -1,3 +1,4 @@
+import { installation } from "../../lib/installation";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { NextConfig } from "next";
@@ -39,8 +40,7 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
-      { protocol: "https", hostname: "symbaiex.com" },
-      { protocol: "https", hostname: "www.symbaiex.com" },
+      ...[new URL(installation.sites.primary).hostname, installation.identity.cookieDomain].filter(Boolean).map(hostname => ({ protocol: "https" as const, hostname })),
       { protocol: "https", hostname: "*.convex.cloud" },
       { protocol: "https", hostname: "*.convex.site" },
     ],

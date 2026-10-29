@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../lib/site-urls";
 import {
   lazy,
   Suspense,
@@ -25,7 +27,7 @@ export function Image({
   blurDataURL?: string;
 }) {
   const src = typeof props.src === "string" && props.src.startsWith("/") && !props.src.startsWith("//")
-    ? new URL(props.src, "https://forum.symbaiex.com").href
+    ? new URL(props.src, FORUM_SITE_URL).href
     : props.src;
   return <img {...props} src={src} alt={props.alt ?? ""} />;
 }

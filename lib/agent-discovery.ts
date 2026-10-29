@@ -9,7 +9,7 @@ import {
   SERVICE_AUTH_METADATA,
   serviceAuthEnabled,
 } from "@/lib/agent-service-auth-config";
-import { PRIMARY_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
+import { APEX_SITE_URL, INSTALLATION_NAMESPACE, PRIMARY_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
 import evidenceRegistry from "@/registry/evidence.server.json";
 import docsRegistry from "@/registry/docs.server.json";
 
@@ -377,12 +377,12 @@ export const AI_CATALOG = {
   specVersion: "1.0",
   host: {
     displayName: "SYMBaiEX",
-    identifier: "symbaiex.com",
+    identifier: INSTALLATION_NAMESPACE,
     documentationUrl: primarySiteUrl("/developers"),
   },
   entries: [
     {
-      identifier: "urn:air:symbaiex.com:a2a:documentation",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:a2a:documentation`,
       displayName: "SYMBaiEX Documentation A2A Agent",
       type: "application/json",
       url: primarySiteUrl("/.well-known/agent-card.json"),
@@ -393,7 +393,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("a2a-documentation"),
     },
     {
-      identifier: "urn:air:symbaiex.com:mcp:evidence",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:mcp:evidence`,
       displayName: "SYMBaiEX Evidence MCP",
       type: "application/mcp-server-card+json",
       url: primarySiteUrl("/mcp/server-card"),
@@ -404,7 +404,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("mcp-evidence"),
     },
     {
-      identifier: "urn:air:symbaiex.com:api:agent-v1",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:api:agent-v1`,
       displayName: "SYMBaiEX Agent REST API",
       type: "application/vnd.oai.openapi+json;version=3.1",
       url: primarySiteUrl("/api/agent/openapi.json"),
@@ -415,7 +415,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("agent-rest-v1"),
     },
     {
-      identifier: "urn:air:symbaiex.com:api:sandbox-v1",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:api:sandbox-v1`,
       displayName: "SYMBaiEX Synthetic API Sandbox",
       type: "application/json",
       url: primarySiteUrl("/api/sandbox"),
@@ -426,7 +426,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("sandbox-api-v1"),
     },
     {
-      identifier: "urn:air:symbaiex.com:api:sandbox-openapi-v1",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:api:sandbox-openapi-v1`,
       displayName: "SYMBaiEX Synthetic Sandbox OpenAPI",
       type: "application/vnd.oai.openapi+json;version=3.1",
       url: primarySiteUrl("/api/sandbox/openapi.json"),
@@ -437,7 +437,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("sandbox-openapi-v1"),
     },
     {
-      identifier: "urn:air:symbaiex.com:events:agent-v1",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:events:agent-v1`,
       displayName: "SYMBaiEX Agent Event API",
       type: "application/vnd.aai.asyncapi+json;version=3.0",
       url: primarySiteUrl("/api/agent/asyncapi.json"),
@@ -447,7 +447,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("agent-events-v1"),
     },
     {
-      identifier: "urn:air:symbaiex.com:skills:agent-api",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:skills:agent-api`,
       displayName: "SYMBaiEX Agent Skills",
       type: "application/json",
       url: primarySiteUrl("/.well-known/agent-skills/index.json"),
@@ -458,7 +458,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("agent-skills"),
     },
     {
-      identifier: "urn:air:symbaiex.com:plugin:agent-api",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:plugin:agent-api`,
       displayName: "SYMBaiEX Agent Plugin",
       type: "application/vnd.agent-plugins.plugin+json;version=1.0.0",
       url: "https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json",
@@ -469,7 +469,7 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("agent-plugin"),
     },
     {
-      identifier: "urn:air:symbaiex.com:mcp:documentation",
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:mcp:documentation`,
       displayName: "SYMBaiEX Documentation MCP",
       type: "application/mcp-server-card+json",
       url: primarySiteUrl("/api/docs/mcp/server-card"),
@@ -484,7 +484,7 @@ export const AI_CATALOG = {
 
 function catalogPublisher() {
   return {
-    identifier: "https://symbaiex.com",
+    identifier: APEX_SITE_URL,
     displayName: "SYMBaiEX",
     identityType: "dns",
   } as const;
@@ -492,7 +492,7 @@ function catalogPublisher() {
 
 function catalogTrustManifest(artifact: string) {
   return {
-    identity: `https://symbaiex.com/.well-known/ai-catalog.json#${artifact}`,
+    identity: `${APEX_SITE_URL}/.well-known/ai-catalog.json#${artifact}`,
     identityType: "dns",
     trustSchema: {
       identifier: "urn:trust:symbaiex-public-contract-v1",

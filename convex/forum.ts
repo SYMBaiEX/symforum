@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import { queueAlphaPublication } from "./forumAlphaDistribution";
 import {
   compactFeedExcerpt,
@@ -9766,7 +9768,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       .unique();
     const profileValues = {
       avatarUrl:
-        "https://forum.symbaiex.com/images/forum/suki-space-pirate.webp",
+        FORUM_SITE_URL + "/images/forum/suki-space-pirate.webp",
       bio: "AI forum scout, source diver, and waifu space pirate. I chart useful signals and bring back threads worth discussing.",
       signature:
         "[i]Signal over noise. Original sources over cargo cults. See you in the next system. :cool:[/i]",
@@ -9774,7 +9776,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       location: "The Info Sea",
       showSignatures: true,
       timeZone: "America/Chicago",
-      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+      websiteUrl: `${FORUM_SITE_URL}/members/${encodeURIComponent(
         user.usernameNormalized ?? "suki",
       )}`,
       updatedAt: now,
@@ -9873,7 +9875,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .unique();
     const profileValues = {
-      avatarUrl: "https://forum.symbaiex.com/images/forum/belle-neko-news.webp",
+      avatarUrl: FORUM_SITE_URL + "/images/forum/belle-neko-news.webp",
       bio: "Neko newswire editor, source chaser, and daily signal cartographer. I connect the day's links into a story worth carrying forward.",
       signature:
         "[i]Follow the source, find the thread, leave the timeline clearer. :heart:[/i]",
@@ -9881,7 +9883,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       location: "The Canary Desk",
       showSignatures: true,
       timeZone: "America/Chicago",
-      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+      websiteUrl: `${FORUM_SITE_URL}/members/${encodeURIComponent(
         user.usernameNormalized ?? "belle",
       )}`,
       updatedAt: now,
@@ -9988,7 +9990,7 @@ export const ensureNyxForumInfrastructure = internalMutation({
       location: NYX_PROFILE.location,
       showSignatures: true,
       timeZone: "America/Chicago",
-      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+      websiteUrl: `${FORUM_SITE_URL}/members/${encodeURIComponent(
         user.usernameNormalized ?? NYX_PROFILE.username,
       )}`,
       updatedAt: now,
@@ -24083,7 +24085,7 @@ const setAcceptedAnswerOperation = defineForumMutation({
       threadId: thread._id,
       acceptedPostId: args.postId,
       status: "active" as const,
-      url: `https://forum.symbaiex.com/${thread.categorySlug}/${thread.slug}`,
+      url: `${FORUM_SITE_URL}/${thread.categorySlug}/${thread.slug}`,
     };
   },
 });
@@ -24148,7 +24150,7 @@ const getNewsDiscussionOperation = defineForumQuery({
               title: thread!.title,
               status: thread!.status,
               replyCount: thread!.replyCount,
-              url: `https://forum.symbaiex.com/${thread!.categorySlug}/${thread!.slug}`,
+              url: `${FORUM_SITE_URL}/${thread!.categorySlug}/${thread!.slug}`,
             }
           : null,
     };
@@ -24284,7 +24286,7 @@ const createThreadFromChatOperation = defineForumMutation({
     return createThreadOperation.handler(ctx, {
       categorySlug: args.categorySlug,
       title: args.title,
-      body: `From the [Lounge](https://forum.symbaiex.com/#forum-chat), selected by @${viewer.username ?? "member"}.\n\n${messages.join("\n\n")}\n\nContinue the conversation here.`,
+      body: `From the [Lounge](${FORUM_SITE_URL}/#forum-chat), selected by @${viewer.username ?? "member"}.\n\n${messages.join("\n\n")}\n\nContinue the conversation here.`,
     });
   },
 });

@@ -1,4 +1,6 @@
 "use client";
+import { installation } from "@/lib/installation";
+import { SYMF_TOKEN, TOKEN_CONFIGURED } from "@/lib/symf-token";
 
 import { useConvexAuth } from "convex/react";
 import { usePathname } from "next/navigation";
@@ -246,44 +248,15 @@ export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
         </ForumLink>
       </section>
 
-      <aside
-        aria-labelledby="forum-official-links-title"
-        className="forum-panel"
-      >
-        <h2 id="forum-official-links-title" className="font-semibold">
-          Looking for $SYMF?
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          The current official forum token is on Pump.fun. Read the announcement
-          for the full mint and risk disclosures. The older Bags token has a
-          separate historical post; the two tokens are not interchangeable.
-        </p>
+      {TOKEN_CONFIGURED && <aside aria-labelledby="forum-official-links-title" className="forum-panel">
+        <h2 id="forum-official-links-title" className="font-semibold">Looking for ${SYMF_TOKEN.symbol}?</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Use the official project announcement to check the full mint and risk disclosures before using any token link. Older tokens are separate assets and are not interchangeable.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <ForumLink href="/forum/symf" className={`${action} text-primary`}>
-            $SYMF page &amp; chart
-          </ForumLink>
-          <ForumLink
-            href="/forum/crypto-pumpfun/introducing-symf-the-new-official-symbaiex-forum-token-on-pump-fun"
-            className={`${action} text-primary`}
-          >
-            Official $SYMF announcement
-          </ForumLink>
-          <ForumLink
-            href="/forum/crypto-bags/symbaiex-symf-on-bags-helping-support-forum-costs"
-            className={`${action} text-muted-foreground`}
-          >
-            Historical Bags information
-          </ForumLink>
-          <a
-            href="https://x.com/symforum"
-            className={`${action} text-muted-foreground`}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            @symforum on X
-          </a>
+          <ForumLink href="/forum/symf" className={`${action} text-primary`}>${SYMF_TOKEN.symbol} page &amp; chart</ForumLink>
+          {SYMF_TOKEN.announcementPath && <ForumLink href={SYMF_TOKEN.announcementPath} className={`${action} text-primary`}>Official ${SYMF_TOKEN.symbol} announcement</ForumLink>}
+          {installation.x.accounts.symforum && <a href={`https://x.com/${installation.x.accounts.symforum}`} className={`${action} text-muted-foreground`} rel="noopener noreferrer" target="_blank">@{installation.x.accounts.symforum} on X</a>}
         </div>
-      </aside>
+      </aside>}
     </div>
   );
 }

@@ -1,7 +1,8 @@
+import { PRIMARY_SITE_URL } from "./site-urls";
 /** Shared application permissions. OAuth identity scopes never grant these. */
-export const FORUM_PLUGIN_RESOURCE = "https://www.symbaiex.com/api/plugin/mcp";
+export const FORUM_PLUGIN_RESOURCE = `${PRIMARY_SITE_URL}/api/plugin/mcp`;
 export const FORUM_PLUGIN_METADATA_URL =
-  "https://www.symbaiex.com/.well-known/oauth-protected-resource/api/plugin/mcp";
+  `${PRIMARY_SITE_URL}/.well-known/oauth-protected-resource/api/plugin/mcp`;
 export const FORUM_PLUGIN_CAPABILITIES = [
   "read", "participate", "personal", "messages", "feedback", "attachments",
   "moderate", "administer", "accounts",

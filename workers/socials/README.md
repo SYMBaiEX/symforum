@@ -29,21 +29,23 @@ Never commit `.dev.vars` or webhook secrets.
 
 ## Cloudflare deployment
 
-The Worker, custom domain, static assets, D1 binding, and observability settings
-are declared in `wrangler.jsonc`.
+The committed `wrangler.jsonc` is a neutral template. Generate your own ignored
+`wrangler.deploy.local.json` using `bun run setup:worker socials` from the repo
+root. See [installation configuration](../../docs/installation-configuration.md).
+Customize the branded sample in `public/` before deploying a fork.
 
 ```bash
 cd workers/socials
 bunx wrangler whoami
-bunx wrangler d1 migrations apply symbaiex-socials-events --remote
-bunx wrangler secret put TYPEFULLY_WEBHOOK_SECRET
-bunx wrangler deploy
+bunx wrangler d1 migrations apply YOUR_DATABASE_NAME --remote --config wrangler.deploy.local.json
+bunx wrangler secret put TYPEFULLY_WEBHOOK_SECRET --config wrangler.deploy.local.json
+bun run deploy
 ```
 
 The Typefully webhook must then be created manually in Typefully under
 **Settings → API → Add webhook**:
 
-- URL: `https://socials.symbaiex.com/webhooks/typefully`
+- URL: `https://YOUR_SOCIALS_DOMAIN/webhooks/typefully`
 - Events: start with `draft.published`, `draft.status_changed`, and
   `draft.tags_changed`
 - Secret: store the generated webhook secret in Cloudflare with

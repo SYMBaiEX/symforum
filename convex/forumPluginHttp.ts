@@ -1,3 +1,7 @@
+import { installationWebOrigins } from "../lib/installation-config";
+import { installation } from "./installation";
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "../lib/site-urls";
 import type { HttpRouter } from "convex/server";
 import { ConvexError } from "convex/values";
 import { httpAction } from "./_generated/server";
@@ -20,9 +24,7 @@ import {
 } from "../lib/forum-plugin-upload";
 
 const origins = new Set([
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  ...installationWebOrigins(installation).filter(origin => origin.startsWith("https:")),
   "https://chatgpt.com",
   "https://chat.openai.com",
   "http://localhost:3000",
@@ -120,7 +122,7 @@ export function forumPluginHttpError(request: Request, error: unknown) {
             quota.resetsAt <= 8_640_000_000_000_000
           )
             safe.resetsAt = quota.resetsAt;
-          if (quota.settingsUrl === "https://www.symbaiex.com/developer")
+          if (quota.settingsUrl === PRIMARY_SITE_URL + "/developer")
             safe.settingsUrl = quota.settingsUrl;
           if (Object.keys(safe).length) diagnostics.quota = safe;
         }

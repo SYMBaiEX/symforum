@@ -1,3 +1,4 @@
+import { installation } from "@/lib/installation";
 import { StructuredData } from "@/components/structured-data";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -102,8 +103,8 @@ export default function TermsPage() {
           These terms may be updated as the platform changes. Material updates
           will be reflected by the date above. Questions about these terms,
           privacy, security, or acceptable use can be sent to{" "}
-          <a className="underline" href="mailto:austin@symbaiex.com">
-            austin@symbaiex.com
+          <a className="underline" href={`mailto:${installation.supportEmail}`}>
+            {installation.supportEmail}
           </a>
           .
         </TermsSection>

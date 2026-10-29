@@ -1,3 +1,4 @@
+import { installationBinding } from "./installation";
 import { memesEnabled, validMeme } from "./telegramMemePolicy";
 export { memesEnabled, validMeme } from "./telegramMemePolicy";
 import { startMemeV2 } from "./telegramMemeData";
@@ -77,6 +78,7 @@ export const start = internalMutation({
       lastQueuedAt: now,
     });
     const requestId = await ctx.db.insert("telegramAgentRequests", {
+      installationBinding,
       key,
       agentSlug: "belle",
       botId: bot.id,

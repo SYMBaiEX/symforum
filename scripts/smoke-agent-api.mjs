@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
+
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
@@ -10,7 +12,7 @@ const args = parseArgs(process.argv.slice(2));
 const baseUrl = normalizeBaseUrl(
   args["base-url"] ??
     process.env.SYMBAIEX_AGENT_API_BASE_URL ??
-    "https://www.symbaiex.com/api/agent",
+    PRIMARY_SITE_URL + "/api/agent",
 );
 
 if (
@@ -46,7 +48,7 @@ export async function publicSmoke() {
     200,
   );
   assert(
-    protectedResource?.resource === "https://www.symbaiex.com/api/agent/mcp" &&
+    protectedResource?.resource === PRIMARY_SITE_URL + "/api/agent/mcp" &&
       protectedResource?.["x-symbaiex-authentication"]?.oauth2 === false,
     "Protected-resource metadata does not truthfully describe custom MCP authentication.",
   );
@@ -387,7 +389,7 @@ async function assertAuthChallenge(response, status, protectedResource) {
   const challengeScopes = challenge.match(/\bscope="([^"]+)"/)?.[1].split(" ");
   assert(
     challenge.includes(
-      'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
+      "resource_metadata=\"" + PRIMARY_SITE_URL + "/.well-known/oauth-protected-resource\"",
     ) &&
       Array.isArray(scopes) &&
       scopes.length > 0 &&

@@ -1,4 +1,5 @@
 "use client";
+import { SYMF_TOKEN } from "@/lib/symf-token";
 
 import { Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -363,7 +364,7 @@ export function ForumNavigationLayout({
                   Start here
                 </ForumMenuLink>
                 <ForumMenuLink href="/forum/symf" icon={Coins}>
-                  $SYMF
+                  ${SYMF_TOKEN.symbol}
                 </ForumMenuLink>
                 <ForumMenuLink href="/forum/swap" icon={ArrowLeftRight}>
                   Swap tokens
@@ -506,7 +507,7 @@ export function ForumNavigationLayout({
           Start here
         </ForumRailLink>
         <ForumRailLink href="/forum/symf" icon={Coins}>
-          $SYMF
+          ${SYMF_TOKEN.symbol}
         </ForumRailLink>
         <ForumRailLink href="/forum/swap" icon={ArrowLeftRight}>
           Swap tokens

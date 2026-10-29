@@ -1,8 +1,10 @@
+
+import { PRIMARY_SITE_URL } from "../../lib/site-urls.ts";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
 
 const SECRET_FIELD = /(?:access|refresh|private|secret|signature|challenge|token|authorization)/i;
-export const PRODUCTION_AGENT_API_BASE_URL = "https://www.symbaiex.com/api/agent";
+export const PRODUCTION_AGENT_API_BASE_URL = PRIMARY_SITE_URL + "/api/agent";
 const DEFAULT_BASE_URL = PRODUCTION_AGENT_API_BASE_URL;
 const MAX_AGENT_ID_LENGTH = 64;
 const MAX_CREDENTIAL_BYTES = 64 * 1024;
@@ -18,7 +20,7 @@ export function normalizeAgentApiBaseUrl(value = DEFAULT_BASE_URL) {
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Agent API base URL must be HTTPS and contain no credentials, query, or fragment.");
   url.pathname = url.pathname.replace(/\/+$/, "");
   const normalized = url.toString().replace(/\/$/, "");
-  if (normalized !== PRODUCTION_AGENT_API_BASE_URL) throw new Error("PLAT-01 certification is pinned to https://www.symbaiex.com/api/agent.");
+  if (normalized !== PRODUCTION_AGENT_API_BASE_URL) throw new Error("PLAT-01 certification is pinned to " + PRIMARY_SITE_URL + "/api/agent.");
   return normalized;
 }
 
@@ -85,7 +87,8 @@ function inspectSafeParentChain(start) {
 
 export function validateLifecycleConfig({ baseUrl, production, confirm, phase }) {
   const normalized = normalizeAgentApiBaseUrl(baseUrl);
-  if (production !== "strong-bee-384") throw new Error("Lifecycle verification is blocked. Pass --production strong-bee-384 for the named production target.");
+  const expected = process.env.AGENT_AUTH_CERTIFICATION_DEPLOYMENT?.trim();
+  if (!expected || production !== expected) throw new Error("Lifecycle verification is blocked. Configure AGENT_AUTH_CERTIFICATION_DEPLOYMENT and pass that exact --production target.");
   if (confirm !== "PLAT-01") throw new Error("Lifecycle verification is blocked. Pass --confirm PLAT-01 after completing owner-console enrollment, rotation, and revocation.");
   if (!["refresh-scope", "rotation", "revocation"].includes(phase)) throw new Error("--phase must be refresh-scope, rotation, or revocation.");
   return normalized;

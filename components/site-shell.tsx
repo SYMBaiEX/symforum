@@ -1,5 +1,6 @@
 "use client";
 
+import { installation } from "@/lib/installation";
 import { AppErrorSurface } from "@/components/app-error-surface";
 import {
   isForumHostname,
@@ -94,15 +95,15 @@ export function SiteShell({
       setForumHost(true);
       setNewsletterHost(false);
       setPrimarySiteHref(primarySiteHrefForForumHost("/", window.location));
-    } else if (window.location.hostname === "newsletter.symbaiex.com") {
+    } else if (window.location.hostname === new URL(installation.sites.newsletter).hostname) {
       setForumHost(false);
       setNewsletterHost(true);
       setPrimarySiteHref(primarySiteUrl("/"));
-    } else if (window.location.hostname === "news.symbaiex.com") {
+    } else if (window.location.hostname === new URL(installation.sites.news).hostname) {
       setForumHost(false);
       setNewsletterHost(false);
       setPrimarySiteHref(primarySiteUrl("/"));
-    } else if (window.location.hostname === "blog.symbaiex.com") {
+    } else if (window.location.hostname === new URL(installation.sites.blog).hostname) {
       setForumHost(false);
       setNewsletterHost(false);
       setPrimarySiteHref(primarySiteUrl("/"));

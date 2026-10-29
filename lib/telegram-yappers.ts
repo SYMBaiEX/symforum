@@ -1,4 +1,6 @@
-export const YAPPERS_TOPIC_ID = 296;
+import { installation } from "./installation";
+import { telegramMessageUrl } from "./installation-config";
+export const YAPPERS_TOPIC_ID = installation.telegram.topics.yappers;
 export const YAPPERS_INTERVAL_MS = 30 * 60_000;
 export const YAPPERS_FOLLOWUP_DELAY_MS = 6 * 60_000;
 export const YAPPERS_LEGACY_FOLLOWUP_DELAY_MS = 20 * 60_000;
@@ -81,7 +83,7 @@ export function researchMarkup(data: {
   if (data.revisit && data.previousMessageId)
     row.push({
       text: "Earlier discussion",
-      url: `https://t.me/c/4387387301/296/${data.previousMessageId}`,
+      url: telegramMessageUrl(installation, YAPPERS_TOPIC_ID, data.previousMessageId),
     });
   return { reply_markup: { inline_keyboard: [row] } };
 }

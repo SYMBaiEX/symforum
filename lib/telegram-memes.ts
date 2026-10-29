@@ -1,4 +1,5 @@
-export const MEME_TOPIC_ID = 13;
+import { installation } from "./installation";
+export const MEME_TOPIC_ID = installation.telegram.topics.memes;
 export const MEME_INTERVAL_MS = 18 * 60_000;
 const reactions = [
   "triumphant cosmic confidence beside a laptop",

@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls.ts";
 /** Secure, deliberately small publisher for the authenticated admin posts API. */
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-const DEFAULT_API_BASE = "https://www.symbaiex.com/api/admin/posts";
+const DEFAULT_API_BASE = PRIMARY_SITE_URL + "/api/admin/posts";
 const KEYCHAIN_SERVICE = "symbaiex-blog-admin";
 const KEYCHAIN_ACCOUNT = "codex-social-ops";
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

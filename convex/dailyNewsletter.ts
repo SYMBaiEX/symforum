@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "../lib/site-urls";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -1041,7 +1043,7 @@ async function readDailyConfig(
   const siteUrl =
     settings.get("newsletter.siteUrl") ??
     env.NEWSLETTER_SITE_URL ??
-    "https://symbaiex.com";
+    PRIMARY_SITE_URL;
   const enabledSetting = settings.get("dailyNewsletter.enabled") ?? null;
   const testModeSetting = settings.get("dailyNewsletter.testMode") ?? null;
   const reviewRequiredSetting =
@@ -1096,7 +1098,7 @@ async function readAdminSettings(
 ): Promise<DailyNewsletterAdminSettings> {
   const siteUrl =
     (await getSettingDirect(ctx, "newsletter.siteUrl")) ??
-    "https://symbaiex.com";
+    PRIMARY_SITE_URL;
   const enabledSetting = await getSettingDirect(ctx, "dailyNewsletter.enabled");
   const testModeSetting = await getSettingDirect(
     ctx,
@@ -1206,11 +1208,11 @@ function normalizeSiteUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return "https://symbaiex.com";
+      return PRIMARY_SITE_URL;
     }
     return url.origin;
   } catch {
-    return "https://symbaiex.com";
+    return PRIMARY_SITE_URL;
   }
 }
 

@@ -1,3 +1,7 @@
+import { installationWebOrigins } from "./installation-config";
+import { installation } from "./installation";
+
+import { PRIMARY_SITE_URL, FORUM_SITE_URL } from "./site-urls";
 import { createHash, randomUUID } from "node:crypto";
 import { agentBearerChallenge } from "./agent-auth-metadata";
 import { validateWorkOSAgentRegistrationCredential } from "./workos-agent-registration";
@@ -53,9 +57,7 @@ export type AgentArtifactKind =
   | "dataset-version-manifest";
 
 const ALLOWED_ORIGINS = new Set([
-  "https://symbaiex.com",
-  "https://www.symbaiex.com",
-  "https://forum.symbaiex.com",
+  ...installationWebOrigins(installation).filter(origin => origin.startsWith("https:")),
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",
@@ -63,7 +65,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const AGENT_RATE_LIMIT_POLICY = '"agent-minute";q=60;w=60';
-const API_LIFECYCLE_URL = "https://www.symbaiex.com/developers/api-lifecycle";
+const API_LIFECYCLE_URL = PRIMARY_SITE_URL + "/developers/api-lifecycle";
 
 export function isAllowedAgentOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -810,7 +812,7 @@ function asyncJobLocation(
   }
   const collection =
     operation === "research_create" ? "research-jobs" : "exports";
-  return `https://www.symbaiex.com/api/agent/v1/${collection}/${encodeURIComponent(payload.jobId)}`;
+  return `${PRIMARY_SITE_URL}/api/agent/v1/${collection}/${encodeURIComponent(payload.jobId)}`;
 }
 function agentDataUpstream() {
   const configured =

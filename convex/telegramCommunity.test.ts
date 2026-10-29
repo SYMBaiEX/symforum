@@ -157,7 +157,7 @@ test("authenticated callbacks deduplicate by source bot and prompt from the sele
         return Response.json({
           ok: true,
           result: {
-            url: "https://strong-bee-384.convex.site/telegram/agents/nyx",
+            url: "https://convex.test/telegram/agents/nyx",
           },
         });
       if (url.endsWith("getChatMember"))
@@ -210,7 +210,7 @@ test("former members and disabled choices receive no prompt or model request", a
       ? Response.json({
           ok: true,
           result: {
-            url: "https://strong-bee-384.convex.site/telegram/agents/nyx",
+            url: "https://convex.test/telegram/agents/nyx",
           },
         })
       : Response.json({ ok: true, result: { status: "left" } }),

@@ -1,3 +1,5 @@
+
+import { FORUM_SITE_URL } from "../../../../lib/site-urls";
 import { ForumHelpPage } from "@/components/forum/forum-help-page";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
@@ -8,7 +10,7 @@ export const metadata: Metadata = {
   title: "Forum Help / FAQ",
   description: "Help and FAQ documents for the SYMBaiEX forum.",
   alternates: {
-    canonical: "https://forum.symbaiex.com/help",
+    canonical: FORUM_SITE_URL + "/help",
   },
 };
 

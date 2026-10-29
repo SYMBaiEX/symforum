@@ -1,3 +1,5 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
 export type SitePageRecord = {
   _id?: string;
   _creationTime?: number;
@@ -64,9 +66,9 @@ export const defaultSitePages: SitePageRecord[] = [
     status: "published",
     updatedAt: UPDATED_AT,
     showImage: true,
-    imageUrl: "https://symbaiex.com/images/about-symbiex-portrait-dark.webp",
+    imageUrl: PRIMARY_SITE_URL + "/images/about-symbiex-portrait-dark.webp",
     imageLightUrl:
-      "https://symbaiex.com/images/about-symbiex-portrait-light.webp",
+      PRIMARY_SITE_URL + "/images/about-symbiex-portrait-light.webp",
     imageAlt: "Stylized SYMBaiEX portrait in a neon city scene",
     imageCredit: "SYMBaiEX",
   },

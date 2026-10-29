@@ -71,6 +71,7 @@ export const telegramAgentTables = {
     requestId: v.id("telegramAgentRequests"),
   }).index("by_key", ["key"]),
   telegramForumDigests: defineTable({
+    installationBinding: v.optional(v.string()),
     key: v.string(),
     topicId: v.number(),
     from: v.number(),
@@ -100,6 +101,7 @@ export const telegramAgentTables = {
   // Delivery intent and deduplication tombstones, not a second chat-history store.
   // Conversation messages belong to the existing Agent component.
   telegramAgentRequests: defineTable({
+    installationBinding: v.optional(v.string()),
     key: v.string(),
     agentSlug: v.string(),
     botId: v.string(),

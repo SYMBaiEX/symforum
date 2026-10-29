@@ -1,3 +1,6 @@
+
+import { PRIMARY_SITE_URL } from "./site-urls";
+import { installation } from "./installation";
 /**
  * Guardrails for the future high-volume agent API hostname.
  *
@@ -7,7 +10,7 @@
  * boundary prevents the public discovery/community API from accidentally
  * inheriting a paid surface.
  */
-export const PREMIUM_AGENT_API_HOST = "agent-api.symbaiex.com";
+export const PREMIUM_AGENT_API_HOST = installation.identity.cookieDomain ? `agent-api.${installation.identity.cookieDomain}` : "";
 
 export type PremiumAgentApiState =
   | "disabled"
@@ -21,7 +24,7 @@ export function premiumAgentApiEnabled(env = process.env) {
 }
 
 export function configuredPremiumAgentApiHost(env = process.env) {
-  return env.PREMIUM_AGENT_API_HOST === PREMIUM_AGENT_API_HOST
+  return Boolean(PREMIUM_AGENT_API_HOST) && env.PREMIUM_AGENT_API_HOST === PREMIUM_AGENT_API_HOST
     ? PREMIUM_AGENT_API_HOST
     : null;
 }
@@ -107,7 +110,7 @@ export function premiumPaymentRequired(
   // authenticated principal against the canonical entitlement and usage ledger.
   return new Response(
     JSON.stringify({
-      type: "https://www.symbaiex.com/docs/premium-agent-api#payment-required",
+      type: PRIMARY_SITE_URL + "/docs/premium-agent-api#payment-required",
       title: "Payment Required",
       status: 402,
       detail,

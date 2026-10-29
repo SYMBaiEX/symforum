@@ -1,3 +1,7 @@
+import { installation } from "../../../lib/installation";
+import { installationWebOrigins } from "../../../lib/installation-config";
+
+import { FORUM_SITE_URL } from "../../../lib/site-urls";
 import {
   useSyncExternalStore,
   forwardRef,
@@ -14,15 +18,13 @@ export const subscribeRoute = (listener: () => void) => {
 export const getRoute = () => route;
 export function internalForumHref(href: string) {
   if (href.startsWith("#")) return `${route.split("#")[0]}${href}`;
-  const url = new URL(href, "https://forum.symbaiex.com");
+  const url = new URL(href, FORUM_SITE_URL);
   if (
-    !["forum.symbaiex.com", "www.symbaiex.com", "symbaiex.com"].includes(
-      url.hostname,
-    )
+    !installationWebOrigins(installation).includes(url.origin)
   )
     return null;
   if (
-    url.hostname !== "forum.symbaiex.com" &&
+    url.origin !== installation.sites.forum &&
     !url.pathname.startsWith("/forum") &&
     !url.pathname.startsWith("/signin")
   )
@@ -61,7 +63,7 @@ export function usePathname() {
 }
 export function useSearchParams() {
   const value = useSyncExternalStore(subscribeRoute, getRoute, getRoute);
-  return new URL(value, "https://forum.symbaiex.com").searchParams;
+  return new URL(value, FORUM_SITE_URL).searchParams;
 }
 export function useRouter() {
   return {

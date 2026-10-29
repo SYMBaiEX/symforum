@@ -1,3 +1,4 @@
+import { installationBinding, installationMatches } from "./installation";
 import { ALPHA_PUBLISHER_SLUG } from "../lib/forum-alpha-editorial";
 import { v } from "convex/values";
 import { createThread } from "@convex-dev/agent";
@@ -24,6 +25,7 @@ import {
   X_OFFICIAL_SOURCES,
   officialXAuthor,
   validXDraft,
+  expectedXUsername,
   X_ORIGINAL_INTERVAL_MS,
 } from "../lib/x-agent-policy";
 
@@ -69,6 +71,7 @@ export async function configureActivity(
     originals?: boolean;
   },
 ) {
+  expectedXUsername(a.agentSlug, a.expectedUsername);
   if (a.agentSlug === ALPHA_PUBLISHER_SLUG)
     throw Error("Project publisher uses Telegram-first coverage only.");
   if (!a.connected || !writeScope(a))
@@ -84,6 +87,7 @@ export async function configureActivity(
       "External work is in progress or uncertain. Reconcile it; reconnect for a fresh grant if needed.",
     );
   const values = {
+    installationBinding,
     accountId: a._id,
     enabled: options.reposts || options.comments || options.originals === true,
     epoch: a.epoch,
@@ -203,7 +207,7 @@ export const claim = internalMutation({
   ),
   handler: async (ctx, args) => {
     const r = await ctx.db.get("xAgentActivity", args.activityId);
-    if (!r?.enabled || (!args.force && r.nextPollAt > Date.now())) return null;
+    if (!r?.enabled || !installationMatches(r) || (!args.force && r.nextPollAt > Date.now())) return null;
     if (r.lease) {
       if ((r.leaseUntil ?? 0) > Date.now()) return null;
       // Expired external work may have refreshed a rotating token or sent a post.
@@ -214,6 +218,9 @@ export const claim = internalMutation({
       });
       return null;
     }
+    const account = await ctx.db.get("xAgentAccounts", r.accountId);
+    if (!account) return null;
+    try { expectedXUsername(account.agentSlug, account.expectedUsername); } catch { return null; }
     await ctx.db.patch("xAgentActivity", r._id, {
       lease: args.lease,
       leaseUntil: Date.now() + 8 * 60_000,
@@ -375,6 +382,7 @@ export const ingest = internalMutation({
           continue;
         const jitter = Number(post.id.slice(-3)) % 10;
         await ctx.db.insert("xAgentOperations", {
+      installationBinding,
           accountId: c.account._id,
           epoch: c.account.epoch,
           key,
@@ -420,7 +428,7 @@ export const next = internalMutation({
   returns: v.union(v.null(), schema.doc("xAgentOperations")),
   handler: async (ctx, args) => {
     const c = await active(ctx, args.activityId, args.lease);
-    if (!c) return null;
+    if (!c || !installationMatches(c.activity)) return null;
     await admitOriginal(ctx, c.account, c.activity);
     const rows = await ctx.db
       .query("xAgentOperations")
@@ -441,6 +449,7 @@ export const next = internalMutation({
             : c.activity.options.comments &&
               c.activity.options.aiRepliesApproved;
       if (
+        !installationMatches(op) ||
         !permitted ||
         op.epoch !== c.account.epoch ||
         (op.kind !== "original" &&
@@ -475,6 +484,7 @@ export const next = internalMutation({
             summary: "One official public post only. No private histories.",
           });
           const draftId = await ctx.db.insert("xAgentDrafts", {
+      installationBinding,
             ownerUserId: c.account.ownerUserId,
             agentSlug: c.account.agentSlug,
             accountEpoch: c.account.epoch,
@@ -498,6 +508,7 @@ export const next = internalMutation({
         const d = await ctx.db.get("xAgentDrafts", op.draftId);
         if (
           !d ||
+          !installationMatches(d) ||
           (d.manuallyEdited && !op.ownerRequested) ||
           ["held", "archived"].includes(d.status)
         ) {
@@ -524,6 +535,8 @@ export const claimSend = internalMutation({
     if (
       !c ||
       !op ||
+      !installationMatches(c.activity) ||
+      !installationMatches(op) ||
       op.accountId !== c.account._id ||
       op.epoch !== c.account.epoch ||
       op.status !== "queued" ||
@@ -551,6 +564,7 @@ export const claimSend = internalMutation({
     if (
       op.kind !== "repost" &&
       (!d ||
+        !installationMatches(d) ||
         d.status !== "draft" ||
         (d.manuallyEdited && !op.ownerRequested) ||
         (op.approvedText !== undefined && d.text !== op.approvedText) ||

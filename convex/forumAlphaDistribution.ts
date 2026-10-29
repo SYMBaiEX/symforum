@@ -1,3 +1,4 @@
+import { installation, installationBinding, installationMatches } from "./installation";
 import { v } from "convex/values";
 import { RateLimiter, DAY, HOUR } from "@convex-dev/rate-limiter";
 import { components, internal } from "./_generated/api";
@@ -82,7 +83,7 @@ async function brand(ctx: QueryCtx) {
   if (
     !a?.connected ||
     a.xUserId !== ALPHA_X_USER_ID ||
-    a.username !== "symforum" ||
+    a.username !== installation.x.accounts.symforum ||
     !a.grant ||
     a.publisherHold ||
     !X_ACTIVITY_SCOPES.every((s) => a.scope?.split(" ").includes(s))
@@ -130,6 +131,7 @@ export async function queueAlphaPublication(
     return;
   const now = Date.now();
   await ctx.db.insert("forumAlphaDeliveries", {
+      installationBinding,
     threadId: t._id,
     title: t.title,
     body: t.body,
@@ -183,6 +185,7 @@ export const claimTelegram = internalMutation({
   ),
   handler: async (ctx, { id }) => {
     const r = await ctx.db.get("forumAlphaDeliveries", id);
+    if (r && !installationMatches(r)) return null;
     if (!r || r.telegramStatus !== "queued" || !enabled()) return null;
     if (
       r.expiresAt <= Date.now() ||
@@ -242,6 +245,7 @@ export const claimX = internalMutation({
   ),
   handler: async (ctx, { id }) => {
     const r = await ctx.db.get("forumAlphaDeliveries", id);
+    if (r && !installationMatches(r)) return null;
     const a = await brand(ctx);
     if (
       !r ||
@@ -362,6 +366,7 @@ export const authorizeXSend = internalMutation({
   returns: v.union(v.null(), v.string()),
   handler: async (ctx, { id }) => {
     const r = await ctx.db.get("forumAlphaDeliveries", id);
+    if (r && !installationMatches(r)) return null;
     const a = await brand(ctx);
     if (
       !r ||
