@@ -1,6 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
-import { walletLoginInput } from "./human-auth-proof";
-import { requestWalletProof, walletFailureMessage } from "./wallet-signin";
+import { walletLoginInput, verifyWalletLogin } from "./human-auth-proof";
+import {
+  requestWalletProof,
+  walletFailureMessage,
+  requestMessageProof,
+  connectMessageWallet,
+  supportsMessageSigning,
+} from "./wallet-signin";
 
 const now = Date.parse("2026-10-29T04:00:00Z");
 const location = {
@@ -108,9 +114,149 @@ describe("Wallet Standard sign-in", () => {
     );
     expect(
       walletFailureMessage(new Error("Unexpected error"), "Phantom"),
-    ).toContain("Unlock");
+    ).toContain("internal signing error");
     expect(
       walletFailureMessage(new Error("private provider response"), "Phantom"),
     ).not.toContain("private provider response");
+  });
+});
+
+describe("explicit connected-wallet message compatibility", () => {
+  function connected() {
+    const account = {
+      address: "11111111111111111111111111111111",
+      publicKey: new Uint8Array(32),
+      chains: ["solana:mainnet"],
+      features: ["solana:signMessage"],
+    };
+    const connect = vi.fn(async () => ({ accounts: [account] }));
+    const signMessage = vi.fn(async ({ message }: { message: Uint8Array }) => [
+      { signedMessage: message, signature: new Uint8Array(64) },
+    ]);
+    return {
+      account,
+      connect,
+      signMessage,
+      wallet: {
+        name: "Phantom",
+        accounts: [account],
+        features: {
+          "standard:connect": { connect },
+          "solana:signMessage": { signMessage },
+        },
+      },
+    };
+  }
+  test("connection alone never requests a signature", async () => {
+    const { wallet, account, signMessage } = connected();
+    expect(supportsMessageSigning(wallet)).toBe(true);
+    expect(await connectMessageWallet(wallet)).toEqual([account]);
+    expect(signMessage).not.toHaveBeenCalled();
+  });
+  test("signs the exact canonical message synchronously from the explicit click", async () => {
+    const { wallet, account, signMessage, connect } = connected();
+    const result = requestMessageProof(
+      wallet,
+      account,
+      challenge(),
+      location,
+      now,
+    );
+    expect(signMessage).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
+    const proof = await result;
+    const text = new TextDecoder().decode(signMessage.mock.calls[0][0].message);
+    expect(text).toContain(
+      `forum.symbaiex.com wants you to sign in with your Solana account:\n${account.address}`,
+    );
+    expect(text).toContain(`Nonce: ${challenge().nonce}`);
+    expect(proof.nonce).toBe(challenge().nonce);
+    expect(verifyWalletLogin(challenge().input, proof)).toBe(false); // a fabricated signature still fails the unchanged server check
+  });
+  test("fails before signing when the selected account changes or challenge expires", () => {
+    const { wallet, account, signMessage } = connected();
+    wallet.accounts = [];
+    expect(() =>
+      requestMessageProof(wallet, account, challenge(), location, now),
+    ).toThrow("changed");
+    wallet.accounts = [account];
+    expect(() =>
+      requestMessageProof(
+        wallet,
+        account,
+        challenge(),
+        location,
+        now + 300_000,
+      ),
+    ).toThrow("expired");
+    expect(signMessage).not.toHaveBeenCalled();
+  });
+  test("rejects altered signed bytes without weakening canonical proof checks", async () => {
+    const { wallet, account, signMessage } = connected();
+    signMessage.mockResolvedValueOnce([
+      { signedMessage: new Uint8Array([1]), signature: new Uint8Array(64) },
+    ]);
+    await expect(
+      requestMessageProof(wallet, account, challenge(), location, now),
+    ).rejects.toThrow("changed the sign-in message");
+  });
+  test("does not automatically retry a cancelled message signature", async () => {
+    const { wallet, account, signMessage } = connected();
+    signMessage.mockRejectedValueOnce({ code: 4001 });
+    await expect(
+      requestMessageProof(wallet, account, challenge(), location, now),
+    ).rejects.toEqual({ code: 4001 });
+    expect(signMessage).toHaveBeenCalledTimes(1);
+  });
+  test("a real Ed25519 compatibility signature passes the unchanged server verifier", async () => {
+    const { wallet, account, signMessage } = connected();
+    const keys = await crypto.subtle.generateKey("Ed25519", true, [
+      "sign",
+      "verify",
+    ]);
+    const publicKey = new Uint8Array(
+      await crypto.subtle.exportKey("raw", keys.publicKey),
+    );
+    const alphabet =
+      "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let number = publicKey.reduce(
+        (value, byte) => value * 256n + BigInt(byte),
+        0n,
+      ),
+      address = "";
+    while (number) {
+      address = alphabet[Number(number % 58n)] + address;
+      number /= 58n;
+    }
+    for (const byte of publicKey) {
+      if (byte) break;
+      address = "1" + address;
+    }
+    account.address = address;
+    account.publicKey = publicKey;
+    signMessage.mockImplementationOnce(async ({ message }) => [
+      {
+        signedMessage: message,
+        signature: new Uint8Array(
+          await crypto.subtle.sign(
+            "Ed25519",
+            keys.privateKey,
+            new Uint8Array(message).buffer,
+          ),
+        ),
+      },
+    ]);
+    const issued = challenge();
+    const proof = await requestMessageProof(
+      wallet,
+      account,
+      issued,
+      location,
+      now,
+    );
+    expect(verifyWalletLogin(issued.input, proof)).toBe(true);
+    expect(
+      verifyWalletLogin({ ...issued.input, nonce: "different123" }, proof),
+    ).toBe(false);
   });
 });

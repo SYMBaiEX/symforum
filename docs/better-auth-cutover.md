@@ -62,6 +62,23 @@ These tests use fake wallets and intercepted traffic, not a real extension.
 The reported Phantom extension error must still be verified in a live wallet;
 passing the signed-wallet HTTP test alone is not that verification.
 
+The real Phantom flow subsequently reached its confirmation prompt but reported
+an internal signing error afterward; the checked production challenges were
+not consumed. This is not evidence that the wallet was still locked, nor proof
+of the underlying extension failure. For this specific wallet-request error,
+the picker offers an explicit connect-then-message compatibility option. It
+never automatically retries signing. Connection does not authenticate; a fresh
+server challenge and a second user click are required to sign the canonical
+SIWS message. Multiple connected accounts require an explicit account choice.
+Changed accounts/messages, stale challenges and cancelled requests fail closed.
+The same backend verifier and account/linking ownership checks are used, with
+no new endpoint, provider permission, database write path or production setting.
+
+Wallet-request, server-verification and session-confirmation errors are shown
+separately. A successful wallet response is not reported as a completed login
+until a native session with a user is returned. Real-extension completion of
+the compatibility route remains unverified until the actual approval succeeds.
+
 ## Maintained Better Auth 1.7 compatibility patch
 
 `patches/@convex-dev%2Fbetter-auth@0.12.6.patch` is applied by Bun's
