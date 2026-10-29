@@ -4,14 +4,15 @@ COPY package.json bun.lock ./
 COPY vendor ./vendor
 RUN bun install --frozen-lockfile --production --ignore-scripts
 
-FROM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:a6c34457f6da4295807e051411c7783739c65b997a324fed14e4fa292615ae91
 ENV NODE_ENV=production PORT=8080
 WORKDIR /app
-COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
-COPY --from=dependencies --chown=node:node /app/vendor ./vendor
-COPY --chown=node:node package.json ./
-COPY --chown=node:node src ./src
-COPY --chown=node:node certs ./certs
-USER node
+COPY --from=dependencies --chown=65532:65532 /app/node_modules ./node_modules
+COPY --from=dependencies --chown=65532:65532 /app/vendor ./vendor
+COPY --chown=65532:65532 package.json ./
+COPY --chown=65532:65532 src ./src
+COPY --chown=65532:65532 certs ./certs
+USER 65532:65532
 EXPOSE 8080
-CMD ["node", "src/index.mjs"]
+# The base image's entrypoint is Node; no shell or package manager is shipped.
+CMD ["src/index.mjs"]
