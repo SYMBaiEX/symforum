@@ -4,12 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./identity-client": "./src/identity-client.ts",
+    "./identity-server": "./src/identity-server.ts",
+    "./agent-join-route": "./src/agent-join-route.ts",
+    "./token": "./src/token.ts",
     "./client": "./src/client.tsx",
     "./query-cache": "./src/query-cache.ts",
     "./routes": "./src/routes.ts",
     "./server": "./src/server.tsx"
   },
   "dependencies": {
+    "@convex-dev/better-auth": "0.12.6",
+    "better-auth": "1.6.33",
     "@convex-dev/auth": "0.0.95",
     "@convex-dev/workos": "0.0.3",
     "@workos-inc/authkit-nextjs": "4.4.0",

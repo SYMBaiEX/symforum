@@ -14,6 +14,8 @@ import { User } from "lucide-react";
 import { ReactNode } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { signOutIdentity } from "@symbaiex/auth/identity-client";
+import Link from "next/link";
 
 export function UserMenu({ children }: { children: ReactNode }) {
   return (
@@ -34,6 +36,7 @@ export function UserMenu({ children }: { children: ReactNode }) {
             <ThemeToggle />
           </DropdownMenuLabel>
           <SignOutButton />
+          {process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true" && <DropdownMenuItem asChild><Link href="/account/connections">Account connections</Link></DropdownMenuItem>}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -41,6 +44,7 @@ export function UserMenu({ children }: { children: ReactNode }) {
 }
 
 function SignOutButton() {
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <DropdownMenuItem onClick={() => void signOutIdentity()}>Sign out</DropdownMenuItem>;
   if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true") {
     return <WorkOSSignOutButton />;
   }

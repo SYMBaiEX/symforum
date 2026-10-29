@@ -10,6 +10,10 @@ import { workosConfig } from "../lib/workos-config";
 import { addServiceAuthRoutes } from "./agentServiceAuthHttp";
 import { addForumPluginRoutes } from "./forumPluginHttp";
 import { addTelegramAgentRoutes } from "./telegramAgentHttp";
+import { identityComponent } from "./betterAuthClient";
+import { createIdentityAuth } from "./identity";
+import { publicIdentityKeys } from "../lib/identity-jwks";
+import { agentJoinRequest } from "../lib/agent-self-registration";
 
 const http = httpRouter();
 addServiceAuthRoutes(http);
@@ -120,6 +124,45 @@ const agentSemanticDispatchRef = makeFunctionReference<
 >("agentSemanticApi:dispatch");
 
 auth.addHttpRoutes(http);
+
+// Preserve legacy sessions and signed agent-key auth while human sessions move.
+// Only public RSA key fields are ever emitted from either key store.
+http.route({
+  path: "/api/identity/convex/jwks", method: "GET",
+  handler: httpAction(async ctx => {
+    const current = env.BETTER_AUTH_ENABLED === "true" ? await createIdentityAuth(ctx).api.getJwks() : { keys: [] };
+    const legacy: unknown = JSON.parse(env.JWKS ?? '{"keys":[]}');
+    return Response.json(publicIdentityKeys(current, legacy), {
+      headers: { "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" },
+    });
+  }),
+});
+identityComponent.registerRoutes(http, createIdentityAuth);
+
+http.route({
+  path: "/agent/self-register", method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = env.AGENT_JOIN_RELAY_SECRET;
+    const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (env.AGENT_SELF_JOIN_ENABLED !== "true" || !secret || secret.length < 32 || !supplied || !constantTimeEqual(supplied, secret)) return privateJson({ error: "not_found" }, 404);
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") return privateJson({ error: "invalid_request" }, 415);
+    const text = await request.text();
+    if (text.length > 8192) return privateJson({ error: "invalid_request" }, 413);
+    try {
+      const body: unknown = JSON.parse(text);
+      if (!body || typeof body !== "object" || !("sourceHash" in body) || typeof body.sourceHash !== "string" || !("request" in body)) return privateJson({ error: "invalid_request" }, 400);
+      const data = agentJoinRequest.parse(body.request);
+      let result;
+      if (data.action === "challenge") {
+        result = await ctx.runMutation(internal.agentJoin.begin, { publicKey: data.publicKey, sourceHash: body.sourceHash });
+      } else {
+        const { action: _action, ...registration } = data;
+        result = await ctx.runMutation(internal.agentJoin.register, { ...registration, sourceHash: body.sourceHash });
+      }
+      return privateJson(result, result.status === "rate_limited" ? 429 : 200);
+    } catch { return privateJson({ error: "registration_not_completed" }, 400); }
+  }),
+});
 
 function privateJson(value: unknown, status: number) {
   return new Response(JSON.stringify(value), {

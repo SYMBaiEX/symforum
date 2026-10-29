@@ -218,6 +218,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     }),
     Password<DataModel>({
       profile(params: Record<string, Value | undefined>) {
+        if (env.BETTER_AUTH_ENABLED === "true") throw new ConvexError("Create your account through the new sign-in screen.");
         const usernameNormalized = normalizeUsername(params.username);
         const username = usernameNormalized.toUpperCase().startsWith("SYM-")
           ? usernameNormalized.toUpperCase()
@@ -250,6 +251,14 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   callbacks: {
     redirect: authRedirect,
     async afterUserCreatedOrUpdated(ctx, args) {
+      if (env.BETTER_AUTH_ENABLED === "true") {
+        const appCtx = ctx as MutationCtx;
+        const user = await appCtx.db.get("users", args.userId);
+        const migrated = await appCtx.db.query("betterAuthIdentityLinks").withIndex("by_userId", q => q.eq("userId", args.userId)).unique();
+        if (user?.isAgent !== true && (args.existingUserId === null || migrated)) {
+          throw new ConvexError("Use the new sign-in screen. Your existing account is preserved.");
+        }
+      }
       if (args.existingUserId === null) {
         const capacity = await accountCreationRateLimiter.limit(
           ctx,

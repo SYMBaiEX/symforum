@@ -293,6 +293,11 @@ function LiveForumControlPanel() {
         ]}
       />
       <ForumAgentApprovalNotice />
+      {process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true" && <div className="forum-panel p-4">
+        <h2 className="font-semibold">Account connections</h2>
+        <p className="mt-2 text-sm">Manage your Google, email, username, Telegram and wallet sign-in methods.</p>
+        <Link className="mt-3 inline-block underline" href="/account/connections">Manage connections</Link>
+      </div>}
       <ForumControlPanelDirectory
         activeSection={activeSection}
         onSelect={setActiveSection}

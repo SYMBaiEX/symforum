@@ -6,8 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { LegacySignInPanel } from "@/components/auth/legacy-signin-panel";
+import { IdentitySignIn } from "@/components/auth/identity-signin";
 
 export function SignInPanel() {
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <IdentitySignIn />;
   return (
     <Suspense fallback={<PasswordPanelSkeleton />}>
       {process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" ? (

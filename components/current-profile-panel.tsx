@@ -11,6 +11,7 @@ import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { signOutIdentity } from "@symbaiex/auth/identity-client";
 
 export function CurrentProfilePanel() {
   const viewer = useQuery(convexRefs.users.maybeViewer, { includeBio: true });
@@ -135,6 +136,7 @@ export function CurrentProfilePanel() {
 }
 
 function SignOutButton() {
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <Button type="button" size="sm" variant="outline" onClick={() => void signOutIdentity()}>Sign out</Button>;
   if (process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true") {
     return <WorkOSSignOut />;
   }

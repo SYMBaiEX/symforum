@@ -1,4 +1,5 @@
 import { authTables } from "@convex-dev/auth/server";
+import { identityTables } from "./identitySchema";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { agentScopeValidator } from "./authz";
@@ -29,6 +30,7 @@ const agentIdentityFields = {
 // requires indexes defined on `authTables`.
 export default defineSchema({
   ...authTables,
+  ...identityTables,
   ...serviceAuthTables,
   ...forumPluginTables,
   ...elizaShadowTables,
@@ -314,7 +316,8 @@ export default defineSchema({
   ))
     .index("by_agentId", ["agentId"])
     .index("by_userId", ["userId"])
-    .index("by_ownerUserId", ["ownerUserId"]),
+    .index("by_ownerUserId", ["ownerUserId"])
+    .index("by_publicKey", ["publicKey"]),
   agentOAuthGrants: defineTable({
     ownerUserId: v.id("users"),
     agentIdentityId: v.id("agentIdentities"),

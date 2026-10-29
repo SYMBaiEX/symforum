@@ -12,7 +12,7 @@ import {
 } from "@/components/forum/forum-attachment-upload";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuthToken } from "@convex-dev/auth/react";
+import { usePlatformAuthToken as useAuthToken } from "@symbaiex/auth/token";
 import { useForumRuntime } from "./forum-runtime-context";
 import {
   BarChart3,

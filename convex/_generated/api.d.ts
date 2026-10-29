@@ -33,6 +33,9 @@ import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
 import type * as apiCommerce from "../apiCommerce.js";
 import type * as auth from "../auth.js";
+import type * as identityData from "../identityData.js";
+import type * as agentJoin from "../agentJoin.js";
+import type * as betterAuthClient from "../betterAuthClient.js";
 import type * as authKitIdentity from "../authKitIdentity.js";
 import type * as authz from "../authz.js";
 import type * as belleForumAgent from "../belleForumAgent.js";
@@ -194,6 +197,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  identityData: typeof identityData;
+  agentJoin: typeof agentJoin;
+  betterAuthClient: typeof betterAuthClient;
   accountEmailVerification: typeof accountEmailVerification;
   admin: typeof admin;
   adminAiBudget: typeof adminAiBudget;
@@ -401,6 +407,7 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;

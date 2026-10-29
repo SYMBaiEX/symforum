@@ -13,6 +13,17 @@ export function AccountEmailVerification({
 }: {
   contactEmail?: string;
 }) {
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <section className="space-y-3 border border-row-border bg-background/50 p-4">
+    <h3 className="text-sm font-semibold">Verify a recovery email</h3>
+    <p className="text-sm text-muted-foreground">Add and verify your email in Account connections so it also works for signing in.</p>
+    <a className="inline-block text-sm underline" href="/account/connections">Manage account connections</a>
+  </section>;
+  return <LegacyAccountEmailVerification contactEmail={contactEmail} />;
+}
+
+function LegacyAccountEmailVerification({ contactEmail }: {
+  contactEmail?: string;
+}) {
   const challengeStatus = useQuery(convexRefs.accountEmailVerification.status, {});
   const requestVerification = useMutation(
     convexRefs.accountEmailVerification.request,

@@ -8,9 +8,20 @@ import workflow from "@convex-dev/workflow/convex.config.js";
 import presence from "@convex-dev/presence/convex.config.js";
 import aggregate from "@convex-dev/aggregate/convex.config.js";
 import migrations from "@convex-dev/migrations/convex.config.js";
+import betterAuth from "@convex-dev/better-auth/convex.config";
 
 const app = defineApp({
   env: {
+    BETTER_AUTH_ENABLED: v.optional(v.string()),
+    BETTER_AUTH_SECRET: v.optional(v.string()),
+    IDENTITY_SITE_URL: v.optional(v.string()),
+    AUTH_GOOGLE_ID: v.optional(v.string()),
+    AUTH_GOOGLE_SECRET: v.optional(v.string()),
+    JWKS: v.optional(v.string()),
+    BETTER_AUTH_COOKIE_DOMAIN: v.optional(v.string()),
+    TELEGRAM_LOGIN_CLIENT_ID: v.optional(v.string()),
+    AGENT_SELF_JOIN_ENABLED: v.optional(v.string()),
+    AGENT_JOIN_RELAY_SECRET: v.optional(v.string()),
     X_AGENTS_ENABLED: v.optional(v.string()),
     X_AGENT_FIRST_REPLY_INVITATIONS_ENABLED: v.optional(v.string()),
     X_AGENT_CLIENT_ID: v.optional(v.string()),
@@ -23,6 +34,7 @@ const app = defineApp({
     AGENT_SERVICE_AUTH_PUBLIC_JWKS: v.optional(v.string()),
     AGENT_SERVICE_AUTH_RELAY_SECRET: v.optional(v.string()),
     WORKOS_CONNECT_ENABLED: v.optional(v.string()),
+    WORKOS_CLIENT_ID: v.optional(v.string()),
     WORKOS_AGENT_REGISTRATION_ENABLED: v.optional(v.string()),
     WORKOS_AUTHKIT_ISSUER: v.optional(v.string()),
     WORKOS_API_KEY: v.optional(v.string()),
@@ -95,6 +107,7 @@ const app = defineApp({
 });
 
 app.use(resend);
+app.use(betterAuth);
 app.use(agent);
 app.use(rag);
 app.use(rateLimiter);

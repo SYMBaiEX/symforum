@@ -28,6 +28,17 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
+  readonly BETTER_AUTH_ENABLED: string | undefined;
+  readonly WORKOS_CLIENT_ID: string | undefined;
+  readonly BETTER_AUTH_SECRET: string | undefined;
+  readonly BETTER_AUTH_COOKIE_DOMAIN: string | undefined;
+  readonly IDENTITY_SITE_URL: string | undefined;
+  readonly AUTH_GOOGLE_ID: string | undefined;
+  readonly AUTH_GOOGLE_SECRET: string | undefined;
+  readonly JWKS: string | undefined;
+  readonly TELEGRAM_LOGIN_CLIENT_ID: string | undefined;
+  readonly AGENT_SELF_JOIN_ENABLED: string | undefined;
+  readonly AGENT_JOIN_RELAY_SECRET: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENT_SEMANTIC_RELAY_SECRET: string | undefined;

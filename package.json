@@ -53,6 +53,11 @@
     "test:forum:render": "playwright test --config playwright.forum.config.ts"
   },
   "dependencies": {
+    "@symbaiex/auth": "workspace:*",
+    "@convex-dev/better-auth": "0.12.6",
+    "better-auth": "1.6.33",
+    "@solana/wallet-standard-util": "1.2.0",
+    "@wallet-standard/app": "1.1.1",
     "@ai-sdk/openai-compatible": "3.0.53",
     "@ai-sdk/otel": "1.0.111",
     "@ai-sdk/react": "4.0.114",

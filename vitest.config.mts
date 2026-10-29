@@ -32,7 +32,7 @@ export default defineConfig({
     ],
     server: {
       deps: {
-        inline: ["convex-test", "@convex-dev/auth"],
+        inline: ["convex-test", "@convex-dev/auth", "@convex-dev/better-auth"],
       },
     },
   },
