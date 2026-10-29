@@ -11,13 +11,12 @@ import {
   useIsWalletReady,
 } from "@solana/kit-plugin-wallet/react";
 import type { UiWallet, UiWalletAccount } from "@wallet-standard/ui";
-import { LoaderCircle, Wallet } from "lucide-react";
+import { ChevronRight, LoaderCircle, ShieldCheck, Wallet } from "lucide-react";
 import {
   identityRequest,
   refreshIdentitySession,
 } from "@symbaiex/auth/identity-client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -305,60 +304,74 @@ function WalletPicker({
           {purpose === "link" ? "Link wallet" : "Solana wallet"}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-sm overflow-y-auto">
-        <DialogHeader>
+      <DialogContent
+        data-surface="forum"
+        className="wallet-picker"
+        overlayClassName="wallet-picker-overlay"
+      >
+        <DialogHeader className="wallet-picker-header">
+          <span className="wallet-picker-mark" aria-hidden="true">
+            <Wallet />
+          </span>
           <DialogTitle>
             {purpose === "link" ? "Link a wallet" : "Connect a wallet"}
           </DialogTitle>
           <DialogDescription>
-            Choose your Solana wallet, then sign a message to finish. No
-            transaction, fees or spending access.
+            Choose your Solana wallet to continue to SYMBaiEX.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3" aria-busy={busy}>
-          {wallets.map((wallet, index) => (
-            <Button
-              key={`${wallet.name}-${index}`}
-              type="button"
-              variant="outline"
-              size="lg"
-              className="h-14 justify-between gap-3 px-4"
-              disabled={busy}
-              onClick={() => void choose(wallet)}
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                {wallet.icon.startsWith("data:image/") ? (
-                  <Image
-                    src={wallet.icon}
-                    alt=""
-                    width={28}
-                    height={28}
-                    unoptimized
-                    className="size-7 rounded-md"
+        <div className="wallet-picker-body" aria-busy={busy}>
+          <div className="wallet-picker-options">
+            {wallets.map((wallet, index) => (
+              <Button
+                key={`${wallet.name}-${index}`}
+                type="button"
+                variant="ghost"
+                className="wallet-picker-option"
+                data-selected={selected?.name === wallet.name}
+                disabled={busy}
+                onClick={() => void choose(wallet)}
+              >
+                <span className="wallet-picker-identity">
+                  <span className="wallet-picker-icon">
+                    {wallet.icon.startsWith("data:image/") ? (
+                      <Image
+                        src={wallet.icon}
+                        alt=""
+                        width={28}
+                        height={28}
+                        unoptimized
+                        className="size-7"
+                      />
+                    ) : (
+                      <Wallet aria-hidden="true" data-icon="inline-start" />
+                    )}
+                  </span>
+                  <span className="wallet-picker-name">{wallet.name}</span>
+                </span>
+                {" "}
+                {busy && selected?.name === wallet.name ? (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    data-icon="inline-end"
+                    className="animate-spin motion-reduce:animate-none"
                   />
                 ) : (
-                  <Wallet aria-hidden="true" data-icon="inline-start" />
+                  <span className="wallet-picker-availability">
+                    Installed
+                    <ChevronRight aria-hidden="true" />
+                  </span>
                 )}
-                <span className="truncate">{wallet.name}</span>
-              </span>
-              {busy && selected?.name === wallet.name ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  data-icon="inline-end"
-                  className="animate-spin motion-reduce:animate-none"
-                />
-              ) : (
-                <Badge variant="secondary">Installed</Badge>
-              )}
-            </Button>
-          ))}
-          {!wallets.length && (
-            <p className="text-sm text-muted-foreground">
-              No compatible wallet found. Install a Solana wallet such as
-              Phantom, or open this site in your wallet’s browser.
-            </p>
-          )}
-          <p role="status" className="text-sm text-muted-foreground">
+              </Button>
+            ))}
+            {!wallets.length && (
+              <p className="wallet-picker-empty">
+                No compatible wallet found. Install a Solana wallet such as
+                Phantom, or open this site in your wallet’s browser.
+              </p>
+            )}
+          </div>
+          <p role="status" className="wallet-picker-status">
             {phase === "connecting"
               ? `Connect your account in ${selected?.name}.`
               : phase === "preparing"
@@ -376,7 +389,7 @@ function WalletPicker({
                           : "Select a wallet to connect. Your wallet stays in control."}
           </p>
           {error && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="wallet-picker-error">
               {error}
             </p>
           )}
@@ -386,6 +399,7 @@ function WalletPicker({
                 key={account.address}
                 type="button"
                 variant="outline"
+                className="wallet-picker-account"
                 onClick={() => {
                   if (selected) void choose(selected, account);
                 }}
@@ -396,16 +410,24 @@ function WalletPicker({
           {prepared && !busy && (
             <>
               {prepared.method === "message" && (
-                <p className="text-sm text-muted-foreground">
+                <p className="wallet-picker-account-hint">
                   Account: {prepared.account.address.slice(0, 6)}…
                   {prepared.account.address.slice(-4)}. Sign-in message only.
                 </p>
               )}
-              <Button type="button" onClick={() => void sign()}>
+              <Button
+                className="wallet-picker-submit"
+                type="button"
+                onClick={() => void sign()}
+              >
                 Sign in with {prepared.wallet.name}
               </Button>
             </>
           )}
+        </div>
+        <div className="wallet-picker-assurance">
+          <ShieldCheck aria-hidden="true" />
+          <p>Message signature only. No transaction or spending approval.</p>
         </div>
       </DialogContent>
     </Dialog>
