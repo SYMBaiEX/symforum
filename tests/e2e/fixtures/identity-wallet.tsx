@@ -29,7 +29,9 @@ function register() {
     chains: ["solana:mainnet"],
     features: ["solana:signMessage"],
   };
-  let connected: readonly FixtureAccount[] = [];
+  let connected: readonly FixtureAccount[] = params.has("preconnected")
+    ? [account]
+    : [];
   return getWallets().register({
     version: "1.0.0",
     name: "Phantom",
@@ -46,6 +48,10 @@ function register() {
             action: "connect",
             userActivated: navigator.userActivation.isActive,
           });
+          if (params.has("connectinternal"))
+            throw Object.assign(new Error("Unexpected error"), {
+              code: -32603,
+            });
           if (params.has("connectcancel")) throw { code: 4001 };
           if (params.has("deferconnect"))
             await new Promise<void>((resolve) => {

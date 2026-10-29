@@ -138,14 +138,23 @@ export function requestWalletProof(
     .then(([proof]) => serializeProof(proof, challenge.nonce));
 }
 
+function messageAccounts(accounts: readonly MessageWalletAccount[]) {
+  return accounts.filter(
+    (account) =>
+      account.publicKey.length === 32 &&
+      account.chains.some((chain) => chain.startsWith("solana:")) &&
+      account.features.includes("solana:signMessage"),
+  );
+}
+
 export function connectMessageWallet(wallet: MessageSignWallet) {
+  // Match the reference adapter: do not issue another connection request when
+  // the wallet already exposes a compatible account to this page. This only
+  // selects a public account; a fresh challenge and signature are still needed.
+  const existing = messageAccounts(wallet.accounts);
+  if (existing.length) return Promise.resolve(existing);
   return wallet.features["standard:connect"].connect().then(({ accounts }) => {
-    const compatible = accounts.filter(
-      (account) =>
-        account.publicKey.length === 32 &&
-        account.chains.some((chain) => chain.startsWith("solana:")) &&
-        account.features.includes("solana:signMessage"),
-    );
+    const compatible = messageAccounts(accounts);
     if (!compatible.length)
       throw new Error("No message-signing Solana account was connected.");
     return compatible;

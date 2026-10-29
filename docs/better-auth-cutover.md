@@ -98,6 +98,17 @@ patch was introduced. Regression tests keep the flow alive during a real guest
 focus refetch and check the subscribed session becomes authenticated after proof
 exchange, while missing sessions fail closed.
 
+Connection parity: like the Wallet Standard reference adapter, the picker reuses
+compatible accounts already exposed by the selected wallet rather than issuing
+another `standard:connect` request. Disconnected/incompatible accounts still
+require connection. Reusing a public account never authenticates it: fresh
+server challenge, explicit signature, exact account/message checks, backend
+verification and native session confirmation all remain mandatory. Regression
+coverage injects a failing reconnect RPC while an account is already exposed
+and verifies no reconnect call is made, but no authentication occurs without the
+fresh signed proof. This addresses redundant reconnects only; it is not evidence
+that the reported live Phantom connection error is fully resolved.
+
 ## Maintained Better Auth 1.7 compatibility patch
 
 `patches/@convex-dev%2Fbetter-auth@0.12.6.patch` is applied by Bun's

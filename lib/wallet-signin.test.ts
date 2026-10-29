@@ -153,6 +153,38 @@ describe("explicit connected-wallet message compatibility", () => {
     expect(await connectMessageWallet(wallet)).toEqual([account]);
     expect(signMessage).not.toHaveBeenCalled();
   });
+  test("does not reconnect an already exposed message-signing account", async () => {
+    const { wallet, account, connect, signMessage } = connected();
+    connect.mockRejectedValueOnce({
+      code: -32603,
+      message: "Unexpected error",
+    });
+    expect(await connectMessageWallet(wallet)).toEqual([account]);
+    expect(connect).not.toHaveBeenCalled();
+    expect(signMessage).not.toHaveBeenCalled();
+  });
+  test("disconnected wallets still connect directly once, with no hidden retries", async () => {
+    const { wallet, account, connect } = connected();
+    wallet.accounts = [];
+    const pending = connectMessageWallet(wallet);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(await pending).toEqual([account]);
+    connect.mockRejectedValueOnce({ code: -32603 });
+    await expect(connectMessageWallet(wallet)).rejects.toEqual({
+      code: -32603,
+    });
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+  test("exposed incompatible accounts cannot bypass connection or account filtering", async () => {
+    const { wallet, account, connect, signMessage } = connected();
+    wallet.accounts = [{ ...account, features: [] }];
+    connect.mockResolvedValueOnce({ accounts: [{ ...account, features: [] }] });
+    await expect(connectMessageWallet(wallet)).rejects.toThrow(
+      "No message-signing",
+    );
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(signMessage).not.toHaveBeenCalled();
+  });
   test("signs the exact canonical message synchronously from the explicit click", async () => {
     const { wallet, account, signMessage, connect } = connected();
     const result = requestMessageProof(
