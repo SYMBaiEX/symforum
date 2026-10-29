@@ -7,7 +7,7 @@ import {
   alphaDeskForAgent,
   alphaDeskInstructions,
 } from "../lib/forum-alpha-editorial";
-import { env, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import {
   activeForumAgentBio,
   forumAgentRosterEntry,
@@ -48,7 +48,7 @@ export function forumResearchConfigForRosterAgent(
   );
   const variationSummary = forumAgentStyleVariationSummary(variation);
   const alphaDesk =
-    env.FORUM_ALPHA_EDITORIAL_ENABLED === "true"
+    process.env.FORUM_ALPHA_EDITORIAL_ENABLED === "true"
       ? alphaDeskForAgent(entry.slug)
       : undefined;
   const deskInstructions = alphaDesk ? alphaDeskInstructions(alphaDesk) : "";

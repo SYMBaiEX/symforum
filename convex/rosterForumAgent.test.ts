@@ -88,3 +88,25 @@ describe("roster forum agent configuration", () => {
     expect(allVariationKeys.size).toBeGreaterThanOrEqual(500);
   });
 });
+
+test("reads activation from the current Node invocation environment", () => {
+  const previous = process.env;
+  try {
+    process.env = { ...previous, FORUM_ALPHA_EDITORIAL_ENABLED: "true" };
+    const configs = FORUM_AGENT_ROSTER.map((entry) =>
+      forumResearchConfigForRosterAgent(entry),
+    );
+    expect(
+      configs.filter((c) => c.researchPool === "solana-alpha"),
+    ).toHaveLength(24);
+    expect(
+      configs.find((c) => c.slug === "drew-ellison")?.forcedCategorySlug,
+    ).toBe("crypto-pumpfun");
+    process.env = { ...previous, FORUM_ALPHA_EDITORIAL_ENABLED: "false" };
+    expect(
+      forumResearchConfigForRosterAgent(FORUM_AGENT_ROSTER[0]).researchPool,
+    ).toBeUndefined();
+  } finally {
+    process.env = previous;
+  }
+});
