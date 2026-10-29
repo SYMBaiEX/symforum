@@ -1,3 +1,4 @@
+import { SYMF_TOKEN } from "../lib/symf-token";
 
 import { FORUM_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
@@ -223,7 +224,7 @@ export const reserveBenefit = internalMutation({
       wallet,
       status: "checking" as const,
       balanceRaw: "0",
-      decimals: 6,
+      decimals: SYMF_TOKEN.decimals,
       eligible: false,
       checkedAt: now,
       expiresAt: now + 15_000,
@@ -327,7 +328,7 @@ export async function refreshBenefitForActor(
       decimals: number;
       priceUsd?: string;
       eligible: boolean;
-    } = { balanceRaw: "0", decimals: 6, eligible: false },
+    } = { balanceRaw: "0", decimals: SYMF_TOKEN.decimals, eligible: false },
     success = false;
   try {
     if (!config.rpcUrl) throw new Error("RPC unavailable.");
@@ -368,13 +369,13 @@ export const builtinTokens = [
     decimals: 6,
     tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   },
-  {
+  ...(COMMERCE_MINT ? [{
     mint: COMMERCE_MINT,
-    symbol: "SYMF",
-    name: "SYMBaiEX Forum",
-    decimals: 6,
-    tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-  },
+    symbol: SYMF_TOKEN.symbol,
+    name: SYMF_TOKEN.name,
+    decimals: SYMF_TOKEN.decimals,
+    tokenProgram: SYMF_TOKEN.tokenProgram,
+  }] : []),
 ];
 type TradeToken = (typeof builtinTokens)[number];
 async function mappedMint(

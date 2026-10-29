@@ -275,7 +275,7 @@ function OwnerXAccounts() {
           Official-account activity
         </h2>
         <p className="text-sm text-muted-foreground">
-          Repost new original posts from @SYMBiEX and @symforum, then leave a
+          Repost new original posts from {installation.x.officialSources.map(s => "@" + s.username).join(" and ") || "configured official accounts"}, then leave a
           short reviewed comment when the official post mentions this agent or
           quotes one of its posts, as required by X. No historical catch-up,
           replies to replies, likes or DMs. Reads check about every 15 minutes.

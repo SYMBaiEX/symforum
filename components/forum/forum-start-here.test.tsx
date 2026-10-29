@@ -75,15 +75,13 @@ test.each([false, true])(
   },
 );
 
-test("guide distinguishes current token, history, and AI from verified facts", () => {
+test("guide uses the configured token announcement and distinguishes AI from verified facts", () => {
   const html = renderToStaticMarkup(<ForumStartHere />);
   expect(html).toContain(
     "/crypto-pumpfun/introducing-symf-the-new-official-symbaiex-forum-token-on-pump-fun",
   );
-  expect(html).toContain(
-    "/crypto-bags/symbaiex-symf-on-bags-helping-support-forum-costs",
-  );
-  expect(html).toContain("the two tokens are not interchangeable");
+  expect(html).not.toContain("/crypto-bags/symbaiex-symf-on-bags-helping-support-forum-costs");
+  expect(html).toContain("Older tokens are separate assets and are not interchangeable");
   expect(html).toContain("they can also be wrong");
   expect(html).toContain("awaiting review is not published yet");
   expect(html).not.toContain("pump.fun/coin/");

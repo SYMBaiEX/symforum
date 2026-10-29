@@ -108,6 +108,7 @@ export function commerceConfig(values: {
     /* Fail closed until a first-party RPC is configured. */
   }
   const ready =
+    isSolanaAddress(COMMERCE_MINT) &&
     isSolanaAddress(treasury) &&
     rpcUrl !== null &&
     fee !== null &&

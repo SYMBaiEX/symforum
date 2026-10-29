@@ -150,11 +150,11 @@ export function renderFeedBuys(buys: FeedBuy[]) {
             maximumFractionDigits: 2,
           }).format(Number(s));
   return (
-    `<b>$SYMF Feed · ${buys.length} ${buys.length === 1 ? "buy" : "buys"}</b>\nNo minimum amount · Times in Chicago\n\n` +
+    `<b>$${SYMF_TOKEN.symbol} Feed · ${buys.length} ${buys.length === 1 ? "buy" : "buys"}</b>\nNo minimum amount · Times in Chicago\n\n` +
     buys
       .map(
         (b) =>
-          `<b>${time.format(b.occurredAt)}</b> · ${telegramHtml(money(b.usd))}\n${telegramHtml(quantity(b.spent))} ${b.spentSymbol} → ${telegramHtml(quantity(b.tokens))} SYMF${b.anomalous ? " · ⚑ Provider flagged" : ""}\n<a href="https://solscan.io/tx/${b.tx}">View transaction</a>`,
+          `<b>${time.format(b.occurredAt)}</b> · ${telegramHtml(money(b.usd))}\n${telegramHtml(quantity(b.spent))} ${b.spentSymbol} → ${telegramHtml(quantity(b.tokens))} ${SYMF_TOKEN.symbol}${b.anomalous ? " · ⚑ Provider flagged" : ""}\n<a href="https://solscan.io/tx/${b.tx}">View transaction</a>`,
       )
       .join("\n\n") +
     `\n\nSource: <a href="https://www.geckoterminal.com/solana/tokens/${SYMF_MINT}">GeckoTerminal</a> · Indexed trades may arrive late.\n<a href="${FORUM_SITE_URL}">SYMBaiEX Forum</a>`

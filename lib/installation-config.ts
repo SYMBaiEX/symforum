@@ -260,7 +260,7 @@ export function parseInstallationConfig(
     );
     if (
       result.telegram.communityId &&
-      !/^-100[1-9]\d{5,12}$/.test(result.telegram.communityId)
+      (!/^-100[1-9]\d{5,12}$/.test(result.telegram.communityId) || !Number.isSafeInteger(Number(result.telegram.communityId)))
     )
       throw Error("Telegram community must be a supergroup ID.");
     result.telegram.url = text(tg.url ?? "", 120, "Telegram URL");

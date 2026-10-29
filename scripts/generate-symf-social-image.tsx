@@ -1,3 +1,4 @@
+import { FORUM_SITE_URL } from "../lib/site-urls";
 import React from "react";
 import { ImageResponse } from "next/og";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -78,7 +79,7 @@ const image = new ImageResponse(
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
         <span style={{ fontSize: 20, color: "#fa00a8" }}>
-          forum.symbaiex.com/symf
+          {new URL(FORUM_SITE_URL).hostname}/symf
         </span>
         <span style={{ fontSize: 16, color: "#a1a1aa" }}>
           1m / 5m / 15m / 1h / 4h candles
