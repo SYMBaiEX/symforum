@@ -31,10 +31,13 @@ import {
   type WalletChallenge,
 } from "@/lib/wallet-signin";
 import {
-  createIdentityWalletClient,
   requestIdentityMessageProof,
   type IdentityWalletClient,
 } from "@/lib/identity-wallet-client";
+import {
+  SolanaWalletBoundary,
+  useSessionWalletClient,
+} from "./solana-wallet-provider";
 import {
   createWalletDiagnostic,
   type WalletDiagnosticAttempt,
@@ -56,6 +59,7 @@ type Phase =
   "idle" | "connecting" | "preparing" | "signing" | "verification" | "session";
 
 type WalletSignInProps = {
+  label?: string;
   purpose: "login" | "link";
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
@@ -63,19 +67,22 @@ type WalletSignInProps = {
 };
 
 export function WalletSignIn(props: WalletSignInProps) {
-  const [client, setClient] = useState<IdentityWalletClient | null>(null);
-  useEffect(() => {
-    const owned = createIdentityWalletClient();
-    setClient(owned);
-    return () => owned[Symbol.dispose]();
-  }, []);
+  return (
+    <SolanaWalletBoundary>
+      <SharedWalletSignIn {...props} />
+    </SolanaWalletBoundary>
+  );
+}
+function SharedWalletSignIn(props: WalletSignInProps) {
+  const client = useSessionWalletClient();
   // Construct after mount, so SSR and discarded Strict Mode renders never
   // register browser wallet listeners or share state between requests.
   if (!client)
     return (
       <Button type="button" variant="outline" disabled>
         <Wallet data-icon="inline-start" />
-        {props.purpose === "link" ? "Link wallet" : "Solana wallet"}
+        {props.label ??
+          (props.purpose === "link" ? "Link wallet" : "Solana wallet")}
       </Button>
     );
   return (
@@ -86,13 +93,18 @@ export function WalletSignIn(props: WalletSignInProps) {
 }
 
 function WalletPicker({
+  label,
   purpose,
   disabled,
   onBusyChange,
   onComplete,
 }: WalletSignInProps) {
   const client = useClient<IdentityWalletClient>();
-  const wallets = useWallets(client);
+  const wallets = useWallets(client).filter(
+    (wallet) =>
+      wallet.features.includes("solana:signMessage") ||
+      wallet.features.includes("solana:signIn"),
+  );
   const ready = useIsWalletReady(client);
   const connect = useConnect(client);
   const signIn = useSignIn(client);
@@ -301,7 +313,7 @@ function WalletPicker({
       <DialogTrigger asChild>
         <Button type="button" variant="outline" disabled={disabled || !ready}>
           <Wallet data-icon="inline-start" />
-          {purpose === "link" ? "Link wallet" : "Solana wallet"}
+          {label ?? (purpose === "link" ? "Link wallet" : "Solana wallet")}
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -348,8 +360,7 @@ function WalletPicker({
                     )}
                   </span>
                   <span className="wallet-picker-name">{wallet.name}</span>
-                </span>
-                {" "}
+                </span>{" "}
                 {busy && selected?.name === wallet.name ? (
                   <LoaderCircle
                     aria-hidden="true"

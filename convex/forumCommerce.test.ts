@@ -18,6 +18,61 @@ import {
 const modules = import.meta.glob("./**/*.ts"),
   issuer = "https://strong-bee-384.convex.site",
   treasury = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
+
+test("wallet session returns only the current verified human account's linked wallets", async () => {
+  const t = setup(),
+    first = await actor(t, 101),
+    second = await actor(t, 102);
+  await expect(t.query(api.forumCommerce.getWalletSession, {})).rejects.toThrow(
+    "Sign in",
+  );
+  expect(
+    await first.client.query(api.forumCommerce.getWalletSession, {}),
+  ).toEqual({ authUserId: first.authUserId, wallets: [first.wallet] });
+  expect(
+    await second.client.query(api.forumCommerce.getWalletSession, {}),
+  ).toEqual({ authUserId: second.authUserId, wallets: [second.wallet] });
+});
+test("token discovery requires linked ownership and reuses a bounded shared cache without a second provider request", async () => {
+  const t = setup(),
+    first = await actor(t, 103),
+    second = await actor(t, 104);
+  const fetcher = vi.fn(async (_input: RequestInfo | URL) =>
+    Response.json([
+      {
+        id: "So11111111111111111111111111111111111111112",
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+        tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        isVerified: true,
+      },
+    ]),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  await expect(
+    first.client.action(api.forumTokenDiscovery.search, {
+      wallet: second.wallet,
+      search: "SOL",
+    }),
+  ).rejects.toThrow("Link and verify");
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(
+    await first.client.action(api.forumTokenDiscovery.search, {
+      wallet: first.wallet,
+      search: "SOL",
+    }),
+  ).toHaveLength(1);
+  expect(
+    await second.client.action(api.forumTokenDiscovery.search, {
+      wallet: second.wallet,
+      search: "SOL",
+    }),
+  ).toHaveLength(1);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const url = String(fetcher.mock.calls[0]?.[0]);
+  expect(url).toContain("https://api.jup.ag/tokens/v2/search?query=SOL");
+});
 function setup() {
   const t = convexTest(schema, modules);
   registerBetterAuth(t);

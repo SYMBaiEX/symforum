@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "project": {
+    "name": "symbaiex",
+    "productType": null,
+    "stack": ["nextjs", "react", "shadcn", "tailwind-v3", "vite"]
+  },
+  "sources": {
+    "tokens": [],
+    "components": ["components/ui"],
+    "assets": ["public/images", "assets"],
+    "instructions": ["AGENTS.md", "CLAUDE.md"]
+  },
+  "design": {
+    "colorMode": "unknown",
+    "colors": {},
+    "typography": {},
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "badge",
+      "button",
+      "card",
+      "dialog",
+      "dropdown-menu",
+      "input",
+      "select",
+      "separator",
+      "skeleton",
+      "surface-scope",
+      "textarea",
+      "toggle",
+      "toggle-group",
+      "tooltip"
+    ],
+    "preferredPrimitives": ["radix-ui"],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [
+    "Swap UI uses a compact sell/receive card and searchable token directory inspired by the user's Jupiter reference, while retaining SYMBaiEX forum colors, existing Dialog/Button primitives, responsive layout and explicit transaction review."
+  ],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "components/ui"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "AGENTS.md"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "CLAUDE.md"
+    },
+    {
+      "fact": "project.stack:nextjs",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v3",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-10-29T21:17:56.710Z"
+}

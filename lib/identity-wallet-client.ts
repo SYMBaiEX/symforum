@@ -10,8 +10,9 @@ import {
 } from "./wallet-signin";
 
 export function createIdentityWalletClient() {
-  // Authentication only: no RPC, transaction payer, silent connection, or
-  // persisted wallet address. Better Auth owns the actual authenticated session.
+  // Shared connection state only: no RPC transport, transaction payer, silent
+  // connection or persisted address. Better Auth owns the authenticated session;
+  // commerce separately verifies linked ownership and the exact simulated message.
   return createClient().use(
     walletWithoutSigner({
       chain: "solana:mainnet",
@@ -19,7 +20,8 @@ export function createIdentityWalletClient() {
       storage: null,
       filter: (wallet) =>
         wallet.features.includes("solana:signIn") ||
-        wallet.features.includes("solana:signMessage"),
+        wallet.features.includes("solana:signMessage") ||
+        wallet.features.includes("solana:signAndSendTransaction"),
     }),
   );
 }

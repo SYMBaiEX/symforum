@@ -107,7 +107,26 @@ async function harness(page: Page, query = "") {
     const name = url.pathname.replace("/__commerce/", "");
     requests.push(name);
     let result: unknown;
-    if (name === "forumSwaps:quote")
+    if (name === "forumTokenDiscovery:search")
+      result = Array.from({ length: 30 }, (_, index) => ({
+        mint: getBase58Decoder().decode(new Uint8Array(32).fill(index + 2)),
+        symbol: `TOKEN${index}`,
+        name: `Directory token ${index}`,
+        decimals: 6,
+        tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        icon: null,
+        verified: true,
+      }));
+    else if (name === "forumCommerce:resolveMint") {
+      const input = route.request().postDataJSON();
+      result = {
+        mint: input.mint,
+        symbol: "RESOLVED",
+        name: "Verified mint",
+        decimals: 6,
+        tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      };
+    } else if (name === "forumSwaps:quote")
       result = {
         quotes: [
           {
@@ -297,4 +316,99 @@ test("mobile layout fits the viewport and key navigation links remain usable", a
     path: "tmp/forum-render-tests/commerce-mobile.png",
     fullPage: true,
   });
+});
+test("an already-authorized linked wallet restores without another connection prompt and auto-quotes once", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized");
+  await expect(
+    page.getByRole("button", { name: "6fHa…RMBY", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Connect wallet", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("You pay", { exact: true }).fill("1");
+  await expect(
+    page.getByRole("button", { name: "Review swap", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".swap-receive")).toHaveText("1");
+  expect(requests.filter((r) => r === "forumSwaps:quote")).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:prepare");
+  await page.getByRole("button", { name: "Review swap", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Review swap" })).toBeVisible();
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+});
+test("the token modal has a large searchable directory and verifies a selected mint before quoting", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized");
+  await page
+    .getByRole("button", { name: "Receive token", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: /TOKEN29/ })).toBeVisible();
+  await page.screenshot({
+    path: "tmp/forum-render-tests/commerce-token-directory.png",
+    fullPage: true,
+  });
+  await dialog.getByRole("textbox", { name: "Search tokens" }).fill("TOKEN29");
+  await expect(dialog.getByRole("button", { name: /TOKEN29/ })).toBeVisible();
+  await dialog.getByRole("button", { name: /TOKEN29/ }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Receive token", exact: true }),
+  ).toContainText("TOKEN29");
+  expect(requests).toContain("forumCommerce:resolveMint");
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await page.screenshot({
+    path: "tmp/forum-render-tests/commerce-updated.png",
+    fullPage: true,
+  });
+});
+test("a logged-in reader without a linked wallet uses verified account linking instead of a separate payment-only connection", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?unlinked&authorized");
+  await expect(
+    page.getByRole("button", { name: "Link wallet to trade" }),
+  ).toBeVisible();
+  await page.getByLabel("You pay", { exact: true }).fill("1");
+  await expect(
+    page.getByRole("button", { name: "Compare routes", exact: true }),
+  ).toBeDisabled();
+  expect(requests).not.toContain("forumSwaps:quote");
+});
+test("an expired preview never starts polling or spending more data quota in the background", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const requests = await harness(page, "?authorized");
+  await page.getByLabel("You pay", { exact: true }).fill("1");
+  await page.clock.runFor(1100);
+  await expect(
+    page.getByRole("button", { name: "Review swap", exact: true }),
+  ).toBeEnabled();
+  await page.clock.runFor(180000);
+  await expect(
+    page.getByRole("button", { name: "Refresh quote", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".swap-receive")).toHaveText("0.00");
+  expect(requests.filter((r) => r === "forumSwaps:quote")).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:prepare");
+});
+test("a deliberate wallet disconnect is not silently undone by restoration", async ({
+  page,
+}) => {
+  await harness(page, "?authorized");
+  await page.getByRole("button", { name: "6fHa…RMBY", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Disconnect wallet", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Connect wallet", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("You pay", { exact: true }).fill("1");
+  await expect(
+    page.getByRole("button", { name: "Compare routes", exact: true }),
+  ).toBeDisabled();
 });

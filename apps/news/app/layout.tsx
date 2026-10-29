@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AuthKitConvexProvider } from "@symbaiex/auth/client";
+import { AuthKitConvexProvider } from "@/components/ConvexClientProvider";
 import { AuthServerBoundary } from "@symbaiex/auth/server";
 import { ForumSiteShell } from "@/components/forum/forum-site-shell";
 import { newsSiteUrl, primarySiteUrl } from "@/lib/site-urls";
