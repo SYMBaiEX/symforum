@@ -45,6 +45,58 @@ Relevant upstream sources:
 
 ### Wallet picker and browser verification
 
+For real-extension diagnosis without production access, run
+`bun --no-env-file run dev:wallet` and open
+`http://127.0.0.1:43218/?walletDebug=1` in the browser profile with the wallet.
+This is a separate loopback-only test page, not a deployed app route. It builds
+the actual shared wallet component and Kit client without production environment
+configuration. Its temporary verifier uses the existing exact-message/Ed25519
+verification helper, browser-bound one-use challenges and in-memory state. It
+does not call Convex, RPCs, model providers or production auth, create production
+accounts, publish, or send transactions. Local demonstration sessions cannot
+authenticate to production. Stop the process to discard all verifier state.
+
+Compare one mode at a time (switching disposes the previous Kit client):
+
+- **Minimal Kit:** calls `client.wallet.connect` with no auth/provider wrapper,
+  challenge or signature request.
+- **Full sign-in component:** runs the actual picker/proof/session-atom flow
+  against the local verifier. The wallet must explicitly sign a clearly labeled
+  local diagnostic message; this is not a production login.
+- **Phantom provider control:** locally calls the documented
+  `window.phantom.solana.connect()` without Kit or authentication. This is only
+  a diagnostic comparison, never an application fallback.
+
+The shared component's diagnostics are off by default. `?walletDebug=1` enables
+an in-memory ring of at most 100 events and local console output. Fields are
+allowlisted: attempt, lane, stage, relative duration, recognized wallet name,
+account count/capabilities, SDK status, user activation, visibility, secure/top
+level context and numeric error code. No address, nonce, signed bytes, signature,
+session data, arbitrary wallet name, raw error, stack, cookie or provider payload
+is retained or transmitted. Reloading clears the event log. A requested signature
+event is emitted only after local challenge/account validation and immediately
+before the actual wallet action; an expired challenge must not look like a wallet
+signature failure.
+
+On October 29, 2026, the user reported the real Phantom extension failing in
+**Minimal Kit**: `connect_requested` followed about 1.5 seconds later by
+`failed`, phase `connect`, code `-32603`, with user activation, visibility,
+secure context and top-level context all true. No challenge or signature request
+was involved. This excludes the forum picker, WorkOS and Better Auth as necessary
+conditions for that reproduction, but does not by itself establish whether the
+remaining cause is Phantom's Wallet Standard bridge, extension/background state
+or a browser interaction. Do not label diagnostic/test success as a Phantom fix.
+Neither a Chrome restart nor a wallet reset is implicit in running this tool.
+
+After the user approved a full Chrome restart and unlocked Phantom, the same
+minimal test returned one account successfully in 1.098 seconds. The real shared
+sign-in component then completed a Phantom message signature, exact-message
+Ed25519 verification and local session confirmation. No code change, wallet reset,
+storage deletion, production account mutation or transaction was needed between
+these reproductions. Browser/extension state is therefore implicated, but the
+specific underlying extension failure is not established. This local result is
+not by itself proof of production sign-in or cross-app logout.
+
 The maintained frontend now uses Solana Kit 8.6.0, the wallet plugin 0.22.0
 and `@solana/react` 8.6.0, following the current Foundation frontend skill.
 React/React DOM are pinned consistently to 19.3.1 across all five apps and

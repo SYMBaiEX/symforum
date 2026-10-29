@@ -51,6 +51,7 @@ export function requestIdentityMessageProof(
   challenge: WalletChallenge,
   location: Pick<Location, "host" | "origin">,
   now = Date.now(),
+  onRequest?: () => void,
 ) {
   assertSelectedAccount(client, account);
   const feature = getWalletAccountFeature(account, "solana:signMessage") as {
@@ -66,6 +67,7 @@ export function requestIdentityMessageProof(
   // account feature here to retain the existing exact-signed-bytes gate.
   return requestMessageProof(
     async (message) => {
+      onRequest?.();
       const result = await feature.signMessage({
         account: rawAccount,
         message,

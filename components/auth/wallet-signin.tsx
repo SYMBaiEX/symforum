@@ -36,6 +36,10 @@ import {
   requestIdentityMessageProof,
   type IdentityWalletClient,
 } from "@/lib/identity-wallet-client";
+import {
+  createWalletDiagnostic,
+  type WalletDiagnosticAttempt,
+} from "@/lib/wallet-diagnostics";
 
 type PreparedRequest =
   | {
@@ -102,6 +106,7 @@ function WalletPicker({
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const active = useRef(true);
+  const diagnostic = useRef<WalletDiagnosticAttempt | null>(null);
 
   useEffect(() => {
     active.current = true;
@@ -122,6 +127,7 @@ function WalletPicker({
   async function prepare(wallet: UiWallet, account?: UiWalletAccount) {
     if (account) selectAccount(account);
     setPhase("preparing");
+    diagnostic.current?.record("challenge_requested");
     const challenge = await identityRequest<WalletChallenge>(
       "/identity/challenge",
       { provider: "solana", purpose },
@@ -129,6 +135,7 @@ function WalletPicker({
     if (!active.current) return;
     if (!challenge.input)
       throw new Error("Wallet verification is unavailable.");
+    diagnostic.current?.record("challenge_ready");
     if (wallet.features.includes("solana:signMessage") && account)
       setPrepared({ method: "message", wallet, account, challenge });
     else if (wallet.features.includes("solana:signIn"))
@@ -145,6 +152,17 @@ function WalletPicker({
     setAccounts([]);
     setError("");
     onBusyChange(true);
+    const report =
+      account && diagnostic.current
+        ? diagnostic.current
+        : createWalletDiagnostic(wallet.name);
+    diagnostic.current = report;
+    report.record("selected", {
+      accountCount: wallet.accounts.length,
+      canSignMessage: wallet.features.includes("solana:signMessage"),
+      canSignIn: wallet.features.includes("solana:signIn"),
+      sdkStatus: client.wallet.getState().status,
+    });
     let connecting = false;
     try {
       // Connect directly from the selection click, before any network await.
@@ -162,8 +180,20 @@ function WalletPicker({
           ? [account]
           : exposed.length
             ? exposed
-            : await connect.dispatchAsync(wallet);
+            : await (() => {
+                report.record("connect_requested");
+                return connect.dispatchAsync(wallet);
+              })();
         if (!active.current) return;
+        report.record(
+          account || exposed.length
+            ? "existing_account_selected"
+            : "connect_succeeded",
+          {
+            accountCount: authorized.length,
+            sdkStatus: client.wallet.getState().status,
+          },
+        );
         const choices = authorized.filter(
           (a) =>
             a.chains.includes("solana:mainnet") &&
@@ -176,6 +206,7 @@ function WalletPicker({
         else setAccounts(choices);
       } else await prepare(wallet);
     } catch (reason) {
+      report.failure(connecting ? "connect" : "prepare", reason);
       if (active.current)
         setError(
           connecting
@@ -200,6 +231,7 @@ function WalletPicker({
     onBusyChange(true);
     let current: Phase = "signing";
     setPhase(current);
+    const report = diagnostic.current;
     try {
       const proof =
         request.method === "message"
@@ -208,24 +240,41 @@ function WalletPicker({
               request.account,
               request.challenge,
               window.location,
+              Date.now(),
+              () => report?.record("signature_requested"),
             )
           : await requestSiwsProof(
-              (input) => signIn.dispatchAsync(request.wallet, input),
+              (input) => {
+                report?.record("signature_requested");
+                return signIn.dispatchAsync(request.wallet, input);
+              },
               request.challenge,
               window.location,
             );
       if (!active.current) return;
+      report?.record("signature_succeeded");
       current = "verification";
       setPhase(current);
+      report?.record("proof_requested");
       await identityRequest("/sign-in/solana", proof);
       if (!active.current) return;
+      report?.record("proof_verified");
       current = "session";
       setPhase(current);
       await refreshIdentitySession();
       if (!active.current) return;
+      report?.record("session_confirmed");
       setOpen(false);
       onComplete();
     } catch (reason) {
+      report?.failure(
+        current === "signing"
+          ? "sign"
+          : current === "verification"
+            ? "verify"
+            : "session",
+        reason,
+      );
       if (active.current)
         setError(
           current === "signing"
