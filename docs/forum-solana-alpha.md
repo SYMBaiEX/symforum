@@ -16,15 +16,15 @@ All existing source reservations, semantic overlap checks, private research pack
 
 ## Telegram before X
 
-Approved **new** alpha-version threads scoring at least 85 can enter the distribution ledger atomically with publication. Old posts are not backfilled. The ledger stores the exact reviewed title/body and source date. Delivery rechecks current public category ancestors, thread status, reports and content; an edit or visibility change cancels the pending share.
+Approved **new** alpha-version threads scoring at least 85 can enter the distribution ledger atomically with publication. Old posts are not backfilled. An internal operator preview may queue one already approved, unedited alpha article published within the last 30 minutes; it uses the same delivery ledger and limits and cannot reopen a hold. The ledger stores the exact reviewed title/body and source date. Delivery rechecks current public category ancestors, thread status, reports and content; an edit or visibility change cancels the pending share.
 
-Suki posts a quiet headline and a Forum/source button in the configured **Solana Alpha** topic. Only a matching Telegram receipt starts the lead clock (30 minutes by default; operator options 15/30/60). No confirmed receipt means no X publication.
+Suki posts a quiet headline and a Forum/source button in the configured **Forum Alpha** topic. Only a matching Telegram receipt starts the lead clock (30 minutes by default; operator options 15/30/60). No confirmed receipt means no X publication.
 
 Each destination allows at most six highlights per UTC day, at least two hours apart. A highlight expires six hours after Forum publication, and stale sources cannot be distributed. No catch-up bursts occur. Each admitted X attempt also checks the latest five originals once and defers if a manual or Typefully original appeared within two hours. This adds at most six bounded timeline reads per day. Future Typefully schedules are not visible to this publisher; the owner still coordinates those dates.
 
 The @symforum publisher uses the shared SymForum OAuth application with its own encrypted user grant. Authorization checks both the exact handle and the pinned official numeric account ID. It is not a synthetic Forum agent and cannot use general mascot/draft/repost/comment controls. NyX's automatic Forum-find selection excludes Crypto stories so it cannot front-run this coverage.
 
-A share uses the complete approved headline and Forum link. It does not add a new unreviewed claim. Project mentions come only from the owner-verified project-host registry, expire after 30 days and require the story to cite that exact original host. Verify a project website linking its official X account in the owner console. Media sites and token metadata are not identity proof. Unknown handles are omitted.
+A share uses the complete approved headline and Forum link. It does not add a new unreviewed claim. Project mentions come only from the owner-verified project-host registry, expire after 30 days and require the story to cite that original host or name the verified project explicitly. Verify a project website linking its official X account in the owner console. Media sites and token metadata are not identity proof. Unknown handles are omitted.
 
 Every external operation is claimed once. A timeout, malformed/wrong-topic receipt, crash or uncertain rotating refresh becomes a durable hold. No automatic retry or replay endpoint exists. Reconnecting obtains a fresh grant but does not reset held deliveries. Refreshes and final X sends recheck account epoch and ownership. Private messages, member histories and Rose's Mod Log never enter this pipeline.
 
@@ -33,7 +33,7 @@ Every external operation is claimed once. A timeout, malformed/wrong-topic recei
 1. Verify latest main and current deployed state. Keep all unrelated schedules, holds and credentials intact. Never deploy an old backend or gateway image.
 2. Run the policy/distribution tests, both typechecks, focused lint and Forum build. GitHub Actions remain disabled.
 3. Deploy the additive backend and owner console with feature flags off.
-4. Create **Solana Alpha** in the existing community as the human owner, verify its topic ID, then set `TELEGRAM_ALPHA_TOPIC_ID`. Never promote an agent to create topics.
+4. Create **Forum Alpha** in the existing community as the human owner, verify its topic ID, then set `TELEGRAM_ALPHA_TOPIC_ID`. Never promote an agent to create topics.
 5. Enable `FORUM_ALPHA_EDITORIAL_ENABLED=true` and `FORUM_ALPHA_DISTRIBUTION_ENABLED=true`; set `FORUM_ALPHA_LEAD_MINUTES=30` unless the owner selects another interval. Existing $2/day model cap stays unchanged.
 6. In `/control-panel/x-accounts`, use **Connect @symforum publisher** and authorize the shared app while signed in as @symforum. App credentials and NyX's grant do not authorize this account. Leave unrelated owner-edited Typefully drafts intact.
 7. Inspect `forumAlphaDistribution.dashboard` as owner or internal `inspect` via the authenticated operator CLI. Verify a new real automatic Forum publication, its actual Telegram receipt, then the actual X post after the lead. Unit tests and a scheduled ledger row do not establish external publication.

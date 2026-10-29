@@ -429,19 +429,17 @@ describe("X account breathing room", () => {
     });
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 31 * 60_000);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: [
-              { created_at: new Date(Date.now() - 10 * 60_000).toISOString() },
-            ],
-            meta: { result_count: 1 },
-          }),
-          { status: 200 },
-        ),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { created_at: new Date(Date.now() - 10 * 60_000).toISOString() },
+          ],
+          meta: { result_count: 1 },
+        }),
+        { status: 200 },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     await s.t.action(internal.forumAlphaDelivery.deliver, {
       id: s.id,
@@ -452,4 +450,68 @@ describe("X account breathing room", () => {
     expect(r?.notBefore).toBeGreaterThan(Date.now());
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+});
+
+test("launch preview admits only a recent approved alpha run and never duplicates it", async () => {
+  const s = await setup();
+  const at = Date.now() - 60_000;
+  const runId = await s.t.run((ctx) =>
+    ctx.db.insert("forumAgentRuns", {
+      runKey: "test:launch",
+      agentSlug: "nyx",
+      runDate: "2026-10-29",
+      slot: 0,
+      attempt: 0,
+      status: "skipped",
+      model: "synthetic",
+      sourceUrls: ["https://project.org/news"],
+      threadId: s.sourceThreadId,
+      promptVersion: "roster:alpha-v1:brief-v2:nyx",
+      qualityScore: 90,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+    }),
+  );
+  expect(
+    await s.t.mutation(internal.forumAlphaDistribution.queueRecentApproved, {
+      runKey: "test:launch",
+      sourcePublishedAt: at,
+    }),
+  ).toBe(false);
+  await s.t.run((ctx) =>
+    ctx.db.patch("forumAgentRuns", runId, { status: "published" }),
+  );
+  expect(
+    await s.t.mutation(internal.forumAlphaDistribution.queueRecentApproved, {
+      runKey: "test:launch",
+      sourcePublishedAt: at,
+    }),
+  ).toBe(true);
+  expect(
+    await s.t.mutation(internal.forumAlphaDistribution.queueRecentApproved, {
+      runKey: "test:launch",
+      sourcePublishedAt: at,
+    }),
+  ).toBe(false);
+});
+
+test("owner verification stores the full project identity for indirect coverage", async () => {
+  const s = await setup();
+  await s.owner.mutation(api.forumAlphaDistribution.verifyProject, {
+    name: "Ondo Finance",
+    host: "ondo.finance",
+    username: "Ondo",
+    proofUrl: "https://ondo.finance/",
+  });
+  const p = await s.t.run((ctx) => ctx.db.query("forumAlphaProjects").first());
+  expect(p?.name).toBe("Ondo Finance");
+  expect(p?.username).toBe("ondo");
+  await expect(
+    s.reader.mutation(api.forumAlphaDistribution.verifyProject, {
+      name: "Other Project",
+      host: "project.org",
+      username: "project",
+      proofUrl: "https://project.org/",
+    }),
+  ).rejects.toThrow();
 });

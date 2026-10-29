@@ -23,11 +23,20 @@ import {
   ALPHA_X_USER_ID,
   alphaLeadMs,
   alphaShareText,
+  alphaProjectMention,
+  alphaTelegramText,
 } from "../lib/forum-alpha-editorial";
 import { X_ACTIVITY_SCOPES, validXDraft } from "../lib/x-agent-policy";
 import { telegramBotRegistry } from "../lib/telegram-agent-policy";
 
 const limits = new RateLimiter(components.rateLimiter, {
+  alphaRead: {
+    kind: "token bucket",
+    rate: 1,
+    period: 15 * 60_000,
+    capacity: 1,
+  },
+  alphaReadDay: { kind: "fixed window", rate: 6, period: DAY },
   alphaDay: { kind: "fixed window", rate: 6, period: DAY },
   alphaSpacing: {
     kind: "token bucket",
@@ -197,7 +206,7 @@ export const claimTelegram = internalMutation({
       updatedAt: Date.now(),
     });
     return {
-      text: `${r.title}\n\nFresh from the Forum. Read the finding and its sources below.`,
+      text: alphaTelegramText(r.title, r.body),
       topicId: r.topicId,
       url: r.url,
     };
@@ -270,11 +279,28 @@ export const claimX = internalMutation({
         .unique();
       if (p && Date.now() - p.updatedAt < 30 * DAY) handles.push(p.username);
     }
+    const projects = await ctx.db
+      .query("forumAlphaProjects")
+      .withIndex("by_updatedAt", (q) =>
+        q.gte("updatedAt", Date.now() - 30 * DAY),
+      )
+      .order("desc")
+      .take(80);
+    for (const project of projects)
+      if (alphaProjectMention(project.name, r.title, r.body))
+        handles.push(project.username);
     const text = alphaShareText(r.title, r.url, handles);
-    if (!text || !validXDraft(text)) return null;
+    if (!text || !validXDraft(text)) {
+      await ctx.db.patch("forumAlphaDeliveries", id, {
+        xStatus: "skipped",
+        issue: "headline_not_shareable",
+        updatedAt: Date.now(),
+      });
+      return null;
+    }
     if (
-      !(await limits.limit(ctx, "alphaSpacing", { key: "x" })).ok ||
-      !(await limits.limit(ctx, "alphaDay", { key: "x" })).ok
+      !(await limits.limit(ctx, "alphaRead", { key: "x" })).ok ||
+      !(await limits.limit(ctx, "alphaReadDay", { key: "x" })).ok
     )
       return null;
     await ctx.db.patch("forumAlphaDeliveries", id, {
@@ -352,6 +378,11 @@ export const authorizeXSend = internalMutation({
       Date.now() <
         r.telegramSentAt + alphaLeadMs(env.FORUM_ALPHA_LEAD_MINUTES) ||
       !(await source(ctx, r))
+    )
+      return null;
+    if (
+      !(await limits.limit(ctx, "alphaSpacing", { key: "x" })).ok ||
+      !(await limits.limit(ctx, "alphaDay", { key: "x" })).ok
     )
       return null;
     await ctx.db.patch("forumAlphaDeliveries", id, {
@@ -474,11 +505,19 @@ export const dashboard = query({
   },
 });
 export const verifyProject = mutation({
-  args: { host: v.string(), username: v.string(), proofUrl: v.string() },
+  args: {
+    name: v.optional(v.string()),
+    host: v.string(),
+    username: v.string(),
+    proofUrl: v.string(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
     if (owner.isAgent) throw Error("Human owner required");
+    const name = args.name?.trim();
+    if (name && !/^[A-Za-z0-9][A-Za-z0-9 .&+\x27-]{5,79}$/.test(name))
+      throw Error("Use the project’s full public name.");
     const host = args.host.toLowerCase();
     const url = new URL(args.proofUrl);
     if (
@@ -499,8 +538,9 @@ export const verifyProject = mutation({
       .withIndex("by_host", (q) => q.eq("host", host))
       .unique();
     const value = {
+      name,
       host,
-      username: args.username,
+      username: args.username.toLowerCase(),
       proofUrl: args.proofUrl,
       verifiedBy: owner._id,
       updatedAt: Date.now(),
@@ -602,5 +642,48 @@ export const deferX = internalMutation({
       updatedAt: Date.now(),
     });
     return null;
+  },
+});
+
+/** A bounded launch preview of a newly reviewed article, never historical backfill. */
+export const queueRecentApproved = internalMutation({
+  args: { runKey: v.string(), sourcePublishedAt: v.number() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (
+      run?.status !== "published" ||
+      !run.threadId ||
+      !run.promptVersion?.includes(":alpha-v1:")
+    )
+      return false;
+    const thread = await ctx.db.get("forumThreads", run.threadId);
+    if (
+      !thread ||
+      thread.createdAt < Date.now() - 30 * 60_000 ||
+      thread.updatedAt !== thread.createdAt
+    )
+      return false;
+    if (
+      await ctx.db
+        .query("forumAlphaDeliveries")
+        .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
+        .unique()
+    )
+      return false;
+    await queueAlphaPublication(ctx, {
+      threadId: thread._id,
+      promptVersion: run.promptVersion,
+      qualityScore: run.qualityScore,
+      sourceUrls: run.sourceUrls,
+      sourcePublishedAt: args.sourcePublishedAt,
+    });
+    return !!(await ctx.db
+      .query("forumAlphaDeliveries")
+      .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
+      .unique());
   },
 });

@@ -253,6 +253,17 @@ export const ALPHA_PUBLISHER_SLUG = "symforum";
 export const ALPHA_X_USER_ID = "2112678767726366720";
 export const ALPHA_SOCIAL_INTERVAL_MS = 2 * 60 * 60_000;
 export const ALPHA_DELIVERY_TTL_MS = 6 * 60 * 60_000;
+/** Share one complete reviewed paragraph; never cut a qualifier off a claim. */
+export function alphaTelegramText(title: string, body: string) {
+  const paragraph = body
+    .split(/\n\s*\n/, 1)[0]
+    .replace(/\[\/?[a-z0-9*]+(?:=[^\]]*)?\]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return paragraph && paragraph.length <= 900 && !/[\[\]<>]/.test(paragraph)
+    ? `${title}\n\n${paragraph}`
+    : title;
+}
 export function alphaLeadMs(value?: string) {
   return [15, 30, 60].includes(Number(value))
     ? Number(value) * 60_000
@@ -304,4 +315,20 @@ export function alphaPagePublishedAt(html: string): number | undefined {
   const raw = html.match(/"datePublished"\s*:\s*"([^"<]{1,80})"/i)?.[1];
   const at = raw ? Date.parse(raw) : NaN;
   return Number.isFinite(at) ? at : undefined;
+}
+
+/** Verified names let a cited news report tag its subject, not the news outlet. */
+export function alphaProjectMention(
+  name: string | undefined,
+  title: string,
+  body: string,
+) {
+  if (!name || name.length < 6 || name.length > 80) return false;
+  const escaped = name
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`, "i").test(
+    `${title} ${body.slice(0, 1800)}`,
+  );
 }
