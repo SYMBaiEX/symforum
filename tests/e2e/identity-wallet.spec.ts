@@ -1,8 +1,26 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 let bundle: string;
+let stylesheet: string;
 test.beforeAll(() => {
+  stylesheet =
+    readFileSync("styles/forum-shared.css", "utf8") +
+    execFileSync(
+      "bun",
+      [
+        "-e",
+        `
+      import postcss from "postcss";
+      import tailwind from "tailwindcss";
+      import config from "./tailwind.config.ts";
+      const css = (await Bun.file("apps/platform/app/globals.css").text()).replace(/^@import.*$/m, "");
+      process.stdout.write((await postcss([tailwind(config)]).process(css, {from: undefined})).css);
+    `,
+      ],
+      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+    );
   bundle = execFileSync(
     "bun",
     [
@@ -61,7 +79,7 @@ async function harness(
     if (url.origin === "http://127.0.0.1:43192" && url.pathname === "/")
       return route.fulfill({
         contentType: "text/html",
-        body: '<meta charset="utf-8"><div id="root"></div><script src="/fixture.js"></script>',
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${stylesheet}</style><div id="root"></div><script src="/fixture.js"></script>`,
       });
     if (url.pathname === "/fixture.js")
       return route.fulfill({ contentType: "text/javascript", body: bundle });
@@ -161,6 +179,57 @@ async function events(page: Page) {
 }
 const count = (requests: string[], suffix: string) =>
   requests.filter((path) => path.endsWith(suffix)).length;
+
+for (const theme of ["light", "dark"] as const) {
+  for (const width of [390, 1280]) {
+    test(`current wallet surface fits ${theme} at ${width}px without changing auth`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      const run = await harness(page);
+      await page.goto("http://127.0.0.1:43192/");
+      await page.evaluate(
+        (dark) => document.documentElement.classList.toggle("dark", dark),
+        theme === "dark",
+      );
+      await page
+        .getByRole("button", { name: "Solana wallet", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "Connect a wallet" });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute("data-surface", "forum");
+      await expect(dialog).toHaveCSS("border-top-left-radius", "16px");
+      await expect(dialog).toHaveCSS(
+        "background-color",
+        theme === "dark" ? "rgb(22, 22, 24)" : "rgb(255, 255, 255)",
+      );
+      const wallet = page.getByRole("button", { name: /Phantom Installed/ });
+      await expect(wallet).toBeFocused();
+      expect((await wallet.boundingBox())!.height).toBeGreaterThanOrEqual(60);
+      const bounds = (await dialog.boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(15);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 15);
+      expect(bounds.y).toBeGreaterThanOrEqual(15);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(785);
+      await expect(
+        dialog.getByText(
+          "Message signature only. No transaction or spending approval.",
+        ),
+      ).toBeVisible();
+      await page.screenshot({
+        path: `tmp/wallet-picker-${theme}-${width}.png`,
+      });
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(
+        page.getByRole("button", { name: "Solana wallet", exact: true }),
+      ).toBeFocused();
+      expect(await events(page)).toEqual([]);
+      expect(count(run.requests, "/identity/challenge")).toBe(0);
+    });
+  }
+}
 
 test("opt-in diagnostics locate an internal connect failure without auth requests or automatic retries", async ({
   page,
