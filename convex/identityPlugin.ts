@@ -315,6 +315,7 @@ export function humanIdentityPlugin(backend: GenericCtx<DataModel>) {
             });
           }
           let subject: string;
+          let telegramUsername: string | undefined;
           try {
             const { payload } = await jwtVerify(
               ctx.body.idToken,
@@ -333,6 +334,13 @@ export function humanIdentityPlugin(backend: GenericCtx<DataModel>) {
             )
               throw new Error("Invalid proof");
             subject = payload.sub;
+            // Only the cryptographically verified provider claim may suggest a
+            // handle. Never read a username from the public proof request body.
+            telegramUsername =
+              typeof payload.preferred_username === "string" &&
+              payload.preferred_username.length <= 33
+                ? payload.preferred_username
+                : undefined;
           } catch {
             throw new APIError("UNAUTHORIZED", {
               message: "Invalid or expired Telegram proof.",
@@ -348,6 +356,7 @@ export function humanIdentityPlugin(backend: GenericCtx<DataModel>) {
               provider: "telegram",
               browserHash: await sha256Base64Url(binder),
               telegramSubject: subject,
+              ...(telegramUsername ? { telegramUsername } : {}),
               ...(session && isFreshIdentitySession(session.session.createdAt)
                 ? { authUserId: session.user.id }
                 : {}),

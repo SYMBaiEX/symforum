@@ -260,14 +260,34 @@ test("a signed wallet proof creates a native session and verifiable JWT, never a
   );
   expect(loggedIn.status).toBe(200);
   const cookie = cookies(loggedIn);
+  expect(
+    await (await request(t, "/get-session", undefined, cookie)).json(),
+  ).toMatchObject({
+    user: {
+      username: `${address.slice(0, 6)}-${address.slice(-4)}`.toLowerCase(),
+    },
+  });
   // Wallet-first users have an internal address containing the exact base58
   // public key. Updating the handle must not case-fold that non-mailbox key.
   expect(
-    (await request(t, "/update-user", { username: "wallet-reader" }, cookie,
-      "forum.symbaiex.com")).status,
+    (
+      await request(
+        t,
+        "/update-user",
+        { username: "wallet-reader" },
+        cookie,
+        "forum.symbaiex.com",
+      )
+    ).status,
   ).toBe(200);
-  expect(await (await request(t, "/get-session", undefined, cookie)).json())
-    .toMatchObject({ user: { username: "wallet-reader", email: address + "@solana.symbaiex.invalid" } });
+  expect(
+    await (await request(t, "/get-session", undefined, cookie)).json(),
+  ).toMatchObject({
+    user: {
+      username: "wallet-reader",
+      email: address + "@solana.symbaiex.invalid",
+    },
+  });
   const tokenResponse = await request(t, "/convex/token", undefined, cookie);
   expect(tokenResponse.status).toBe(200);
   const { token } = await tokenResponse.json();
