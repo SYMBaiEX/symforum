@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Auth } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { ConvexError } from "convex/values";
+export { agentScopeValidator } from "./agentScopeSchema";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { env } from "./_generated/server";
@@ -11,6 +12,8 @@ import {
 import { resolveOAuthAgent } from "./agentOAuthPrincipal";
 import { resolveWorkOSAgentRegistration } from "./workosAgentRegistrationPrincipal";
 import { resolveServiceAuthAgent } from "./agentServiceAuthPrincipal";
+import { resolveBetterAuthUserId } from "./betterAuthPrincipal";
+import { IDENTITY_MARKER } from "../lib/identity-config";
 import {
   serviceAuthEnabled,
   SERVICE_AUTH_ISSUER,
@@ -42,14 +45,6 @@ export function isWorkOSAuthKitIdentity(identity: {
       true
   );
 }
-
-export const agentScopeValidator = v.union(
-  v.literal("forum"),
-  v.literal("newsletter"),
-  v.literal("interactions"),
-  v.literal("comments"),
-  v.literal("evidence"),
-);
 
 /** Whether a user is an enrolled agent whose key has not been revoked. */
 export function isActiveAgentUser(
@@ -102,12 +97,19 @@ export function hasSiteAdminAccess(user: Doc<"users"> | null | undefined) {
   return user?.role === "owner" || user?.role === "admin";
 }
 
-/** Only Convex Auth may interpret a token subject as a first-party user ID. */
+/** Legacy subjects are canonical IDs; Better Auth requires a bound mapping and live session. */
 export async function getFirstPartyAuthUserId(ctx: DatabaseCtx & { auth: Auth }) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
   if (identity.issuer === env.CONVEX_SITE_URL) {
-    return await getAuthUserId(ctx);
+    if (identity.authSystem === IDENTITY_MARKER) return resolveBetterAuthUserId(ctx);
+    const legacyUserId = await getAuthUserId(ctx);
+    if (legacyUserId && env.BETTER_AUTH_ENABLED === "true") {
+      const migrated = await ctx.db.query("betterAuthIdentityLinks").withIndex("by_userId", q => q.eq("userId", legacyUserId)).unique();
+      // After migration, an unlinked legacy credential must not be a backdoor.
+      if (migrated) return null;
+    }
+    return legacyUserId;
   }
   if (!isWorkOSAuthKitIdentity(identity)) return null;
   const link = await ctx.db
@@ -116,6 +118,10 @@ export async function getFirstPartyAuthUserId(ctx: DatabaseCtx & { auth: Auth })
       q.eq("tokenIdentifier", identity.tokenIdentifier),
     )
     .unique();
+  if (link && env.BETTER_AUTH_ENABLED === "true") {
+    const migrated = await ctx.db.query("betterAuthIdentityLinks").withIndex("by_userId", q => q.eq("userId", link.userId)).unique();
+    if (migrated) return null;
+  }
   return link?.userId ?? null;
 }
 

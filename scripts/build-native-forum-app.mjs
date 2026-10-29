@@ -65,6 +65,7 @@ const aliases = {
   "next/headers": "framework.tsx",
   "next/web-vitals": "framework.tsx",
   "@convex-dev/auth/react": "framework.tsx",
+  "@symbaiex/auth/token": "framework.tsx",
   "@convex-dev/presence/react": "presence.ts",
   "@/app/forum/forum-route-status": "server.ts",
   "@/app/forum/announcements/announcement-route-status": "server.ts",

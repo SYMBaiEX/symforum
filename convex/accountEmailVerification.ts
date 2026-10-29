@@ -11,6 +11,7 @@ import {
 } from "./_generated/server";
 import { components } from "./_generated/api";
 import { requireAuthenticatedUser } from "./authz";
+import { IDENTITY_MARKER } from "../lib/identity-config";
 import {
   bytesToBase64Url,
 } from "./agentIdentityCrypto";
@@ -124,6 +125,7 @@ export const request = mutation({
   args: { email: v.string() },
   returns: requestResult,
   handler: async (ctx, args) => {
+    if ((await ctx.auth.getUserIdentity())?.authSystem === IDENTITY_MARKER) throw new ConvexError("Use Account connections to verify your recovery email.");
     const user = await requireAuthenticatedUser(ctx);
     if (user.isAgent === true) {
       throw new ConvexError({
@@ -212,6 +214,7 @@ export const verify = mutation({
   args: { code: v.string() },
   returns: verificationResult,
   handler: async (ctx, args) => {
+    if ((await ctx.auth.getUserIdentity())?.authSystem === IDENTITY_MARKER) throw new ConvexError("Use Account connections to verify your recovery email.");
     const user = await requireAuthenticatedUser(ctx);
     if (user.isAgent === true) {
       throw new ConvexError({

@@ -1,0 +1,564 @@
+diff --git a/dist/auth-options.js b/dist/auth-options.js
+index 1b67f02ecc231be2054d30b5ce6fbf9e9e323724..d6eabd0f79ac0743adee46b98a1f3efaa9c97685 100644
+--- a/dist/auth-options.js
++++ b/dist/auth-options.js
+@@ -4,7 +4,6 @@ import { emailOTP } from "better-auth/plugins/email-otp";
+ import { genericOAuth } from "better-auth/plugins/generic-oauth";
+ import { jwt } from "better-auth/plugins/jwt";
+ import { magicLink } from "better-auth/plugins/magic-link";
+-import { oidcProvider } from "better-auth/plugins/oidc-provider";
+ import { oneTimeToken } from "better-auth/plugins/one-time-token";
+ import { phoneNumber } from "better-auth/plugins/phone-number";
+ import { twoFactor } from "better-auth/plugins/two-factor";
+@@ -33,10 +32,6 @@ export const options = {
+                 },
+             ],
+         }),
+-        oidcProvider({
+-            loginPage: "/login",
+-            __skipDeprecationWarning: true,
+-        }),
+         bearer(),
+         oneTimeToken(),
+         jwt(),
+diff --git a/dist/client/adapter.js b/dist/client/adapter.js
+index 6916dd1f7cf7e9aa83ff7a681a65f0c4ea0130e1..921d693d7702fdd399680d2e2713c33c87b56f89 100644
+--- a/dist/client/adapter.js
++++ b/dist/client/adapter.js
+@@ -1,6 +1,6 @@
+ import { createAdapterFactory } from "better-auth/adapters";
+ import { createFunctionHandle } from "convex/server";
+-import { asyncMap } from "convex-helpers";
++import { asyncMap, omit } from "convex-helpers";
+ import { prop, sortBy } from "remeda";
+ import { isRunMutationCtx } from "../utils/index.js";
+ let didWarnExperimentalJoinsUnsupported = false;
+@@ -65,11 +65,11 @@ const parseWhere = (where) => {
+     return whereArray.map((w) => {
+         if (w.value instanceof Date) {
+             return {
+-                ...w,
++                ...omit(w, ["mode"]),
+                 value: w.value.getTime(),
+             };
+         }
+-        return w;
++        return omit(w, ["mode"]);
+     });
+ };
+ const getDocId = (doc) => {
+@@ -197,7 +197,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     if (data.where?.every((w) => w.connector === "OR")) {
+                         for (const w of data.where) {
+                             const result = await ctx.runQuery(api.adapter.findOne, {
+-                                ...data,
++                                ...omit(data, ["modelKey"]),
+                                 model: data.model,
+                                 where: parseWhere(w),
+                             });
+@@ -207,7 +207,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                         }
+                     }
+                     return await ctx.runQuery(api.adapter.findOne, {
+-                        ...data,
++                        ...omit(data, ["modelKey"]),
+                         model: data.model,
+                         where: parseWhere(data.where),
+                     });
+@@ -222,7 +222,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                         const { select: _ignoredSelect, ...queryData } = data;
+                         const results = await asyncMap(data.where, async (w) => handlePagination(async ({ paginationOpts }) => {
+                             return await ctx.runQuery(api.adapter.findMany, {
+-                                ...queryData,
++                                ...omit(queryData, ["modelKey"]),
+                                 model: data.model,
+                                 where: parseWhere(w),
+                                 paginationOpts,
+@@ -242,7 +242,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     }
+                     const result = await handlePagination(async ({ paginationOpts }) => {
+                         return await ctx.runQuery(api.adapter.findMany, {
+-                            ...data,
++                            ...omit(data, ["modelKey"]),
+                             model: data.model,
+                             where: parseWhere(data.where),
+                             paginationOpts,
+@@ -255,7 +255,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     if (data.where?.some((w) => w.connector === "OR")) {
+                         const results = await asyncMap(data.where, async (w) => handlePagination(async ({ paginationOpts }) => {
+                             return await ctx.runQuery(api.adapter.findMany, {
+-                                ...data,
++                                ...omit(data, ["modelKey"]),
+                                 model: data.model,
+                                 where: parseWhere(w),
+                                 paginationOpts,
+@@ -266,7 +266,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     }
+                     const result = await handlePagination(async ({ paginationOpts }) => {
+                         return await ctx.runQuery(api.adapter.findMany, {
+-                            ...data,
++                            ...omit(data, ["modelKey"]),
+                             model: data.model,
+                             where: parseWhere(data.where),
+                             paginationOpts,
+@@ -342,7 +342,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     const result = await handlePagination(async ({ paginationOpts }) => {
+                         return await ctx.runMutation(api.adapter.deleteMany, {
+                             input: {
+-                                ...data,
++                                ...omit(data, ["modelKey"]),
+                                 model: data.model,
+                                 where: parseWhere(data.where),
+                             },
+@@ -384,7 +384,7 @@ export const convexAdapter = (ctx, api, config = {}) => {
+                     const result = await handlePagination(async ({ paginationOpts }) => {
+                         return await ctx.runMutation(api.adapter.updateMany, {
+                             input: {
+-                                ...data,
++                                ...omit(data, ["modelKey"]),
+                                 model: data.model,
+                                 where: parseWhere(data.where),
+                             },
+diff --git a/dist/client/create-api.js b/dist/client/create-api.js
+index 35e3bc4fd385b5bd949317a64410cc14a7e6b6ce..22a1037384499298c6c67f8ac574da8b7e479f3b 100644
+--- a/dist/client/create-api.js
++++ b/dist/client/create-api.js
+@@ -5,7 +5,7 @@ import { partial } from "convex-helpers/validators";
+ import { adapterWhereValidator, checkUniqueFields, hasUniqueFields, listOne, paginate, selectFields, } from "./adapter-utils.js";
+ import { getAuthTables } from "better-auth/db";
+ const whereValidator = (schema, tableName) => v.object({
+-    field: v.union(...Object.keys(schema.tables[tableName].validator.fields).map((field) => v.literal(field)), v.literal("_id")),
++    field: v.union(...Object.keys(schema.tables[tableName].validator.fields).map((field) => v.literal(field)), v.literal("_id"), v.literal("_creationTime")),
+     operator: v.optional(v.union(v.literal("lt"), v.literal("lte"), v.literal("gt"), v.literal("gte"), v.literal("eq"), v.literal("in"), v.literal("not_in"), v.literal("ne"), v.literal("contains"), v.literal("starts_with"), v.literal("ends_with"))),
+     value: v.union(v.string(), v.number(), v.boolean(), v.array(v.string()), v.array(v.number()), v.null()),
+     connector: v.optional(v.union(v.literal("AND"), v.literal("OR"))),
+diff --git a/dist/component/schema.d.ts b/dist/component/schema.d.ts
+index 2666ea19ac94ad0255380392fb4930c7c7d22a93..b89bb2431f359bd4b1fd202e5703c0d3cc95937a 100644
+--- a/dist/component/schema.d.ts
++++ b/dist/component/schema.d.ts
+@@ -95,6 +95,7 @@ export declare const tables: {
+     }, "required", "createdAt" | "updatedAt" | "userId" | "password" | "accountId" | "providerId" | "accessToken" | "refreshToken" | "idToken" | "accessTokenExpiresAt" | "refreshTokenExpiresAt" | "scope">, {
+         accountId: ["accountId", "_creationTime"];
+         accountId_providerId: ["accountId", "providerId", "_creationTime"];
++        accountId_providerId_userId: ["accountId", "providerId", "userId", "_creationTime"];
+         providerId_userId: ["providerId", "userId", "_creationTime"];
+         userId: ["userId", "_creationTime"];
+     }, {}, {}>;
+@@ -200,16 +201,20 @@ export declare const tables: {
+         userId: ["userId", "_creationTime"];
+     }, {}, {}>;
+     jwks: import("convex/server").TableDefinition<import("convex/values").VObject<{
++        alg?: string | null | undefined;
++        crv?: string | null | undefined;
+         expiresAt?: number | null | undefined;
+         createdAt: number;
+         publicKey: string;
+         privateKey: string;
+     }, {
++        alg: import("convex/values").VUnion<string | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VString<string, "required">], "optional", never>;
++        crv: import("convex/values").VUnion<string | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VString<string, "required">], "optional", never>;
+         publicKey: import("convex/values").VString<string, "required">;
+         privateKey: import("convex/values").VString<string, "required">;
+         createdAt: import("convex/values").VFloat64<number, "required">;
+         expiresAt: import("convex/values").VUnion<number | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VFloat64<number, "required">], "optional", never>;
+-    }, "required", "createdAt" | "expiresAt" | "publicKey" | "privateKey">, {}, {}, {}>;
++    }, "required", "createdAt" | "expiresAt" | "publicKey" | "privateKey" | "alg" | "crv">, {}, {}, {}>;
+     rateLimit: import("convex/server").TableDefinition<import("convex/values").VObject<{
+         key: string;
+         count: number;
+@@ -309,6 +314,7 @@ declare const schema: import("convex/server").SchemaDefinition<{
+     }, "required", "createdAt" | "updatedAt" | "userId" | "password" | "accountId" | "providerId" | "accessToken" | "refreshToken" | "idToken" | "accessTokenExpiresAt" | "refreshTokenExpiresAt" | "scope">, {
+         accountId: ["accountId", "_creationTime"];
+         accountId_providerId: ["accountId", "providerId", "_creationTime"];
++        accountId_providerId_userId: ["accountId", "providerId", "userId", "_creationTime"];
+         providerId_userId: ["providerId", "userId", "_creationTime"];
+         userId: ["userId", "_creationTime"];
+     }, {}, {}>;
+@@ -414,16 +420,20 @@ declare const schema: import("convex/server").SchemaDefinition<{
+         userId: ["userId", "_creationTime"];
+     }, {}, {}>;
+     jwks: import("convex/server").TableDefinition<import("convex/values").VObject<{
++        alg?: string | null | undefined;
++        crv?: string | null | undefined;
+         expiresAt?: number | null | undefined;
+         createdAt: number;
+         publicKey: string;
+         privateKey: string;
+     }, {
++        alg: import("convex/values").VUnion<string | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VString<string, "required">], "optional", never>;
++        crv: import("convex/values").VUnion<string | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VString<string, "required">], "optional", never>;
+         publicKey: import("convex/values").VString<string, "required">;
+         privateKey: import("convex/values").VString<string, "required">;
+         createdAt: import("convex/values").VFloat64<number, "required">;
+         expiresAt: import("convex/values").VUnion<number | null | undefined, [import("convex/values").VNull<null, "required">, import("convex/values").VFloat64<number, "required">], "optional", never>;
+-    }, "required", "createdAt" | "expiresAt" | "publicKey" | "privateKey">, {}, {}, {}>;
++    }, "required", "createdAt" | "expiresAt" | "publicKey" | "privateKey" | "alg" | "crv">, {}, {}, {}>;
+     rateLimit: import("convex/server").TableDefinition<import("convex/values").VObject<{
+         key: string;
+         count: number;
+diff --git a/dist/component/schema.js b/dist/component/schema.js
+index 86516c9cc1e90bfe1ace285a150d2b0eef580bf8..5aa70d140d429b992e386cf4d7e91ab1e893c597 100644
+--- a/dist/component/schema.js
++++ b/dist/component/schema.js
+@@ -60,6 +60,7 @@ export const tables = {
+     })
+         .index("accountId", ["accountId"])
+         .index("accountId_providerId", ["accountId", "providerId"])
++        .index("accountId_providerId_userId", ["accountId", "providerId", "userId"])
+         .index("providerId_userId", ["providerId", "userId"])
+         .index("userId", ["userId"]),
+     verification: defineTable({
+@@ -119,6 +120,8 @@ export const tables = {
+         .index("clientId_userId", ["clientId", "userId"])
+         .index("userId", ["userId"]),
+     jwks: defineTable({
++        alg: v.optional(v.union(v.null(), v.string())),
++        crv: v.optional(v.union(v.null(), v.string())),
+         publicKey: v.string(),
+         privateKey: v.string(),
+         createdAt: v.number(),
+diff --git a/dist/plugins/convex/index.d.ts b/dist/plugins/convex/index.d.ts
+index e316d163f09b2f9f70c6e9e08dadb22faf7ad007..208a46bade5e3c48d838a352a99120ea6cda05b5 100644
+--- a/dist/plugins/convex/index.d.ts
++++ b/dist/plugins/convex/index.d.ts
+@@ -98,7 +98,7 @@ export declare const convex: (opts: {
+     jwksRotateOnTokenGenerationError?: boolean;
+     /**
+      * @param {BetterAuthOptions} options - Better Auth options. Not required,
+-     * currently used to pass the basePath to the oidcProvider plugin.
++     * used to locate the Convex token and discovery endpoints.
+      */
+     options?: BetterAuthOptions;
+ }) => {
+@@ -258,7 +258,7 @@ export declare const convex: (opts: {
+             metadata: {
+                 isAction: false;
+             };
+-        }, import("better-auth/plugins/oidc-provider").OIDCMetadata>;
++        }, { issuer: string; jwks_uri: string; id_token_signing_alg_values_supported: string[] }>;
+         getJwks: import("better-call").StrictEndpoint<"/convex/jwks", {
+             method: "GET";
+             metadata: {
+diff --git a/dist/plugins/convex/index.js b/dist/plugins/convex/index.js
+index 549d21da3f8e8be44530aba44c892d7b20a26b7b..05917058295f947b2106de32e4f79d84f274c1e6 100644
+--- a/dist/plugins/convex/index.js
++++ b/dist/plugins/convex/index.js
+@@ -1,16 +1,9 @@
+ import { createAuthEndpoint, createAuthMiddleware, sessionMiddleware, } from "better-auth/api";
+ import { bearer as bearerPlugin } from "better-auth/plugins/bearer";
+ import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
+-import { oidcProvider as oidcProviderPlugin } from "better-auth/plugins/oidc-provider";
+ import { omit } from "convex-helpers";
+ import { VERSION } from "../../version.js";
+ export const JWT_COOKIE_NAME = "convex_jwt";
+-const normalizeAfterHooks = (hooks) => {
+-    return hooks.map((hook) => ({
+-        ...hook,
+-        matcher: (ctx) => Boolean(hook.matcher(ctx)),
+-    }));
+-};
+ const getJwksAlg = (authProvider) => {
+     const isCustomJwt = "type" in authProvider && authProvider.type === "customJwt";
+     if (isCustomJwt && authProvider.algorithm !== "RS256") {
+@@ -42,14 +35,6 @@ const parseAuthConfig = (authConfig, opts) => {
+ };
+ export const convex = (opts) => {
+     const jwtExpirationSeconds = opts.jwt?.expirationSeconds ?? opts.jwtExpirationSeconds ?? 60 * 15;
+-    const oidcProvider = oidcProviderPlugin({
+-        loginPage: "/not-used",
+-        metadata: {
+-            issuer: `${process.env.CONVEX_SITE_URL}`,
+-            jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
+-        },
+-        __skipDeprecationWarning: true,
+-    });
+     const providerConfig = parseAuthConfig(opts.authConfig, opts);
+     const jwtOptions = {
+         jwt: {
+@@ -168,7 +153,6 @@ export const convex = (opts) => {
+                 },
+             ],
+             after: [
+-                ...normalizeAfterHooks(oidcProvider.hooks.after),
+                 {
+                     matcher: (ctx) => {
+                         return Boolean(ctx.path?.startsWith("/sign-in") ||
+@@ -231,14 +215,13 @@ export const convex = (opts) => {
+                     isAction: false,
+                 },
+                 // TODO: properly type this
+-            }, async (ctx) => {
+-                const response = await oidcProvider.endpoints.getOpenIdConfig({
+-                    ...ctx,
+-                    asResponse: false,
+-                    returnHeaders: false,
+-                    returnStatus: false,
+-                });
+-                return response;
++            }, async () => {
++                // Discovery only: this integration is not an OAuth server.
++                return {
++                    issuer: `${process.env.CONVEX_SITE_URL}`,
++                    jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
++                    id_token_signing_alg_values_supported: [getJwksAlg(providerConfig)],
++                };
+             }),
+             getJwks: createAuthEndpoint("/convex/jwks", {
+                 method: "GET",
+diff --git a/package.json b/package.json
+index ebc656cde9cd862fe3de8fa6eb41eaaac559e545..588c8a7e11f5ef9e629b723bf4dbf6022d8676ac 100644
+--- a/package.json
++++ b/package.json
+@@ -101,7 +101,7 @@
+     }
+   },
+   "peerDependencies": {
+-    "better-auth": ">=1.6.11 <1.7.0",
++    "better-auth": "1.7.14",
+     "convex": "^1.25.0",
+     "react": "^18.3.1 || ^19.0.0"
+   },
+diff --git a/src/auth-options.ts b/src/auth-options.ts
+index 6281482f77ba91e9fadea812d922f91a81d42e06..eda273f4fcd8f35bb6ffd13874b7cd10296e69b3 100644
+--- a/src/auth-options.ts
++++ b/src/auth-options.ts
+@@ -5,7 +5,6 @@ import { emailOTP } from "better-auth/plugins/email-otp";
+ import { genericOAuth } from "better-auth/plugins/generic-oauth";
+ import { jwt } from "better-auth/plugins/jwt";
+ import { magicLink } from "better-auth/plugins/magic-link";
+-import { oidcProvider } from "better-auth/plugins/oidc-provider";
+ import { oneTimeToken } from "better-auth/plugins/one-time-token";
+ import { phoneNumber } from "better-auth/plugins/phone-number";
+ import { twoFactor } from "better-auth/plugins/two-factor";
+@@ -35,10 +34,6 @@ export const options = {
+         },
+       ],
+     }),
+-    oidcProvider({
+-      loginPage: "/login",
+-      __skipDeprecationWarning: true,
+-    }),
+     bearer(),
+     oneTimeToken(),
+     jwt(),
+diff --git a/src/client/adapter.ts b/src/client/adapter.ts
+index c40b60ac8fcf713ac6ec422fa534caa30e089940..8dd9229508b2f304fad723549af101129f0d8282 100644
+--- a/src/client/adapter.ts
++++ b/src/client/adapter.ts
+@@ -13,7 +13,7 @@ import type {
+ import type { SetOptional } from "type-fest";
+ import type defaultSchema from "../component/schema.js";
+ import type { Where } from "better-auth/types";
+-import { asyncMap } from "convex-helpers";
++import { asyncMap, omit } from "convex-helpers";
+ import { prop, sortBy } from "remeda";
+ import { isRunMutationCtx } from "../utils/index.js";
+ import type { Doc, TableNames } from "../component/_generated/dataModel.js";
+@@ -117,11 +117,11 @@ const parseWhere = (
+   return whereArray.map((w) => {
+     if (w.value instanceof Date) {
+       return {
+-        ...w,
++        ...omit(w, ["mode"]),
+         value: w.value.getTime(),
+       };
+     }
+-    return w;
++    return omit(w, ["mode"]);
+   }) as ConvexCleanedWhere[];
+ };
+ 
+@@ -292,7 +292,7 @@ export const convexAdapter = <
+           if (data.where?.every((w) => w.connector === "OR")) {
+             for (const w of data.where) {
+               const result = await ctx.runQuery(api.adapter.findOne, {
+-                ...data,
++                ...omit(data, ["modelKey"]),
+                 model: data.model as TableNames,
+                 where: parseWhere(w),
+               });
+@@ -302,7 +302,7 @@ export const convexAdapter = <
+             }
+           }
+           return await ctx.runQuery(api.adapter.findOne, {
+-            ...data,
++            ...omit(data, ["modelKey"]),
+             model: data.model as TableNames,
+             where: parseWhere(data.where),
+           });
+@@ -320,7 +320,7 @@ export const convexAdapter = <
+               handlePagination(
+                 async ({ paginationOpts }) => {
+                   return await ctx.runQuery(api.adapter.findMany, {
+-                    ...queryData,
++                    ...omit(queryData, ["modelKey"]),
+                     model: data.model as TableNames,
+                     where: parseWhere(w),
+                     paginationOpts,
+@@ -345,7 +345,7 @@ export const convexAdapter = <
+           const result = await handlePagination(
+             async ({ paginationOpts }) => {
+               return await ctx.runQuery(api.adapter.findMany, {
+-                ...data,
++                ...omit(data, ["modelKey"]),
+                 model: data.model as TableNames,
+                 where: parseWhere(data.where),
+                 paginationOpts,
+@@ -361,7 +361,7 @@ export const convexAdapter = <
+             const results = await asyncMap(data.where, async (w) =>
+               handlePagination(async ({ paginationOpts }) => {
+                 return await ctx.runQuery(api.adapter.findMany, {
+-                  ...data,
++                  ...omit(data, ["modelKey"]),
+                   model: data.model as TableNames,
+                   where: parseWhere(w),
+                   paginationOpts,
+@@ -374,7 +374,7 @@ export const convexAdapter = <
+ 
+           const result = await handlePagination(async ({ paginationOpts }) => {
+             return await ctx.runQuery(api.adapter.findMany, {
+-              ...data,
++              ...omit(data, ["modelKey"]),
+               model: data.model as TableNames,
+               where: parseWhere(data.where),
+               paginationOpts,
+@@ -459,7 +459,7 @@ export const convexAdapter = <
+           const result = await handlePagination(async ({ paginationOpts }) => {
+             return await ctx.runMutation(api.adapter.deleteMany, {
+               input: {
+-                ...data,
++                ...omit(data, ["modelKey"]),
+                 model: data.model as TableNames,
+                 where: parseWhere(data.where),
+               },
+@@ -507,7 +507,7 @@ export const convexAdapter = <
+           const result = await handlePagination(async ({ paginationOpts }) => {
+             return await ctx.runMutation(api.adapter.updateMany, {
+               input: {
+-                ...data,
++                ...omit(data, ["modelKey"]),
+                 model: data.model as TableNames,
+                 where: parseWhere(data.where),
+               },
+diff --git a/src/client/create-api.ts b/src/client/create-api.ts
+index 97679db61fadddf96c0d6004b634bf0a14246f5b..1a82fc3dce9b3f293023df9f0ea5516e4fadaf95 100644
+--- a/src/client/create-api.ts
++++ b/src/client/create-api.ts
+@@ -29,7 +29,8 @@ const whereValidator = (
+       ...Object.keys(schema.tables[tableName].validator.fields).map((field) =>
+         v.literal(field)
+       ),
+-      v.literal("_id")
++      v.literal("_id"),
++      v.literal("_creationTime")
+     ),
+     operator: v.optional(
+       v.union(
+diff --git a/src/component/schema.ts b/src/component/schema.ts
+index 8b5ecc1c7e8dd615461290459f147e9c07813a3f..0c8bcf603ecc92bafcf2d4d07cfd9cffff4ecd46 100644
+--- a/src/component/schema.ts
++++ b/src/component/schema.ts
+@@ -62,6 +62,7 @@ export const tables = {
+   })
+     .index("accountId", ["accountId"])
+     .index("accountId_providerId", ["accountId","providerId"])
++    .index("accountId_providerId_userId", ["accountId","providerId","userId"])
+     .index("providerId_userId", ["providerId","userId"])
+     .index("userId", ["userId"]),
+   verification: defineTable({
+@@ -121,6 +122,8 @@ export const tables = {
+     .index("clientId_userId", ["clientId","userId"])
+     .index("userId", ["userId"]),
+   jwks: defineTable({
++    alg: v.optional(v.union(v.null(), v.string())),
++    crv: v.optional(v.union(v.null(), v.string())),
+     publicKey: v.string(),
+     privateKey: v.string(),
+     createdAt: v.number(),
+diff --git a/src/plugins/convex/index.ts b/src/plugins/convex/index.ts
+index db4cce2ce00c5df55f98a522f578f8e0e78a4c11..37f481a98d68fb8c15b342ca7abf097d58abfc30 100644
+--- a/src/plugins/convex/index.ts
++++ b/src/plugins/convex/index.ts
+@@ -8,28 +8,12 @@ import {
+ import { bearer as bearerPlugin } from "better-auth/plugins/bearer";
+ import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
+ import type { JwtOptions, Jwk } from "better-auth/plugins/jwt";
+-import { oidcProvider as oidcProviderPlugin } from "better-auth/plugins/oidc-provider";
+ import { omit } from "convex-helpers";
+ import type { AuthConfig, AuthProvider } from "convex/server";
+ import { VERSION } from "../../version.js";
+ 
+ export const JWT_COOKIE_NAME = "convex_jwt";
+ 
+-type BetterAuthAfterHooks = NonNullable<
+-  NonNullable<BetterAuthPlugin["hooks"]>["after"]
+->;
+-type BetterAuthAfterHook = BetterAuthAfterHooks[number];
+-type BetterAuthHookContext = Parameters<BetterAuthAfterHook["matcher"]>[0];
+-
+-const normalizeAfterHooks = <THook extends BetterAuthAfterHook>(
+-  hooks: THook[]
+-): BetterAuthAfterHooks => {
+-  return hooks.map((hook) => ({
+-    ...hook,
+-    matcher: (ctx: BetterAuthHookContext) => Boolean(hook.matcher(ctx)),
+-  }));
+-};
+-
+ const getJwksAlg = (authProvider: AuthProvider) => {
+   const isCustomJwt =
+     "type" in authProvider && authProvider.type === "customJwt";
+@@ -170,20 +154,12 @@ export const convex = (opts: {
+   jwksRotateOnTokenGenerationError?: boolean;
+   /**
+    * @param {BetterAuthOptions} options - Better Auth options. Not required,
+-   * currently used to pass the basePath to the oidcProvider plugin.
++   * used to locate the Convex token and discovery endpoints.
+    */
+   options?: BetterAuthOptions;
+ }) => {
+   const jwtExpirationSeconds =
+     opts.jwt?.expirationSeconds ?? opts.jwtExpirationSeconds ?? 60 * 15;
+-  const oidcProvider = oidcProviderPlugin({
+-    loginPage: "/not-used",
+-    metadata: {
+-      issuer: `${process.env.CONVEX_SITE_URL}`,
+-      jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
+-    },
+-    __skipDeprecationWarning: true,
+-  });
+   const providerConfig = parseAuthConfig(opts.authConfig, opts);
+ 
+   const jwtOptions = {
+@@ -314,7 +290,6 @@ export const convex = (opts: {
+         },
+       ],
+       after: [
+-        ...normalizeAfterHooks(oidcProvider.hooks.after),
+         {
+           matcher: (ctx) => {
+             return Boolean(
+@@ -383,14 +358,15 @@ export const convex = (opts: {
+           },
+           // TODO: properly type this
+         },
+-        async (ctx) => {
+-          const response = await oidcProvider.endpoints.getOpenIdConfig({
+-            ...ctx,
+-            asResponse: false,
+-            returnHeaders: false,
+-            returnStatus: false,
+-          });
+-          return response;
++        async () => {
++          // Convex validates our JWTs; this integration is not an OAuth server.
++          // Do not mount an authorization/token/registration implementation just
++          // to advertise the issuer and public signing keys.
++          return {
++            issuer: `${process.env.CONVEX_SITE_URL}`,
++            jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
++            id_token_signing_alg_values_supported: [getJwksAlg(providerConfig)],
++          };
+         }
+       ),
+       getJwks: createAuthEndpoint(

@@ -49,6 +49,7 @@ export default function dynamic<P extends object>(
 export function useAuthToken() {
   return null;
 }
+export const usePlatformAuthToken = useAuthToken;
 export function useAuthActions() {
   return {
     signIn: async () => {

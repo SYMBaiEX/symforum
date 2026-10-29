@@ -1,6 +1,7 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { identityToken } from "@symbaiex/auth/identity-server";
 import { createHmac } from "node:crypto";
 import {
   ToolLoopAgent,
@@ -381,7 +382,7 @@ async function ownerConvexClient(request: Request) {
     throw new AdminAiError(503, "Convex is not configured");
   }
 
-  const token = await convexAuthNextjsToken();
+  const token = process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true" ? await identityToken() : await convexAuthNextjsToken();
   if (!token) {
     throw new AdminAiError(401, "Sign in required");
   }

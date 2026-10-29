@@ -38,7 +38,7 @@ const SONNER_STYLE_HASHES = [
   "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='",
 ];
 const proxy =
-  process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
+  process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true" && process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
     ? withSharedLegacySession(
         convexAuthNextjsMiddleware(
           async (request, { convexAuth }) =>
@@ -83,9 +83,10 @@ async function proxyRequest(
   legacyAuthenticated: boolean,
 ) {
   const humanSession = usesHumanSession(request.nextUrl.pathname);
-  if (humanSession) assertHumanAuthConfiguration(process.env);
+  if (humanSession && process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true") assertHumanAuthConfiguration(process.env);
   const authKitConfigured =
     humanSession &&
+    process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true" &&
     process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" &&
     Boolean(process.env.WORKOS_CLIENT_ID);
   const authKit = authKitConfigured
@@ -431,7 +432,7 @@ function contentSecurityPolicy(): SecurityPolicy {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
-    `connect-src 'self' https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://${FORUM_PRODUCTION_HOSTNAME} https://blog.symbaiex.com https://news.symbaiex.com https://newsletter.symbaiex.com https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
+    `connect-src 'self' https://oauth.telegram.org https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://${FORUM_PRODUCTION_HOSTNAME} https://blog.symbaiex.com https://news.symbaiex.com https://newsletter.symbaiex.com https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -456,6 +457,7 @@ function applySecurityHeaders(
     request?.nextUrl.pathname === "/forum/control-panel/x-accounts" ||
     request?.nextUrl.pathname === "/agent/connect" ||
     request?.nextUrl.pathname === "/agent/claim" ||
+    request?.nextUrl.pathname === "/agents/claim" ||
     request?.nextUrl.pathname.startsWith("/agent-auth/") ||
     (request?.nextUrl.pathname === "/signin" &&
       request.nextUrl.searchParams
@@ -475,6 +477,9 @@ function applySecurityHeaders(
     response.headers.set("Origin-Trial", webMcpTrialToken);
   }
   response.headers.set("X-Frame-Options", "DENY");
+  if (request?.nextUrl.pathname === "/signin" || request?.nextUrl.pathname === "/account/connections") {
+    response.headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  }
   response.headers.set(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",

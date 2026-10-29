@@ -1,4 +1,6 @@
 import type { AuthConfig } from "convex/server";
+import { getAuthConfigProvider } from "@convex-dev/better-auth/auth-config";
+import { IDENTITY_BASE_PATH } from "../lib/identity-config";
 import {
   workosAgentRegistrationConfig,
   workosConfig,
@@ -46,10 +48,9 @@ const authConfig = {
           },
         ]
       : []),
-    {
-      domain: process.env.CONVEX_SITE_URL!,
-      applicationID: "convex",
-    },
+    ...(process.env.BETTER_AUTH_ENABLED === "true"
+      ? [getAuthConfigProvider({ basePath: IDENTITY_BASE_PATH })]
+      : [{ domain: process.env.CONVEX_SITE_URL!, applicationID: "convex" }]),
     ...(workos
       ? [
           {

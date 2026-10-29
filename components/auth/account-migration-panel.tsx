@@ -9,10 +9,16 @@ import { api } from "@/convex/_generated/api";
 import { ConvexReactClient } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IdentitySignIn } from "./identity-signin";
 
 const SYNTHETIC_EMAIL_SUFFIX = "@users.symbaiex.local";
 
 export function AccountMigrationPanel({ status }: { status?: string }) {
+  if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true") return <IdentitySignIn />;
+  return <WorkOSAccountMigrationPanel status={status} />;
+}
+
+function WorkOSAccountMigrationPanel({ status }: { status?: string }) {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
   const client = useMemo(
     () => (url ? new ConvexReactClient(url) : null),

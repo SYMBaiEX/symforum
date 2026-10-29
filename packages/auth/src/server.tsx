@@ -12,6 +12,7 @@ export async function AuthServerBoundary({
   children: ReactNode;
 }) {
   if (
+    process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true" ||
     process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true" ||
     !process.env.NEXT_PUBLIC_CONVEX_URL
   ) {

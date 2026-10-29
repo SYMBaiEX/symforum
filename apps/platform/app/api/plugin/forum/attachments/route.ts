@@ -1,4 +1,5 @@
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { identityToken } from "@symbaiex/auth/identity-server";
 import {
   FORUM_PLUGIN_FILE_BYTES,
   ForumUploadError,
@@ -17,7 +18,9 @@ export async function POST(request: Request) {
     );
   try {
     const token =
-      process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true"
+      process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "true"
+        ? await identityToken()
+        : process.env.NEXT_PUBLIC_WORKOS_ENABLED === "true"
         ? request.headers
             .get("authorization")
             ?.replace(/^Bearer\s+/i, "") ?? null
