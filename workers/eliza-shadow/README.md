@@ -87,6 +87,29 @@ For a local image build from the repository root:
 docker build -t symbaiex-eliza-shadow workers/eliza-shadow
 ```
 
+The runtime is a digest-pinned distroless Node 24 / Debian 13 image, running as
+UID/GID 65532. Bun installs production dependencies only in the build stage;
+the runtime contains no shell, npm or Yarn. The base entrypoint is Node, so pass
+Node arguments directly when overriding the command. Use a separate development
+environment for debugging rather than installing tools into a live container.
+
+For an isolated Linux/amd64 verification, build with `--platform linux/amd64
+--no-cache`, then run the existing tests without external networking. The mounts
+below supply test code and the public roster fixture, not production secrets:
+
+```sh
+docker run --rm --network none \
+  --mount "type=bind,source=$(pwd)/workers/eliza-shadow/test,target=/app/test,readonly" \
+  --mount "type=bind,source=$(pwd)/convex/forumAgentRoster.ts,target=/convex/forumAgentRoster.ts,readonly" \
+  symbaiex-eliza-shadow --test --test-concurrency=1 'test/*.test.mjs'
+```
+
+Scan the built image's OS and application packages with a current vulnerability
+database. Retain all findings and distinguish upstream advisories without fixes
+from patched or removed components; a passing package audit alone does not cover
+the base image. Changing the Dockerfile does not deploy it: follow the normal
+gateway rollout and graceful-drain procedure separately, preserving the ledger.
+
 Start with Convex shadow dispatch disabled, deploy this service, check health, then let Convex run a small capped shadow sample. Rolling back means disabling Convex dispatch and stopping this service; do not delete the ledger/database. This worker does not change existing content publication behavior.
 
 Tests use real core/SQL lifecycle with temporary PGlite storage and a mock provider. They make no paid inference requests. Production PostgreSQL and Cloudflare deployment require separate live verification.

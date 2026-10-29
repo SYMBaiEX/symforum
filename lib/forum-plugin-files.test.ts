@@ -167,9 +167,38 @@ describe("forum attachment URL and DNS boundary", () => {
     ).resolves.toMatchObject({ contentType: "image/png" });
     const opts = mocks.request.mock.calls[0][1];
     const callback = vi.fn();
-    opts.lookup("files.example", {}, callback);
-    expect(callback).toHaveBeenCalledWith(null, "8.8.8.8", 4);
+    for (const options of [{}, { all: false }]) {
+      callback.mockClear();
+      opts.lookup("files.example", options, callback);
+      expect(callback).toHaveBeenCalledWith(null, "8.8.8.8", 4);
+    }
   });
+  test.each([
+    [{ address: "8.8.8.8", family: 4 }],
+    [{ address: "2606:4700:4700::1111", family: 6 }],
+    [
+      { address: "2606:4700:4700::1111", family: 6 },
+      { address: "8.8.8.8", family: 4 },
+    ],
+  ])(
+    "returns an address array for Node family selection while retaining the DNS pin: %j",
+    async (...answers) => {
+      mocks.lookup.mockResolvedValueOnce(answers);
+      downloadResponse();
+      await expect(
+        downloadForumPluginFile(file().download_url),
+      ).resolves.toMatchObject({ contentType: "image/png" });
+      const callback = vi.fn();
+      mocks.request.mock.calls[0][1].lookup(
+        "files.example",
+        { all: true },
+        callback,
+      );
+      expect(callback).toHaveBeenCalledWith(null, [answers[0]]);
+      expect(mocks.lookup).toHaveBeenCalledTimes(1);
+      expect(mocks.request.mock.calls[0][0].hostname).toBe("files.example");
+    },
+  );
   test("checks every redirect destination and bounds redirect depth", async () => {
     downloadResponse({
       status: 302,

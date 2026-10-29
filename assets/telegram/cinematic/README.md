@@ -38,4 +38,13 @@ registry blocks `vfx-portal` and `extruded-logo`; the unmodified references and
 registry lock/history remain in the source project. Three.js and GSAP load from
 version-pinned jsDelivr URLs. Geist Bold typeface and its license are in assets.
 
+The retained `compositions/vfx-portal.html`, `compositions/extruded-logo.html` and
+`compositions/components/drift-hold.html` originate from the HyperFrames registry
+at v0.8.209 ([upstream source](https://github.com/heygen-com/hyperframes/tree/v0.8.209/registry)).
+HyperFrames is by HeyGen and contributors, licensed under Apache-2.0;
+see `HyperFrames-LICENSE.txt`. `compositions/cinema.html` adapts portal and
+extruded-letter techniques into this project's original scene. Keep this notice
+and the upstream license when redistributing the example code. The mascot artwork
+retains the separate project brand terms in `ASSETS.md`.
+
 This film contains no token prices, returns, or market-cap claims.

@@ -66,7 +66,8 @@ cd packages/agent-python-sdk
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Install Gitleaks 8.30.1 for `bun run security:secrets`. Tests are still scanned;
+Install Gitleaks 8.30.1, run `bun run security:check` to verify its negative
+controls, then run `bun run security:secrets`. Tests and documentation remain scanned;
 only exact, audited synthetic values are allowed by the scanner configuration.
 Dependency audits include development dependencies in every independent lock.
 

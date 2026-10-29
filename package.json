@@ -52,6 +52,7 @@
     "build:apps": "bun run build:platform && bun run build:forum && bun run build:blog && bun run build:news && bun run build:newsletter",
     "test:forum:render": "playwright test --config playwright.forum.config.ts",
     "dev:wallet": "bun --no-env-file scripts/wallet-debug.mjs",
+    "security:check": "node scripts/check-secret-scanner.mjs",
     "security:secrets": "gitleaks git --redact --no-banner --log-opts=\"--all --full-history\" ."
   },
   "dependencies": {
