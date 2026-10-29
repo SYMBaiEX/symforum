@@ -15,7 +15,7 @@ import {
 } from "../lib/forum-alpha-editorial";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
@@ -3497,14 +3497,16 @@ class ForumAgentConfigurationError extends Error {}
 export const refreshAlphaDiscovery = internalAction({
   args: {},
   returns: v.object({
+    enabled: v.boolean(),
     count: v.number(),
     newestAt: v.union(v.number(), v.null()),
   }),
   handler: async (ctx) => {
-    if (env.FORUM_ALPHA_EDITORIAL_ENABLED !== "true")
-      return { count: 0, newestAt: null };
+    if (process.env.FORUM_ALPHA_EDITORIAL_ENABLED !== "true")
+      return { enabled: false, count: 0, newestAt: null };
     const candidates = await collectResearchCandidates(ctx, "solana-alpha");
     return {
+      enabled: true,
       count: candidates.length,
       newestAt: candidates[0]?.publishedAt ?? null,
     };

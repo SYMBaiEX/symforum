@@ -1,6 +1,6 @@
 "use node";
 import { v } from "convex/values";
-import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { sealX, unsealX } from "../lib/x-agent-crypto";
@@ -18,16 +18,19 @@ async function access(
   id: Id<"forumAlphaDeliveries">,
   a: Doc<"xAgentAccounts">,
 ) {
-  if (!env.X_AGENT_TOKEN_KEK || !a.grant) throw Error("Grant unavailable");
+  if (!process.env.X_AGENT_TOKEN_KEK || !a.grant)
+    throw Error("Grant unavailable");
   const binding = `${a.ownerUserId}:${a.agentSlug}:grant:v1`;
-  const g = JSON.parse(await unsealX(env.X_AGENT_TOKEN_KEK, a.grant, binding));
+  const g = JSON.parse(
+    await unsealX(process.env.X_AGENT_TOKEN_KEK, a.grant, binding),
+  );
   if (typeof g.accessToken !== "string" || typeof g.refreshToken !== "string")
     throw Error("Invalid grant");
   if ((a.expiresAt ?? 0) > Date.now() + 5 * 60_000)
     return g.accessToken as string;
   if (
-    !env.X_AGENT_CLIENT_ID ||
-    !env.X_AGENT_CLIENT_SECRET ||
+    !process.env.X_AGENT_CLIENT_ID ||
+    !process.env.X_AGENT_CLIENT_SECRET ||
     !(await ctx.runMutation(internal.forumAlphaDistribution.refreshBrand, {
       id,
     }))
@@ -39,7 +42,7 @@ async function access(
     signal: AbortSignal.timeout(15_000),
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${Buffer.from(`${encodeURIComponent(env.X_AGENT_CLIENT_ID)}:${encodeURIComponent(env.X_AGENT_CLIENT_SECRET)}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`${encodeURIComponent(process.env.X_AGENT_CLIENT_ID)}:${encodeURIComponent(process.env.X_AGENT_CLIENT_SECRET)}`).toString("base64")}`,
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
@@ -62,7 +65,7 @@ async function access(
   )
     throw Error("Invalid refreshed grant");
   const grant = await sealX(
-    env.X_AGENT_TOKEN_KEK,
+    process.env.X_AGENT_TOKEN_KEK,
     JSON.stringify({
       accessToken: t.access_token,
       refreshToken: t.refresh_token,
@@ -88,7 +91,9 @@ export const deliver = internalAction({
   returns: v.null(),
   handler: async (ctx, { id, destination }): Promise<null> => {
     if (destination === "telegram") {
-      const bot = telegramBotRegistry(env.TELEGRAM_AGENT_BOTS).get("suki");
+      const bot = telegramBotRegistry(process.env.TELEGRAM_AGENT_BOTS).get(
+        "suki",
+      );
       if (!bot) return null;
       const c = await ctx.runMutation(
         internal.forumAlphaDistribution.claimTelegram,
