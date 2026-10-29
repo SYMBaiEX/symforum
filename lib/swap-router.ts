@@ -139,6 +139,23 @@ function normalize(
     throw new Error("Unexpected Raydium fee or quote mode.");
   if (provider === "jupiter" && quote.swapMode !== "ExactIn")
     throw new Error("Only exact-input swaps are supported.");
+  if (provider === "jupiter") {
+    if (
+      !Array.isArray(payload.setupInstructions) ||
+      payload.setupInstructions.some((value) => {
+        const ix = record(value);
+        if (ix.programId !== "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+          return false;
+        if (!Array.isArray(ix.accounts) || ix.accounts.length < 6) return true;
+        return ![request.inputMint, request.outputMint].includes(
+          String(record(ix.accounts[3]).pubkey),
+        );
+      })
+    )
+      throw new Error(
+        "Route requires unsupported intermediate token accounts.",
+      );
+  }
   const out = rawAmount(
     provider === "raydium" ? quote.outputAmount : quote.outAmount,
   );
@@ -219,7 +236,7 @@ export async function collectSwapQuotes(
     provider: "jupiter",
     load: () =>
       providerJson(
-        `https://api.jup.ag/swap/v2/build?${common}&taker=${request.wallet}&transactionVersion=${request.supportsV1 ? 1 : 0}&maxAccounts=64`,
+        `https://api.jup.ag/swap/v2/build?${common}&taker=${request.wallet}&transactionVersion=${request.supportsV1 ? 1 : 0}&maxAccounts=64&useSharedAccounts=true`,
         fetcher,
         config.jupiterApiKey
           ? { headers: { "x-api-key": config.jupiterApiKey } }

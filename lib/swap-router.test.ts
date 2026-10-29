@@ -36,6 +36,7 @@ function response(
         inAmount: "9975000",
         outAmount: out,
         swapMode: "ExactIn",
+        setupInstructions: [],
         routePlan: [{ swapInfo: { ammKey: wallet, label: "Pool" } }],
         ...overrides,
       }
@@ -61,6 +62,30 @@ const fake =
   async (input) =>
     Response.json(String(input).includes("jup.ag") ? j : r);
 describe("swap quote validation", () => {
+  test("requests shared intermediates and keeps unsupported user intermediate ATAs out of route selection", async () => {
+    const urls: string[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      urls.push(String(input));
+      return Response.json(
+        String(input).includes("jup.ag")
+          ? response("jupiter", "1000000", {
+              setupInstructions: [
+                {
+                  programId: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+                  accounts: [{}, {}, {}, { pubkey: wallet }, {}, {}],
+                },
+              ],
+            })
+          : response("raydium"),
+      );
+    };
+    const result = await collectSwapQuotes(request, config, fetcher);
+    expect(urls.find((u) => u.includes("jup.ag"))).toContain(
+      "useSharedAccounts=true",
+    );
+    expect(result.quotes.map((q) => q.provider)).toEqual(["raydium"]);
+    expect(result.failures).toHaveLength(1);
+  });
   test("the entered amount includes the exact platform fee", () => {
     expect(validateSwapRequest(request)).toEqual({
       total: 10000000n,
