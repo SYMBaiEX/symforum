@@ -12,7 +12,9 @@ regexes = [
   '''^synthetic-live-secret-at-least-32-characters$''',
 ]
 [[allowlists]]
-description = "Public container content digest, not a credential"
+description = "Exact public historical gateway version, not a credential"
+targetRules = ["generic-api-key"]
+condition = "AND"
 paths = ['''^docs/eliza-shadow-pilot\.md$''']
-regexTarget = "line"
-regexes = ['''sha256:[a-f0-9]{64}''']
+regexTarget = "secret"
+regexes = ['''^6d90115b-39ac-4a71-871f-bbf44217151c$''']

@@ -103,7 +103,8 @@ bun run deps:audit
 Playwright's Chromium for browser tests with `bunx playwright install chromium`.
 All three dependency locks are audited, including development tooling.
 
-For secret scanning, install Gitleaks 8.30.1 and run `bun run security:secrets`.
+For secret scanning, install Gitleaks 8.30.1, run `bun run security:check`, then
+`bun run security:secrets`.
 Release verification scans reachable history and a tracked-file snapshot.
 GitHub Actions and automatic dependency-update jobs are disabled for this
 repository; maintainers run the documented checks locally and review their
