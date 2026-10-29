@@ -227,6 +227,9 @@ async function publicationPreflight(
         .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
         .unique(),
   );
+  if (existing?.promptVersion?.includes(":alpha-v1:")) {
+    return { ok: false as const, reason: "alpha-already-attempted" };
+  }
   if (existing?.status === "published") {
     return { ok: false as const, reason: "already-published" };
   }

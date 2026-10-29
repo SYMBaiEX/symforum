@@ -153,3 +153,41 @@ describe("forum agent run claims and feed caching", () => {
     ).resolves.toMatchObject({ claimed: true, runKey: `suki:${runDate}:0` });
   });
 });
+
+test.each(["skipped", "failed", "running"] as const)(
+  "preserves a previous alpha %s without replay or metadata changes",
+  async (status) => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const id = await t.run((ctx) =>
+      ctx.db.insert("forumAgentRuns", {
+        runKey: `suki:${runDate}:0`,
+        agentSlug: "suki",
+        runDate,
+        slot: 0,
+        attempt: 0,
+        status,
+        model: "test/model",
+        sourceUrls: [],
+        promptVersion: "roster:alpha-v1:brief-v2:suki",
+        errorMessage: "Existing review or execution hold",
+        startedAt: 1,
+        updatedAt: 1,
+      }),
+    );
+    const before = await t.run((ctx) => ctx.db.get("forumAgentRuns", id));
+    await expect(
+      t.mutation(internal.sukiForumAgentData.claimRun, {
+        runDate,
+        slot: 0,
+        attempt: 1,
+      }),
+    ).resolves.toMatchObject({
+      claimed: false,
+      reason: "alpha-already-attempted",
+    });
+    expect(await t.run((ctx) => ctx.db.get("forumAgentRuns", id))).toEqual(
+      before,
+    );
+  },
+);
