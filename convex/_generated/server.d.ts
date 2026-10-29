@@ -28,14 +28,6 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
-  readonly FORUM_SWAPS_ENABLED: string | undefined;
-  readonly FORUM_PROMOTIONS_ENABLED: string | undefined;
-  readonly FORUM_COMMERCE_TREASURY: string | undefined;
-  readonly FORUM_PLATFORM_FEE_BPS: string | undefined;
-  readonly FORUM_PROMOTION_AMOUNT_RAW: string | undefined;
-  readonly FORUM_PROMOTION_DURATION_HOURS: string | undefined;
-  readonly FORUM_COMMERCE_RPC_URL: string | undefined;
-  readonly JUPITER_API_KEY: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENT_JOIN_RELAY_SECRET: string | undefined;
@@ -72,13 +64,21 @@ type Env = {
   readonly FORUM_ALPHA_DISTRIBUTION_ENABLED: string | undefined;
   readonly FORUM_ALPHA_EDITORIAL_ENABLED: string | undefined;
   readonly FORUM_ALPHA_LEAD_MINUTES: string | undefined;
+  readonly FORUM_COMMERCE_RPC_URL: string | undefined;
+  readonly FORUM_COMMERCE_TREASURY: string | undefined;
   readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;
   readonly FORUM_FROM_EMAIL: string | undefined;
+  readonly FORUM_PLATFORM_FEE_BPS: string | undefined;
+  readonly FORUM_PROMOTIONS_ENABLED: string | undefined;
+  readonly FORUM_PROMOTION_AMOUNT_RAW: string | undefined;
+  readonly FORUM_PROMOTION_DURATION_HOURS: string | undefined;
   readonly FORUM_REPLY_TO: string | undefined;
   readonly FORUM_SITE_URL: string | undefined;
+  readonly FORUM_SWAPS_ENABLED: string | undefined;
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
   readonly IDENTITY_SITE_URL: string | undefined;
+  readonly JUPITER_API_KEY: string | undefined;
   readonly JWKS: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
