@@ -5,8 +5,8 @@ import Image from "next/image";
 import { getWallets } from "@wallet-standard/app";
 import { LoaderCircle, Wallet } from "lucide-react";
 import {
-  identityClient,
   identityRequest,
+  refreshIdentitySession,
 } from "@symbaiex/auth/identity-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,6 @@ import {
   connectMessageWallet,
   requestMessageProof,
   supportsMessageSigning,
-  isInternalWalletError,
   walletFailureMessage,
   type MessageSignWallet,
   type MessageWalletAccount,
@@ -34,17 +33,37 @@ import {
 type RegisteredWallet = ReturnType<
   ReturnType<typeof getWallets>["get"]
 >[number];
+type CompatibleWallet = RegisteredWallet & (MessageSignWallet | SignInWallet);
 function supportsSignIn(
   wallet: RegisteredWallet,
 ): wallet is RegisteredWallet & SignInWallet {
   return (
-    wallet.chains.some((chain) => chain.startsWith("solana:")) &&
     typeof (
       wallet.features["solana:signIn"] as
         SignInWallet["features"]["solana:signIn"] | undefined
     )?.signIn === "function"
   );
 }
+function compatible(wallet: RegisteredWallet): wallet is CompatibleWallet {
+  return (
+    wallet.chains.some((chain) => chain.startsWith("solana:")) &&
+    (supportsMessageSigning(wallet) || supportsSignIn(wallet))
+  );
+}
+type PreparedRequest =
+  | {
+      method: "message";
+      wallet: RegisteredWallet & MessageSignWallet;
+      account: MessageWalletAccount;
+      challenge: WalletChallenge;
+    }
+  | {
+      method: "signIn";
+      wallet: RegisteredWallet & SignInWallet;
+      challenge: WalletChallenge;
+    };
+type Phase =
+  "idle" | "connecting" | "preparing" | "signing" | "verification" | "session";
 
 export function WalletSignIn({
   purpose,
@@ -58,205 +77,144 @@ export function WalletSignIn({
   onComplete: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [wallets, setWallets] = useState<(RegisteredWallet & SignInWallet)[]>(
-    [],
-  );
-  const [ready, setReady] = useState(false);
-  const [preparing, setPreparing] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [wallets, setWallets] = useState<CompatibleWallet[]>([]);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [selected, setSelected] = useState<CompatibleWallet | null>(null);
+  const [accounts, setAccounts] = useState<readonly MessageWalletAccount[]>([]);
+  const [prepared, setPrepared] = useState<PreparedRequest | null>(null);
   const [error, setError] = useState("");
-  const [messageOption, setMessageOption] = useState<
-    (RegisteredWallet & MessageSignWallet) | null
-  >(null);
-  const [messageAccounts, setMessageAccounts] = useState<
-    readonly MessageWalletAccount[]
-  >([]);
-  const [messageRequest, setMessageRequest] = useState<{
-    account: MessageWalletAccount;
-    challenge: WalletChallenge;
-  } | null>(null);
-  const challenge = useRef<WalletChallenge | null>(null);
-  const requestId = useRef(0);
-  const signing = useRef(false);
+  const inFlight = useRef(false);
 
   useEffect(() => {
-    const generation = requestId;
     const registry = getWallets();
-    const update = () => setWallets(registry.get().filter(supportsSignIn));
+    const update = () => setWallets(registry.get().filter(compatible));
     update();
     const offRegister = registry.on("register", update);
     const offUnregister = registry.on("unregister", update);
     return () => {
       offRegister();
       offUnregister();
-      generation.current++;
     };
   }, []);
 
-  async function prepare() {
-    const id = ++requestId.current;
-    challenge.current = null;
-    setReady(false);
-    setError("");
-    setMessageOption(null);
-    setMessageAccounts([]);
-    setMessageRequest(null);
-    setPreparing(true);
-    try {
-      const result = await identityRequest<WalletChallenge>(
-        "/identity/challenge",
-        {
-          provider: "solana",
-          purpose,
-        },
-      );
-      if (id !== requestId.current) return;
-      if (!result.input) throw new Error("Wallet verification is unavailable.");
-      challenge.current = result;
-      setReady(true);
-    } catch {
-      if (id === requestId.current)
-        setError(
-          "Could not prepare secure sign-in. Try preparing a new request.",
-        );
-    } finally {
-      if (id === requestId.current) setPreparing(false);
-    }
-  }
-
   function changeOpen(value: boolean) {
-    // Do not start a second signature flow while the wallet is still open.
-    if (signing.current) return;
+    if (inFlight.current) return;
     setOpen(value);
-    if (value) void prepare();
-    else {
-      requestId.current++;
-      challenge.current = null;
-      setReady(false);
-      setPreparing(false);
-      setError("");
-      setMessageOption(null);
-      setMessageAccounts([]);
-      setMessageRequest(null);
-    }
-  }
-
-  async function choose(wallet: RegisteredWallet & SignInWallet) {
-    const current = challenge.current;
-    if (!current || signing.current) return;
-    signing.current = true;
-    challenge.current = null;
-    setReady(false);
-    setSelected(wallet.name);
+    setSelected(null);
+    setAccounts([]);
+    setPrepared(null);
     setError("");
-    onBusyChange(true);
-    let phase: "wallet" | "verification" | "session" = "wallet";
-    try {
-      const proof = await requestWalletProof(wallet, current, window.location);
-      phase = "verification";
-      await identityRequest("/sign-in/solana", proof);
-      phase = "session";
-      const session = await identityClient.getSession();
-      if (session.error || !session.data?.user?.id)
-        throw new Error("Session was not confirmed.");
-      setOpen(false);
-      onComplete();
-    } catch (reason) {
-      setError(
-        phase === "wallet"
-          ? walletFailureMessage(reason, wallet.name)
-          : phase === "verification"
-            ? "The server could not verify this sign-in. No accounts were merged. Prepare a new request."
-            : "Wallet approval succeeded, but the session could not be confirmed. Refresh the page before retrying.",
-      );
-      if (
-        phase === "wallet" &&
-        isInternalWalletError(reason) &&
-        supportsMessageSigning(wallet)
-      )
-        setMessageOption(wallet);
-    } finally {
-      signing.current = false;
-      setSelected("");
-      onBusyChange(false);
-    }
   }
 
-  async function prepareMessage(account: MessageWalletAccount) {
-    // This runs after connection, not as part of the signature click. Never
-    // reuse the failed SIWS challenge, even if no server proof was accepted.
-    const fresh = await identityRequest<WalletChallenge>(
+  async function prepare(
+    wallet: CompatibleWallet,
+    account?: MessageWalletAccount,
+  ) {
+    setPhase("preparing");
+    const challenge = await identityRequest<WalletChallenge>(
       "/identity/challenge",
       { provider: "solana", purpose },
     );
-    if (!fresh.input) throw new Error("No wallet challenge was returned.");
-    setMessageAccounts([]);
-    setMessageRequest({ account, challenge: fresh });
+    if (!challenge.input)
+      throw new Error("Wallet verification is unavailable.");
+    if (supportsMessageSigning(wallet) && account)
+      setPrepared({ method: "message", wallet, account, challenge });
+    else if (supportsSignIn(wallet))
+      setPrepared({ method: "signIn", wallet, challenge });
+    else throw new Error("A message-signing account is required.");
+    setAccounts([]);
   }
 
-  async function connectForMessage(account?: MessageWalletAccount) {
-    const wallet = messageOption;
-    if (!wallet || signing.current) return;
-    signing.current = true;
-    onBusyChange(true);
-    setSelected(wallet.name);
+  async function choose(
+    wallet: CompatibleWallet,
+    account?: MessageWalletAccount,
+  ) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSelected(wallet);
+    setPrepared(null);
+    setAccounts([]);
     setError("");
+    onBusyChange(true);
+    let connecting = false;
     try {
-      const accounts = account ? [account] : await connectMessageWallet(wallet);
-      if (accounts.length === 1) await prepareMessage(accounts[0]);
-      else setMessageAccounts(accounts);
+      // Connect directly from the selection click, before any network await.
+      // The next, separate click signs the fresh server challenge. Phantom's
+      // combined signIn RPC is not forced on wallets with message signing.
+      if (supportsMessageSigning(wallet)) {
+        connecting = !account;
+        setPhase("connecting");
+        const choices = account
+          ? [account]
+          : await connectMessageWallet(wallet);
+        connecting = false;
+        if (choices.length === 1) await prepare(wallet, choices[0]);
+        else setAccounts(choices);
+      } else await prepare(wallet);
     } catch (reason) {
-      setError(walletFailureMessage(reason, wallet.name, "connect"));
-      setMessageAccounts([]);
-      setMessageRequest(null);
+      setError(
+        connecting
+          ? walletFailureMessage(reason, wallet.name, "connect")
+          : "Could not prepare secure sign-in. Select your wallet to start a new request.",
+      );
     } finally {
-      signing.current = false;
-      setSelected("");
+      inFlight.current = false;
+      setPhase("idle");
       onBusyChange(false);
     }
   }
 
-  async function signConnectedMessage() {
-    const wallet = messageOption;
-    const request = messageRequest;
-    if (!wallet || !request || signing.current) return;
-    signing.current = true;
-    setMessageRequest(null); // one explicit signature attempt per prepared request
-    setSelected(wallet.name);
+  async function sign() {
+    if (!prepared || inFlight.current) return;
+    const request = prepared;
+    inFlight.current = true;
+    setPrepared(null); // Consume this attempt before opening the wallet.
     setError("");
     onBusyChange(true);
-    let phase: "wallet" | "verification" | "session" = "wallet";
+    let current: Phase = "signing";
+    setPhase(current);
     try {
-      const proof = await requestMessageProof(
-        wallet,
-        request.account,
-        request.challenge,
-        window.location,
-      );
-      phase = "verification";
+      const proof =
+        request.method === "message"
+          ? await requestMessageProof(
+              request.wallet,
+              request.account,
+              request.challenge,
+              window.location,
+            )
+          : await requestWalletProof(
+              request.wallet,
+              request.challenge,
+              window.location,
+            );
+      current = "verification";
+      setPhase(current);
       await identityRequest("/sign-in/solana", proof);
-      phase = "session";
-      const session = await identityClient.getSession();
-      if (session.error || !session.data?.user?.id)
-        throw new Error("Session was not confirmed.");
+      current = "session";
+      setPhase(current);
+      await refreshIdentitySession();
       setOpen(false);
       onComplete();
     } catch (reason) {
       setError(
-        phase === "wallet"
-          ? walletFailureMessage(reason, wallet.name, "signMessage")
-          : phase === "verification"
-            ? "The server could not verify this sign-in. No accounts were merged. Prepare a new request."
+        current === "signing"
+          ? walletFailureMessage(
+              reason,
+              request.wallet.name,
+              request.method === "message" ? "signMessage" : "signIn",
+            )
+          : current === "verification"
+            ? "The server could not verify this sign-in. No accounts were merged. Select your wallet to start a new request."
             : "Wallet approval succeeded, but the session could not be confirmed. Refresh the page before retrying.",
       );
-      setMessageOption(null);
     } finally {
-      signing.current = false;
-      setSelected("");
+      inFlight.current = false;
+      setPhase("idle");
       onBusyChange(false);
     }
   }
 
+  const busy = phase !== "idle";
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
@@ -271,14 +229,11 @@ export function WalletSignIn({
             {purpose === "link" ? "Link a wallet" : "Connect a wallet"}
           </DialogTitle>
           <DialogDescription>
-            Choose your Solana wallet, then approve the sign-in message. No
+            Choose your Solana wallet, then sign a message to finish. No
             transaction, fees or spending access.
           </DialogDescription>
         </DialogHeader>
-        <div
-          className="flex flex-col gap-3"
-          aria-busy={preparing || Boolean(selected)}
-        >
+        <div className="flex flex-col gap-3" aria-busy={busy}>
           {wallets.map((wallet, index) => (
             <Button
               key={`${wallet.name}-${index}`}
@@ -286,7 +241,7 @@ export function WalletSignIn({
               variant="outline"
               size="lg"
               className="h-14 justify-between gap-3 px-4"
-              disabled={!ready || Boolean(selected)}
+              disabled={busy}
               onClick={() => void choose(wallet)}
             >
               <span className="flex min-w-0 items-center gap-3">
@@ -304,7 +259,7 @@ export function WalletSignIn({
                 )}
                 <span className="truncate">{wallet.name}</span>
               </span>
-              {selected === wallet.name ? (
+              {busy && selected === wallet ? (
                 <LoaderCircle
                   aria-hidden="true"
                   data-icon="inline-end"
@@ -322,62 +277,52 @@ export function WalletSignIn({
             </p>
           )}
           <p role="status" className="text-sm text-muted-foreground">
-            {preparing
-              ? "Preparing secure sign-in…"
-              : selected
-                ? `Approve the request in ${selected}.`
-                : messageRequest
-                  ? "Wallet connected. Sign the message below to finish."
-                  : messageAccounts.length
-                    ? "Choose the Solana account you want to sign in with."
-                    : ready
-                      ? "Ready to connect. Your wallet stays in control."
-                      : "Prepare a fresh request to try again."}
+            {phase === "connecting"
+              ? `Connect your account in ${selected?.name}.`
+              : phase === "preparing"
+                ? "Preparing secure sign-in…"
+                : phase === "signing"
+                  ? `Approve the sign-in message in ${selected?.name}.`
+                  : phase === "verification"
+                    ? "Verifying your signed message…"
+                    : phase === "session"
+                      ? "Confirming your sign-in…"
+                      : prepared
+                        ? "Ready. Sign the message below to finish."
+                        : accounts.length
+                          ? "Choose the Solana account you want to sign in with."
+                          : "Select a wallet to connect. Your wallet stays in control."}
           </p>
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          {messageOption &&
-            !selected &&
-            !messageRequest &&
-            !messageAccounts.length && (
-              <Button type="button" onClick={() => void connectForMessage()}>
-                Connect {messageOption.name} for message sign-in
-              </Button>
-            )}
-          {!selected &&
-            messageAccounts.map((account) => (
+          {!busy &&
+            accounts.map((account) => (
               <Button
                 key={account.address}
                 type="button"
                 variant="outline"
-                onClick={() => void connectForMessage(account)}
+                onClick={() => {
+                  if (selected) void choose(selected, account);
+                }}
               >
                 Use {account.address.slice(0, 6)}…{account.address.slice(-4)}
               </Button>
             ))}
-          {messageRequest && !selected && (
+          {prepared && !busy && (
             <>
-              <p className="text-sm text-muted-foreground">
-                Account: {messageRequest.account.address.slice(0, 6)}…
-                {messageRequest.account.address.slice(-4)}. Sign-in message
-                only.
-              </p>
-              <Button type="button" onClick={() => void signConnectedMessage()}>
-                Sign in with {messageOption?.name}
+              {prepared.method === "message" && (
+                <p className="text-sm text-muted-foreground">
+                  Account: {prepared.account.address.slice(0, 6)}…
+                  {prepared.account.address.slice(-4)}. Sign-in message only.
+                </p>
+              )}
+              <Button type="button" onClick={() => void sign()}>
+                Sign in with {prepared.wallet.name}
               </Button>
             </>
-          )}
-          {!ready && !preparing && !selected && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void prepare()}
-            >
-              Prepare new request
-            </Button>
           )}
         </div>
       </DialogContent>

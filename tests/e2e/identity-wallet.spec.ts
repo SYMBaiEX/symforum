@@ -12,8 +12,9 @@ test.beforeAll(() => {
       entrypoints: ["tests/e2e/fixtures/identity-wallet.tsx"],
       target: "browser", format: "iife", minify: true,
       define: {"process.env": JSON.stringify({NODE_ENV: "production"})},
-      plugins: [{name: "isolated-auth", setup(build) {
-        build.onResolve({filter: /^@symbaiex\\/auth\\/identity-client$/}, () => ({path: process.cwd()+"/tests/e2e/fixtures/identity-client.ts"}));
+      plugins: [{name: "isolated-convex", setup(build) {
+        build.onResolve({filter: /^convex\\/react$/}, () => ({path: process.cwd()+"/tests/e2e/fixtures/identity-convex.ts"}));
+        build.onResolve({filter: /^next\\/navigation$/}, () => ({path: process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));
       }}],
     });
     if (!result.success) throw new Error(result.logs.join("\\n"));
@@ -31,18 +32,30 @@ async function harness(
     fail?: boolean;
     deferred?: boolean;
     proofFail?: boolean;
+    sessionFail?: boolean;
+    focusDeferred?: boolean;
+    initialDeferred?: boolean;
   } = {},
 ) {
   page.on("pageerror", (error) => {
     throw error;
   });
   const requests: string[] = [];
+  let signedIn = false;
+  let sessions = 0;
   let release: (() => void) | undefined;
+  let releaseSession: (() => void) | undefined;
   const gate = options.deferred
     ? new Promise<void>((resolve) => {
         release = resolve;
       })
     : Promise.resolve();
+  const sessionGate =
+    options.focusDeferred || options.initialDeferred
+      ? new Promise<void>((resolve) => {
+          releaseSession = resolve;
+        })
+      : Promise.resolve();
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.origin === "http://127.0.0.1:43192" && url.pathname === "/")
@@ -53,6 +66,35 @@ async function harness(
     if (url.pathname === "/fixture.js")
       return route.fulfill({ contentType: "text/javascript", body: bundle });
     requests.push(url.pathname);
+    if (url.pathname === "/api/identity/get-session") {
+      sessions++;
+      if (options.initialDeferred || (options.focusDeferred && sessions === 2))
+        await sessionGate;
+      const now = new Date().toISOString();
+      return route.fulfill({
+        json:
+          signedIn && !options.sessionFail
+            ? {
+                session: {
+                  id: "fixture-session",
+                  userId: "fixture-user",
+                  token: "fixture-only",
+                  createdAt: now,
+                  updatedAt: now,
+                  expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+                },
+                user: {
+                  id: "fixture-user",
+                  name: "Fixture",
+                  email: "fixture@example.test",
+                  emailVerified: false,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              }
+            : null,
+      });
+    }
     if (url.pathname === "/api/identity/identity/challenge") {
       await gate;
       if (options.fail)
@@ -79,263 +121,269 @@ async function harness(
         },
       });
     }
-    if (url.pathname === "/api/identity/sign-in/solana")
-      return options.proofFail
-        ? route.fulfill({ status: 503, body: "unavailable" })
-        : route.fulfill({ json: { authenticated: true } });
+    if (url.pathname === "/api/identity/sign-in/solana") {
+      if (options.proofFail)
+        return route.fulfill({ status: 503, body: "unavailable" });
+      signedIn = true;
+      return route.fulfill({ json: { authenticated: true } });
+    }
     if (url.origin === "https://oauth.telegram.org")
       return route.fulfill({
         contentType: "text/javascript",
         body: "window.Telegram = { Login: { auth() {} } };",
       });
-    return route.abort(); // No external or production traffic, including identity writes.
+    return route.abort(); // Every request intercepted; no real provider/production traffic.
   });
-  return { requests, release: () => release?.() };
+  return {
+    requests,
+    release: () => release?.(),
+    releaseSession: () => releaseSession?.(),
+  };
 }
+async function open(page: Page, query = "") {
+  await page.goto("http://127.0.0.1:43192/" + query);
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+  await page.getByRole("button", { name: "Solana wallet" }).click();
+}
+async function choose(page: Page) {
+  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+}
+function signButton(page: Page) {
+  return page.getByRole("button", {
+    name: "Sign in with Phantom",
+    exact: true,
+  });
+}
+async function events(page: Page) {
+  return JSON.parse(
+    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  ) as { action: string; userActivated: boolean; account?: string }[];
+}
+const count = (requests: string[], suffix: string) =>
+  requests.filter((path) => path.endsWith(suffix)).length;
 
-test("wallet modal prepares first, signs on the click, and submits only once", async ({
+test("connects first, prepares a fresh challenge, signs explicitly and updates the real subscribed session", async ({
   page,
 }) => {
   const run = await harness(page, { deferred: true });
-  await page.goto("http://127.0.0.1:43192/");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  const dialog = page.getByRole("dialog", { name: "Connect a wallet" });
-  await expect(dialog).toBeVisible();
-  const phantom = dialog.getByRole("button", { name: /Phantom/ });
-  await expect(phantom).toBeDisabled();
-  await expect(page.getByLabel("Wallet events")).toHaveText("[]");
+  await open(page, "?internal"); // Combined Phantom signIn is deliberately broken.
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
+  await choose(page);
+  await expect(page.getByText("Preparing secure sign-in…")).toBeVisible();
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+  ]);
   run.release();
-  await expect(phantom).toBeEnabled();
-  await phantom.click({ clickCount: 2 });
+  await signButton(page).click({ clickCount: 2 });
   await expect(page.getByText("Signed in successfully")).toBeVisible();
-  await expect(dialog).toBeHidden();
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(1);
-  const events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
-  );
-  expect(events).toHaveLength(1);
-  expect(events[0].userActivated).toBe(true);
+  await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  const calls = await events(page);
+  expect(calls.map((event) => event.action)).toEqual([
+    "connect",
+    "signMessage",
+  ]);
+  expect(calls.every((event) => event.userActivated)).toBe(true);
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
+  expect(count(run.requests, "/identity/challenge")).toBe(1);
   expect(run.requests).not.toContain("/js/telegram-login.js");
 });
 
-test("wallet cancellation never submits a proof or automatically retries", async ({
+test("popup focus refresh does not unmount the active wallet flow", async ({
+  page,
+}) => {
+  const run = await harness(page, { focusDeferred: true });
+  await open(page, "?deferconnect&internal");
+  await choose(page);
+  await expect(page.getByRole("status")).toContainText("Connect your account");
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(page.getByLabel("Session state")).toHaveText("pending");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Connect your account");
+  run.releaseSession();
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("wallet-fixture:connect")),
+  );
+  await signButton(page).click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+    "signMessage",
+  ]);
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
+});
+
+test("protected pages remain blocked during actual session loading", async ({
+  page,
+}) => {
+  const run = await harness(page, { initialDeferred: true });
+  await page.goto("http://127.0.0.1:43192/?protected");
+  await expect(page.getByLabel("Session state")).toHaveText("pending");
+  await expect(
+    page.getByText("Verifying your account…", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Solana wallet" })).toHaveCount(
+    0,
+  );
+  run.releaseSession();
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+});
+
+test("connection cancellation never prepares, signs, or automatically retries", async ({
   page,
 }) => {
   const run = await harness(page);
-  await page.goto("http://127.0.0.1:43192/?cancel");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom/ }).click();
+  await open(page, "?connectcancel");
+  await choose(page);
   await expect(page.getByRole("alert")).toContainText("cancelled");
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(0);
-  expect(
-    run.requests.filter((path) => path.endsWith("/identity/challenge")),
-  ).toHaveLength(1);
-  await page.getByRole("button", { name: "Prepare new request" }).click();
-  await expect(page.getByRole("button", { name: /Phantom/ })).toBeEnabled();
-  expect(
-    run.requests.filter((path) => path.endsWith("/identity/challenge")),
-  ).toHaveLength(2);
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+  ]);
 });
 
-test("expiry fails closed before the wallet is asked to sign", async ({
-  page,
-}) => {
+test("expiry fails closed before requesting a signature", async ({ page }) => {
   const run = await harness(page, { expired: true });
-  await page.goto("http://127.0.0.1:43192/");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom/ }).click();
+  await open(page);
+  await choose(page);
+  await signButton(page).click();
   await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByLabel("Wallet events")).toHaveText("[]");
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(0);
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+  ]);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
 });
 
-test("discovers a late wallet, supports Escape, and restores trigger focus", async ({
+test("discovers a late message-only wallet, supports Escape and restores focus", async ({
   page,
 }) => {
   await harness(page);
-  await page.goto("http://127.0.0.1:43192/?empty");
-  const trigger = page.getByRole("button", { name: "Solana wallet" });
-  await trigger.click();
+  await open(page, "?empty&messageonly");
   await expect(page.getByText(/No compatible wallet found/)).toBeVisible();
   await page.evaluate(() =>
     window.dispatchEvent(new Event("wallet-fixture:register")),
   );
-  await expect(page.getByRole("button", { name: /Phantom/ })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: /Phantom Installed/ }),
+  ).toBeEnabled();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
-  await expect(trigger).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Solana wallet" }),
+  ).toBeFocused();
 });
 
-test("a failed challenge leaves a usable retry and never opens a wallet", async ({
+test("failed preparation allows explicit retry without signing", async ({
   page,
 }) => {
-  await harness(page, { fail: true });
-  await page.goto("http://127.0.0.1:43192/");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
+  const run = await harness(page, { fail: true });
+  await open(page);
+  await choose(page);
   await expect(page.getByRole("alert")).toContainText("Could not prepare");
-  await expect(
-    page.getByRole("button", { name: "Prepare new request" }),
-  ).toBeEnabled();
-  await expect(page.getByRole("button", { name: /Phantom/ })).toBeDisabled();
+  await choose(page);
+  await expect.poll(() => count(run.requests, "/identity/challenge")).toBe(2);
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+    "connect",
+  ]);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
 });
 
 test("Telegram SDK loads only after Telegram is chosen", async ({ page }) => {
   const run = await harness(page);
   await page.goto("http://127.0.0.1:43192/");
-  await expect(
-    page.getByRole("button", { name: "Telegram", exact: true }),
-  ).toBeEnabled();
-  expect(run.requests).toEqual([]);
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+  expect(run.requests).not.toContain("/js/telegram-login.js");
   await page.getByRole("button", { name: "Telegram", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Continue with Telegram" }),
   ).toBeEnabled();
-  expect(
-    run.requests.filter((path) => path === "/js/telegram-login.js"),
-  ).toHaveLength(1);
+  expect(count(run.requests, "/js/telegram-login.js")).toBe(1);
 });
 
-test("internal SIWS failure offers an explicit connect-then-message path, with no automatic retry", async ({
-  page,
-}) => {
-  const run = await harness(page);
-  await page.goto("http://127.0.0.1:43192/?internal");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom Installed/ }).click();
-  await expect(page.getByRole("alert")).toContainText("internal signing error");
-  let events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
-  );
-  expect(events.map((event: { action: string }) => event.action)).toEqual([
-    "signIn",
-  ]);
-  await page
-    .getByRole("button", { name: "Connect Phantom for message sign-in" })
-    .click();
-  const sign = page.getByRole("button", {
-    name: "Sign in with Phantom",
-    exact: true,
-  });
-  await expect(sign).toBeEnabled();
-  events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
-  );
-  expect(events.map((event: { action: string }) => event.action)).toEqual([
-    "signIn",
-    "connect",
-  ]);
-  expect(
-    run.requests.filter((path) => path.endsWith("/identity/challenge")),
-  ).toHaveLength(2);
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(0);
-  await sign.click({ clickCount: 2 });
-  await expect(page.getByText("Signed in successfully")).toBeVisible();
-  events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
-  );
-  expect(events.map((event: { action: string }) => event.action)).toEqual([
-    "signIn",
-    "connect",
-    "signMessage",
-  ]);
-  expect(
-    events.every((event: { userActivated: boolean }) => event.userActivated),
-  ).toBe(true);
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(1);
-});
-
-test("server verification failures are not mislabeled as a locked Phantom", async ({
+test("server verification failures are not mislabeled as wallet failures", async ({
   page,
 }) => {
   await harness(page, { proofFail: true });
-  await page.goto("http://127.0.0.1:43192/");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  await open(page);
+  await choose(page);
+  await signButton(page).click();
   await expect(page.getByRole("alert")).toContainText(
     "server could not verify",
   );
-  await expect(
-    page.getByRole("button", { name: "Connect Phantom for message sign-in" }),
-  ).toHaveCount(0);
   await expect(page.getByRole("alert")).not.toContainText("locked");
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
 });
 
-test("multiple connected accounts require an explicit choice", async ({
+test("multiple connected accounts require explicit selection before preparing", async ({
   page,
 }) => {
-  await harness(page);
-  await page.goto("http://127.0.0.1:43192/?internal&multi");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom Installed/ }).click();
-  await page
-    .getByRole("button", { name: "Connect Phantom for message sign-in" })
-    .click();
+  const run = await harness(page);
+  await open(page, "?multi");
+  await choose(page);
   await expect(
     page.getByText("Choose the Solana account you want to sign in with."),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Sign in with Phantom", exact: true }),
-  ).toHaveCount(0);
+  expect(count(run.requests, "/identity/challenge")).toBe(0);
+  await expect(signButton(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Use 222222…2222" }).click();
-  await page
-    .getByRole("button", { name: "Sign in with Phantom", exact: true })
-    .click();
+  await signButton(page).click();
   await expect(page.getByText("Signed in successfully")).toBeVisible();
-  const events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
+  expect((await events(page)).at(-1)?.account).toBe(
+    "22222222222222222222222222222222",
   );
-  expect(events.at(-1).account).toBe("22222222222222222222222222222222");
 });
 
-test("cancelling the compatibility signature never posts or retries", async ({
+test("cancelled signature never posts or retries; a new selection gets a fresh challenge", async ({
   page,
 }) => {
   const run = await harness(page);
-  await page.goto("http://127.0.0.1:43192/?internal&messagecancel");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom Installed/ }).click();
-  await page
-    .getByRole("button", { name: "Connect Phantom for message sign-in" })
-    .click();
-  await page
-    .getByRole("button", { name: "Sign in with Phantom", exact: true })
-    .click();
+  await open(page, "?messagecancel");
+  await choose(page);
+  await signButton(page).click();
   await expect(page.getByRole("alert")).toContainText("cancelled");
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(0);
-  const events = JSON.parse(
-    (await page.getByLabel("Wallet events").textContent()) ?? "[]",
-  );
-  expect(events.map((event: { action: string }) => event.action)).toEqual([
-    "signIn",
+  await expect(signButton(page)).toHaveCount(0);
+  expect(count(run.requests, "/sign-in/solana")).toBe(0);
+  expect((await events(page)).map((event) => event.action)).toEqual([
     "connect",
     "signMessage",
   ]);
+  await choose(page);
+  await expect(signButton(page)).toBeEnabled();
+  expect(count(run.requests, "/identity/challenge")).toBe(2);
 });
 
-test("a failed session confirmation is not reported as a successful sign-in", async ({
+test("a missing session fails closed despite successful proof exchange", async ({
   page,
 }) => {
-  const run = await harness(page);
-  await page.goto("http://127.0.0.1:43192/?sessionfail");
-  await page.getByRole("button", { name: "Solana wallet" }).click();
-  await page.getByRole("button", { name: /Phantom Installed/ }).click();
+  const run = await harness(page, { sessionFail: true });
+  await open(page);
+  await choose(page);
+  await signButton(page).click();
   await expect(page.getByRole("alert")).toContainText(
     "session could not be confirmed",
   );
   await expect(page.getByText("Signed in successfully")).toHaveCount(0);
-  expect(
-    run.requests.filter((path) => path.endsWith("/sign-in/solana")),
-  ).toHaveLength(1);
+  await expect(page.getByLabel("Session state")).toHaveText("guest");
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
+});
+
+test("SIWS-only wallets prepare first and sign on a separate direct click", async ({
+  page,
+}) => {
+  const run = await harness(page);
+  await open(page, "?siwsonly");
+  await choose(page);
+  await expect(signButton(page)).toBeEnabled();
+  expect(await events(page)).toEqual([]);
+  await signButton(page).click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  expect((await events(page)).map((event) => event.action)).toEqual(["signIn"]);
+  expect((await events(page))[0].userActivated).toBe(true);
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
 });
