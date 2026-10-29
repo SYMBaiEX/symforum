@@ -227,10 +227,20 @@ function LiveSwap({
         setNotice(
           "No safe routes responded. Nothing was signed. Try later or use a smaller amount.",
         );
-    } catch {
+      return data;
+    } catch (reason) {
+      const detail =
+        reason &&
+        typeof reason === "object" &&
+        "data" in reason &&
+        typeof reason.data === "string"
+          ? reason.data
+          : "";
       if (revision.current === started)
         setError(
-          "Routes could not be verified. Check the amount, your linked wallet in Account Connections, and try later if the free data limit has been reached.",
+          /Routing is busy|already in progress/.test(detail)
+            ? "Routing is busy. Wait a few seconds, then choose Review swap. No payment was requested and nothing is retried automatically."
+            : "Routes could not be verified. Check the amount, your linked wallet in Account Connections, and try later if the free data limit has been reached.",
         );
     } finally {
       busyGuard.current = false;
@@ -330,8 +340,25 @@ function LiveSwap({
       );
     }
   });
-  const busy = routes.isRunning || prepare.isRunning || send.isRunning;
-  const locked = prepare.isRunning || send.isRunning || sent;
+  const review = useAction(async () => {
+    let q = result?.quotes[0];
+    if (!q || q.expiresAt <= Date.now()) {
+      const freshResult = await routes.dispatchAsync();
+      q = freshResult?.quotes[0];
+    }
+    if (q) await prepare.dispatchAsync(q);
+  });
+  const busy =
+    routes.isRunning || prepare.isRunning || send.isRunning || review.isRunning;
+  const locked =
+    prepare.isRunning || send.isRunning || review.isRunning || sent;
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const update = () => setVisible(document.visibilityState !== "hidden");
+    update();
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
   const canQuote =
     config?.swapsEnabled &&
     isAuthenticated &&
@@ -351,6 +378,7 @@ function LiveSwap({
   useEffect(() => {
     if (
       !quoteKey ||
+      !visible ||
       locked ||
       routes.isRunning ||
       attemptedQuote.current === quoteKey
@@ -361,7 +389,7 @@ function LiveSwap({
       quoteDispatch.current();
     }, 1000);
     return () => clearTimeout(timer);
-  }, [quoteKey, locked, routes.isRunning]);
+  }, [quoteKey, locked, routes.isRunning, visible]);
   const best = result?.quotes[0];
   const fresh = !!best && best.expiresAt > now;
   function pickToken(t: TradeToken, side: "input" | "output") {
@@ -473,27 +501,29 @@ function LiveSwap({
           <option value={100}>1%</option>
         </select>
       </div>
-      <Button
-        className="w-full swap-primary"
-        disabled={!canQuote || busy}
-        onClick={() =>
-          fresh && best && !prepared
-            ? prepare.dispatch(best)
-            : routes.dispatch()
-        }
-      >
-        {routes.isRunning
-          ? "Finding the best available route…"
-          : fresh && !prepared
-            ? "Review swap"
-            : result
-              ? "Refresh quote"
-              : "Compare routes"}
-      </Button>
+      {(!prepared || !fresh) && !sent && (
+        <Button
+          className="w-full swap-primary"
+          disabled={!canQuote || busy}
+          onClick={() => review.dispatch()}
+        >
+          {prepare.isRunning
+            ? "Simulating your swap…"
+            : routes.isRunning || review.isRunning
+              ? "Finding the best available route…"
+              : !isAuthenticated
+                ? "Sign in to swap"
+                : !linked
+                  ? "Connect your linked wallet"
+                  : !rawAmount || BigInt(rawAmount) === 0n
+                    ? "Enter an amount"
+                    : "Review swap"}
+        </Button>
+      )}
       {best && !fresh && !sent && (
         <p className="commerce-note">
-          Quote expired. Refresh to see a current receive amount before
-          reviewing.
+          Quote expired. Review swap will automatically check fresh routes
+          before showing your review.
         </p>
       )}
       {result && (

@@ -4,6 +4,7 @@ import { getWallets } from "@wallet-standard/app";
 import { address, getAddressEncoder } from "@solana/kit";
 import { StandaloneSwap } from "../../../components/swap/token-swap";
 import { ForumCommerceFrame } from "../../../components/swap/forum-commerce";
+import { ForumSymf } from "../../../components/forum/forum-symf";
 const wallet = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
 const account = {
   address: wallet,
@@ -78,7 +79,9 @@ getWallets().register({
 createRoot(document.getElementById("root")!).render(
   <div className="forum-app-shell">
     <div className="forum-surface">
-      {location.search.includes("promotion") ? (
+      {location.search.includes("symf") ? (
+        <ForumSymf />
+      ) : location.search.includes("promotion") ? (
         <ForumCommerceFrame threadId="thread-fixture">
           <article>
             <h1>A public token post</h1>

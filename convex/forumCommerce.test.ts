@@ -79,6 +79,144 @@ function setup() {
   registerLimiter(t);
   return t;
 }
+test("200 concurrent duplicate quote requests admit one wallet-bound lease, not 200 provider fanouts", async () => {
+  const t = setup(),
+    a = await actor(t, 201);
+  const args = {
+    wallet: a.wallet,
+    inputMint: "So11111111111111111111111111111111111111112",
+    outputMint: COMMERCE_MINT,
+    amountRaw: "1000000000",
+    slippageBps: 50,
+    supportsV1: false,
+  };
+  const results = await Promise.allSettled(
+    Array.from({ length: 200 }, (_, i) =>
+      a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+        ...args,
+        lease: `test-${i}`,
+      }),
+    ),
+  );
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter((r) => r.status === "rejected")).toHaveLength(199);
+  expect(
+    await t.run((ctx) => ctx.db.query("forumSwapRequests").take(3)),
+  ).toHaveLength(1);
+});
+test("200 independent wallets get bounded admission while provider and daily caps stay intact", async () => {
+  const t = setup();
+  vi.spyOn(Date, "now").mockReturnValue(1793300000000);
+  const actors = [];
+  for (let i = 1; i <= 200; i++) actors.push(await actor(t, i));
+  const results = await Promise.allSettled(
+    actors.map((a, i) =>
+      a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+        wallet: a.wallet,
+        inputMint: "So11111111111111111111111111111111111111112",
+        outputMint: COMMERCE_MINT,
+        amountRaw: "1000000000",
+        slippageBps: 50,
+        lease: `burst-${i}`,
+      }),
+    ),
+  );
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter((r) => r.status === "rejected")).toHaveLength(199);
+  const a = actors[0];
+  await a.client.mutation(internal.forumCommerce.reserveNetwork, {
+    wallet: a.wallet,
+    cost: 2,
+    jupiter: true,
+  });
+  await expect(
+    actors[1].client.mutation(internal.forumCommerce.reserveNetwork, {
+      wallet: actors[1].wallet,
+      cost: 2,
+      jupiter: true,
+    }),
+  ).rejects.toThrow("Routing is busy");
+});
+test("cached quotes stay wallet-owned, preserve expiry and stop being reusable after preparation", async () => {
+  const t = setup(),
+    a = await actor(t, 202),
+    other = await actor(t, 203),
+    now = Date.now();
+  const request = {
+    wallet: a.wallet,
+    inputMint: "So11111111111111111111111111111111111111112",
+    outputMint: COMMERCE_MINT,
+    amountRaw: "1000000",
+    slippageBps: 50,
+    supportsV1: false,
+  };
+  await a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+    ...request,
+    lease: "original",
+  });
+  const [saved] = await a.client.mutation(internal.forumSwaps.saveQuotes, {
+    wallet: a.wallet,
+    quotesJson: JSON.stringify([
+      {
+        id: "cached",
+        provider: "jupiter",
+        request: { ...request, platformFeeBps: 25 },
+        swapAmountRaw: "997500",
+        platformFeeRaw: "2500",
+        outputAmountRaw: "10000",
+        minimumOutputAmountRaw: "9950",
+        priceImpactBps: 1,
+        createdAt: now,
+        expiresAt: now + 25000,
+        routeLabels: ["test"],
+        opaque: {},
+      },
+    ]),
+  });
+  const payload = JSON.stringify({
+    quotes: [saved],
+    failures: [],
+    benefitEligible: false,
+    benefitStatus: "unavailable",
+    platformFeeBps: 25,
+  });
+  await a.client.mutation(internal.forumSwaps.finishQuoteRequest, {
+    wallet: a.wallet,
+    lease: "original",
+    payload,
+    quoteIds: [saved.quoteId],
+  });
+  expect(
+    await a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+      ...request,
+      lease: "reuse",
+    }),
+  ).toBe(payload);
+  await expect(
+    other.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+      ...request,
+      lease: "steal",
+    }),
+  ).rejects.toThrow("Link and verify");
+  await a.client.mutation(internal.forumSwaps.consumeQuote, {
+    quoteId: saved.quoteId,
+  });
+  await expect(
+    a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+      ...request,
+      lease: "after-prepare",
+    }),
+  ).rejects.toThrow("Routing is busy");
+  // Stale completion cannot overwrite a newer lease or alter a financial record.
+  await a.client.mutation(internal.forumSwaps.finishQuoteRequest, {
+    wallet: a.wallet,
+    lease: "not-original",
+    quoteIds: [],
+  });
+  expect(
+    await t.run((ctx) => ctx.db.get("forumSwapQuotes", saved.quoteId)),
+  ).toMatchObject({ status: "preparing" });
+});
 type Test = ReturnType<typeof setup>;
 function key(n: number, size = 32) {
   return getBase58Decoder().decode(new Uint8Array(size).fill(n));
