@@ -291,6 +291,8 @@ export const claimWalletRead = internalMutation({
       lease,
       leaseUntil: now + 30_000,
       nextFetchAt: now + TERMINAL_WALLET_TTL_MS,
+      // A failed request for B must not relabel A's cached balances as B.
+      state: old?.selection === selection ? old.state : undefined,
     };
     if (old) await ctx.db.patch("forumTerminalWallets", old._id, fields);
     else await ctx.db.insert("forumTerminalWallets", fields);

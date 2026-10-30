@@ -292,6 +292,48 @@ describe("private watches and bounded read leases", () => {
       await t.run((ctx) => ctx.db.query("forumTerminalWallets").take(10)),
     ).toHaveLength(1);
   });
+  test("a failed selection change never relabels the previous token balance", async () => {
+    const t = setup(),
+      a = await actor(t, 31),
+      b = await actor(t, 32);
+    await t.run((ctx) =>
+      ctx.db.insert("forumTerminalWallets", {
+        wallet: a.wallet,
+        selection: MINT,
+        lease: "old",
+        leaseUntil: 0,
+        nextFetchAt: 0,
+        state: {
+          wallet: a.wallet,
+          checkedAt: NOW - 120_000,
+          expiresAt: NOW - 60_000,
+          slot: 123,
+          balances: [{ mint: MINT, rawAmount: "1000000", decimals: 6 }],
+          maxSolRaw: null,
+          feeReserveLamports: null,
+        },
+      }),
+    );
+    expect(
+      await a.client.mutation(internal.forumTerminalData.claimWalletRead, {
+        wallet: a.wallet,
+        selectedMint: b.wallet,
+        lease: "new",
+      }),
+    ).toEqual({ fetch: true, state: null });
+    await a.client.mutation(internal.forumTerminalData.saveWalletRead, {
+      wallet: a.wallet,
+      lease: "new",
+      state: null,
+    });
+    expect(
+      await a.client.mutation(internal.forumTerminalData.claimWalletRead, {
+        wallet: a.wallet,
+        selectedMint: b.wallet,
+        lease: "again",
+      }),
+    ).toEqual({ fetch: false, state: null });
+  });
   test("risk refresh shares one mint lease across owners and an unchanged daily budget", async () => {
     const t = setup(),
       a = await actor(t, 5),
