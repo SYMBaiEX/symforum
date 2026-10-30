@@ -1,6 +1,13 @@
 "use client";
 
-import { Component, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   useQuery,
   useAction as useConvexAction,
@@ -34,9 +41,11 @@ import { AuthorTip } from "@/components/community/community-hub";
 
 export function ForumCommerceFrame({
   threadId,
+  readOnlyArchive = false,
   children,
 }: {
   threadId: string;
+  readOnlyArchive?: boolean;
   children: ReactNode;
 }) {
   const runtime = useForumRuntime();
@@ -51,7 +60,10 @@ export function ForumCommerceFrame({
           aria-label="Post token and promotion"
         >
           <CommerceBoundary>
-            <ThreadCommerce threadId={threadId as Id<"forumThreads">} />
+            <ThreadCommerce
+              threadId={threadId as Id<"forumThreads">}
+              readOnlyArchive={readOnlyArchive}
+            />
           </CommerceBoundary>
           <CommerceBoundary>
             <AuthorTip threadId={threadId as Id<"forumThreads">} />
@@ -61,7 +73,13 @@ export function ForumCommerceFrame({
     </CommerceWalletProvider>
   );
 }
-function ThreadCommerce({ threadId }: { threadId: Id<"forumThreads"> }) {
+function ThreadCommerce({
+  threadId,
+  readOnlyArchive,
+}: {
+  threadId: Id<"forumThreads">;
+  readOnlyArchive: boolean;
+}) {
   const tokens = useQuery(api.forumCommerce.resolveThreadTokens, { threadId });
   const mapped = useQuery(api.forumCommerce.getThreadMint, { threadId });
   const [resolved, setResolved] = useState<TradeToken | null>(null),
@@ -132,13 +150,25 @@ function ThreadCommerce({ threadId }: { threadId: Id<"forumThreads"> }) {
           </p>
         </section>
       )}
-      <PromotionCheckout threadId={threadId} />
+      <PromotionCheckout threadId={threadId} readOnlyArchive={readOnlyArchive} />
     </>
   );
 }
-function PromotionCheckout({ threadId }: { threadId: Id<"forumThreads"> }) {
+function PromotionCheckout({
+  threadId,
+  readOnlyArchive,
+}: {
+  threadId: Id<"forumThreads">;
+  readOnlyArchive: boolean;
+}) {
   const client = useCommerceWallet();
-  return client ? <LivePromotion threadId={threadId} client={client} /> : null;
+  return client ? (
+    <LivePromotion
+      threadId={threadId}
+      client={client}
+      readOnlyArchive={readOnlyArchive}
+    />
+  ) : null;
 }
 type Intent = FunctionReturnType<typeof api.forumPromotions.quotePromotion>;
 const date = (value: number) =>
@@ -152,9 +182,11 @@ const date = (value: number) =>
 function LivePromotion({
   threadId,
   client,
+  readOnlyArchive,
 }: {
   threadId: Id<"forumThreads">;
   client: CommerceWalletClient;
+  readOnlyArchive: boolean;
 }) {
   const config = useQuery(api.forumCommerce.getConfig, {}),
     connected = useConnectedWallet(client),
@@ -180,7 +212,14 @@ function LivePromotion({
     isAuthenticated ? {} : "skip",
   );
   const dispatchGuard = useRef(false);
+  // Keep callbacks from a previously active board closed after it is archived.
+  // Existing payment/receipt state is deliberately not reset.
+  const archiveGuard = useRef(readOnlyArchive);
+  useLayoutEffect(() => {
+    archiveGuard.current = readOnlyArchive;
+  }, [readOnlyArchive]);
   const checkout = useAction(async () => {
+    if (archiveGuard.current) return;
     setError("");
     try {
       if (!connected) return;
@@ -194,7 +233,7 @@ function LivePromotion({
     }
   });
   const review = useAction(async () => {
-    if (!intent || !connected) return;
+    if (archiveGuard.current || !intent || !connected) return;
     setError("");
     try {
       const data = await prepare({
@@ -217,13 +256,21 @@ function LivePromotion({
     }
   });
   const send = useAction(async () => {
-    if (dispatchGuard.current || !intent || !prepared || !consent) return;
+    if (
+      archiveGuard.current ||
+      dispatchGuard.current ||
+      !intent ||
+      !prepared ||
+      !consent
+    )
+      return;
     dispatchGuard.current = true;
     setSent(true);
     setError("");
     let walletInvoked = false;
     try {
       await begin({ intentId: intent.intentId });
+      if (archiveGuard.current) return;
       walletInvoked = true;
       const sig = await requestReviewedTransaction(client, prepared);
       setSignature(sig);
@@ -263,52 +310,77 @@ function LivePromotion({
   const busy =
     checkout.isRunning || review.isRunning || send.isRunning || check.isRunning;
   const display = active ?? intent;
+  const receipts = mine?.filter((row) => row.threadId === threadId) ?? [];
+  if (readOnlyArchive && !display && receipts.length === 0) return null;
   return (
     <section id="promote-post" className="commerce-panel promotion-checkout">
       <h2>
         <Megaphone aria-hidden="true" />
-        Promote this post
+        {readOnlyArchive ? "Promotion receipts" : "Promote this post"}
       </h2>
-      <p>
-        A clearly labeled placement in this board. At most five run at a time; a
-        full board queues the next 24-hour slot.
-      </p>
-      <div className="commerce-promotion-price">
-        <strong>
-          {formatTokenAmount(config?.promotionAmountRaw ?? "10000000000", 6)}{" "}
-          SYMF
-        </strong>
-        <span>24 hours</span>
-      </div>
-      <p>
-        <Flame aria-hidden="true" />
-        50% is burned; 50% goes to the platform treasury.
-      </p>
-      {!config?.promotionsEnabled && (
-        <p>Paid placements are not yet enabled.</p>
-      )}
-      <CommerceWalletButton disabled={busy || sent} />
-      {!isAuthenticated && (
+      {readOnlyArchive ? (
         <p>
-          <ForumLink href="/signin?redirectTo=/forum" className="underline">
-            Sign in
-          </ForumLink>{" "}
-          to sponsor a post.
+          This board is a read-only archive. New promotions are closed. Existing
+          receipts remain available to check without resending a payment.
         </p>
+      ) : (
+        <>
+          <p>
+            A clearly labeled placement in this board. At most five run at a
+            time; a full board queues the next 24-hour slot.
+          </p>
+          <div className="commerce-promotion-price">
+            <strong>
+              {formatTokenAmount(config?.promotionAmountRaw ?? "10000000000", 6)}{" "}
+              SYMF
+            </strong>
+            <span>24 hours</span>
+          </div>
+          <p>
+            <Flame aria-hidden="true" />
+            50% is burned; 50% goes to the platform treasury.
+          </p>
+          {!config?.promotionsEnabled && (
+            <p>Paid placements are not yet enabled.</p>
+          )}
+          <CommerceWalletButton disabled={busy || sent} />
+          {!isAuthenticated && (
+            <p>
+              <ForumLink href="/signin?redirectTo=/forum" className="underline">
+                Sign in
+              </ForumLink>{" "}
+              to sponsor a post.
+            </p>
+          )}
+          {!intent && (
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={
+                !config?.promotionsEnabled ||
+                !isAuthenticated ||
+                !connected ||
+                busy
+              }
+              onClick={() => checkout.dispatch()}
+            >
+              Check next available slot
+            </Button>
+          )}
+        </>
       )}
-      {!intent && (
-        <Button
-          className="w-full"
-          variant="outline"
-          disabled={
-            !config?.promotionsEnabled || !isAuthenticated || !connected || busy
-          }
-          onClick={() => checkout.dispatch()}
-        >
-          Check next available slot
-        </Button>
+      {display && readOnlyArchive && (
+        <div className="commerce-review">
+          <h3>Existing promotion status</h3>
+          <dl>
+            <div>
+              <dt>Status</dt>
+              <dd>{display.status}</dd>
+            </div>
+          </dl>
+        </div>
       )}
-      {display && (
+      {display && !readOnlyArchive && (
         <div className="commerce-review">
           <h3>Promotion review</h3>
           <dl>
@@ -418,37 +490,37 @@ function LivePromotion({
           </Button>
         </div>
       )}
-      {!!mine?.some((row) => row.threadId === threadId) && (
+      {receipts.length > 0 && (
         <details className="commerce-details">
           <summary>Your promotion receipts for this post</summary>
-          {mine
-            .filter((row) => row.threadId === threadId)
-            .map((row) => (
-              <div className="commerce-history" key={row.intentId}>
-                <span>
-                  {row.status} · {date(row.startsAt)}
-                </span>
-                <Input
-                  aria-label="Receipt signature"
-                  placeholder="Signature from wallet history"
-                  value={row.signature ?? signature}
-                  onChange={(e) => setSignature(e.target.value)}
-                />
-                <Button
-                  variant="ghost"
-                  disabled={busy || (!row.signature && !signature)}
-                  onClick={() => check.dispatch(row)}
-                >
-                  Check receipt
-                </Button>
-              </div>
-            ))}
+          {receipts.map((row) => (
+            <div className="commerce-history" key={row.intentId}>
+              <span>
+                {row.status} · {date(row.startsAt)}
+              </span>
+              <Input
+                aria-label="Receipt signature"
+                placeholder="Signature from wallet history"
+                value={row.signature ?? signature}
+                onChange={(e) => setSignature(e.target.value)}
+              />
+              <Button
+                variant="ghost"
+                disabled={busy || (!row.signature && !signature)}
+                onClick={() => check.dispatch(row)}
+              >
+                Check receipt
+              </Button>
+            </div>
+          ))}
         </details>
       )}
-      <p>
-        Anyone can sponsor an eligible public post. Paying never changes
-        moderation, reputation or organic ranking.
-      </p>
+      {!readOnlyArchive && (
+        <p>
+          Anyone can sponsor an eligible public post. Paying never changes
+          moderation, reputation or organic ranking.
+        </p>
+      )}
     </section>
   );
 }

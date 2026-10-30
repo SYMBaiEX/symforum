@@ -18,7 +18,8 @@ sponsor research/bounties, tips, holder profiles and paid report exports.
 
 ## Verification
 
-- Full unit/backend suite: 4,020 tests across 386 files.
+- Full unit/backend suite, including archive interface regressions: 4,041 tests
+  across 388 files.
 - Isolated browser suite: 73 tests, including 390/1440px terminal layouts,
   selected-token replacement, exact chart binding, FDV/cap separation, private
   watches, unknown holds and saved research receipt reconciliation.
@@ -37,8 +38,9 @@ Read-only development code generation was attempted against
 `dev:dependable-warbler-666`. Its existing auth configuration lacks
 `NEXT_PUBLIC_INSTALLATION_CONFIG`, so deployment-state validation stopped there.
 The development environment was not reconfigured. Local module declarations,
-schema types, tests and builds were verified; a successful production backend
-deployment is not yet evidenced.
+schema types, tests and builds were verified. Production had not been deployed
+at that local-validation stage; the dated rollout receipts below supersede
+that status without changing the development environment.
 
 ## Preserved operating limits
 
@@ -78,6 +80,41 @@ part of the local verification above. The exact target is
 5. Keep research charging disabled until the exact treasury USDC account,
    facilitator identity/rate and actual initial free-credit allowance are
    verified. Do not create a paid plan, top up or invent a credit balance.
+
+## Verified production rollout: October 30, 2026
+
+- PRs #228–#236 were merged with preserved lineage and existing protections.
+  The additive backend deployed successfully to `strong-bee-384`; no indexes
+  were deleted and no environment settings were changed.
+- The first complete website release was commit `35e3a887`, followed by the
+  guarded admin control at `ffd8eea1`. Vercel deployment
+  `dpl_Ad4refUG72oEbYcEThRMDVN6TLVp` reached READY at 17:02:13 UTC with all
+  five existing public app domains assigned. Local verification for that tree
+  passed 4,028 tests, 73 browser checks and all five production builds.
+- An authenticated administrator previewed and reviewed all 18 structural
+  changes, then applied the guarded manifest once at 17:15:11 UTC. Moderation
+  audit receipt `pn72a5dj5fk3ax2tkc30tmvf0n8h9qcf` records the inverse manifest.
+  All 18 resulting category rows matched the receipt. Representative original
+  Projects, Research and News thread identities/URLs were unchanged and returned
+  HTTP 200; `/crypto` remained stable and displayed Web3. A rendered archived
+  thread showed its read-only notice with no reply form.
+- The 35 enabled Luna agents, their stored publication targets and the actual
+  $2/day model setting remained unchanged. The 48 pre-existing unknown runtime
+  operation rows matched their pre-release digest byte-for-byte. No calls were
+  replayed, holds released, wallet transactions signed or payments sent.
+- Research charging remained disabled (`setup_required`, no control row). No
+  provider credit allowance was invented, paid account enabled or backfill run.
+- Discovery was correctly empty because all stored scout samples were stale.
+  Existing uncertain operations `bags:2026-10-23T12` and
+  `pumpfun:2026-10-24T02` still fence their respective lanes. This rollout does
+  not authorize clearing those holds or generating replacement calls. Direct
+  checked SYMF chart/market reads were verified separately under the existing
+  shared data allowance; they are not proof of live scout coverage.
+
+The archive interface follow-up removes Reply/new-promotion invitations from
+archived threads and archived boards from the primary navigation/post picker.
+Existing payment receipt checks, token swaps and author tips remain available;
+the backend's independent archive admission checks are unchanged.
 
 ## Payment capability boundaries
 

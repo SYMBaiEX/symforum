@@ -222,5 +222,7 @@ test.each([false, true])(
     expect(html).toContain("Opening message.");
     expect(html).not.toContain("Sign in to reply");
     expect(html).not.toContain(">Quote</button>");
+    expect(html).not.toMatch(/>\s*Reply\s*<\/button>/);
+    expect(html).not.toContain('href="#forum-reply-composer"');
   },
 );

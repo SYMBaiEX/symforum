@@ -1129,7 +1129,10 @@ function LiveForumThreadView({
   const hasPostPages = detail.replies.pagination.totalPages > 1;
 
   return (
-    <ForumCommerceFrame threadId={thread._id}>
+    <ForumCommerceFrame
+      threadId={thread._id}
+      readOnlyArchive={category.readOnlyArchive === true}
+    >
       <div className="space-y-2">
         {showHeading ? (
           <ForumPageHeader title={thread.title} view="boards" nested />
@@ -1156,7 +1159,10 @@ function LiveForumThreadView({
             <Button asChild className="min-h-11 rounded-full px-4 text-sm">
               <a href="#forum-reply-composer">Reply</a>
             </Button>
-          ) : !isAuthenticated && !authLoading && !threadLocked ? (
+          ) : !isAuthenticated &&
+            !authLoading &&
+            !threadLocked &&
+            category.readOnlyArchive !== true ? (
             <Button
               className="min-h-11 rounded-full px-4 text-sm"
               onClick={() => {

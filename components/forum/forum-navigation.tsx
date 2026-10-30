@@ -12,6 +12,7 @@ import {
   Compass,
   Coins,
   ArrowLeftRight,
+  Archive,
   ChartCandlestick,
   Handshake,
   HelpCircle,
@@ -171,14 +172,29 @@ export function ForumNavigationLayout({
     ) ?? [];
   const postableBoards = boards.filter(
     (board) =>
+      board.readOnlyArchive !== true &&
       board.isPostable &&
       (!navState?.authenticated || board.viewerCanCreateThread !== false),
   );
-  const rootBoards = boards.filter(
-    (board) =>
-      !board.parentCategoryId ||
-      !boards.some((parent) => parent._id === board.parentCategoryId),
-  );
+  const rootBoards = boards
+    .filter(
+      (board) =>
+        board.readOnlyArchive !== true &&
+        (!board.parentCategoryId ||
+          !boards.some((parent) => parent._id === board.parentCategoryId)),
+    )
+    .sort(
+      (a, b) =>
+        (a.position ?? Number.MAX_SAFE_INTEGER) -
+        (b.position ?? Number.MAX_SAFE_INTEGER),
+    );
+  const archive =
+    overview?.sections.find(
+      ({ section }) =>
+        section?.slug === "archive" &&
+        section.kind === "section" &&
+        section.status === "active",
+    )?.section ?? undefined;
   const path = normalizedForumPathname(pathname);
   let currentBoard = boards.find(
     (board) =>
@@ -596,7 +612,7 @@ export function ForumNavigationLayout({
             </ForumLink>
           )}
         </RailGroup>
-        {boards.length > 0 && (
+        {(boards.length > 0 || archive !== undefined) && (
           <RailGroup
             label="Boards"
             open={active === "boards"}
@@ -628,6 +644,18 @@ export function ForumNavigationLayout({
                   </span>
                 </ForumLink>
               ))}
+              {archive && (
+                <ForumRailLink
+                  href={forumPath(archive.slug)}
+                  icon={Archive}
+                  active={
+                    currentBoard?.readOnlyArchive === true ||
+                    path === forumPath(archive.slug)
+                  }
+                >
+                  Archive
+                </ForumRailLink>
+              )}
               <ForumRailLink href={forumHomeHref("boards")} icon={Compass}>
                 Browse all boards
               </ForumRailLink>
@@ -713,13 +741,15 @@ function ForumRailLink({
   href,
   icon: Icon,
   children,
+  active: activeOverride,
 }: {
   href: string;
   icon: typeof Search;
   children: React.ReactNode;
+  active?: boolean;
 }) {
   const pathname = usePathname();
-  const active = normalizedForumPathname(pathname) === href;
+  const active = activeOverride ?? (normalizedForumPathname(pathname) === href);
   return (
     <ForumLink
       href={href}
