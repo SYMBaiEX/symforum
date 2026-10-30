@@ -10,6 +10,15 @@ export const rpcExpiryProof = v.object({
   newestHistoryTime: v.number(),
   historyHash: v.string(),
 });
+export const signatureExpiryProof = v.object({
+  signature: v.string(),
+  checkedAt: v.number(),
+  genesis: v.string(),
+  statusSlot: v.number(),
+  invalidAtSlot: v.number(),
+  finalizedHeight: v.number(),
+  firstAvailableSlot: v.number(),
+});
 export const swapReconciliationAudit = v.object({
   kind: v.literal("expired_not_landed"),
   authorization: v.string(),

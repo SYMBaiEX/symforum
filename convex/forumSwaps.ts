@@ -796,6 +796,10 @@ export const beginWalletRequest = mutation({
   args: { quoteId: v.id("forumSwapQuotes") },
   returns: receiptValidator,
   handler: async (ctx, { quoteId }) => {
+    if (env.FORUM_SWAP_SIGNATURE_FIRST_ENABLED === "true")
+      throw new ConvexError(
+        "Refresh the page to use signature-first swap submission. No wallet request was authorized.",
+      );
     const row = await ctx.db.get("forumSwapQuotes", quoteId),
       actor = await commerceActor(ctx, row?.wallet);
     if (

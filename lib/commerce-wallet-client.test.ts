@@ -7,6 +7,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
   compileTransaction,
   getBase64EncodedWireTransaction,
+  getBase64Encoder,
 } from "@solana/kit";
 import { createHash } from "node:crypto";
 import { runInNewContext } from "node:vm";
@@ -16,8 +17,10 @@ import {
   CommerceWalletRequestError,
   supportsCommerceTransaction,
   commerceWalletFailureMessage,
+  signReviewedSwap,
   type CommerceWalletClient,
 } from "./commerce-wallet-client";
+import { signedSwapFixture } from "../tests/fixtures/signed-swap";
 const boundary = vi.hoisted(() => ({
   getFeature: vi.fn(),
   getAccount: vi.fn(),
@@ -58,6 +61,57 @@ test("only exact unsigned simulated message enables the wallet review", async ()
   const value = fixture();
   expect(await verifyPreparedTransaction(value)).toEqual(value);
   expect(Object.isFrozen(await verifyPreparedTransaction(value))).toBe(true);
+});
+test("sign-only requests exactly the simulated transaction and never broadcasts or falls back", async () => {
+  const f = await signedSwapFixture(1);
+  const account = { address: f.wallet, chains: ["solana:mainnet"] };
+  const sign = vi.fn(async () => [
+    {
+      signedTransaction: Uint8Array.from(
+        getBase64Encoder().encode(f.signedTransactionBase64),
+      ),
+    },
+  ]);
+  const send = vi.fn();
+  boundary.getAccount.mockReturnValue(account);
+  boundary.getFeature.mockImplementation((_account, feature) =>
+    feature === "solana:signTransaction"
+      ? { supportedTransactionVersions: [1], signTransaction: sign }
+      : { supportedTransactionVersions: [0], signAndSendTransaction: send },
+  );
+  const client = {
+    wallet: {
+      getState: () => ({
+        connected: { account, supportedTransactionVersions: new Set([0]) },
+      }),
+    },
+  } as unknown as CommerceWalletClient;
+  expect(supportsCommerceTransaction(client, 1, true)).toBe(true);
+  expect(supportsCommerceTransaction(client, 1, false)).toBe(false);
+  expect(await signReviewedSwap(client, f.prepared)).toMatchObject({
+    signedTransactionBase64: f.signedTransactionBase64,
+  });
+  expect(sign).toHaveBeenCalledTimes(1);
+  expect(sign).toHaveBeenCalledWith(
+    expect.objectContaining({
+      account,
+      chain: "solana:mainnet",
+      transaction: Uint8Array.from(
+        getBase64Encoder().encode(f.prepared.transactionBase64),
+      ),
+      options: { preflightCommitment: "confirmed", minContextSlot: 200 },
+    }),
+  );
+  expect(send).not.toHaveBeenCalled();
+  sign.mockRejectedValueOnce({
+    code: -32603,
+    message: "private signing error",
+  });
+  await expect(signReviewedSwap(client, f.prepared)).rejects.toMatchObject({
+    phase: "request",
+    code: -32603,
+  });
+  expect(send).not.toHaveBeenCalled();
 });
 test.each([
   { messageHash: "0".repeat(64) },

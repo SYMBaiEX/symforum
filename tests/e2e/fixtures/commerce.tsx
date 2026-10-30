@@ -1,16 +1,26 @@
 // Fake wallet: signatures below are inert fixtures and never leave this harness.
 import { createRoot } from "react-dom/client";
 import { getWallets } from "@wallet-standard/app";
-import { address, getAddressEncoder } from "@solana/kit";
+import { address, getAddressEncoder, getBase64Encoder } from "@solana/kit";
 import { StandaloneSwap } from "../../../components/swap/token-swap";
 import { ForumCommerceFrame } from "../../../components/swap/forum-commerce";
 import { ForumSymf } from "../../../components/forum/forum-symf";
-const wallet = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
+declare global {
+  interface Window {
+    __commerceFixtureWallet?: string;
+  }
+}
+const wallet =
+  window.__commerceFixtureWallet ??
+  "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
 const account = {
   address: wallet,
   publicKey: Uint8Array.from(getAddressEncoder().encode(address(wallet))),
   chains: ["solana:mainnet"] as const,
-  features: ["solana:signAndSendTransaction"] as const,
+  features: [
+    "solana:signAndSendTransaction",
+    "solana:signTransaction",
+  ] as const,
 };
 let connected: readonly (typeof account)[] = location.search.includes(
   "authorized",
@@ -35,6 +45,34 @@ getWallets().register({
     return connected;
   },
   features: {
+    "solana:signTransaction": {
+      version: "1.0.0",
+      supportedTransactionVersions: [0],
+      signTransaction: async (input: {
+        account: typeof account;
+        transaction: Uint8Array;
+      }) => {
+        calls++;
+        document.getElementById("wallet-calls")!.textContent = String(calls);
+        if (input.account !== account) throw Error("Wrong raw wallet account");
+        if (location.search.includes("signfail"))
+          throw Object.assign(Error("private signing failure"), {
+            code: -32603,
+          });
+        const response = await fetch("/__commerce/wallet:sign", {
+          method: "POST",
+          body: JSON.stringify({ bytes: Array.from(input.transaction) }),
+        });
+        const result = await response.json();
+        return [
+          {
+            signedTransaction: Uint8Array.from(
+              getBase64Encoder().encode(result.wire),
+            ),
+          },
+        ];
+      },
+    },
     "standard:events": {
       version: "1.0.0",
       on: (

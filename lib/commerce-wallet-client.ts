@@ -8,8 +8,12 @@ import {
 import { createIdentityWalletClient } from "./identity-wallet-client";
 import { getWalletAccountFeature } from "@wallet-standard/ui-features";
 import { getWalletAccountForUiWalletAccount } from "@wallet-standard/ui-registry";
-import type { SolanaSignAndSendTransactionFeature } from "@solana/wallet-standard-features";
+import type {
+  SolanaSignAndSendTransactionFeature,
+  SolanaSignTransactionFeature,
+} from "@solana/wallet-standard-features";
 import type { PreparedSwap } from "./swap-router";
+import { inspectSignedSwap, signedBytesToBase64 } from "./swap-signed-wire";
 
 export function createCommerceWalletClient() {
   return createIdentityWalletClient();
@@ -25,6 +29,7 @@ type WalletResponseIssue = "result_count" | "signature_bytes" | null;
 export function supportsCommerceTransaction(
   client: CommerceWalletClient,
   version: 0 | 1,
+  signOnly = false,
 ) {
   const current = client.wallet.getState().connected;
   if (!current || !current.account.chains.includes("solana:mainnet"))
@@ -32,7 +37,7 @@ export function supportsCommerceTransaction(
   try {
     const feature = getWalletAccountFeature(
       current.account,
-      "solana:signAndSendTransaction",
+      signOnly ? "solana:signTransaction" : "solana:signAndSendTransaction",
     ) as SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
     return feature.supportedTransactionVersions.includes(version);
   } catch {
@@ -59,6 +64,60 @@ export class CommerceWalletRequestError extends Error {
         ? cause.code
         : null;
   }
+}
+
+/** Sign only. No broadcast, fallback, rebuilding or retries. */
+export async function signReviewedSwap(
+  client: CommerceWalletClient,
+  prepared: ReviewedTransaction,
+) {
+  const current = client.wallet.getState().connected;
+  if (
+    !current ||
+    current.account.address !== prepared.wallet ||
+    !current.account.chains.includes("solana:mainnet")
+  )
+    throw new CommerceWalletRequestError("account");
+  let feature: SolanaSignTransactionFeature["solana:signTransaction"],
+    account: ReturnType<typeof getWalletAccountForUiWalletAccount>;
+  try {
+    feature = getWalletAccountFeature(
+      current.account,
+      "solana:signTransaction",
+    ) as typeof feature;
+    account = getWalletAccountForUiWalletAccount(current.account);
+    if (
+      !feature.supportedTransactionVersions.includes(
+        prepared.transactionVersion,
+      )
+    )
+      throw Error("Unsupported signing version");
+  } catch (error) {
+    throw new CommerceWalletRequestError("feature", error);
+  }
+  let result: unknown;
+  try {
+    result = await feature.signTransaction({
+      account,
+      chain: "solana:mainnet",
+      transaction: Uint8Array.from(
+        getBase64Encoder().encode(prepared.transactionBase64),
+      ),
+      options: {
+        preflightCommitment: "confirmed",
+        minContextSlot: prepared.simulationSlot,
+      },
+    });
+  } catch (error) {
+    throw new CommerceWalletRequestError("request", error);
+  }
+  if (!Array.isArray(result) || result.length !== 1)
+    throw new CommerceWalletRequestError("response", undefined, "result_count");
+  const signedTransactionBase64 = signedBytesToBase64(
+    result[0]?.signedTransaction,
+  );
+  const binding = await inspectSignedSwap(signedTransactionBase64, prepared);
+  return { ...binding, signedTransactionBase64 };
 }
 
 export function commerceWalletFailureMessage(error: unknown) {

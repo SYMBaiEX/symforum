@@ -3,7 +3,13 @@ import { getFunctionName } from "convex/server";
 import { useCallback, useSyncExternalStore } from "react";
 let recoveryResolved = false,
   recoveryRevision = 0;
+let signedReceipt: { signature: string; finalized?: boolean } | null = null;
 const recoveryListeners = new Set<() => void>();
+window.addEventListener("commerce:signed-receipt", (event) => {
+  signedReceipt = (event as CustomEvent).detail;
+  recoveryRevision++;
+  recoveryListeners.forEach((listener) => listener());
+});
 window.addEventListener("commerce:resolve-recovery", () => {
   recoveryResolved = true;
   recoveryRevision++;
@@ -41,11 +47,15 @@ export function useQuery(
       authUserId: "test-reader",
       wallets: location.search.includes("unlinked")
         ? []
-        : ["6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY"],
+        : [
+            window.__commerceFixtureWallet ??
+              "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
+          ],
     };
   if (name === "forumCommerce:getConfig")
     return {
       swapsEnabled: !location.search.includes("disabled"),
+      signatureFirstEnabled: location.search.includes("signaturefirst"),
       promotionsEnabled: true,
       treasury: "11111111111111111111111111111111",
       platformFeeBps: 25,
@@ -72,6 +82,27 @@ export function useQuery(
   if (name === "forumCommerce:resolveThreadTokens") return [];
   if (name === "forumCommerce:getThreadMint") return null;
   if (name === "forumPromotions:listPromoted") return [];
+  if (name === "forumSwaps:listMine" && signedReceipt)
+    return [
+      {
+        quoteId: "quote-fixture",
+        wallet: window.__commerceFixtureWallet,
+        status: signedReceipt.finalized ? "confirmed" : "submitted",
+        signature: signedReceipt.signature,
+        inputMint: SOL,
+        outputMint: USDC,
+        amountRaw: "10000000",
+        createdAt: 0,
+        issue: null,
+        recovery: {
+          state: signedReceipt.finalized ? "resolved" : "scheduled",
+          reason: "checking_receipt",
+          attempts: 1,
+          nextCheckAt: Date.now() + 5000,
+          progress: "confirmed",
+        },
+      },
+    ];
   if (name.endsWith(":listMine"))
     return location.search.includes("held")
       ? [

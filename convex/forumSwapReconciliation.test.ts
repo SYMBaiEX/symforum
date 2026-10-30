@@ -18,6 +18,7 @@ import {
   MAINNET_GENESIS,
   reconciliationHash,
 } from "../lib/swap-reconciliation";
+import { commerceLimiter } from "./forumCommerce";
 const modules = import.meta.glob("./**/*.ts");
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -121,6 +122,65 @@ async function setup() {
   return { t, id, other, approval, history, fetcher };
 }
 describe("operator approved single-swap reconciliation", () => {
+  test("one-shot diagnostic survives a failed proof and cannot be reused or reset", async () => {
+    const f = await setup();
+    vi.stubEnv(
+      "FORUM_SWAP_RECONCILIATION_TARGET",
+      JSON.stringify({
+        ...f.approval,
+        authorization: "one-shot-diagnostic-fixture",
+      }),
+    );
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (url, init) =>
+      String(url).includes("api.mainnet-beta")
+        ? new Response("private-provider-failure", { status: 429 })
+        : original(url, init),
+    );
+    expect(
+      await f.t.action(internal.forumSwapReconciliation.reconcileApproved, {}),
+    ).toEqual({ status: "held", reason: "solana_genesis" });
+    expect(f.fetcher).toHaveBeenCalledTimes(6);
+    const markers = await f.t.run((ctx) =>
+      ctx.db
+        .query("forumSwapReconciliationAttempts")
+        .withIndex("by_authorization", (q) =>
+          q.eq("authorization", "one-shot-diagnostic-fixture"),
+        )
+        .take(2),
+    );
+    expect(markers).toHaveLength(1);
+    expect(
+      await f.t.action(internal.forumSwapReconciliation.reconcileApproved, {}),
+    ).toEqual({ status: "held", reason: "reservation_inconclusive_no_replay" });
+    expect(f.fetcher).toHaveBeenCalledTimes(6);
+    expect(
+      await f.t.run((ctx) => ctx.db.get("forumSwapQuotes", f.id)),
+    ).toMatchObject({ status: "held" });
+  });
+  test("one-shot diagnostic still respects the unchanged daily recovery cap", async () => {
+    const f = await setup();
+    vi.stubEnv(
+      "FORUM_SWAP_RECONCILIATION_TARGET",
+      JSON.stringify({
+        ...f.approval,
+        authorization: "one-shot-diagnostic-capped",
+      }),
+    );
+    await f.t.run((ctx) =>
+      commerceLimiter.limit(ctx, "commerceRecoveryDaily", {
+        key: "all",
+        count: 100,
+      }),
+    );
+    expect(
+      await f.t.action(internal.forumSwapReconciliation.reconcileApproved, {}),
+    ).toMatchObject({
+      status: "held",
+      reason: "reservation_inconclusive_no_replay",
+    });
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
   test("retains the complete old record, audits only the approved hold and is idempotent", async () => {
     const f = await setup();
     const before = await f.t.run((ctx) => ctx.db.get("forumSwapQuotes", f.id));

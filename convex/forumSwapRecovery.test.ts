@@ -29,7 +29,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
-async function fixture(options: { signature?: boolean; fresh?: boolean } = {}) {
+async function fixture(
+  options: {
+    signature?: boolean;
+    fresh?: boolean;
+    signatureFirst?: boolean;
+  } = {},
+) {
   const t = convexTest(schema, modules);
   registerLimiter(t);
   registerAuth(t);
@@ -144,18 +150,36 @@ async function fixture(options: { signature?: boolean; fresh?: boolean } = {}) {
     simulationSlot: 200,
     transactionVersion: 1,
     ...(options.signature ? { signature } : {}),
+    ...(options.signatureFirst ? { signatureFirst: true } : {}),
   };
   const id = await t.run((ctx) => ctx.db.insert("forumSwapQuotes", row)),
     other = await t.run((ctx) => ctx.db.insert("forumSwapQuotes", row));
+  if (options.signatureFirst)
+    await t.run((ctx) =>
+      ctx.db.insert("forumSwapSubmissions", {
+        quoteId: id,
+        signature,
+        wireHash: "a".repeat(64),
+        registeredAt: createdAt,
+        attemptedAt: createdAt + 1,
+        rpcState: "unknown",
+      }),
+    );
   const data: {
     recent: boolean;
     empty: boolean;
     unavailable: boolean;
     receipt: unknown;
+    progress: "processed" | "confirmed" | "finalized" | null;
+    statusSlot: number;
+    afterExpiryFound: boolean;
   } = {
     recent: false,
     empty: false,
     unavailable: false,
+    progress: null,
+    statusSlot: 350,
+    afterExpiryFound: false,
     receipt: {
       slot: 250,
       meta: { err: null },
@@ -184,6 +208,24 @@ async function fixture(options: { signature?: boolean; fresh?: boolean } = {}) {
               err: null,
             },
           ];
+    else if (method === "getSignatureStatuses")
+      result = {
+        context: { slot: data.statusSlot },
+        value: [
+          data.progress ||
+          (data.afterExpiryFound &&
+            fetcher.mock.calls.filter(
+              (call) =>
+                JSON.parse(String(call[1]?.body)).method === "isBlockhashValid",
+            ).length > 0)
+            ? {
+                slot: 250,
+                err: null,
+                confirmationStatus: data.progress ?? "confirmed",
+              }
+            : null,
+        ],
+      };
     else if (method === "getTransaction") result = data.receipt;
     else throw Error("No simulation, signing or sending allowed");
     return Response.json({ jsonrpc: "2.0", id: 1, result });
@@ -327,6 +369,117 @@ test("known signed receipts are auto-confirmed against both providers", async ()
     outcome: "confirmed",
   });
   expect(f.fetcher).toHaveBeenCalledTimes(4);
+});
+test("signature-first confirmation checks start promptly and progress never regresses", async () => {
+  const f = await fixture({ signature: true, signatureFirst: true });
+  f.data.receipt = null;
+  f.data.progress = "confirmed";
+  await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
+  expect((await f.job())!.nextCheckAt - Date.now()).toBeLessThanOrEqual(1000);
+  await f.due();
+  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  expect(await f.job()).toMatchObject({
+    state: "scheduled",
+    attempts: 1,
+    progress: "confirmed",
+  });
+  expect(f.fetcher).toHaveBeenCalledTimes(6);
+  f.data.progress = "processed";
+  await f.due();
+  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  expect(await f.job()).toMatchObject({ progress: "confirmed" });
+  expect(
+    await f.t.run((ctx) => ctx.db.get("forumSwapQuotes", f.id)),
+  ).toMatchObject({ status: "held" });
+});
+test("signature-first expiry uses fresh post-expiry absence from both providers and retains the signature/proof", async () => {
+  const f = await fixture({ signature: true, signatureFirst: true });
+  f.data.receipt = null;
+  await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
+  await f.due();
+  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  expect(
+    await f.t.run((ctx) => ctx.db.get("forumSwapQuotes", f.id)),
+  ).toMatchObject({
+    status: "failed",
+    issue: "signature_expired_not_found",
+    signature: f.signature,
+  });
+  expect(await f.job()).toMatchObject({
+    state: "resolved",
+    outcome: "not_landed",
+    attempts: 1,
+  });
+  const saved = await f.t.run((ctx) =>
+    ctx.db
+      .query("forumSwapSubmissions")
+      .withIndex("by_quoteId", (q) => q.eq("quoteId", f.id))
+      .unique(),
+  );
+  expect(saved).toMatchObject({
+    signature: f.signature,
+    expiryProofHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    expiryProof: {
+      helius: { statusSlot: 350, invalidAtSlot: 300 },
+      solana: { statusSlot: 350, invalidAtSlot: 300 },
+    },
+  });
+  expect(f.fetcher).toHaveBeenCalledTimes(14);
+  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  expect(f.fetcher).toHaveBeenCalledTimes(14);
+});
+test.each(["late_signature", "lagging_status", "missing_ledger", "budget"])(
+  "%s cannot authorize signature-first expiry",
+  async (mode) => {
+    const f = await fixture({ signature: true, signatureFirst: true });
+    f.data.receipt = null;
+    if (mode === "late_signature") f.data.afterExpiryFound = true;
+    if (mode === "lagging_status") f.data.statusSlot = 299;
+    if (mode === "missing_ledger")
+      await f.t.run(async (ctx) => {
+        const sub = await ctx.db
+          .query("forumSwapSubmissions")
+          .withIndex("by_quoteId", (q) => q.eq("quoteId", f.id))
+          .unique();
+        await ctx.db.delete("forumSwapSubmissions", sub!._id);
+      });
+    if (mode === "budget")
+      await f.t.run((ctx) =>
+        commerceLimiter.limit(ctx, "commerceRecoveryDaily", {
+          key: "all",
+          count: 94,
+        }),
+      );
+    await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
+    await f.due();
+    if (mode === "missing_ledger")
+      await expect(
+        f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id }),
+      ).rejects.toThrow("binding missing");
+    else await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+    expect(
+      await f.t.run((ctx) => ctx.db.get("forumSwapQuotes", f.id)),
+    ).toMatchObject({ status: "held", signature: f.signature });
+    expect((await f.job())!.state).not.toBe("resolved");
+  },
+);
+test("new signed pending checks stop at six; old signed checks still stop at three", async () => {
+  const f = await fixture({ signature: true, signatureFirst: true });
+  f.data.receipt = null;
+  f.data.progress = "processed";
+  await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
+  for (let i = 0; i < 6; i++) {
+    await f.due();
+    await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  }
+  expect(await f.job()).toMatchObject({
+    state: "review",
+    attempts: 6,
+    nextCheckAt: 0,
+  });
+  await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
+  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  expect(f.fetcher).toHaveBeenCalledTimes(36);
 });
 test("a finalized exact-message chain failure terminates without replay", async () => {
   const f = await fixture({ signature: true });
