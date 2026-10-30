@@ -84,8 +84,8 @@ export function MarketPanel({
     >
       <header className={styles.panelHead}>
         <div>
-          <h2 id="terminal-discovery-title">Discover</h2>
-          <p>Sampled tokens. Not the entire market.</p>
+          <h2 id="terminal-discovery-title">Markets</h2>
+          <p>Scout samples, not a market-wide ranking.</p>
         </div>
       </header>
       <div className={styles.filters}>
@@ -157,7 +157,7 @@ export function MarketPanel({
         <p role="status" className={styles.empty}>
           {search
             ? "No matching token in this sample. The swap selector supports exact-mint search."
-            : "No recent tokens in this band yet. Scheduled scouts rotate coverage without adding paid requests."}
+            : "No recent tokens match this sample. The swap selector supports exact-mint search."}
         </p>
       ) : (
         <ul className={styles.marketList} aria-label="Sampled tokens">

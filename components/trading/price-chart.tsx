@@ -8,6 +8,7 @@ import type {
   SymfChartInterval,
 } from "@/lib/symf-market-data";
 import styles from "@/components/forum/forum-symf.module.css";
+import terminalStyles from "./forum-terminal.module.css";
 import { readChartData, type ChartMarketData } from "./price-chart-data";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
@@ -25,10 +26,12 @@ function CandleCanvas({
   candles,
   light,
   symbol,
+  compact,
 }: {
   candles: SymfCandle[];
   light: boolean;
   symbol: string;
+  compact?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const fitted = useRef(false);
@@ -136,7 +139,7 @@ function CandleCanvas({
     <div className="relative">
       <div
         ref={container}
-        className={styles.candleCanvas}
+        className={`${styles.candleCanvas} ${compact ? terminalStyles.chartCanvas : ""}`}
         role="img"
         aria-label={`${symbol} USD candlestick chart, ${candles.length} candles. Latest close ${priceFormat.format(candles[candles.length - 1].close)}. Drag to pan and scroll to zoom. Times shown in UTC.`}
       />
@@ -161,6 +164,7 @@ function ChartData({
   symbol,
   endpoint,
   onMarket,
+  compact,
 }: {
   interval: SymfChartInterval;
   light: boolean;
@@ -168,6 +172,7 @@ function ChartData({
   symbol: string;
   endpoint: string;
   onMarket?: (market: ChartMarketData) => void;
+  compact?: boolean;
 }) {
   const [data, setData] = useState<
     (SymfChartData & { stale?: boolean }) | null
@@ -219,7 +224,9 @@ function ChartData({
   }, [endpoint, mint, interval, onMarket]);
   if (!data)
     return (
-      <div className={styles.candleCanvas}>
+      <div
+        className={`${styles.candleCanvas} ${compact ? terminalStyles.chartCanvas : ""}`}
+      >
         <p
           role="status"
           className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground"
@@ -232,7 +239,9 @@ function ChartData({
     );
   return (
     <>
-      <div className={styles.priceBar}>
+      <div
+        className={`${styles.priceBar} ${compact ? terminalStyles.chartQuote : ""}`}
+      >
         <p className="font-mono tabular-nums">
           {priceFormat.format(data.candles[data.candles.length - 1].close)}{" "}
           <span>USD · latest candle close</span>
@@ -244,12 +253,15 @@ function ChartData({
         </p>
       </div>
       <CandleCanvas
+        compact={compact}
         key={light ? "light" : "dark"}
         candles={data.candles}
         light={light}
         symbol={symbol}
       />
-      <details className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+      <details
+        className={`border-t border-border px-4 py-3 text-xs text-muted-foreground ${compact ? terminalStyles.chartDataDisclosure : ""}`}
+      >
         <summary className="focus-ring cursor-pointer">
           Read candle data
         </summary>
@@ -305,18 +317,20 @@ export function TokenPriceChart({
   light,
   endpoint = `/api/token/${encodeURIComponent(mint)}/chart`,
   onMarket,
+  compact,
 }: {
   mint: string;
   symbol: string;
   light: boolean;
   endpoint?: string;
   onMarket?: (market: ChartMarketData) => void;
+  compact?: boolean;
 }) {
   const [interval, setInterval] = useState<SymfChartInterval>("15m");
   return (
     <>
       <div
-        className={styles.chartControls}
+        className={`${styles.chartControls} ${compact ? terminalStyles.chartControls : ""}`}
         role="group"
         aria-label="Candle interval"
       >
@@ -334,6 +348,7 @@ export function TokenPriceChart({
         <span>USD candles · UTC</span>
       </div>
       <ChartData
+        compact={compact}
         key={`${mint}:${interval}`}
         interval={interval}
         light={light}

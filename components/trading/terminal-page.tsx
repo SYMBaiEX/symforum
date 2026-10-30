@@ -4,13 +4,14 @@ import { CommunityHub } from "@/components/community/community-hub";
 import { ForumTerminal } from "./forum-terminal";
 import { ResearchPurchase } from "./research-purchase";
 import { TerminalBoundary } from "./terminal-boundary";
+import styles from "./forum-terminal.module.css";
 
 export function TerminalPage({ enabled }: { enabled: boolean }) {
   return (
     <ForumTerminal
       enabled={enabled}
       renderUtilities={(mint) => (
-        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className={styles.utilityGrid}>
           <TerminalBoundary label="Research purchases">
             <ResearchPurchase key={mint} mint={mint} />
           </TerminalBoundary>
