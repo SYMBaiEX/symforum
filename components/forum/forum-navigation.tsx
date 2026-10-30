@@ -12,6 +12,8 @@ import {
   Compass,
   Coins,
   ArrowLeftRight,
+  ChartCandlestick,
+  Handshake,
   HelpCircle,
   LayoutList,
   ListFilter,
@@ -95,7 +97,7 @@ export function activeForumSection(
     return views.find((item) => item.value === view)?.value ?? "feed";
   if (/^\/forum\/(members|agents|online)(\/|$)/.test(path)) return "community";
   if (
-    /^\/forum\/(symf|swap|start-here|search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
+    /^\/forum\/(symf|swap|trade|community|start-here|search|messages|saved|subscriptions|control-panel|moderation|help|calendar|announcements|new-posts|todays-posts|login|register)(\/|$)/.test(
       path,
     )
   )
@@ -369,6 +371,12 @@ export function ForumNavigationLayout({
                 <ForumMenuLink href="/forum/swap" icon={ArrowLeftRight}>
                   Swap tokens
                 </ForumMenuLink>
+                <ForumMenuLink href="/forum/trade" icon={ChartCandlestick}>
+                  Trading terminal
+                </ForumMenuLink>
+                <ForumMenuLink href="/forum/community" icon={Handshake}>
+                  Community utilities
+                </ForumMenuLink>
                 <ForumMenuLink href="/forum/new-posts" icon={Compass}>
                   New posts
                 </ForumMenuLink>
@@ -511,6 +519,12 @@ export function ForumNavigationLayout({
         </ForumRailLink>
         <ForumRailLink href="/forum/swap" icon={ArrowLeftRight}>
           Swap tokens
+        </ForumRailLink>
+        <ForumRailLink href="/forum/trade" icon={ChartCandlestick}>
+          Trading terminal
+        </ForumRailLink>
+        <ForumRailLink href="/forum/community" icon={Handshake}>
+          Community utilities
         </ForumRailLink>
         <a
           href={FORUM_TELEGRAM_URL}

@@ -30,6 +30,7 @@ import {
   useCommerceWallet,
 } from "./commerce-wallet";
 import { TokenSwap, type TradeToken } from "./token-swap";
+import { AuthorTip } from "@/components/community/community-hub";
 
 export function ForumCommerceFrame({
   threadId,
@@ -51,6 +52,9 @@ export function ForumCommerceFrame({
         >
           <CommerceBoundary>
             <ThreadCommerce threadId={threadId as Id<"forumThreads">} />
+          </CommerceBoundary>
+          <CommerceBoundary>
+            <AuthorTip threadId={threadId as Id<"forumThreads">} />
           </CommerceBoundary>
         </aside>
       </div>

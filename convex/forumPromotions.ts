@@ -10,7 +10,11 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { commerceActor, publicCommerceThread } from "./forumCommerceAccess";
+import {
+  commerceActor,
+  publicCommerceThread,
+  promotableCommerceThread,
+} from "./forumCommerceAccess";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceMint, commerceRpc } from "./forumCommerceRpc";
 import {
@@ -157,7 +161,7 @@ export const reserve = internalMutation({
     });
     if (!rate.ok)
       throw new ConvexError("Promotion checkout rate limit reached.");
-    const thread = await publicCommerceThread(ctx, args.threadId);
+    const thread = await promotableCommerceThread(ctx, args.threadId);
     if (!thread)
       throw new ConvexError("Only active public board posts can be promoted.");
     const prior = await ctx.db
@@ -302,7 +306,7 @@ export const consumePreparation = internalMutation({
       throw new ConvexError(
         "Checkout expired or preparation already requested. Do not submit another payment.",
       );
-    if (!(await publicCommerceThread(ctx, row.threadId)))
+    if (!(await promotableCommerceThread(ctx, row.threadId)))
       throw new ConvexError("This post is no longer eligible.");
     await ctx.db.patch("forumPromotionIntents", row._id, {
       preparationStartedAt: Date.now(),
@@ -427,7 +431,7 @@ export const beginWalletRequest = mutation({
     if (
       !config.promotionsEnabled ||
       config.treasury !== row.treasury ||
-      !(await publicCommerceThread(ctx, row.threadId))
+      !(await promotableCommerceThread(ctx, row.threadId))
     )
       throw new ConvexError(
         "Promotions paused or post no longer eligible. Nothing was sent.",

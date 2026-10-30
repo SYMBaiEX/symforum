@@ -53,8 +53,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function useMinute() {
   const [now, setNow] = useState(0);
   useEffect(() => {
-    setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 60_000);
+    setNow(Math.floor(Date.now() / 60_000) * 60_000);
+    const interval = setInterval(
+      () => setNow(Math.floor(Date.now() / 60_000) * 60_000),
+      60_000,
+    );
     return () => clearInterval(interval);
   }, []);
   return now;

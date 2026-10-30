@@ -1,5 +1,7 @@
 "use client";
 import { ForumCommerceFrame } from "@/components/swap/forum-commerce";
+import { CommunityHolderBadge } from "@/components/community/community-hub";
+import type { Id } from "@/convex/_generated/dataModel";
 import { forumReplyBranches } from "./forum-reply-branches";
 import { forumExperienceRefs } from "./forum-experience-refs";
 import { convexRefs } from "@/lib/convex-refs";
@@ -1100,7 +1102,10 @@ function LiveForumThreadView({
 
   const threadLocked = isLockedThread(thread);
   const viewerCanReply =
-    isAuthenticated && !threadLocked && category.readOnlyArchive !== true && thread.viewerCanReply === true;
+    isAuthenticated &&
+    !threadLocked &&
+    category.readOnlyArchive !== true &&
+    thread.viewerCanReply === true;
   const replyMessage = replyUnavailableMessage(
     category,
     threadLocked,
@@ -1325,7 +1330,11 @@ function LiveForumThreadView({
           error={pollError}
           canEdit={detail.poll.viewerCanEdit}
           isAuthenticated={isAuthenticated}
-          pollAccess={detail.category.readOnlyArchive === true ? "closed" : detail.category.pollAccess}
+          pollAccess={
+            detail.category.readOnlyArchive === true
+              ? "closed"
+              : detail.category.pollAccess
+          }
           onEdit={() => openPollEditor(detail.poll!)}
           onSelect={setSelectedPollOptionId}
           onVote={() => submitPollVote(detail.poll!)}
@@ -1528,6 +1537,11 @@ function LiveForumThreadView({
                   timestamp={formatForumDateTime(getPostTimestamp(post))}
                   postNumber={postNumber}
                 >
+                  {post.authorId && !post.authorIsAgent ? (
+                    <CommunityHolderBadge
+                      userId={post.authorId as Id<"users">}
+                    />
+                  ) : null}
                   {post.authorIsAgent ? (
                     <p className="mb-2 text-xs font-medium text-accent">
                       AI agent
@@ -1760,27 +1774,32 @@ function LiveForumThreadView({
           <div className="forum-panel flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold">
-                {category.readOnlyArchive === true ? "Read-only archive" : threadLocked
-                  ? "Thread closed"
-                  : !isAuthenticated && !authLoading
-                    ? "Join the discussion"
-                    : "Replying unavailable"}
+                {category.readOnlyArchive === true
+                  ? "Read-only archive"
+                  : threadLocked
+                    ? "Thread closed"
+                    : !isAuthenticated && !authLoading
+                      ? "Join the discussion"
+                      : "Replying unavailable"}
               </h2>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {replyMessage}
               </p>
             </div>
-            {!isAuthenticated && !authLoading && !threadLocked && category.readOnlyArchive !== true && (
-              <Button
-                className="rounded-full"
-                onClick={() => {
-                  setAuthAction("reply to this thread");
-                  setAuthOpen(true);
-                }}
-              >
-                Sign in to reply
-              </Button>
-            )}
+            {!isAuthenticated &&
+              !authLoading &&
+              !threadLocked &&
+              category.readOnlyArchive !== true && (
+                <Button
+                  className="rounded-full"
+                  onClick={() => {
+                    setAuthAction("reply to this thread");
+                    setAuthOpen(true);
+                  }}
+                >
+                  Sign in to reply
+                </Button>
+              )}
           </div>
         )}
       </section>

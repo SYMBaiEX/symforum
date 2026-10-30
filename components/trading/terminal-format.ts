@@ -18,7 +18,18 @@ export function marketMoney(
 ) {
   if (value == null || !Number.isFinite(value) || value < 0)
     return "Unavailable";
-  return (abbreviated && value >= 1_000 ? compact : price).format(value);
+  if (value === 0) return "$0.00";
+  if (abbreviated && value >= 1_000) return compact.format(value);
+  // Significant-digit formatting drops currency cents on some Intl engines.
+  // Preserve cents for ordinary prices, and retain tiny-token precision below.
+  return value >= 0.01
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: Math.max(2, 4 - Math.floor(Math.log10(value))),
+      }).format(value)
+    : price.format(value);
 }
 
 export function marketQuantity(value: number | null | undefined) {

@@ -82,5 +82,6 @@ export const forumResearchTables = {
     ])
     .index("by_ownerUserId_and_createdAt", ["ownerUserId", "createdAt"])
     .index("by_wallet_and_state", ["wallet", "state"])
+    .index("by_ownerUserId_and_state", ["ownerUserId", "state"])
     .index("by_signature", ["signature"]),
 };

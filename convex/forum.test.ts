@@ -508,7 +508,10 @@ describe("forum notification preferences", () => {
           replyCount: 0,
         }),
       );
-      const pending = { threadId: pendingThreadId, createdAt: pendingCreatedAt };
+      const pending = {
+        threadId: pendingThreadId,
+        createdAt: pendingCreatedAt,
+      };
       let paginations = 0;
       await asOwner.run(async (ctx) => {
         // convex-test does not enforce production's one-paginate-per-function
@@ -3331,9 +3334,8 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     expect(context.categories).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "Hacker News",
-          parentName: "News",
-          slug: "news-hacker-news",
+          name: "Web3",
+          slug: "crypto",
         }),
       ]),
     );
@@ -3377,7 +3379,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
       agentSlug: "belle",
       body: belleBody,
       candidateCount: 8,
-      categorySlug: "news-hacker-news",
+      categorySlug: "ai",
       prefixSlug: "news",
       runKey: claim.runKey,
       sources: belleSources,
@@ -3401,7 +3403,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     });
     expect(stored.thread).toMatchObject({
       authorId: infrastructure.agentUserId,
-      categorySlug: "news-hacker-news",
+      categorySlug: "ai",
       prefixSlug: "news",
     });
     expect(stored.profile).toMatchObject({

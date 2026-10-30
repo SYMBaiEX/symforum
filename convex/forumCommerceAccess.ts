@@ -79,3 +79,24 @@ export async function publicCommerceThread(
   }
   return categoryId ? null : thread;
 }
+
+/** Historical posts remain readable/swappable, but archived inventory is not sold. */
+export async function promotableCommerceThread(
+  ctx: QueryCtx | MutationCtx,
+  threadId: Id<"forumThreads">,
+) {
+  const thread = await publicCommerceThread(ctx, threadId);
+  if (!thread) return null;
+  let id: Id<"forumCategories"> | undefined = thread.categoryId;
+  const seen = new Set<string>();
+  for (let depth = 0; id && depth < 8; depth++) {
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const category:
+      (Doc<"forumCategories"> & { readOnlyArchive?: boolean }) | null =
+      await ctx.db.get("forumCategories", id);
+    if (!category || category.readOnlyArchive === true) return null;
+    id = category.parentCategoryId;
+  }
+  return id ? null : thread;
+}

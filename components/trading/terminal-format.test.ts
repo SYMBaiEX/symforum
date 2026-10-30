@@ -25,6 +25,8 @@ describe("terminal public-data boundaries", () => {
     expect(marketMoney(Number.NaN)).toBe("Unavailable");
     expect(marketMoney(-1)).toBe("Unavailable");
     expect(marketMoney(0)).toBe("$0.00");
+    expect(marketMoney(0.5)).toBe("$0.50");
+    expect(marketMoney(0.0000015)).not.toBe("$0.00");
   });
   it("formats token raw amounts without floating-point balance loss", () => {
     expect(balanceLabel("12345678901234567890123456", 6)).toBe(

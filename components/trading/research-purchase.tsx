@@ -115,7 +115,9 @@ function ResearchPurchaseConnected({
     client,
     "solana:signTransaction",
   );
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(
+    () => Math.floor(Date.now() / 60_000) * 60_000,
+  );
   const config = useQuery(configRef, { now });
   const history = useQuery(historyRef, isAuthenticated ? {} : "skip");
   const quote = useAction(quoteRef),
@@ -125,7 +127,8 @@ function ResearchPurchaseConnected({
   const [open, setOpen] = useState(false),
     [prepared, setPrepared] = useState<Quote | null>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [receiptMessage, setReceiptMessage] = useState("");
   const lock = useRef(false);
   const receipt = useQuery(
     statusRef,
@@ -135,7 +138,10 @@ function ResearchPurchaseConnected({
     ["verifying", "settlement_claimed", "unknown"].includes(item.state),
   );
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    const timer = setInterval(
+      () => setNow(Math.floor(Date.now() / 60_000) * 60_000),
+      60_000,
+    );
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
@@ -160,6 +166,26 @@ function ResearchPurchaseConnected({
       clearTimeout(timer);
     };
   }, [receipt?.state, receipt?.signature, receipt?.intentKey, check]);
+  const verifySaved = async (intentKey: string) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setReceiptMessage("");
+    try {
+      setReceiptMessage(
+        (await check({ intentKey }))
+          ? "Finalized receipt verified. Your report is available below."
+          : "Finality is not proven yet. The saved payment stays protected; nothing was resent.",
+      );
+    } catch {
+      setReceiptMessage(
+        "Receipt verification is unavailable. The saved payment stays protected; nothing was resent.",
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
   const review = async () => {
     if (!connected || !linked || lock.current) return;
     lock.current = true;
@@ -317,6 +343,21 @@ function ResearchPurchaseConnected({
           )}
         </p>
       )}
+      {held?.state === "unknown" && held.signature ? (
+        <Button
+          className="mt-2"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void verifySaved(held.intentKey)}
+        >
+          Verify saved receipt
+        </Button>
+      ) : null}
+      {receiptMessage ? (
+        <p className="mt-2 text-sm" role="status">
+          {receiptMessage}
+        </p>
+      ) : null}
       {error && (
         <p className="mt-3 text-sm text-destructive" role="alert">
           {error}
@@ -328,7 +369,7 @@ function ResearchPurchaseConnected({
             Your recent research receipts
           </summary>
           <ul className="mt-3 space-y-3">
-            {history.slice(0, 5).map((item) => (
+            {history.map((item) => (
               <li
                 key={item.intentKey}
                 className="flex flex-wrap items-center justify-between gap-2"
@@ -339,6 +380,16 @@ function ResearchPurchaseConnected({
                     ? "expired quote"
                     : item.state.replaceAll("_", " ")}
                 </span>
+                {item.state === "unknown" && item.signature ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void verifySaved(item.intentKey)}
+                  >
+                    Verify saved receipt
+                  </Button>
+                ) : null}
                 {item.state === "fulfilled" ? (
                   <a
                     className="text-xs underline"

@@ -242,6 +242,43 @@ test("duplicate approval and settlement claims consume one permanent credit rese
     ),
   ).toBe(2);
 });
+
+test("protected research receipts remain discoverable beyond the recent-ten window", async () => {
+  const t = setup(),
+    a = await actor(t, 41);
+  const saved = await seed(t, a, "a".repeat(64));
+  await t.run((ctx) =>
+    ctx.db.patch("forumResearchIntents", saved, {
+      state: "unknown",
+      signature: "2".repeat(88),
+      payloadHash: "e".repeat(64),
+      createdAt: Date.now() - 86_400_000,
+    }),
+  );
+  for (let i = 100; i < 112; i++)
+    await seed(t, a, i.toString(16).padStart(64, "0"));
+  const rows = await a.client.query(query("listMine"), {});
+  expect(rows[0]).toMatchObject({
+    intentKey: "a".repeat(64),
+    state: "unknown",
+    signature: "2".repeat(88),
+  });
+  expect(rows.length).toBeLessThanOrEqual(40);
+  expect(
+    new Set(rows.map((row: { intentKey: string }) => row.intentKey)).size,
+  ).toBe(rows.length);
+  await expect(
+    a.client.mutation(mutation("claimPayment"), {
+      intentKey: (100).toString(16).padStart(64, "0"),
+      payloadHash: "e".repeat(64),
+      messageHash: "d".repeat(64),
+    }),
+  ).rejects.toThrow("protected");
+  expect(
+    (await a.client.query(query("status"), { intentKey: "a".repeat(64) }))
+      .state,
+  ).toBe("unknown");
+});
 test("expired or changed simulated message never reaches settlement claim", async () => {
   const t = setup(),
     a = await actor(t, 13),
