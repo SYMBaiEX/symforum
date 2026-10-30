@@ -1,5 +1,6 @@
 "use node";
 
+import { BREAKING_NEWS_INSTRUCTIONS } from "../lib/forum-breaking-news";
 import { FORUM_EDITORIAL_CONTRACT } from "../lib/forum-posting-prompts";
 import { v } from "convex/values";
 import { PUBLICATION_VOICE_GUARDRAILS } from "../lib/agent-publication-quality";
@@ -30,6 +31,8 @@ const ROSTER_PROMPT_VERSION =
 type ForumAgentStyleSeed = {
   runDate: string;
   slot: number;
+  alphaSourceKey?: string;
+  alphaBoard?: "crypto" | "crypto-pumpfun" | "crypto-bags";
 };
 
 export function forumResearchConfigForRosterAgent(
@@ -47,17 +50,25 @@ export function forumResearchConfigForRosterAgent(
     styleSeed.slot,
   );
   const variationSummary = forumAgentStyleVariationSummary(variation);
-  const alphaDesk =
+  const assignedDesk =
     process.env.FORUM_ALPHA_EDITORIAL_ENABLED === "true"
       ? alphaDeskForAgent(entry.slug)
       : undefined;
-  const deskInstructions = alphaDesk ? alphaDeskInstructions(alphaDesk) : "";
+  const alphaDesk =
+    assignedDesk && styleSeed.alphaSourceKey && styleSeed.alphaBoard
+      ? { ...assignedDesk, board: styleSeed.alphaBoard }
+      : assignedDesk;
+  const breaking = alphaDesk && styleSeed.alphaSourceKey;
+  const deskInstructions = alphaDesk
+    ? `${alphaDeskInstructions(alphaDesk)}${breaking ? `\n${BREAKING_NEWS_INSTRUCTIONS}` : ""}`
+    : "";
   const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile} ${voiceSummary}`;
 
   return {
-    dailySlots: 1,
+    dailySlots: breaking ? 2 : 1,
+    alphaSourceKey: breaking ? styleSeed.alphaSourceKey : undefined,
     name: entry.name,
-    promptVersion: `${ROSTER_PROMPT_VERSION}${alphaDesk ? ":alpha-v1:brief-v2" : ""}:${entry.slug}:${variation.key}`,
+    promptVersion: `${ROSTER_PROMPT_VERSION}${alphaDesk ? `:alpha-v1:brief-v2${breaking ? ":breaking-v1" : ""}` : ""}:${entry.slug}:${variation.key}`,
     slug: entry.slug,
     ...(alphaDesk
       ? {
@@ -152,8 +163,22 @@ export const runDailySlot = internalAction({
     runDate: v.optional(v.string()),
     workflowManaged: v.optional(v.boolean()),
     workflowId: v.optional(v.string()),
+    alphaSourceKey: v.optional(v.string()),
+    alphaBoard: v.optional(
+      v.union(
+        v.literal("crypto"),
+        v.literal("crypto-pumpfun"),
+        v.literal("crypto-bags"),
+      ),
+    ),
   },
   handler: async (ctx, args): Promise<ForumResearchRunResult> => {
+    if (
+      args.alphaSourceKey &&
+      (process.env.FORUM_BREAKING_NEWS_ENABLED !== "true" ||
+        process.env.FORUM_ALPHA_EDITORIAL_ENABLED !== "true")
+    )
+      return { status: "skipped", reason: "breaking-desk-disabled" };
     const entry = forumAgentRosterEntry(args.agentSlug);
     if (
       entry === undefined ||
@@ -176,6 +201,8 @@ export const runDailySlot = internalAction({
       forumResearchConfigForRosterAgent(entry, {
         runDate,
         slot: args.slot,
+        alphaSourceKey: args.alphaSourceKey,
+        alphaBoard: args.alphaBoard,
       }),
     );
   },

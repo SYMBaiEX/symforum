@@ -131,6 +131,7 @@ export const xAgentTables = {
     post: v.optional(xOfficialPost),
     ownerRequested: v.optional(v.boolean()),
     approvedText: v.optional(v.string()),
+    alphaDeliveryId: v.optional(v.id("forumAlphaDeliveries")),
     status: v.union(
       v.literal("queued"),
       v.literal("sending"),

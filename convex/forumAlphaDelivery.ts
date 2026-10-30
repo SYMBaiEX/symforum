@@ -6,7 +6,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { sealX, unsealX } from "../lib/x-agent-crypto";
 import {
   ALPHA_X_USER_ID,
-  ALPHA_SOCIAL_INTERVAL_MS,
 } from "../lib/forum-alpha-editorial";
 import { X_ACTIVITY_SCOPES } from "../lib/x-agent-policy";
 import {
@@ -144,6 +143,7 @@ export const deliver = internalAction({
       });
       return null;
     }
+    if (await ctx.runMutation(internal.forumBreakingX.queue, { id })) return null;
     const c = await ctx.runMutation(internal.forumAlphaDistribution.claimX, {
       id,
     });
@@ -184,10 +184,10 @@ export const deliver = internalAction({
           throw Error("Invalid timeline receipt");
         lastAt = Math.max(lastAt, at);
       }
-      if (lastAt + ALPHA_SOCIAL_INTERVAL_MS > Date.now()) {
+      if (lastAt + c.intervalMs > Date.now()) {
         await ctx.runMutation(internal.forumAlphaDistribution.deferX, {
           id,
-          notBefore: lastAt + ALPHA_SOCIAL_INTERVAL_MS,
+          notBefore: lastAt + c.intervalMs,
         });
         return null;
       }

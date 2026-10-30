@@ -3,7 +3,8 @@
 import { convexTest } from "convex-test";
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
+import { RateLimiter, DAY } from "@convex-dev/rate-limiter";
+import { components, api, internal } from "./_generated/api";
 import schema from "./schema";
 import { sealX } from "../lib/x-agent-crypto";
 import { queueAlphaPublication } from "./forumAlphaDistribution";
@@ -514,4 +515,204 @@ test("owner verification stores the full project identity for indirect coverage"
       proofUrl: "https://project.org/",
     }),
   ).rejects.toThrow();
+});
+
+async function breakingQueued() {
+  vi.stubEnv("FORUM_BREAKING_NEWS_ENABLED", "true");
+  vi.stubEnv("FORUM_ALPHA_EDITORIAL_ENABLED", "true");
+  vi.stubEnv("FORUM_ALPHA_LEAD_MINUTES", "15");
+  const s = await setup();
+  await s.t.run(async (ctx) => {
+    await ctx.db.patch("forumThreads", s.sourceThreadId, {
+      title: "Solana launches a new mainnet integration",
+      body: "Solana announced a new integration. The deployment is available on mainnet.",
+    });
+    await queueAlphaPublication(ctx, {
+      threadId: s.sourceThreadId,
+      promptVersion: "roster:alpha-v1:brief-v2:breaking-v1",
+      qualityScore: 95,
+      sourcePublishedAt: Date.now() - 60_000,
+      sourceUrls: ["https://solana.com/news/integration"],
+    });
+  });
+  const row = await s.t.run((ctx) =>
+    ctx.db.query("forumAlphaDeliveries").first(),
+  );
+  expect(row?.newsPriority).toBe("urgent");
+  await s.t.mutation(internal.forumAlphaDistribution.claimTelegram, {
+    id: row!._id,
+  });
+  await s.t.mutation(internal.forumAlphaDistribution.finishTelegram, {
+    id: row!._id,
+    messageId: 123,
+  });
+  const { accountId, activityId } = await s.t.run(async (ctx) => {
+    const accountId = await ctx.db.insert("xAgentAccounts", {
+      agentSlug: "nyx",
+      ownerUserId: s.ownerId,
+      expectedUsername: "symbaiex_nyx",
+      epoch: 1,
+      connected: true,
+      mode: "automatic",
+      xUserId: "1234",
+      username: "symbaiex_nyx",
+      grant: { ciphertext: "sealed", nonce: "nonce" },
+      scope: "tweet.read users.read offline.access tweet.write",
+      expiresAt: Date.now() + 3600_000,
+      updatedAt: Date.now(),
+    });
+    const activityId = await ctx.db.insert("xAgentActivity", {
+      accountId,
+      epoch: 1,
+      enabled: true,
+      enabledAt: Date.now(),
+      nextPollAt: Date.now(),
+      options: {
+        originals: true,
+        reposts: true,
+        comments: true,
+        aiRepliesApproved: true,
+      },
+      cursors: [],
+    });
+    return { accountId, activityId };
+  });
+  return { ...s, id: row!._id, accountId, activityId };
+}
+test("breaking news uses NyX immediately after confirmed Telegram, once, through the existing worker", async () => {
+  const s = await breakingQueued();
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("forumAlphaDeliveries", s.id)))!
+      .notBefore,
+  ).toBeLessThanOrEqual(Date.now());
+  // It must never fall through to the @symforum publisher.
+  expect(
+    await s.t.mutation(internal.forumAlphaDistribution.claimX, { id: s.id }),
+  ).toBeNull();
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  const ops = await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(5));
+  expect(ops).toHaveLength(1);
+  expect(ops[0].accountId).toBe(s.accountId);
+  expect(ops[0].alphaDeliveryId).toBe(s.id);
+  const args = { activityId: s.activityId, lease: "breaking-test" };
+  await s.t.mutation(internal.xAgentActivityData.claim, args);
+  expect(
+    await s.t.mutation(internal.xAgentActivityData.claimSend, {
+      ...args,
+      operationId: ops[0]._id,
+    }),
+  ).toEqual({ text: expect.stringContaining("Solana launches") });
+  await s.t.mutation(internal.xAgentActivityData.finishSend, {
+    ...args,
+    operationId: ops[0]._id,
+    confirmed: true,
+    resultId: "2116000000000000001",
+  });
+  const row = await s.t.run((ctx) => ctx.db.get("forumAlphaDeliveries", s.id));
+  expect(row?.xStatus).toBe("sent");
+  expect(row?.xPostId).toBe("2116000000000000001");
+  expect(row?.xSentAt).toBeTypeOf("number");
+});
+test("paused NyX never posts, and edited source stops an already queued breaking operation", async () => {
+  const s = await breakingQueued();
+  await s.t.run((ctx) =>
+    ctx.db.patch("xAgentAccounts", s.accountId, { mode: "drafts" }),
+  );
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  expect(
+    await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(5)),
+  ).toHaveLength(0);
+  await s.t.run((ctx) =>
+    ctx.db.patch("xAgentAccounts", s.accountId, { mode: "automatic" }),
+  );
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  const op = await s.t.run((ctx) => ctx.db.query("xAgentOperations").first());
+  await s.t.run((ctx) =>
+    ctx.db.patch("forumThreads", s.sourceThreadId, {
+      body: "Edited after review",
+    }),
+  );
+  const args = { activityId: s.activityId, lease: "source-edit" };
+  await s.t.mutation(internal.xAgentActivityData.claim, args);
+  expect(
+    await s.t.mutation(internal.xAgentActivityData.claimSend, {
+      ...args,
+      operationId: op!._id,
+    }),
+  ).toBeNull();
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  expect(
+    await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(5)),
+  ).toHaveLength(1);
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("xAgentOperations", op!._id)))!.status,
+  ).toBe("held");
+});
+test("routine news stays on Forum and Telegram without rearming X after Telegram delivery", async () => {
+  vi.stubEnv("FORUM_BREAKING_NEWS_ENABLED", "true");
+  const s = await setup();
+  await s.t.run(async (ctx) => {
+    await ctx.db.patch("forumThreads", s.sourceThreadId, {
+      title: "Solana integration adds another deployment",
+      body: "The Solana deployment was announced four hours ago.",
+    });
+    await queueAlphaPublication(ctx, {
+      threadId: s.sourceThreadId,
+      promptVersion: "roster:alpha-v1:breaking-v1",
+      qualityScore: 95,
+      sourcePublishedAt: Date.now() - 4 * 3600_000,
+      sourceUrls: ["https://solana.com/news/old"],
+    });
+  });
+  const row = await s.t.run((ctx) =>
+    ctx.db.query("forumAlphaDeliveries").first(),
+  );
+  expect(row?.newsPriority).toBe("routine");
+  expect(row?.xStatus).toBe("skipped");
+  await s.t.mutation(internal.forumAlphaDistribution.claimTelegram, {
+    id: row!._id,
+  });
+  await s.t.mutation(internal.forumAlphaDistribution.finishTelegram, {
+    id: row!._id,
+    messageId: 234,
+  });
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("forumAlphaDeliveries", row!._id)))
+      ?.xStatus,
+  ).toBe("skipped");
+});
+
+test("NyX breaking news shares the existing six-original daily quota and never retries an uncertain send", async () => {
+  const s = await breakingQueued();
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  const op = await s.t.run((ctx) => ctx.db.query("xAgentOperations").first());
+  const shared = new RateLimiter(components.rateLimiter, {
+    xOriginals: { kind: "fixed window", rate: 6, period: DAY },
+  });
+  await s.t.run(async (ctx) => {
+    for (let i = 0; i < 6; i++)
+      await shared.limit(ctx, "xOriginals", { key: s.accountId });
+  });
+  const args = { activityId: s.activityId, lease: "daily-limit" };
+  await s.t.mutation(internal.xAgentActivityData.claim, args);
+  expect(
+    await s.t.mutation(internal.xAgentActivityData.claimSend, {
+      ...args,
+      operationId: op!._id,
+    }),
+  ).toBeNull();
+  expect(
+    (await s.t.run((ctx) => ctx.db.get("xAgentOperations", op!._id)))?.status,
+  ).toBe("queued");
+  await s.t.run((ctx) =>
+    ctx.db.patch("xAgentOperations", op!._id, {
+      status: "held",
+      issue: "uncertain",
+    }),
+  );
+  await s.t.mutation(internal.forumBreakingX.queue, { id: s.id });
+  expect(
+    await s.t.run((ctx) => ctx.db.query("xAgentOperations").take(10)),
+  ).toHaveLength(1);
 });

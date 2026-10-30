@@ -2090,3 +2090,10 @@ function discoverySelection(): Parameters<
     contentFormat: "discovery",
   };
 }
+
+test("alpha feeds do not mistake an Atom modified timestamp for publication", () => {
+  const xml = '<feed><entry><title>Solana release</title><link href="https://solana.com/news/release"/><updated>2026-10-29T12:00:00Z</updated><summary>Solana mainnet release</summary></entry></feed>';
+  const rows = parseFeedXml(xml, { boardSlugs: ["crypto"], feedUrl: "https://solana.com/feed", sourceName: "Solana", publisherUrls: true });
+  expect(rows).toHaveLength(1);
+  expect(rows[0].publishedAt).toBeUndefined();
+});

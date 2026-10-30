@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
-crons.interval("shared fresh Solana web discovery", { minutes: 30 }, internal.sukiForumAgent.refreshAlphaDiscovery, {});
+crons.interval("shared fresh Solana web discovery", { minutes: 5 }, internal.sukiForumAgent.refreshAlphaDiscovery, {});
 crons.interval("Telegram first Solana highlights", { minutes: 1 }, internal.forumAlphaDistribution.tick, {});
 crons.interval("official-account X reposts and approved AI comments", { minutes: 1 }, internal.xAgentActivity.tick, {});
 crons.interval("expire X account authorizations and hold stale drafts", { minutes: 10 }, internal.xAgentAccounts.cleanup, {});

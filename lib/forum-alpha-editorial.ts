@@ -133,7 +133,7 @@ const SOLANA =
 const PUMP = /pump[.\s-]?fun/i;
 const BAGS = /bags\.fm|\bbags\s+(?:app|ecosystem|launchpad|platform|token)\b/i;
 const EVENT =
-  /\b(?:rais(?:e[sd]?|ing)|fund(?:ing|ed|raise)|seed|series\s+[a-f]|launch(?:es|ed|ing)?|announc\w*|releas\w*|integrat\w*|partner\w*|mainnet|testnet|upgrade\w*|deploy\w*|adoption|users|transactions|volume|hackathon|grant\w*)\b/i;
+  /\b(?:rais(?:e[sd]?|ing)|fund(?:ing|ed|raise)|seed|series\s+[a-f]|launch(?:es|ed|ing)?|announc\w*|releas\w*|integrat\w*|partner\w*|mainnet|testnet|upgrade\w*|deploy\w*|adoption|users|transactions|volume|hackathon|grant\w*|outage|halt(?:ed)?|restart(?:ed)?|emergency|acquir(?:es|ed))\b/i;
 
 /** Bing's public RSS links wrap publisher URLs; never request its click tracker. */
 export function alphaPublisherUrl(value: string): string | null {
@@ -214,6 +214,11 @@ export type ResearchFeed = {
 const search = (query: string) =>
   `https://www.bing.com/news/search?${new URLSearchParams({ q: query, qft: 'interval="7"', format: "rss", setlang: "en-US" })}`;
 export const ALPHA_RESEARCH_FEEDS: readonly ResearchFeed[] = [
+  {
+    name: "Solana original network status",
+    url: "https://status.solana.com/history.rss",
+    boardSlugs: ["crypto"],
+  },
   {
     name: "Solana announcement web discovery",
     url: search(
