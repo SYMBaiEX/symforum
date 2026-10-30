@@ -66,6 +66,36 @@ afterEach(() => {
 });
 
 describe("Solana Tracker eligible indexed rankings", () => {
+  test("uses documented cap bounds inside the same request and rejects inclusive upper-bound/out-of-band rows", async () => {
+    const options = setup([
+      row({ marketCapUsd: 50_000 }),
+      row({ mint: KIMCHI, marketCapUsd: 100_000, volume_1h: 50_000 }),
+      row({ mint: mint(4), marketCapUsd: 49999, volume_1h: 40_000 }),
+    ]);
+    const result = await fetchTokenRankings({ ...options, capBand: "50k100k" });
+    expect(options.reserveRequest).toHaveBeenCalledOnce();
+    expect(options.fetch).toHaveBeenCalledOnce();
+    const url = new URL(String(options.fetch.mock.calls[0][0]));
+    expect(url.searchParams.get("minMarketCap")).toBe("50000");
+    expect(url.searchParams.get("maxMarketCap")).toBe("100000");
+    expect(result.map((row) => row.mint)).toEqual([SYMF]);
+    expect(result[0].warnings?.join(" ")).toContain("restricted to");
+    expect(result[0].warnings?.join(" ")).toContain("within that segment");
+  });
+  test("keeps the requested 500k–1m segment distinct from neighboring caps", async () => {
+    const options = setup([
+      row({ marketCapUsd: 750_000 }),
+      row({ mint: KIMCHI, marketCapUsd: 1_000_000 }),
+    ]);
+    const result = await fetchTokenRankings({ ...options, capBand: "500k1m" });
+    expect(result).toHaveLength(1);
+    expect(result[0].marketCapUsd).toBe(750_000);
+    expect(
+      new URL(String(options.fetch.mock.calls[0][0])).searchParams.get(
+        "minMarketCap",
+      ),
+    ).toBe("500000");
+  });
   test("uses one reserved, fixed-origin, nonredirecting request with exact search parameters", async () => {
     const options = setup();
     const result = await fetchTokenRankings(options);

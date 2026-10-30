@@ -6,6 +6,7 @@ import type { TokenSnapshot } from "../lib/token-alpha";
 import { OPENROUTER_TOKEN_SCOUT_MODEL } from "../lib/ai-models";
 import { SolanaTrackerError } from "../lib/solana-tracker";
 import { SolanaMintVerificationError } from "../lib/solana-mint-validation";
+import { discoveryBandForSlot } from "../lib/forum-terminal-data";
 
 const mocks = vi.hoisted(() => ({
   rankings: vi.fn(),
@@ -188,6 +189,23 @@ describe("token pilot orchestration", () => {
     expect(mocks.route).not.toHaveBeenCalled();
     expect(mocks.generate).not.toHaveBeenCalled();
     expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(0);
+    expect(calls(ctx, "forumTerminalData:recordSnapshots")).toHaveLength(0);
+    expect(args.capBand).toBeUndefined();
+  });
+  test("ordinary runs rotate an existing ranking slot and cache the verified sample without adding provider/model calls", async () => {
+    const ctx = context();
+    expect((await runTokenPilot(ctx.ctx, { platform: "bags" })).status).toBe(
+      "published",
+    );
+    expect(mocks.rankings).toHaveBeenCalledTimes(1);
+    expect(mocks.rankings.mock.calls[0][0].capBand).toBe(
+      discoveryBandForSlot(NOW, "bags"),
+    );
+    expect(calls(ctx, "forumTerminalData:recordSnapshots")).toEqual([
+      { snapshots: [snapshot] },
+    ]);
+    expect(mocks.generate).toHaveBeenCalledTimes(2); // unchanged generation + independent review
+    expect(calls(ctx, "forum:publishTokenForumContribution")).toHaveLength(1);
   });
   test.each(["rankings", "mint-verification"] as const)(
     "data probe reports only the safe %s stage on failure",

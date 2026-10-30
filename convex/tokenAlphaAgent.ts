@@ -39,6 +39,8 @@ import {
 import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { tokenPlatformValidator } from "./tokenAlphaSchema";
+import { discoveryBandForSlot } from "../lib/forum-terminal-data";
+import type { MarketCapBand } from "../lib/forum-market-cap";
 
 const analysisSchema = z.object({ analysis: z.string().min(80).max(700) });
 const reviewSchema = z.object({
@@ -89,6 +91,7 @@ async function loadTokenCandidates(
   ctx: ActionCtx,
   platform: TokenPlatform,
   stage: (value: DataStage) => void,
+  capBand?: MarketCapBand,
 ) {
   stage("configuration");
   if (!env.SOLANA_TRACKER_API_KEY || env.ELIZA_RUNTIME_MODE !== "live")
@@ -98,6 +101,7 @@ async function loadTokenCandidates(
     apiKey: env.SOLANA_TRACKER_API_KEY,
     platform,
     now: Date.now(),
+    ...(capBand ? { capBand } : {}),
     reserveRequest: async () =>
       await ctx.runMutation(internal.tokenAlphaData.reserveApiRequest, {
         kind: "ranking",
@@ -443,8 +447,18 @@ export async function runTokenPilot(
   try {
     const apiKey = env.SOLANA_TRACKER_API_KEY;
     if (!apiKey) throw new Error("token_pilot_configuration_unavailable");
-    const { candidates } = await loadTokenCandidates(ctx, platform, (value) => {
-      phase = value;
+    const { candidates } = await loadTokenCandidates(
+      ctx,
+      platform,
+      (value) => {
+        phase = value;
+      },
+      discoveryBandForSlot(Date.now(), platform),
+    );
+    // Cache all verified candidates inside this already-reserved ordinary slot.
+    // Diagnostic/probe calls never update the public feed or generate alerts.
+    await ctx.runMutation(internal.forumTerminalData.recordSnapshots, {
+      snapshots: candidates,
     });
     const rankingEvidence = candidates.map(
       ({ mint, volume1hUsd, sourceRank, metricsAsOf }) => ({
