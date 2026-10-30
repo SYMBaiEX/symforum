@@ -5,6 +5,7 @@ import { useQuery, useAction } from "convex/react";
 import { useTheme } from "next-themes";
 import { Copy, Check, ArrowUpRight, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SYMF_TOKEN } from "@/lib/symf-token";
 import { ForumLink } from "@/components/forum/forum-link";
 import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
@@ -29,7 +30,17 @@ export function TokenDetail({
   token: MarketChoice;
   now: number;
 }) {
-  const market = useQuery(terminalApi.getMarket, { mint: token.mint, now });
+  const indexed = useQuery(terminalApi.getMarket, { mint: token.mint, now });
+  const market = indexed && indexed.mint !== token.mint ? null : indexed;
+  const displayToken =
+    token.symbol === "TOKEN" && market
+      ? {
+          ...token,
+          symbol: market.symbol,
+          name: market.name,
+          imageUrl: market.imageUrl,
+        }
+      : token;
   const { resolvedTheme } = useTheme();
   const [copy, setCopy] = useState<"copied" | "failed" | null>(null);
   const [liveMarket, setLiveMarket] = useState<ChartMarketData | null>(null);
@@ -80,16 +91,54 @@ export function TokenDetail({
     const href = safeExternalUrl(url);
     return href ? [{ label, href }] : [];
   });
+  const discussionPath =
+    (market?.threadUrl ? safeForumThread(market.threadUrl) : null) ??
+    (token.mint === SYMF_TOKEN.mint
+      ? safeForumThread(SYMF_TOKEN.announcementPath)
+      : null);
   return (
-    <section className={styles.panel} aria-labelledby="terminal-token-title">
+    <section
+      className={styles.tokenSurface}
+      aria-labelledby="terminal-token-title"
+    >
       <div className={styles.tokenHead}>
         <div className={styles.tokenTop}>
           <div className={styles.identity}>
-            <TokenLogo key={token.mint} token={token} />
+            <TokenLogo key={token.mint} token={displayToken} />
             <div>
-              <h2 id="terminal-token-title">${token.symbol}</h2>
-              <p>{token.name}</p>
+              <h2 id="terminal-token-title">
+                {displayToken.symbol === "TOKEN"
+                  ? "Selected token"
+                  : `$${displayToken.symbol}`}
+              </h2>
+              <p>{displayToken.name}</p>
             </div>
+          </div>
+          <div className={styles.mint}>
+            <span className="sr-only">Mint</span>
+            <code title={token.mint}>{token.mint}</code>
+            <button
+              className={`${styles.iconButton} focus-ring`}
+              type="button"
+              aria-label="Copy selected token mint"
+              onClick={() => void copyMint()}
+            >
+              {copy === "copied" ? (
+                <Check aria-hidden="true" />
+              ) : (
+                <Copy aria-hidden="true" />
+              )}
+            </button>
+            <span
+              role="status"
+              className={copy === "failed" ? styles.muted : "sr-only"}
+            >
+              {copy === "copied"
+                ? "Mint copied."
+                : copy === "failed"
+                  ? "Select the mint above to copy it."
+                  : ""}
+            </span>
           </div>
           <dl className={styles.price}>
             <div>
@@ -101,32 +150,6 @@ export function TokenDetail({
               </dd>
             </div>
           </dl>
-        </div>
-        <div className={styles.mint}>
-          <span>Mint</span>
-          <code>{token.mint}</code>
-          <button
-            className={`${styles.iconButton} focus-ring`}
-            type="button"
-            aria-label="Copy selected token mint"
-            onClick={() => void copyMint()}
-          >
-            {copy === "copied" ? (
-              <Check aria-hidden="true" />
-            ) : (
-              <Copy aria-hidden="true" />
-            )}
-          </button>
-          <span
-            role="status"
-            className={copy === "failed" ? styles.muted : "sr-only"}
-          >
-            {copy === "copied"
-              ? "Mint copied."
-              : copy === "failed"
-                ? "Select the mint above to copy it."
-                : ""}
-          </span>
         </div>
         <dl className={styles.topMetrics}>
           {[metrics[1], metrics[2], metrics[6], metrics[7]].map(
@@ -143,16 +166,16 @@ export function TokenDetail({
           {market
             ? now - market.metricsAsOf > 15 * 60_000
               ? " · 1h change is a stale sample"
-              : " · 1h change uses the indexed sample"
+              : " · 1h sampled"
             : " · 1h change unavailable"}
-          . Not an executable quote.
+          . Not a quote.
         </p>
       </div>
       <TokenPriceChart
         compact
         key={token.mint}
         mint={token.mint}
-        symbol={token.symbol}
+        symbol={displayToken.symbol}
         light={resolvedTheme === "light"}
         onMarket={setLiveMarket}
       />
@@ -200,27 +223,22 @@ export function TokenDetail({
               </a>
             ))}
           </div>
-          {market?.threadUrl && safeForumThread(market.threadUrl) ? (
-            <ForumLink
-              href={safeForumThread(market.threadUrl)!}
-              className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
-            >
-              Read the token discussion
-              <ArrowUpRight className="size-4" aria-hidden="true" />
-            </ForumLink>
-          ) : (
-            <p className={`${styles.muted} mt-3`}>
-              No canonical discussion is indexed for this mint yet.{" "}
-              <ForumLink
-                className="underline underline-offset-4"
-                href="/forum/crypto"
-              >
-                Browse Web3
-              </ForumLink>
-            </p>
-          )}
         </div>
       </details>
+      <div className={styles.discussionBar}>
+        <span>From the forum</span>
+        {discussionPath ? (
+          <ForumLink href={discussionPath} className="focus-ring">
+            Read the token discussion{" "}
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </ForumLink>
+        ) : (
+          <ForumLink href="/forum/crypto" className="focus-ring">
+            Browse Web3 discussions{" "}
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </ForumLink>
+        )}
+      </div>
     </section>
   );
 }
