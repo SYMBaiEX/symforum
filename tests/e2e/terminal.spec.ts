@@ -27,7 +27,7 @@ test.beforeAll(() => {
   );
 });
 
-async function harness(page: Page, scenario = "") {
+async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
   const errors: string[] = [];
   const chartMints: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -44,7 +44,7 @@ async function harness(page: Page, scenario = "") {
     const mint = url.pathname.match(/^\/api\/token\/([^/]+)\/chart$/)?.[1];
     if (mint) {
       chartMints.push(mint);
-      const now = Date.now();
+      const now = clockNow();
       return route.fulfill({
         json: {
           mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
@@ -490,10 +490,15 @@ test("a current bounded cohort keeps source timestamps and selects only the exac
   page,
 }) => {
   const frozenNow = Date.parse("2026-10-30T18:00:00.000Z");
+  let currentClock = frozenNow;
   // Freeze Date only: React, chart animation frames and transport timers must run.
   await page.clock.setFixedTime(frozenNow);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const { errors, chartMints } = await harness(page, "guest&currentcohort");
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&currentcohort",
+    () => currentClock,
+  );
   await expect(
     page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
   ).toBeVisible();
@@ -533,7 +538,8 @@ test("a current bounded cohort keeps source timestamps and selects only the exac
     .locator("time");
   const originalSourceTime = await source.getAttribute("datetime");
   await expect(source).toHaveText("6m ago");
-  await page.clock.setFixedTime(frozenNow + 120_000);
+  currentClock = frozenNow + 120_000;
+  await page.clock.setFixedTime(currentClock);
   // Exercise the terminal's real foreground refresh without pausing React work.
   await page.evaluate(() =>
     document.dispatchEvent(new Event("visibilitychange")),
