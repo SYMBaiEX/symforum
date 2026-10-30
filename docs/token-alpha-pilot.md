@@ -11,8 +11,9 @@ Convex owns the hourly schedule, identities, source snapshots, private drafts,
 review decisions, spending reservations and atomic forum publication. The
 existing ElizaOS container generates only the bounded qualitative analysis and
 independent review. It has no scheduling or publishing credentials. Both steps
-explicitly request `openai/gpt-6-luna` under the existing shared **$0.75/day**
-model budget. The Standard OpenAI endpoint is pinned with provider fallback
+explicitly request `openai/gpt-6-luna` under the existing shared model budget.
+This feed change does not alter its configured amount. The Standard OpenAI
+endpoint is pinned with provider fallback
 disabled and enforced input/output price ceilings of $0.20/$0.50 per million
 tokens. No alternate paid route or automatic ambiguous-outcome retry is allowed.
 The two scouts' draft/review stages are explicitly admitted by both transports;

@@ -166,7 +166,7 @@
 .scroll th.tokenColumn {
   z-index: 3;
 }
-.tokenButton {
+.assetChoice {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -176,17 +176,17 @@
   border-radius: 4px;
   text-align: left;
 }
-.tokenButton > span:first-child {
+.assetChoice > span:first-child {
   flex: 0 0 24px;
   width: 24px;
   height: 24px;
 }
-.tokenButton > span:last-child {
+.assetChoice > span:last-child {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
-.tokenButton strong {
+.assetChoice strong {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -196,7 +196,7 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.tokenButton small {
+.assetChoice small {
   display: block;
   max-width: 104px;
   overflow: hidden;
@@ -205,7 +205,7 @@
   white-space: nowrap;
   font-size: 11px;
 }
-.tokenButton code {
+.assetChoice code {
   color: hsl(var(--muted-foreground));
   font-family: var(--font-geist-mono), monospace;
   font-size: 11px;
@@ -326,10 +326,10 @@
     min-width: 172px;
     max-width: 180px;
   }
-  .tokenButton {
+  .assetChoice {
     gap: 8px;
   }
-  .tokenButton small {
+  .assetChoice small {
     max-width: 65px;
   }
   .observation a {
@@ -341,7 +341,7 @@
   .toolbar .search input,
   .pinned button,
   .scroll th button,
-  .tokenButton,
+  .assetChoice,
   .observation a {
     min-height: 44px;
   }
