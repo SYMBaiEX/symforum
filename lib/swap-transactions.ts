@@ -34,6 +34,7 @@ import {
   getCloseAccountInstruction,
 } from "@solana-program/token";
 import { getBurnCheckedInstruction } from "@solana-program/token-2022";
+import { SwapRpcError } from "./swap-preparation-errors";
 import {
   normalizeManagedOrder,
   JUPITER_REFERRAL_PROGRAM,
@@ -549,15 +550,25 @@ export async function prepareManagedSwap(
       Number(simulation.value.unitsConsumed) <= MAX_UNITS,
     "Simulation failed. Nothing was signed or sent.",
   );
-  const fee = await swapRpc<{ value: number | null }>(
-    config.rpcUrl,
-    "getFeeForMessage",
-    [
-      getBase64Decoder().decode(tx.messageBytes),
-      { commitment: "confirmed", minContextSlot: simulation.context.slot },
-    ],
-    fetcher,
-  );
+  const feeArgs = [
+    getBase64Decoder().decode(tx.messageBytes),
+    { commitment: "confirmed", minContextSlot: simulation.context.slot },
+  ];
+  let fee: { value: number | null };
+  try {
+    fee = await swapRpc(config.rpcUrl, "getFeeForMessage", feeArgs, fetcher);
+  } catch (error) {
+    // A single read-only retry for an unavailable/lagging RPC replica; keep
+    // the same exact message and minimum slot. Never retry signing/execute.
+    if (
+      !(error instanceof SwapRpcError) ||
+      error.code !== "rpc_unavailable" ||
+      (error.rpcCode !== null && ![-32016, -32005].includes(error.rpcCode))
+    )
+      throw error;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    fee = await swapRpc(config.rpcUrl, "getFeeForMessage", feeArgs, fetcher);
+  }
   requireCondition(
     Number.isSafeInteger(fee.value) &&
       Number(fee.value) >= 0 &&

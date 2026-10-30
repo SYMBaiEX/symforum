@@ -655,13 +655,23 @@ export const rpcHealthCheck = internalAction({
   },
 });
 export const reserveUnsignedDiagnostic = internalMutation({
-  args: { managed: v.optional(v.literal(true)) },
+  args: {
+    managed: v.optional(v.literal(true)),
+    verification: v.optional(v.literal("fee-lookup-v2")),
+  },
   returns: v.boolean(),
   handler: async (ctx, args) => {
+    if (args.verification && !args.managed) return false;
     const once = await commerceLimiter.limit(
       ctx,
       "commerceUnsignedDiagnostic",
-      { key: args.managed ? "operator-managed-order-v1" : "operator-node-v1" },
+      {
+        key: args.verification
+          ? "operator-managed-fee-lookup-v2"
+          : args.managed
+            ? "operator-managed-order-v1"
+            : "operator-node-v1",
+      },
     );
     if (!once.ok) return false;
     const provider = await commerceLimiter.limit(

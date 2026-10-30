@@ -19,6 +19,7 @@ export type SwapPreparationIssue = keyof typeof SWAP_PREPARATION_MESSAGES;
 export class SwapRpcError extends Error {
   constructor(
     readonly code: "rpc_blocked" | "rpc_rate_limited" | "rpc_unavailable",
+    readonly rpcCode: number | null = null,
   ) {
     super(SWAP_PREPARATION_MESSAGES[code]);
     this.name = "SwapRpcError";

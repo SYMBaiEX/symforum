@@ -91,9 +91,13 @@ export function normalizeManagedOrder(
     minimum <= out &&
       minimum >= (out * BigInt(10_000 - request.slippageBps)) / 10_000n,
   );
-  const impact = Number(order.priceImpactPct);
+  const impact =
+    typeof order.priceImpact === "number"
+      ? order.priceImpact
+      : Number(order.priceImpactPct) * 100;
   requireValue(
-    typeof order.priceImpactPct === "string" &&
+    (typeof order.priceImpact === "number" ||
+      typeof order.priceImpactPct === "string") &&
       Number.isFinite(impact) &&
       Math.abs(impact) * 100 <= MAX_PRICE_IMPACT_BPS,
   );
@@ -145,7 +149,7 @@ export function normalizeManagedOrder(
       Number(order.lastValidBlockHeight) > 0,
   );
   const expiry =
-    order.expireAt === undefined
+    order.expireAt == null
       ? now + SWAP_QUOTE_TTL_MS
       : Date.parse(String(order.expireAt));
   requireValue(Number.isFinite(expiry) && expiry > now);

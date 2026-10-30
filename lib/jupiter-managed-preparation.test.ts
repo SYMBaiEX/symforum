@@ -258,3 +258,46 @@ test.each([
     expect(f.calls).not.toContain("sendTransaction");
   },
 );
+
+test("a lagging fee replica gets one read-only retry with identical message and slot, not another simulation", async () => {
+  const f = await fixture();
+  const fees: unknown[] = [];
+  const fetcher: typeof fetch = async (url, init) => {
+    const input = JSON.parse(String(init?.body));
+    if (input.method === "getFeeForMessage") {
+      fees.push(input.params);
+      if (fees.length === 1)
+        return Response.json({
+          jsonrpc: "2.0",
+          id: 1,
+          error: { code: -32016, message: "private provider body" },
+        });
+    }
+    return f.fetcher(url, init);
+  };
+  await prepareManagedSwap(f.quote, f.config, fetcher);
+  expect(fees).toHaveLength(2);
+  expect(fees[0]).toEqual(fees[1]);
+  expect(f.calls.filter((x) => x === "simulateTransaction")).toHaveLength(1);
+});
+
+test("invalid RPC fee requests fail closed without a read retry or provider text", async () => {
+  const f = await fixture();
+  let fees = 0;
+  const fetcher: typeof fetch = async (url, init) => {
+    const input = JSON.parse(String(init?.body));
+    if (input.method === "getFeeForMessage") {
+      fees++;
+      return Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { code: -32602, message: "private provider body" },
+      });
+    }
+    return f.fetcher(url, init);
+  };
+  await expect(
+    prepareManagedSwap(f.quote, f.config, fetcher),
+  ).rejects.toMatchObject({ code: "rpc_unavailable", rpcCode: -32602 });
+  expect(fees).toBe(1);
+});

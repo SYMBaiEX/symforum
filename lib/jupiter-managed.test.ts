@@ -119,6 +119,29 @@ test("missing referral/key or unsupported integrator fee cannot silently fall ba
     managedOrderUrl({ ...request, platformFeeBps: 25 }, config),
   ).toThrow();
 });
+test("price impact ratio and percentage units both enforce the unchanged five-percent cap", () => {
+  expect(() =>
+    normalizeManagedOrder(
+      { ...managedFixture(), priceImpactPct: "0.0501" },
+      request,
+      config,
+    ),
+  ).toThrow();
+  expect(() =>
+    normalizeManagedOrder(
+      { ...managedFixture(), priceImpact: -5.01, priceImpactPct: "0" },
+      request,
+      config,
+    ),
+  ).toThrow();
+  expect(
+    normalizeManagedOrder(
+      { ...managedFixture(), priceImpact: -1.25, expireAt: null },
+      request,
+      config,
+    ).priceImpactBps,
+  ).toBe(125);
+});
 test("execute sends only saved request and signed bytes to the fixed endpoint once", async () => {
   const fetcher = vi.fn(async () =>
     Response.json({

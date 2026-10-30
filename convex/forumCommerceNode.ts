@@ -20,6 +20,7 @@ import {
 import {
   swapPreparationIssue,
   SWAP_PREPARATION_MESSAGES,
+  SwapRpcError,
 } from "../lib/swap-preparation-errors";
 
 const prepared = v.object({
@@ -93,7 +94,11 @@ export const buildPromotion = internalAction({
 });
 /** No signing/broadcast capability. Only metadata leaves this operator-only boundary. */
 export const unsignedDiagnostic = internalAction({
-  args: { wallet: v.string(), managed: v.optional(v.literal(true)) },
+  args: {
+    wallet: v.string(),
+    managed: v.optional(v.literal(true)),
+    verification: v.optional(v.literal("fee-lookup-v2")),
+  },
   returns: v.object({
     ok: v.boolean(),
     code: v.string(),
@@ -101,10 +106,11 @@ export const unsignedDiagnostic = internalAction({
     simulations: v.number(),
     kitCode: v.union(v.number(), v.null()),
     source: v.union(v.string(), v.null()),
+    rpcCode: v.optional(v.union(v.number(), v.null())),
   }),
   handler: async (
     ctx,
-    { wallet, managed },
+    { wallet, managed, verification },
   ): Promise<{
     ok: boolean;
     code: string;
@@ -112,14 +118,15 @@ export const unsignedDiagnostic = internalAction({
     simulations: number;
     kitCode: number | null;
     source: string | null;
+    rpcCode?: number | null;
   }> => {
     let stage = "admission",
       simulations = 0;
     if (
-      !(await ctx.runMutation(
-        internal.forumSwaps.reserveUnsignedDiagnostic,
-        managed ? { managed } : {},
-      ))
+      !(await ctx.runMutation(internal.forumSwaps.reserveUnsignedDiagnostic, {
+        ...(managed ? { managed } : {}),
+        ...(verification ? { verification } : {}),
+      }))
     )
       return {
         ok: false,
@@ -206,6 +213,7 @@ export const unsignedDiagnostic = internalAction({
         simulations,
         kitCode,
         source,
+        rpcCode: error instanceof SwapRpcError ? error.rpcCode : null,
       };
     }
   },

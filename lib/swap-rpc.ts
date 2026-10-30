@@ -52,6 +52,15 @@ export async function swapRpc<T>(
     if (error instanceof SwapRpcError) throw error;
     throw new SwapRpcError("rpc_unavailable");
   }
+  if (response.error && typeof response.error === "object") {
+    const error = record(response.error);
+    throw new SwapRpcError(
+      "rpc_unavailable",
+      typeof error.code === "number" && Number.isSafeInteger(error.code)
+        ? error.code
+        : null,
+    );
+  }
   if (
     response.jsonrpc !== "2.0" ||
     response.id !== 1 ||
