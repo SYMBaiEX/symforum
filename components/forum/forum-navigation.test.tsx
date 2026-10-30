@@ -36,6 +36,10 @@ test.each(["/members/member", "/forum/agents", "/online"])(
 test.each([
   "/symf",
   "/forum/symf",
+  "/trade",
+  "/forum/trade",
+  "/community",
+  "/forum/community",
   "/start-here",
   "/forum/start-here",
   "/messages",
@@ -106,7 +110,13 @@ test("compact navigation preserves named primary and permitted personal destinat
   expect(html).not.toContain('href="/forum/moderation"');
   for (const name of ["Feed", "News", "Community", "Boards"])
     expect(html).toContain(`aria-label="${name}"`);
-  for (const name of ["Start here", "$SYMF", "Swap tokens"]) {
+  for (const name of [
+    "Start here",
+    "$SYMF",
+    "Swap tokens",
+    "Trading terminal",
+    "Community utilities",
+  ]) {
     expect(html).toContain(`aria-label="${name}"`);
     expect(html).toContain(
       `class="forum-nav-label min-w-0 flex-1">${name}</span>`,
