@@ -22,9 +22,15 @@ import {
 } from "@/lib/swap-amounts";
 import { publicSwapPreparationError } from "@/lib/swap-preparation-errors";
 import {
+  refreshedQuoteNeedsReview,
+  walletHandoffAllowed,
+} from "@/lib/swap-review";
+import {
   requestReviewedTransaction,
   verifyPreparedTransaction,
   CommerceWalletRequestError,
+  supportsCommerceTransaction,
+  commerceWalletFailureMessage,
   type CommerceWalletClient,
   type ReviewedTransaction,
 } from "@/lib/commerce-wallet-client";
@@ -160,12 +166,17 @@ function LiveSwap({
     [outputMint, setOutputMint] = useState(outputToken?.mint ?? USDC),
     [amount, setAmount] = useState(""),
     [slippage, setSlippage] = useState(50);
+  const [format, setFormat] = useState<"auto" | "v0">("auto");
+  const supportsV1 =
+    format === "auto" && supportsCommerceTransaction(client, 1);
+  const supportsV0 = supportsCommerceTransaction(client, 0);
   const [extra, setExtra] = useState<TradeToken[]>([]);
   const [result, setResult] = useState<QuoteResult | null>(null),
     [selected, setSelected] = useState<Quote | null>(null),
     [prepared, setPrepared] = useState<ReviewedTransaction | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
+    [walletDiagnostic, setWalletDiagnostic] = useState(""),
     [sent, setSent] = useState(false),
     [signature, setSignature] = useState("");
   const [recoverySignatures, setRecoverySignatures] = useState<
@@ -265,7 +276,7 @@ function LiveSwap({
   } catch {
     /* Invalid amounts never reach the provider. */
   }
-  const inputKey = `${identityKey}:${inputMint}:${outputMint}:${rawAmount}:${slippage}`;
+  const inputKey = `${identityKey}:${inputMint}:${outputMint}:${rawAmount}:${slippage}:${supportsV1}:${format}`;
   const clear = () => {
     revision.current++;
     setResult(null);
@@ -273,6 +284,7 @@ function LiveSwap({
     setPrepared(null);
     setError("");
     setNotice("");
+    setWalletDiagnostic("");
   };
   const routes = useAction(async () => {
     if (busyGuard.current || dispatched.current) return;
@@ -289,7 +301,7 @@ function LiveSwap({
         outputMint,
         amountRaw: parseTokenAmount(amount, input.decimals),
         slippageBps: slippage,
-        supportsV1: connected.supportedTransactionVersions.has(1),
+        supportsV1,
       });
       if (
         client.wallet.getState().connected?.account.address !==
@@ -334,7 +346,7 @@ function LiveSwap({
       if (_signal.aborted || started !== revision.current) return;
       if (
         walletNow?.account.address !== data.wallet ||
-        !walletNow.supportedTransactionVersions.has(data.transactionVersion)
+        !supportsCommerceTransaction(client, data.transactionVersion)
       )
         throw new Error(
           "Connected wallet changed or does not support this transaction version.",
@@ -367,6 +379,12 @@ function LiveSwap({
       selected.expiresAt <= Date.now()
     )
       return;
+    if (!walletHandoffAllowed(selected.expiresAt)) {
+      setNotice(
+        "Return to this tab with an internet connection, then choose Swap. No wallet request was made.",
+      );
+      return;
+    }
     dispatched.current = true;
     setSent(true);
     setError("");
@@ -375,6 +393,14 @@ function LiveSwap({
     let returnedSignature = false;
     try {
       await begin({ quoteId: selected.quoteId });
+      // The account/visibility/deadline may change during server admission.
+      // Keep the durable fence if interrupted here; never open a stale wallet prompt.
+      if (
+        _signal.aborted ||
+        ready.revision !== revision.current ||
+        !walletHandoffAllowed(selected.expiresAt)
+      )
+        throw new Error("Wallet handoff interrupted before approval.");
       walletInvoked = true;
       const sig = await requestReviewedTransaction(client, prepared);
       returnedSignature = true;
@@ -401,7 +427,7 @@ function LiveSwap({
         Number.isSafeInteger(reason.code)
           ? reason.code
           : null;
-      console.warn("Swap approval did not complete", {
+      const diagnostic = {
         stage: returnedSignature
           ? "receipt"
           : walletInvoked
@@ -414,7 +440,14 @@ function LiveSwap({
           reason instanceof CommerceWalletRequestError
             ? reason.responseIssue
             : null,
-      });
+      };
+      console.warn(
+        "Swap approval did not complete",
+        JSON.stringify(diagnostic),
+      );
+      setWalletDiagnostic(
+        `Stage: ${diagnostic.stage}; wallet phase: ${diagnostic.walletPhase ?? "none"}; code: ${diagnostic.code ?? "none"}; response: ${diagnostic.responseIssue ?? "none"}.`,
+      );
       if (walletInvoked)
         await hold({ quoteId: selected.quoteId }).catch(() => {});
       setNotice("");
@@ -422,7 +455,7 @@ function LiveSwap({
         returnedSignature
           ? "Your wallet returned a transaction signature, but its receipt could not be checked. Use Check receipt below; do not submit another swap."
           : walletInvoked
-            ? "The wallet did not return a transaction signature. Check wallet Activity. Do not repeat this swap until its outcome is verified."
+            ? `${commerceWalletFailureMessage(reason)} The attempt remains protected; see its verification status below. Do not repeat this swap until its outcome is verified.`
             : "The wallet request could not be authorized. No wallet window was opened. Reload to inspect the saved operation status; nothing is resent automatically.",
       );
     }
@@ -451,9 +484,16 @@ function LiveSwap({
     try {
       if (dispatched.current || unresolved) return;
       let q = result?.quotes[0];
+      const previous = q;
       if (!q || q.expiresAt <= Date.now() + 5000) {
         const freshResult = await routes.dispatchAsync();
         q = freshResult?.quotes[0];
+        if (previous && q && refreshedQuoteNeedsReview(previous, q)) {
+          setNotice(
+            "Quote updated: the minimum received or fee changed. Review the new amounts, then choose Swap if you accept. No wallet request was made.",
+          );
+          return;
+        }
       }
       if (!q) return;
       const ready = await prepare.dispatchAsync(q);
@@ -473,8 +513,21 @@ function LiveSwap({
     document.addEventListener("visibilitychange", update);
     return () => document.removeEventListener("visibilitychange", update);
   }, []);
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const canQuote =
     config?.swapsEnabled &&
+    online &&
+    (supportsV1 || supportsV0) &&
     isAuthenticated &&
     linked &&
     connected &&
@@ -616,6 +669,83 @@ function LiveSwap({
           <option value={100}>1%</option>
         </select>
       </div>
+      <details className="commerce-details">
+        <summary>Wallet compatibility</summary>
+        <div className="commerce-inline">
+          <label htmlFor={`${id}-format`}>Transaction format</label>
+          <select
+            id={`${id}-format`}
+            value={format}
+            disabled={locked}
+            onChange={(e) => {
+              setFormat(e.target.value === "v0" ? "v0" : "auto");
+              clear();
+            }}
+          >
+            <option value="auto">Automatic</option>
+            <option value="v0">v0 compatibility</option>
+          </select>
+        </div>
+        <p>
+          Automatic checks the wallet send capability. If your wallet reports an
+          internal error with v1, you can select v0 for a future swap after any
+          held outcome is verified. This never retries an existing payment.
+        </p>
+      </details>
+      {best && fresh && input && output && (
+        <div className="swap-preview" aria-label="Swap estimate">
+          <dl>
+            <div>
+              <dt>Minimum received</dt>
+              <dd>
+                {formatTokenAmount(
+                  best.minimumOutputAmountRaw,
+                  output.decimals,
+                )}{" "}
+                {output.symbol}
+              </dd>
+            </div>
+            <div>
+              <dt>Platform fee · included</dt>
+              <dd>
+                {best.platformFeeBps === 0
+                  ? "Waived"
+                  : `${formatTokenAmount(best.platformFeeRaw, input.decimals)} ${input.symbol} (${best.platformFeeBps / 100}%)`}
+              </dd>
+            </div>
+            <div>
+              <dt>Price impact</dt>
+              <dd>{(best.priceImpactBps / 100).toFixed(2)}%</dd>
+            </div>
+          </dl>
+          <div className="commerce-inline">
+            <span>
+              {best.provider === "jupiter" ? "Jupiter" : "Raydium"} · highest
+              quoted output
+            </span>
+            <span>
+              Quote valid{" "}
+              {Math.max(0, Math.ceil((best.expiresAt - now) / 1000))}s
+            </span>
+          </div>
+          <p>
+            Network fees and any token-account rent are extra. Wallet approval
+            shows the final transaction.
+          </p>
+          {best.priceImpactBps >= 100 && (
+            <p role="status">
+              High price impact: this trade may move the pool price
+              significantly. Consider a smaller amount.
+            </p>
+          )}
+        </div>
+      )}
+      {!online && (
+        <p className="commerce-note" role="status">
+          You are offline. Reconnect before requesting a quote or opening wallet
+          approval.
+        </p>
+      )}
       <Button
         className="w-full swap-primary"
         disabled={needsRecovery ? busy : !canQuote || busy || sent}
@@ -649,15 +779,19 @@ function LiveSwap({
                 ? "Preparing swap…"
                 : routes.isRunning || buy.isRunning
                   ? "Finding your route…"
-                  : !isAuthenticated
-                    ? "Sign in to swap"
-                    : !linked
-                      ? "Connect your linked wallet"
-                      : !rawAmount || BigInt(rawAmount) === 0n
-                        ? "Enter an amount"
-                        : outputToken
-                          ? `Buy ${output?.symbol ?? "token"}`
-                          : "Swap"}
+                  : !online
+                    ? "Reconnect to swap"
+                    : !isAuthenticated
+                      ? "Sign in to swap"
+                      : !linked
+                        ? "Connect your linked wallet"
+                        : !supportsV0 && !supportsV1
+                          ? "Wallet cannot send this format"
+                          : !rawAmount || BigInt(rawAmount) === 0n
+                            ? "Enter an amount"
+                            : outputToken
+                              ? `Buy ${output?.symbol ?? "token"}`
+                              : "Swap"}
       </Button>
       {recovering && (
         <div className="commerce-note" role="status">
@@ -731,6 +865,20 @@ function LiveSwap({
             Highest quoted output first. Network costs and rent are not part of
             this ranking.
           </p>
+          <dl className="swap-mints">
+            <div>
+              <dt>Pay mint</dt>
+              <dd>
+                <code>{inputMint}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Receive mint</dt>
+              <dd>
+                <code>{outputMint}</code>
+              </dd>
+            </div>
+          </dl>
           {result.quotes.map((q, i) => (
             <div key={q.quoteId} className="commerce-route">
               <span>
@@ -810,6 +958,15 @@ function LiveSwap({
         >
           View transaction <ArrowUpRight aria-hidden="true" />
         </a>
+      )}
+      {walletDiagnostic && (
+        <details className="commerce-details">
+          <summary>Safe wallet diagnostic</summary>
+          <p>{walletDiagnostic}</p>
+          <p>
+            No keys, transaction contents or provider error text are included.
+          </p>
+        </details>
       )}
       {finalized && (
         <Button

@@ -78,6 +78,10 @@ getWallets().register({
           throw new Error("Wrong raw account or unsafe wallet options");
         if (location.search.includes("walletfail"))
           throw new Error("Mock ambiguous outcome");
+        if (location.search.includes("walletinternal"))
+          throw Object.assign(new Error("private wallet provider body"), {
+            code: -32603,
+          });
         return [{ signature: new Uint8Array(64).fill(1) }];
       },
     },

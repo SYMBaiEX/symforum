@@ -14,6 +14,8 @@ import {
   verifyPreparedTransaction,
   requestReviewedTransaction,
   CommerceWalletRequestError,
+  supportsCommerceTransaction,
+  commerceWalletFailureMessage,
   type CommerceWalletClient,
 } from "./commerce-wallet-client";
 const boundary = vi.hoisted(() => ({
@@ -73,7 +75,10 @@ test("wallet preflight uses the simulated commitment and slot, without RPC retri
   const call = vi.fn(async (_input: unknown) => [
     { signature: new Uint8Array(64).fill(1) },
   ]);
-  boundary.getFeature.mockReturnValue({ signAndSendTransaction: call });
+  boundary.getFeature.mockReturnValue({
+    signAndSendTransaction: call,
+    supportedTransactionVersions: [0],
+  });
   const client = {
     wallet: {
       getState: () => ({
@@ -106,7 +111,10 @@ function requestWithResponse(response: unknown) {
   const account = { address: prepared.wallet, chains: ["solana:mainnet"] };
   boundary.getAccount.mockReturnValue(account);
   const call = vi.fn(async () => response);
-  boundary.getFeature.mockReturnValue({ signAndSendTransaction: call });
+  boundary.getFeature.mockReturnValue({
+    signAndSendTransaction: call,
+    supportedTransactionVersions: [0],
+  });
   const client = {
     wallet: {
       getState: () => ({
@@ -173,3 +181,53 @@ test("wallet rejection preserves only its numeric code and phase, not the provid
   }
   expect(call).toHaveBeenCalledTimes(1);
 });
+test("checks the actual send feature, not the store's sign-only version set", async () => {
+  const f = requestWithResponse([{ signature: new Uint8Array(64).fill(1) }]);
+  const account = { address: fixture().wallet, chains: ["solana:mainnet"] };
+  const client = {
+    wallet: {
+      getState: () => ({
+        connected: { account, supportedTransactionVersions: new Set([0, 1]) },
+      }),
+    },
+  } as unknown as CommerceWalletClient;
+  expect(supportsCommerceTransaction(client, 0)).toBe(true);
+  expect(supportsCommerceTransaction(client, 1)).toBe(false);
+  await expect(
+    requestReviewedTransaction(client, { ...fixture(), transactionVersion: 1 }),
+  ).rejects.toMatchObject({ phase: "feature" });
+  expect(f.call).not.toHaveBeenCalled();
+});
+test("send capability is authoritative even when a separate sign-only feature narrows the store", async () => {
+  const f = requestWithResponse([{ signature: new Uint8Array(64).fill(1) }]);
+  boundary.getFeature.mockReturnValue({
+    supportedTransactionVersions: [0, 1],
+    signAndSendTransaction: f.call,
+  });
+  const account = { address: fixture().wallet, chains: ["solana:mainnet"] };
+  const client = {
+    wallet: {
+      getState: () => ({
+        connected: { account, supportedTransactionVersions: new Set([0]) },
+      }),
+    },
+  } as unknown as CommerceWalletClient;
+  expect(supportsCommerceTransaction(client, 1)).toBe(true);
+  await requestReviewedTransaction(client, {
+    ...fixture(),
+    transactionVersion: 1,
+  });
+  expect(f.call).toHaveBeenCalledTimes(1);
+});
+test.each([-32603, 4001, -32002, 999999])(
+  "wallet code %s has a safe explanation but never claims non-submission",
+  (code) => {
+    const error = new CommerceWalletRequestError("request", {
+      code,
+      message: "private-payload",
+    });
+    expect(commerceWalletFailureMessage(error)).not.toMatch(
+      /private-payload|nothing was sent/i,
+    );
+  },
+);

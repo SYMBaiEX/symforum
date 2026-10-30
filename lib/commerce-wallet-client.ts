@@ -21,6 +21,25 @@ export type ReviewedTransaction = PreparedSwap & { wallet: string };
 type WalletFailurePhase = "account" | "feature" | "request" | "response";
 type WalletResponseIssue = "result_count" | "signature_bytes" | null;
 
+/** Capability of the actual send feature, not another sign-only feature. No wallet request. */
+export function supportsCommerceTransaction(
+  client: CommerceWalletClient,
+  version: 0 | 1,
+) {
+  const current = client.wallet.getState().connected;
+  if (!current || !current.account.chains.includes("solana:mainnet"))
+    return false;
+  try {
+    const feature = getWalletAccountFeature(
+      current.account,
+      "solana:signAndSendTransaction",
+    ) as SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
+    return feature.supportedTransactionVersions.includes(version);
+  } catch {
+    return false;
+  }
+}
+
 /** Only fixed categories/numeric codes may leave the wallet boundary. Never raw errors. */
 export class CommerceWalletRequestError extends Error {
   readonly code: number | null;
@@ -40,6 +59,20 @@ export class CommerceWalletRequestError extends Error {
         ? cause.code
         : null;
   }
+}
+
+export function commerceWalletFailureMessage(error: unknown) {
+  if (!(error instanceof CommerceWalletRequestError))
+    return "The wallet request could not complete.";
+  if (error.phase === "request" && error.code === -32603)
+    return "The wallet returned an internal sign-and-send error. This does not prove whether it submitted the transaction.";
+  if (error.phase === "request" && error.code === 4001)
+    return "The wallet reported that approval was declined. The saved attempt still requires outcome verification.";
+  if (error.phase === "request" && error.code === -32002)
+    return "The wallet reports another approval request is already open.";
+  if (error.phase === "account" || error.phase === "feature")
+    return "The selected wallet account or transaction capability changed.";
+  return "The wallet did not return a usable transaction signature.";
 }
 
 /** Validate the exact simulated message before the one-shot wallet request. */
@@ -79,8 +112,7 @@ export async function requestReviewedTransaction(
   if (
     !current ||
     current.account.address !== prepared.wallet ||
-    !current.account.chains.includes("solana:mainnet") ||
-    !current.supportedTransactionVersions.has(prepared.transactionVersion)
+    !current.account.chains.includes("solana:mainnet")
   )
     throw new CommerceWalletRequestError("account");
   let feature: SolanaSignAndSendTransactionFeature["solana:signAndSendTransaction"];
@@ -91,6 +123,12 @@ export async function requestReviewedTransaction(
       "solana:signAndSendTransaction",
     ) as typeof feature;
     account = getWalletAccountForUiWalletAccount(current.account);
+    if (
+      !feature.supportedTransactionVersions.includes(
+        prepared.transactionVersion,
+      )
+    )
+      throw new Error("Unsupported send version");
   } catch (cause) {
     throw new CommerceWalletRequestError("feature", cause);
   }

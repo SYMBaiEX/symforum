@@ -1,4 +1,3 @@
-
 import { SYMF_TOKEN } from "./symf-token";
 import {
   AccountRole,
@@ -453,7 +452,8 @@ async function assembleAndSimulate(
   );
   requireCondition(
     simulation.value.err === null &&
-      Number.isSafeInteger(simulation.context.slot),
+      Number.isSafeInteger(simulation.context.slot) &&
+      simulation.context.slot >= 0,
     "Simulation failed. Nothing was signed or sent.",
   );
   const units = simulation.value.unitsConsumed;
@@ -490,13 +490,19 @@ async function assembleAndSimulate(
     "simulateTransaction",
     [
       getBase64EncodedWireTransaction(transaction),
-      { encoding: "base64", commitment: "confirmed", sigVerify: false },
+      {
+        encoding: "base64",
+        commitment: "confirmed",
+        sigVerify: false,
+        minContextSlot: simulation.context.slot,
+      },
     ],
     fetcher,
   );
   requireCondition(
     finalSimulation.value.err === null &&
-      Number.isSafeInteger(finalSimulation.context.slot),
+      Number.isSafeInteger(finalSimulation.context.slot) &&
+      finalSimulation.context.slot >= simulation.context.slot,
     "Final transaction simulation failed. Nothing was signed or sent.",
   );
   requireCondition(
@@ -790,8 +796,7 @@ export async function buildPromotionTransaction(
     "Promotion checkout expired. Request a new slot.",
   );
   requireCondition(
-    config.treasury === intent.treasury &&
-      intent.mint === SYMF_TOKEN.mint,
+    config.treasury === intent.treasury && intent.mint === SYMF_TOKEN.mint,
   );
   address(intent.reference);
   const total = rawAmount(intent.amountRaw),

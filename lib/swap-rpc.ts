@@ -52,7 +52,12 @@ export async function swapRpc<T>(
     if (error instanceof SwapRpcError) throw error;
     throw new SwapRpcError("rpc_unavailable");
   }
-  if (response.error || !("result" in response))
+  if (
+    response.jsonrpc !== "2.0" ||
+    response.id !== 1 ||
+    response.error ||
+    !("result" in response)
+  )
     throw new SwapRpcError("rpc_unavailable");
   return response.result as T;
 }
