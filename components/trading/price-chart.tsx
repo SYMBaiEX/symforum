@@ -136,7 +136,7 @@ function CandleCanvas({
   }, [api, candles]);
 
   return (
-    <div className="relative">
+    <div className={`relative ${compact ? terminalStyles.chartFrame : ""}`}>
       <div
         ref={container}
         className={`${styles.candleCanvas} ${compact ? terminalStyles.chartCanvas : ""}`}

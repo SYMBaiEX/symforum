@@ -114,6 +114,7 @@
   content: "";
 }
 .layout {
+  --terminal-chart-height: clamp(380px, 46dvh, 420px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 328px;
   align-items: stretch;
@@ -373,9 +374,13 @@
   margin: 0;
   font-size: 11px;
 }
+.chartWorkspace .chartFrame {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
 .chartWorkspace .chartCanvas {
   grid-column: 1 / -1;
-  height: clamp(380px, 46dvh, 420px);
+  height: var(--terminal-chart-height);
   border-top: 1px solid hsl(var(--border));
 }
 .chartWorkspace .chartDataDisclosure {
@@ -885,6 +890,9 @@
   }
 }
 @container (max-width: 840px) {
+  .layout {
+    --terminal-chart-height: 272px;
+  }
   .layout,
   .below,
   .utilityGrid {
@@ -902,9 +910,6 @@
   }
   .headerActions .headerLink {
     display: none;
-  }
-  .chartWorkspace .chartCanvas {
-    height: 272px;
   }
 }
 @container (max-width: 600px) {
@@ -945,6 +950,8 @@
   }
   .receiptsLink,
   .tradeShortcut {
+    justify-content: center;
+    min-width: 44px;
     min-height: 44px;
     font-size: 11px;
   }
@@ -998,6 +1005,11 @@
     min-height: 44px;
   }
   .chartWorkspace .chartControls button {
+    min-width: 44px;
+  }
+  .receiptsLink,
+  .tradeShortcut {
+    justify-content: center;
     min-width: 44px;
   }
 }
