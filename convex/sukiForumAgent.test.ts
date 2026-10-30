@@ -248,6 +248,9 @@ describe("Suki forum research helpers", () => {
       const candidates = await collectResearchCandidates(context);
 
       expect(candidates).toHaveLength(14);
+      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).not.toContain("research-papers");
+      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).toContain("ai-models");
+      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).not.toContain("projects");
       expect(runQuery).toHaveBeenCalledTimes(1);
       expect(readBatchSize).toBe(14);
       expect(runMutation).not.toHaveBeenCalled();

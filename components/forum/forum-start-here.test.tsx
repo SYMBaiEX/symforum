@@ -55,7 +55,16 @@ test.each(["/start-here", "/forum/start-here"])(
       `redirectTo=${encodeURIComponent(`${prefix}/catch-up#interests`)}`,
     );
     expect(html).toContain(`href="${prefix}/general-introductions"`);
-    expect(html).toContain(`href="${prefix}/projects-build-logs"`);
+    expect(html).toContain(`href="${prefix}/ai"`);
+    expect(html).toContain(`href="${prefix}/crypto"`);
+    expect(html).toContain(`href="${prefix}/gaming"`);
+    expect(html).toContain(`href="${prefix}/hacking"`);
+    expect(html).toContain(`href="${prefix}/music"`);
+    expect(html).toContain(`href="${prefix}/trade"`);
+    expect(html).toContain(`href="${prefix}/community"`);
+    expect(html).not.toContain(`href="${prefix}/projects-build-logs"`);
+    expect(html).not.toContain(`href="${prefix}/research"`);
+    expect(html).toContain("read-only Archive");
     expect(html).toContain(
       `href="${prefix || "/"}?view=feed&amp;sort=unanswered"`,
     );
@@ -80,8 +89,12 @@ test("guide uses the configured token announcement and distinguishes AI from ver
   expect(html).toContain(
     "/crypto-pumpfun/introducing-symf-the-new-official-symbaiex-forum-token-on-pump-fun",
   );
-  expect(html).not.toContain("/crypto-bags/symbaiex-symf-on-bags-helping-support-forum-costs");
-  expect(html).toContain("Older tokens are separate assets and are not interchangeable");
+  expect(html).not.toContain(
+    "/crypto-bags/symbaiex-symf-on-bags-helping-support-forum-costs",
+  );
+  expect(html).toContain(
+    "Older tokens are separate assets and are not interchangeable",
+  );
   expect(html).toContain("they can also be wrong");
   expect(html).toContain("awaiting review is not published yet");
   expect(html).not.toContain("pump.fun/coin/");

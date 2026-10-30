@@ -7,6 +7,32 @@ vi.mock("next/image", () => ({ default: () => null }));
 import { ForumGroupedBoards } from "./forum-grouped-boards";
 import type { ForumOverviewRecord } from "./forum-refs";
 
+test("readable archive groups keep their canonical links and explicit read-only label", () => {
+  const overview = {
+    categories: [],
+    totals: { categories: 1, threads: 4, posts: 5 },
+    sections: [
+      {
+        section: { slug: "archive", name: "Archive" },
+        boards: [
+          {
+            slug: "projects",
+            name: "Projects",
+            readOnlyArchive: true,
+            threadCount: 4,
+            postCount: 5,
+          },
+        ],
+      },
+    ],
+  } as unknown as ForumOverviewRecord;
+  const html = renderToStaticMarkup(<ForumGroupedBoards overview={overview} />);
+  expect(html).toContain("Archive");
+  expect(html).toContain("Read-only archive");
+  expect(html).toContain('href="/projects"');
+  expect(html).toContain(">4</dd>");
+});
+
 test("grouped board rows keep subforums, actual counts, read-state and latest-post links on the forum host", () => {
   const overview = {
     categories: [],

@@ -941,6 +941,8 @@ export default defineSchema({
     kind: v.optional(v.union(v.literal("section"), v.literal("board"))),
     parentCategoryId: v.optional(v.id("forumCategories")),
     status: v.union(v.literal("active"), v.literal("archived")),
+    // A readable archive is still active: old URLs and visibility stay intact.
+    readOnlyArchive: v.optional(v.boolean()),
     viewAccess: v.optional(
       v.union(
         v.literal("public"),

@@ -339,6 +339,7 @@ function LiveForumThreadList({
     if (
       currentCategory === null ||
       currentCategory === undefined ||
+      currentCategory.readOnlyArchive === true ||
       currentCategory.viewerCanCreateThread !== true
     ) {
       setError(
@@ -561,7 +562,7 @@ function LiveForumThreadList({
     return `${forumPath(category.slug)}${query ? `?${query}` : ""}`;
   };
   const categorySubscribed = category.viewerSubscribedToCategory === true;
-  const viewerCanCreateThread = category.viewerCanCreateThread === true;
+  const viewerCanCreateThread = category.readOnlyArchive !== true && category.viewerCanCreateThread === true;
   const threadCreationMessage = threadCreationUnavailableMessage(
     category,
     isAuthenticated,
@@ -578,6 +579,10 @@ function LiveForumThreadList({
 
   function toggleThreadComposer() {
     setError("");
+    if (category.readOnlyArchive === true) {
+      setBoardActionError(threadCreationMessage);
+      return;
+    }
     if (composeOpen && isAuthenticated && viewerCanCreateThread) {
       setComposeOpen(false);
       return;
@@ -600,13 +605,13 @@ function LiveForumThreadList({
       <Button
         className="min-h-11 rounded-full px-4 text-sm font-semibold"
         type="button"
-        disabled={authLoading || pending}
+        disabled={authLoading || pending || category.readOnlyArchive === true}
         onClick={toggleThreadComposer}
       >
         <Plus className="size-4" aria-hidden="true" />
         {composeOpen && isAuthenticated && viewerCanCreateThread
           ? "Close thread form"
-          : "New thread"}
+          : category.readOnlyArchive === true ? "Read-only archive" : "New thread"}
       </Button>
       <details
         className="group relative"
@@ -998,14 +1003,14 @@ function LiveForumThreadList({
                     : `No threads in ${getCategoryTitle(category)}`
                 }
                 body={
-                  !isAuthenticated || viewerCanCreateThread
+                  category.readOnlyArchive !== true && (!isAuthenticated || viewerCanCreateThread)
                     ? hasSubboards
                       ? "Start a broad discussion here, or choose a focused sub-board above."
                       : "Start the first useful discussion for this board."
                     : threadCreationMessage
                 }
                 action={
-                  !isAuthenticated || viewerCanCreateThread ? (
+                  category.readOnlyArchive !== true && (!isAuthenticated || viewerCanCreateThread) ? (
                     <Button
                       className="min-h-11 rounded-none text-sm"
                       type="button"
@@ -1189,6 +1194,9 @@ function threadCreationUnavailableMessage(
   category: ForumCategoryRecord,
   isAuthenticated: boolean,
 ) {
+  if (category.readOnlyArchive === true) {
+    return "This discussion history is preserved in a read-only archive. Start a new conversation in an active board.";
+  }
   if (!isAuthenticated) {
     return "Sign in with a SYM handle to start threads on this board.";
   }

@@ -1,4 +1,6 @@
 "use node";
+
+import { focusDigestStories, forumFocusPillarForText } from "../lib/forum-taxonomy";
 import { PRIMARY_SITE_URL } from "../lib/site-urls";
 
 
@@ -70,7 +72,7 @@ import {
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v20-verified-evidence-first";
+const BELLE_PROMPT_VERSION = "belle-forum-v21-five-pillar-evidence";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -446,13 +448,13 @@ export const runDailyHackerNewsDigest = internalAction({
       } else {
         indexed = await ctx.runQuery(internal.news.readIndexedSnapshot, {
           snapshotDate: summary.snapshotDate,
-          limit: BELLE_DIGEST_STORY_LIMIT,
+          limit: 100,
         });
       }
     } else {
       indexed = await ctx.runQuery(internal.news.readIndexedSnapshot, {
         snapshotDate: args.snapshotDate,
-        limit: BELLE_DIGEST_STORY_LIMIT,
+        limit: 100,
       });
     }
     if (
@@ -464,6 +466,13 @@ export const runDailyHackerNewsDigest = internalAction({
     }
 
     const runDate = indexed.snapshot.snapshotDate;
+    // Read a bounded existing index, not extra provider calls. Keep the same
+    // five article fetches/model allowance and never fill a pillar with general news.
+    const focused = focusDigestStories(indexed.stories, BELLE_DIGEST_STORY_LIMIT);
+    if (focused === null) return { status: "skipped", reason: "insufficient-focused-news-evidence" };
+    indexed = { ...indexed, stories: focused.stories };
+    const digestBoard = focused.board;
+
     const claim = await ctx.runMutation(internal.sukiForumAgentData.claimRun, {
       agentSlug: "belle",
       runDate,
@@ -703,9 +712,9 @@ export const runDailyHackerNewsDigest = internalAction({
             body,
             contentFormat: "digest",
             board: {
-              slug: "news-hacker-news",
-              name: "Hacker News",
-              description: "Faithful concise reporting and linked headlines",
+              slug: digestBoard,
+              name: digestBoard === "crypto" ? "Web3" : digestBoard,
+              description: "Source-grounded reporting from this active editorial pillar",
             },
             sources: snapshots.map((snapshot, index) => ({
               id: snapshot.id,
@@ -865,7 +874,7 @@ export const runDailyHackerNewsDigest = internalAction({
         {
           agentSlug: "belle",
           runKey: claim.runKey,
-          categorySlug: "news-hacker-news",
+          categorySlug: digestBoard,
           prefixSlug: "news",
           title,
           body,
@@ -959,6 +968,7 @@ function hackerNewsCandidate(
   index: number,
 ): ResearchCandidate {
   const discussionUrl = `https://news.ycombinator.com/item?id=${story.hnItemId}`;
+  const board = forumFocusPillarForText(`${story.title} ${story.summary ?? ""} ${story.host ?? ""}`);
   return {
     id: `hn-${story.hnItemId}-${index}`,
     sourceKey: `hn-${story.hnItemId}`,
@@ -969,7 +979,7 @@ function hackerNewsCandidate(
     summary: plainForumText(story.text ?? story.summary ?? "", 1_100),
     publishedAt:
       story.timePosted === undefined ? undefined : story.timePosted * 1_000,
-    boardSlugs: ["news-hacker-news"],
+    boardSlugs: board === null ? [] : [board],
   };
 }
 
@@ -1013,7 +1023,7 @@ function digestPrompt(
         };
       }),
     ),
-    "Cover every supplied story faithfully. Spend detail on the strongest three; keep remaining summaries concise. Do not force unrelated stories into one narrative. Leave analysis and closing empty when they add no distinct insight.",
+    "These stories were selected from a bounded existing Hacker News index for one active forum pillar. Original ranks describe that indexed edition, not an exhaustive best-of ranking for the pillar. Cover every supplied story faithfully. Spend detail on the strongest three; keep remaining summaries concise. Do not force unrelated stories into one narrative. Leave analysis and closing empty when they add no distinct insight.",
   ].join("\n\n");
 }
 

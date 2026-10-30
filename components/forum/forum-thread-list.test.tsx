@@ -53,7 +53,7 @@ beforeEach(() => {
   mocks.query.mockReturnValue(undefined);
 });
 
-function configureBoard(canCreate: boolean) {
+function configureBoard(canCreate: boolean, readOnlyArchive = false) {
   mocks.params = "compose=1";
   mocks.query.mockImplementation((reference) =>
     reference === forumRefs.listThreads
@@ -62,6 +62,7 @@ function configureBoard(canCreate: boolean) {
             slug: "research",
             title: "Research",
             viewerCanCreateThread: canCreate,
+            readOnlyArchive,
           },
           threads: [],
           announcements: [],
@@ -98,6 +99,21 @@ test.each([false, true])(
     );
     expect(html).not.toContain('data-testid="composer"');
     expect(html).toContain("New thread");
+  },
+);
+
+test.each([false, true])(
+  "archives remain readable without guest posting prompts (authenticated %s)",
+  (authenticated) => {
+    configureBoard(true, true);
+    mocks.authenticated = authenticated;
+    const html = renderToStaticMarkup(
+      <ForumThreadList categorySlug="research" enabled />,
+    );
+    expect(html).not.toContain('data-testid="composer"');
+    expect(html).toContain("Read-only archive");
+    expect(html).toContain("preserved in a read-only archive");
+    expect(html).not.toContain("Start the first thread");
   },
 );
 

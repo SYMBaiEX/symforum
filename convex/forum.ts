@@ -1,5 +1,11 @@
 
 import { FORUM_SITE_URL } from "../lib/site-urls";
+import {
+  categoryIsReadOnlyInGraph,
+  FORUM_ARCHIVE_ROOTS,
+  FORUM_FOCUS_PILLARS,
+  FORUM_TAXONOMY_VERSION,
+} from "../lib/forum-taxonomy";
 import { queueAlphaPublication } from "./forumAlphaDistribution";
 import {
   compactFeedExcerpt,
@@ -496,7 +502,7 @@ const SUKI_FORUM_TAXONOMY = [
     slug: "general",
     name: "General",
     description: "Introductions, community talk, help, and everything between.",
-    position: 10,
+    position: 60,
     children: [
       {
         slug: "general-introductions",
@@ -608,7 +614,7 @@ const SUKI_FORUM_TAXONOMY = [
     name: "AI",
     description:
       "Practical AI techniques, models, agents, and the tools around them.",
-    position: 40,
+    position: 10,
     children: [
       {
         slug: "ai-prompts",
@@ -651,11 +657,21 @@ const SUKI_FORUM_TAXONOMY = [
     ],
   },
   {
+    slug: "crypto",
+    name: "Web3",
+    description: "Solana-native projects, token research and the wider Web3 ecosystem. Compare exact mints and dated source evidence.",
+    position: 30,
+    children: [
+      { slug: "crypto-pumpfun", name: "Pump.fun", description: "Pump.fun project research and canonical token discussions, with source timestamps and risk context.", position: 31 },
+      { slug: "crypto-bags", name: "Bags.fm", description: "Bags.fm projects, product launches and source-backed token research.", position: 32 },
+    ],
+  },
+  {
     slug: "hacking",
     name: "Hacking",
     description:
       "Defensive security, responsible research, privacy, and practical learning.",
-    position: 50,
+    position: 40,
     children: [
       {
         slug: "hacking-security-news",
@@ -705,7 +721,7 @@ const SUKI_FORUM_TAXONOMY = [
     name: "Gaming",
     description:
       "Games, communities, servers, modding, guides, and useful downloads.",
-    position: 60,
+    position: 20,
     children: [
       {
         slug: "gaming-hacks",
@@ -742,7 +758,7 @@ const SUKI_FORUM_TAXONOMY = [
     name: "Music",
     description:
       "New sounds, production craft, instruments, and scenes worth hearing.",
-    position: 70,
+    position: 50,
     children: [
       {
         slug: "music-new-releases",
@@ -1080,7 +1096,7 @@ const listCategoryOptionsOperation = defineForumQuery({
     );
 
     return visibleCategories
-      .filter(isBoardCategory)
+      .filter((category) => isBoardCategory(category) && category.readOnlyArchive !== true)
       .slice(0, limit)
       .map((category) => ({
         _id: category._id,
@@ -8670,6 +8686,400 @@ const updateForumPollStatusOperation = defineForumMutation({
 });
 export const updateForumPollStatus = mutation(updateForumPollStatusOperation);
 
+const taxonomyStateValidator = v.object({
+  name: v.string(),
+  parentCategoryId: v.union(v.id("forumCategories"), v.null()),
+  position: v.number(),
+  readOnlyArchive: v.union(v.boolean(), v.null()),
+});
+const taxonomyChangeValidator = v.object({
+  categoryId: v.id("forumCategories"),
+  slug: v.string(),
+  before: taxonomyStateValidator,
+  after: taxonomyStateValidator,
+  archiveRoot: v.boolean(),
+});
+type TaxonomyState = {
+  name: string;
+  parentCategoryId: Id<"forumCategories"> | null;
+  position: number;
+  readOnlyArchive: boolean | null;
+};
+type TaxonomyChange = {
+  categoryId: Id<"forumCategories">;
+  slug: string;
+  before: TaxonomyState;
+  after: TaxonomyState;
+  archiveRoot: boolean;
+};
+function taxonomyState(category: ForumCategoryDoc): TaxonomyState {
+  return {
+    name: category.name,
+    parentCategoryId: category.parentCategoryId ?? null,
+    position: category.position,
+    readOnlyArchive: category.readOnlyArchive ?? null,
+  };
+}
+
+/** Bounded, source-state-bound preview. No thread IDs, URLs or content move. */
+async function forumTaxonomyPreview(ctx: QueryCtx | MutationCtx, now: number) {
+  if (!Number.isFinite(now) || now <= 0)
+    throw forumError("INVALID_TIME", "A valid observation time is required.");
+  const categories = await ctx.db
+    .query("forumCategories")
+    .withIndex("by_position")
+    .take(CATEGORY_LIST_LIMIT + 1);
+  if (categories.length > CATEGORY_LIST_LIMIT)
+    throw forumError(
+      "TAXONOMY_LIMIT",
+      "The taxonomy exceeds this migration's bounded limit.",
+    );
+  const byId = new Map(categories.map((category) => [category._id, category]));
+  const archive =
+    categories.find((category) => category.slug === "archive") ?? null;
+  const blockers: string[] = [];
+  if (
+    archive !== null &&
+    (categoryKind(archive) !== "section" ||
+      archive.status !== "active" ||
+      categoryViewAccess(archive) !== "public" ||
+      archive.parentCategoryId !== undefined)
+  )
+    blockers.push(
+      "Existing Archive must be a top-level active public section.",
+    );
+  const roots = categories.filter((category) =>
+    (FORUM_ARCHIVE_ROOTS as readonly string[]).includes(category.slug),
+  );
+  for (const slug of FORUM_ARCHIVE_ROOTS) {
+    if (!roots.some((category) => category.slug === slug))
+      blockers.push(`Missing expected board: ${slug}.`);
+  }
+  const archivedIds = new Set<Id<"forumCategories">>();
+  for (const root of roots) {
+    if (root.status !== "active") blockers.push(`The hidden board ${root.slug} needs a separate visibility review before a readable archive migration.`);
+    // Removing a restrictive ancestor must never make a board more public.
+    let parentId = root.parentCategoryId;
+    const visited = new Set<Id<"forumCategories">>();
+    while (parentId !== undefined && parentId !== archive?._id) {
+      if (visited.has(parentId) || visited.size >= 10) {
+        blockers.push(`Invalid ancestry for ${root.slug}.`);
+        break;
+      }
+      visited.add(parentId);
+      const parent = byId.get(parentId);
+      if (
+        !parent ||
+        parent.status !== "active" ||
+        categoryViewAccessRank(categoryViewAccess(parent)) >
+          categoryViewAccessRank(categoryViewAccess(root))
+      ) {
+        blockers.push(`Reparenting ${root.slug} could widen inherited access.`);
+        break;
+      }
+      parentId = parent.parentCategoryId;
+    }
+    archivedIds.add(root._id);
+  }
+  for (let depth = 0; depth < 10; depth += 1) {
+    const size = archivedIds.size;
+    for (const category of categories)
+      if (
+        category.parentCategoryId !== undefined &&
+        archivedIds.has(category.parentCategoryId)
+      )
+        archivedIds.add(category._id);
+    if (size === archivedIds.size) break;
+  }
+  const changes: TaxonomyChange[] = [];
+  const order = ["ai", "gaming", "crypto", "hacking", "music", "general"];
+  for (const category of categories) {
+    const before = taxonomyState(category);
+    const after = { ...before };
+    if (category._id === archive?._id) after.readOnlyArchive = true;
+    const archiveRoot = roots.some((root) => root._id === category._id);
+    if (archivedIds.has(category._id)) {
+      after.readOnlyArchive = true;
+      if (archiveRoot) after.parentCategoryId = archive?._id ?? null;
+    }
+    const position = order.indexOf(category.slug);
+    if (position >= 0) {
+      after.position = (position + 1) * 10;
+      if (category.slug === "crypto") after.name = "Web3";
+    }
+    if (
+      JSON.stringify(before) !== JSON.stringify(after) ||
+      (archiveRoot && archive === null)
+    )
+      changes.push({
+        categoryId: category._id,
+        slug: category.slug,
+        before,
+        after,
+        archiveRoot,
+      });
+  }
+  for (const categoryId of archivedIds) {
+    // Any unresolved checkout/submission is a blocker even after its display
+    // window ends. An elapsed slot is not proof that no payment was submitted.
+    // Existence probes saturate at one and fail closed; receipts are never reset.
+    const unresolved = await Promise.all((["checkout", "submitted", "held"] as const).map((status) =>
+      ctx.db.query("forumPromotionIntents").withIndex("by_categoryId_and_status_and_endsAt", (q) => q.eq("categoryId", categoryId).eq("status", status)).take(1),
+    ));
+    const currentScheduled = await ctx.db.query("forumPromotionIntents").withIndex("by_categoryId_and_status_and_endsAt", (q) => q.eq("categoryId", categoryId).eq("status", "scheduled").gt("endsAt", now)).take(1);
+    if (unresolved.some((rows) => rows.length > 0) || currentScheduled.length > 0) {
+      blockers.push(
+        `A current or unresolved paid placement blocks archiving ${byId.get(categoryId)?.slug ?? "board"}.`,
+      );
+    }
+  }
+  const source = categories.map((category) => ({
+    id: category._id,
+    slug: category.slug,
+    ...taxonomyState(category),
+    status: category.status,
+    viewAccess: categoryViewAccess(category),
+  }));
+  const fingerprint = await sha256Base64Url(
+    JSON.stringify({ version: FORUM_TAXONOMY_VERSION, source, blockers }),
+  );
+  return {
+    version: FORUM_TAXONOMY_VERSION,
+    fingerprint,
+    archiveCategoryId: archive?._id ?? null,
+    changes,
+    blockers,
+    canApply: blockers.length === 0,
+  };
+}
+
+export const previewForumTaxonomy = query({
+  args: { now: v.number() },
+  returns: v.object({
+    version: v.string(),
+    fingerprint: v.string(),
+    archiveCategoryId: v.union(v.id("forumCategories"), v.null()),
+    changes: v.array(taxonomyChangeValidator),
+    blockers: v.array(v.string()),
+    canApply: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireForumAdmin(ctx);
+    return await forumTaxonomyPreview(ctx, args.now);
+  },
+});
+
+export const applyForumTaxonomy = mutation({
+  args: {
+    expectedFingerprint: v.string(),
+    confirmation: v.literal("preserve-urls-and-holds"),
+  },
+  returns: v.object({
+    applied: v.boolean(),
+    auditId: v.union(v.id("forumModerationEvents"), v.null()),
+    archiveCategoryId: v.id("forumCategories"),
+    inverseManifest: v.array(taxonomyChangeValidator),
+  }),
+  handler: async (ctx, args) => {
+    const actor = await requireForumAdmin(ctx);
+    const now = Date.now();
+    const preview = await forumTaxonomyPreview(ctx, now);
+    if (preview.fingerprint !== args.expectedFingerprint)
+      throw forumError(
+        "TAXONOMY_CHANGED",
+        "The taxonomy or paid placements changed. Review a fresh preview.",
+      );
+    if (!preview.canApply)
+      throw forumError("TAXONOMY_BLOCKED", preview.blockers.join(" "));
+    const archive = await ensureDefaultForumCategory(ctx, {
+      slug: "archive",
+      name: "Archive",
+      description:
+        "Earlier discussions, preserved at their original links. Read-only; new conversations belong in the active boards.",
+      kind: "section",
+      status: "active",
+      viewAccess: "public",
+      threadAccess: "closed",
+      replyAccess: "closed",
+      pollAccess: "closed",
+      position: 1000,
+      now,
+    });
+    await ctx.db.patch("forumCategories", archive.category._id, {
+      readOnlyArchive: true,
+    });
+    const manifest = preview.changes.map((change) => ({
+      ...change,
+      after: {
+        ...change.after,
+        ...(change.archiveRoot
+          ? { parentCategoryId: archive.category._id }
+          : {}),
+      },
+    }));
+    for (const change of manifest)
+      await ctx.db.patch("forumCategories", change.categoryId, {
+        name: change.after.name,
+        parentCategoryId: change.after.parentCategoryId ?? undefined,
+        position: change.after.position,
+        readOnlyArchive: change.after.readOnlyArchive ?? undefined,
+        updatedAt: now,
+      });
+    if (!manifest.length)
+      return {
+        applied: false,
+        auditId: null,
+        archiveCategoryId: archive.category._id,
+        inverseManifest: [],
+      };
+    // Reparenting is a publication-boundary change even though visibility is retained.
+    await bumpEvidencePublicationEpoch(ctx);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.requestHistoricalReconciliation,
+      {},
+    );
+    await requestUniversalSearchProjectionRebuild(ctx);
+    const auditId = await recordModerationLog(ctx, {
+      actorUserId: actor._id,
+      entityType: "forumCategory",
+      entityId: archive.category._id,
+      categoryId: archive.category._id,
+      eventType: "forum_category_updated",
+      message: "Forum five-pillar taxonomy applied; original URLs preserved",
+      metadata: {
+        kind: "forum-taxonomy-migration",
+        version: FORUM_TAXONOMY_VERSION,
+        fingerprint: preview.fingerprint,
+        changes: manifest,
+      },
+    });
+    return {
+      applied: true,
+      auditId,
+      archiveCategoryId: archive.category._id,
+      inverseManifest: manifest,
+    };
+  },
+});
+
+/** Restore only the saved, still-matching structural fields, never content/counters. */
+export const restoreForumTaxonomy = mutation({
+  args: {
+    auditId: v.id("forumModerationEvents"),
+    confirmation: v.literal("restore-saved-taxonomy"),
+  },
+  returns: v.object({ restored: v.number() }),
+  handler: async (ctx, args) => {
+    const actor = await requireForumAdmin(ctx);
+    const audit = await ctx.db.get("forumModerationEvents", args.auditId);
+    if (!audit || audit.eventType !== "forum_category_updated")
+      throw forumError(
+        "TAXONOMY_RECEIPT_INVALID",
+        "The saved migration receipt is unavailable.",
+      );
+    const receipt: unknown = JSON.parse(audit.metadataJson);
+    if (!isTaxonomyMigrationReceipt(receipt))
+      throw forumError(
+        "TAXONOMY_RECEIPT_INVALID",
+        "This is not a supported taxonomy receipt.",
+      );
+    for (const change of receipt.changes) {
+      const category = await ctx.db.get("forumCategories", change.categoryId);
+      if (
+        !category ||
+        category.slug !== change.slug ||
+        JSON.stringify(taxonomyState(category)) !== JSON.stringify(change.after)
+      )
+        throw forumError(
+          "TAXONOMY_CHANGED",
+          "A board changed after migration; restore requires a fresh manual review.",
+        );
+      if (
+        change.before.parentCategoryId !== null &&
+        !(await ctx.db.get("forumCategories", change.before.parentCategoryId))
+      )
+        throw forumError(
+          "TAXONOMY_CHANGED",
+          "A saved parent board no longer exists.",
+        );
+    }
+    const now = Date.now();
+    for (const change of receipt.changes)
+      await ctx.db.patch("forumCategories", change.categoryId, {
+        name: change.before.name,
+        parentCategoryId: change.before.parentCategoryId ?? undefined,
+        position: change.before.position,
+        readOnlyArchive: change.before.readOnlyArchive ?? undefined,
+        updatedAt: now,
+      });
+    await bumpEvidencePublicationEpoch(ctx);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.requestHistoricalReconciliation,
+      {},
+    );
+    await requestUniversalSearchProjectionRebuild(ctx);
+    await recordModerationLog(ctx, {
+      actorUserId: actor._id,
+      entityType: "forumCategory",
+      entityId: audit.entityId,
+      eventType: "forum_category_updated",
+      message: "Saved forum taxonomy restored; content and receipts unchanged",
+      metadata: {
+        kind: "forum-taxonomy-restored",
+        auditId: args.auditId,
+        restored: receipt.changes.length,
+      },
+    });
+    return { restored: receipt.changes.length };
+  },
+});
+
+function isTaxonomyMigrationReceipt(
+  value: unknown,
+): value is { changes: TaxonomyChange[] } {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("kind" in value) ||
+    value.kind !== "forum-taxonomy-migration" ||
+    !("version" in value) ||
+    value.version !== FORUM_TAXONOMY_VERSION ||
+    !("changes" in value) ||
+    !Array.isArray(value.changes) ||
+    value.changes.length > CATEGORY_LIST_LIMIT
+  )
+    return false;
+  const state = (candidate: unknown) =>
+    candidate !== null &&
+    typeof candidate === "object" &&
+    "name" in candidate &&
+    typeof candidate.name === "string" &&
+    "position" in candidate &&
+    typeof candidate.position === "number" &&
+    Number.isFinite(candidate.position) &&
+    "parentCategoryId" in candidate &&
+    (candidate.parentCategoryId === null ||
+      typeof candidate.parentCategoryId === "string") &&
+    "readOnlyArchive" in candidate &&
+    (candidate.readOnlyArchive === null ||
+      typeof candidate.readOnlyArchive === "boolean");
+  return value.changes.every(
+    (change: unknown) =>
+      change !== null &&
+      typeof change === "object" &&
+      "categoryId" in change &&
+      typeof change.categoryId === "string" &&
+      "slug" in change &&
+      typeof change.slug === "string" &&
+      "archiveRoot" in change &&
+      typeof change.archiveRoot === "boolean" &&
+      "before" in change &&
+      state(change.before) &&
+      "after" in change &&
+      state(change.after),
+  );
+}
+
 const upsertForumCategoryOperation = defineForumMutation({
   args: {
     categoryId: v.optional(v.id("forumCategories")),
@@ -8679,6 +9089,7 @@ const upsertForumCategoryOperation = defineForumMutation({
     kind: v.optional(categoryKindValidator),
     parentCategoryId: v.optional(v.id("forumCategories")),
     status: categoryStatusValidator,
+    readOnlyArchive: v.optional(v.boolean()),
     viewAccess: v.optional(categoryViewAccessValidator),
     threadAccess: v.optional(categoryWriteAccessValidator),
     replyAccess: v.optional(categoryWriteAccessValidator),
@@ -8739,6 +9150,7 @@ const upsertForumCategoryOperation = defineForumMutation({
         kind,
         parentCategoryId,
         status: args.status,
+        readOnlyArchive: args.readOnlyArchive,
         viewAccess,
         threadAccess,
         replyAccess,
@@ -8811,6 +9223,7 @@ const upsertForumCategoryOperation = defineForumMutation({
       kind,
       parentCategoryId,
       status: args.status,
+      readOnlyArchive: args.readOnlyArchive ?? category.readOnlyArchive,
       viewAccess,
       threadAccess,
       replyAccess,
@@ -10138,14 +10551,18 @@ async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
   if (user === null || user.isAgent !== true || user.agentSlug !== agentSlug) {
     throw new Error(`${agent.name}'s forum identity is not configured`);
   }
-  const categories = (
+  const categories = (await visibleCategoriesForUser(
+    ctx,
     await ctx.db
       .query("forumCategories")
       .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
-      .take(CATEGORY_LIST_LIMIT)
-  ).filter(
+      .take(CATEGORY_LIST_LIMIT),
+    null,
+  )).filter(
     (category) =>
-      isBoardCategory(category) && categoryViewAccess(category) === "public",
+      isBoardCategory(category) && categoryViewAccess(category) === "public" &&
+      category.readOnlyArchive !== true && canStartThreadInCategory(user, category, false) &&
+      FORUM_FOCUS_PILLARS.some((pillar) => category.slug === pillar || category.slug.startsWith(`${pillar}-`)),
   );
   const categoryNamesById = new Map(
     categories.map((category) => [category._id, category.name]),
@@ -11178,6 +11595,7 @@ export const publishSukiForumReply = internalMutation({
       thread.status !== "active" ||
       category === null ||
       category.status !== "active" ||
+      (await categoryIsReadOnlyArchive(ctx, category)) ||
       categoryViewAccess(category) !== "public"
     ) {
       await ctx.db.patch("forumAgentReplyRuns", run._id, {
@@ -11341,7 +11759,8 @@ async function loadSukiReplyCandidate(
     categoryViewAccess(category) !== "public" ||
     !(await canViewCategoryWithAncestors(ctx, null, category)) ||
     sukiUser === null ||
-    !canReplyInCategory(sukiUser, category, false)
+    !canReplyInCategory(sukiUser, category, false) ||
+    (await categoryIsReadOnlyArchive(ctx, category))
   ) {
     return null;
   }
@@ -11788,6 +12207,9 @@ async function forumReplyAdmission(
     sourceKind: args.sourceKind,
   });
   if (reason !== null) return { admitted: false as const, reason };
+  if (await categoryIsReadOnlyArchive(ctx, category)) {
+    return { admitted: false as const, reason: "not-public" };
+  }
   if (!(await canViewCategoryWithAncestors(ctx, null, category))) {
     return { admitted: false as const, reason: "not-public" };
   }
@@ -12031,7 +12453,8 @@ export const publishSukiForumThread = internalMutation({
       category === null ||
       !isBoardCategory(category) ||
       category.status !== "active" ||
-      categoryViewAccess(category) !== "public"
+      categoryViewAccess(category) !== "public" ||
+      (await categoryIsReadOnlyArchive(ctx, category))
     ) {
       throw new Error(`${agentName} selected an unavailable forum board`);
     }
@@ -12739,6 +13162,7 @@ export const publishTokenForumContribution = internalMutation({
       !isBoardCategory(category) ||
       category.status !== "active" ||
       categoryViewAccess(category) !== "public" ||
+      (await categoryIsReadOnlyArchive(ctx, category)) ||
       !(await canViewCategoryWithAncestors(ctx, null, category))
     ) {
       throw new Error("Token forum identity or public board is unavailable");
@@ -13163,6 +13587,7 @@ async function ensureDefaultForumCategory(
     replyAccess: ForumCategoryWriteAccess;
     slug: string;
     status: ForumCategoryDoc["status"];
+    readOnlyArchive?: boolean;
     threadAccess: ForumCategoryWriteAccess;
     viewAccess: ForumCategoryViewAccess;
   },
@@ -13182,6 +13607,7 @@ async function ensureDefaultForumCategory(
     kind: args.kind,
     parentCategoryId: args.parentCategoryId,
     status: args.status,
+    readOnlyArchive: args.readOnlyArchive,
     viewAccess: args.viewAccess,
     threadAccess: args.threadAccess,
     replyAccess: args.replyAccess,
@@ -13267,13 +13693,25 @@ async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
   }
   await migrateEmptyLegacyNewsBoardSlug(ctx, now);
 
+  const archive = await ensureDefaultForumCategory(ctx, {
+    slug: "archive", name: "Archive",
+    description: "Earlier discussions, preserved at their original links. Read-only; new conversations belong in the active boards.",
+    kind: "section", status: "active", viewAccess: "public",
+    threadAccess: "closed", replyAccess: "closed", pollAccess: "closed",
+    position: 1000, readOnlyArchive: true, now,
+  });
+  categoryIds.push(archive.category._id);
+  if (archive.created) createdCategoryIds.push(archive.category._id);
+
   for (const parent of SUKI_FORUM_TAXONOMY) {
+    const readOnlyArchive = (FORUM_ARCHIVE_ROOTS as readonly string[]).includes(parent.slug);
     const parentResult = await ensureDefaultForumCategory(ctx, {
       slug: parent.slug,
       name: parent.name,
       description: parent.description,
       kind: "board",
-      parentCategoryId: section.category._id,
+      parentCategoryId: readOnlyArchive ? archive.category._id : section.category._id,
+      readOnlyArchive,
       status: "active",
       viewAccess: "public",
       threadAccess: "members",
@@ -13295,6 +13733,7 @@ async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
         description: child.description,
         kind: "board",
         parentCategoryId: parentResult.category._id,
+        readOnlyArchive,
         status: "active",
         viewAccess: "public",
         threadAccess: "members",
@@ -15406,7 +15845,7 @@ async function requireVisibleCategory(
   ) {
     throw forumError("CATEGORY_NOT_FOUND", "That board is not available.");
   }
-  return category;
+  return await categoryWithArchiveState(ctx, category);
 }
 
 async function requireVisibleCategoryById(
@@ -15434,7 +15873,7 @@ async function visibleCategoryById(
   ) {
     return null;
   }
-  return category;
+  return await categoryWithArchiveState(ctx, category);
 }
 
 async function requireWritableCategory(
@@ -15462,6 +15901,24 @@ async function requireWritableCategory(
     );
   }
   return category;
+}
+
+async function categoryIsReadOnlyArchive(
+  ctx: QueryCtx | MutationCtx,
+  category: ForumCategoryDoc,
+) {
+  if (category.readOnlyArchive === true) return true;
+  const graph = await loadCategoryVisibilityGraph(ctx, [category]);
+  return categoryIsReadOnlyInGraph(category, graph);
+}
+
+async function categoryWithArchiveState(
+  ctx: QueryCtx | MutationCtx,
+  category: ForumCategoryDoc,
+): Promise<ForumCategoryDoc> {
+  return (await categoryIsReadOnlyArchive(ctx, category))
+    ? { ...category, readOnlyArchive: true }
+    : category;
 }
 
 async function requirePublicThread(
@@ -15813,6 +16270,8 @@ async function canHostVisibleThreads(
     return false;
   }
 
+  if (await categoryIsReadOnlyArchive(ctx, category)) return false;
+
   const categoryRank = categoryViewAccessRank(categoryViewAccess(category));
   let parentCategoryId = category.parentCategoryId;
   for (
@@ -15853,12 +16312,18 @@ async function visibleCategoriesForUser(
           : null,
       ),
     );
-    return visible.flatMap((category) => (category === null ? [] : [category]));
+    return visible.flatMap((category) => (category === null ? [] : [{
+      ...category,
+      readOnlyArchive: categoryIsReadOnlyInGraph(category, categoryGraph),
+    }]));
   }
 
   return categories.filter((category) =>
     canViewCategoryInGraph(user, category, categoryGraph, moderatedCategoryIds),
-  );
+  ).map((category) => ({
+    ...category,
+    readOnlyArchive: categoryIsReadOnlyInGraph(category, categoryGraph),
+  }));
 }
 
 async function loadCategoryVisibilityGraph(
@@ -15963,6 +16428,7 @@ function canStartThreadInCategory(
   userCanModerateCategory = canModerate(user),
 ) {
   return (
+    category?.readOnlyArchive !== true &&
     canViewCategory(user, category, userCanModerateCategory) &&
     isBoardCategory(category) &&
     canUseCategoryWriteAccess(
@@ -15979,6 +16445,7 @@ function canReplyInCategory(
   userCanModerateCategory = canModerate(user),
 ) {
   return (
+    category?.readOnlyArchive !== true &&
     canViewCategory(user, category, userCanModerateCategory) &&
     isBoardCategory(category) &&
     canUseCategoryWriteAccess(
@@ -15995,6 +16462,7 @@ function canVoteInCategory(
   userCanModerateCategory = canModerate(user),
 ) {
   return (
+    category?.readOnlyArchive !== true &&
     canViewCategory(user, category, userCanModerateCategory) &&
     isBoardCategory(category) &&
     canUseCategoryWriteAccess(
@@ -16126,6 +16594,9 @@ function categoryPermissionMessage(
   category: ForumCategoryDoc,
   action: "thread" | "reply" | "poll",
 ) {
+  if (category.readOnlyArchive === true) {
+    return "This board is a read-only archive. Start a new discussion in an active board.";
+  }
   const actionLabel =
     action === "thread"
       ? "start threads"
@@ -20531,7 +21002,8 @@ function publicCategoryRecord(
     description: category.description,
     kind: categoryKind(category),
     parentCategoryId: category.parentCategoryId,
-    isPostable: isBoardCategory(category),
+    isPostable: isBoardCategory(category) && category.readOnlyArchive !== true,
+    readOnlyArchive: category.readOnlyArchive === true,
     status: category.status,
     viewAccess: categoryViewAccess(category),
     threadAccess: categoryThreadAccess(category),
@@ -20658,6 +21130,7 @@ async function publicCategoryRecordWithAncestors(
   category: ForumCategoryDoc,
   user: UserDoc | null,
 ) {
+  category = await categoryWithArchiveState(ctx, category);
   const ancestors: PublicForumCategoryRecord[] = [];
   let parentCategoryId = category.parentCategoryId;
 
@@ -23636,7 +24109,7 @@ async function recordModerationLog(
 ) {
   const now = Date.now();
   const metadataJson = JSON.stringify(args.metadata);
-  await ctx.db.insert("forumModerationEvents", {
+  const eventId = await ctx.db.insert("forumModerationEvents", {
     actorUserId: args.actorUserId,
     entityType: args.entityType,
     entityId: args.entityId,
@@ -23669,7 +24142,7 @@ async function recordModerationLog(
       actorUserId: args.actorUserId,
       metadataJson,
     });
-    return;
+    return eventId;
   }
 
   await ctx.db.insert("systemLogs", {
@@ -23689,6 +24162,7 @@ async function recordModerationLog(
     entityId: args.entityId,
     metadataJson,
   });
+  return eventId;
 }
 
 async function filterThreadsForPublicCategory<T extends ForumThreadListSource>(
@@ -23735,8 +24209,8 @@ const privateConversationService = createForumPrivateConversationOperations({
   assertForumParticipationAllowed,
   assertDeliveryAllowed: assertOwnerPrivateMessageDeliveryAllowed,
   normalizeAttachments: normalizeForumAttachmentInputs,
-  recordReport: (ctx, reporterId, reportId, messageId, authorId) =>
-    recordModerationLog(ctx, {
+  recordReport: async (ctx, reporterId, reportId, messageId, authorId) => {
+    await recordModerationLog(ctx, {
       actorUserId: reporterId,
       entityType: "forumReport",
       entityId: reportId,
@@ -23749,7 +24223,8 @@ const privateConversationService = createForumPrivateConversationOperations({
         targetUserId: authorId,
         reportEntityType: "privateMessage",
       },
-    }),
+    });
+  },
 });
 export const getPrivateMessageAccess = query(
   privateConversationService.operations.getPrivateMessageAccess.definition,

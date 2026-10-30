@@ -1183,7 +1183,7 @@ describe("forum notification preferences", () => {
     );
 
     expect(first.created).toBe(true);
-    expect(first.createdCategoryIds).toHaveLength(42);
+    expect(first.createdCategoryIds).toHaveLength(46);
     expect(first.createdPrefixIds).toHaveLength(8);
     expect(first.createdAnnouncementIds).toHaveLength(1);
     expect(first.createdHelpDocumentIds).toHaveLength(3);
@@ -1221,6 +1221,10 @@ describe("forum notification preferences", () => {
       "ai-models",
       "ai-prompts",
       "ai-skills",
+      "archive",
+      "crypto",
+      "crypto-bags",
+      "crypto-pumpfun",
       "forum-news",
       "gaming",
       "gaming-downloads",
@@ -1285,7 +1289,7 @@ describe("forum notification preferences", () => {
     );
 
     expect(second.created).toBe(false);
-    expect(second.categoryIds).toHaveLength(42);
+    expect(second.categoryIds).toHaveLength(46);
     expect(second.createdCategoryIds).toHaveLength(0);
     expect(second.createdPrefixIds).toHaveLength(0);
     expect(second.createdAnnouncementIds).toHaveLength(0);
@@ -1434,7 +1438,7 @@ describe("forum notification preferences", () => {
       internal.forum.ensureSukiForumInfrastructure,
       {},
     );
-    expect(first.createdCategoryIds).toHaveLength(42);
+    expect(first.createdCategoryIds).toHaveLength(46);
     expect(first.createdPrefixIds).toHaveLength(8);
 
     const second = await t.mutation(
