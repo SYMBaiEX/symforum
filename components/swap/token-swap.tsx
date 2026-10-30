@@ -31,6 +31,7 @@ import {
   CommerceWalletRequestError,
   supportsCommerceTransaction,
   commerceWalletFailureMessage,
+  signReviewedSwap,
   type CommerceWalletClient,
   type ReviewedTransaction,
 } from "@/lib/commerce-wallet-client";
@@ -158,6 +159,11 @@ function LiveSwap({
   const refresh = useConvexAction(api.forumCommerce.refreshBenefit);
   const mine = useQuery(api.forumSwaps.listMine, isAuthenticated ? {} : "skip");
   const ensureRecovery = useMutation(api.forumSwapRecovery.ensure);
+  const registerSigned = useMutation(api.forumSwapSubmission.registerSigned);
+  const cancelUnsubmitted = useMutation(
+    api.forumSwapSubmission.cancelUnsubmitted,
+  );
+  const relaySigned = useConvexAction(api.forumSwapSubmission.relay);
   const recoveryAdmissions = useRef(new Set<string>());
   const [recoveryUnavailable, setRecoveryUnavailable] = useState<string | null>(
     null,
@@ -168,8 +174,13 @@ function LiveSwap({
     [slippage, setSlippage] = useState(50);
   const [format, setFormat] = useState<"auto" | "v0">("auto");
   const supportsV1 =
-    format === "auto" && supportsCommerceTransaction(client, 1);
-  const supportsV0 = supportsCommerceTransaction(client, 0);
+    format === "auto" &&
+    supportsCommerceTransaction(client, 1, config?.signatureFirstEnabled);
+  const supportsV0 = supportsCommerceTransaction(
+    client,
+    0,
+    config?.signatureFirstEnabled,
+  );
   const [extra, setExtra] = useState<TradeToken[]>([]);
   const [result, setResult] = useState<QuoteResult | null>(null),
     [selected, setSelected] = useState<Quote | null>(null),
@@ -224,12 +235,16 @@ function LiveSwap({
   useEffect(() => {
     if (!selected || !sent) return;
     const saved = mine?.find((row) => row.quoteId === selected.quoteId);
-    if (saved?.status === "confirmed") setFinalized(true);
-    else if (
+    if (saved?.status === "confirmed") {
+      setFinalized(true);
+      setNotice("Swap finalized. The exact reviewed transaction was verified.");
+    } else if (
       saved?.status === "failed" &&
       [
         "reconciled_expired_not_landed",
         "finalized_transaction_failed",
+        "signature_expired_not_found",
+        "app_submission_not_started",
       ].includes(saved.issue ?? "")
     ) {
       // Unlock the form, not the payment. Only a new explicit Buy can sign.
@@ -244,7 +259,9 @@ function LiveSwap({
       setNotice(
         saved.issue === "finalized_transaction_failed"
           ? "The previous swap failed on-chain. Network fees may apply. Nothing will be retried automatically."
-          : "The previous swap expired without landing. Trading is unlocked; nothing was resent.",
+          : saved.issue === "app_submission_not_started"
+            ? "Submission was cancelled before the app sent anything. You can request a fresh quote."
+            : "The previous swap expired without landing. Trading is unlocked; nothing was resent.",
       );
     }
   }, [mine, selected, sent]);
@@ -346,7 +363,11 @@ function LiveSwap({
       if (_signal.aborted || started !== revision.current) return;
       if (
         walletNow?.account.address !== data.wallet ||
-        !supportsCommerceTransaction(client, data.transactionVersion)
+        !supportsCommerceTransaction(
+          client,
+          data.transactionVersion,
+          config?.signatureFirstEnabled,
+        )
       )
         throw new Error(
           "Connected wallet changed or does not support this transaction version.",
@@ -389,6 +410,68 @@ function LiveSwap({
     setSent(true);
     setError("");
     setNotice("Approve only if the amounts and destination match your review.");
+    if (config?.signatureFirstEnabled) {
+      let signed: Awaited<ReturnType<typeof signReviewedSwap>> | undefined;
+      let stage = "signing";
+      try {
+        signed = await signReviewedSwap(client, prepared);
+        setSignature(signed.signature);
+        if (
+          _signal.aborted ||
+          ready.revision !== revision.current ||
+          !walletHandoffAllowed(selected.expiresAt)
+        )
+          throw Error("Signing interrupted before submission");
+        stage = "registration";
+        await registerSigned({
+          quoteId: selected.quoteId,
+          signedTransactionBase64: signed.signedTransactionBase64,
+        });
+        stage = "submission";
+        await relaySigned({
+          quoteId: selected.quoteId,
+          signedTransactionBase64: signed.signedTransactionBase64,
+        });
+        setNotice((current) =>
+          current.startsWith("Swap finalized.")
+            ? current
+            : "Transaction signature saved. Tracking confirmation automatically; nothing will be resent.",
+        );
+      } catch (reason) {
+        const code =
+          reason instanceof CommerceWalletRequestError ? reason.code : null;
+        console.warn(
+          "Swap signature-first step did not complete",
+          JSON.stringify({ stage, code }),
+        );
+        setWalletDiagnostic(`Stage: ${stage}; code: ${code ?? "none"}.`);
+        const cancelled = await cancelUnsubmitted({
+          quoteId: selected.quoteId,
+        }).catch(() => false);
+        if (cancelled) {
+          dispatched.current = false;
+          setSent(false);
+          setPrepared(null);
+          setSelected(null);
+          setResult(null);
+          setSignature("");
+          setNotice("");
+          setError(
+            stage === "signing"
+              ? "Wallet signing did not complete. The app did not submit a transaction. You can request a fresh quote."
+              : "Submission did not start. The saved attempt was cancelled before any relay was authorized. You can request a fresh quote.",
+          );
+        } else {
+          setNotice("");
+          setError(
+            signed
+              ? "The signature is available. Submission status needs verification; tracking continues from the saved operation. Do not submit again."
+              : "The signing attempt could not be closed safely. Open the saved operation status; no automatic resend will occur.",
+          );
+        }
+      }
+      return;
+    }
     let walletInvoked = false;
     let returnedSignature = false;
     try {
@@ -748,9 +831,27 @@ function LiveSwap({
       )}
       <Button
         className="w-full swap-primary"
-        disabled={needsRecovery ? busy : !canQuote || busy || sent}
+        disabled={
+          finalized ? busy : needsRecovery ? busy : !canQuote || busy || sent
+        }
         aria-controls={needsRecovery ? `${id}-history` : undefined}
         onClick={() => {
+          if (finalized && !unresolved) {
+            revision.current++;
+            dispatched.current = false;
+            purchaseActive.current = false;
+            attemptedQuote.current = "";
+            setSent(false);
+            setFinalized(false);
+            setSignature("");
+            setAmount("");
+            setPrepared(null);
+            setSelected(null);
+            setResult(null);
+            setNotice("");
+            setError("");
+            return;
+          }
           if (needsRecovery) {
             if (history.current) {
               history.current.open = true;
@@ -768,12 +869,18 @@ function LiveSwap({
         {send.isRunning
           ? "Waiting for wallet / receipt…"
           : needsRecovery
-            ? recovering?.recovery && recovering.recovery.state !== "review"
-              ? "Verifying previous swap…"
-              : "View swap status"
+            ? recovering?.recovery?.state === "checking"
+              ? "Checking swap outcome…"
+              : !recovering?.recovery || recovering.recovery.state === "review"
+                ? "View swap status"
+                : recovering?.signature
+                  ? recovering.recovery?.progress === "confirmed"
+                    ? "Confirmed · finalizing…"
+                    : "Awaiting confirmation"
+                  : "Waiting for verification"
             : sent
               ? finalized
-                ? "Swap complete"
+                ? "New swap"
                 : "Wallet request completed"
               : prepare.isRunning
                 ? "Preparing swap…"
@@ -786,7 +893,9 @@ function LiveSwap({
                       : !linked
                         ? "Connect your linked wallet"
                         : !supportsV0 && !supportsV1
-                          ? "Wallet cannot send this format"
+                          ? config?.signatureFirstEnabled
+                            ? "Wallet cannot sign this format"
+                            : "Wallet cannot send this format"
                           : !rawAmount || BigInt(rawAmount) === 0n
                             ? "Enter an amount"
                             : outputToken
@@ -834,11 +943,19 @@ function LiveSwap({
               Automatic outcome verification is queued. You do not need to click
               again or keep this page open. Nothing will be resent.
               {recovering.recovery.nextCheckAt > now
-                ? ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 60_000)} min.`
+                ? recovering.recovery.nextCheckAt - now < 60000
+                  ? ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 1000)} sec.`
+                  : ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 60_000)} min.`
                 : ""}
             </p>
           )}
         </div>
+      )}
+      {recovering?.recovery?.diagnostic && (
+        <p className="commerce-note">
+          Last check: {recovering.recovery.diagnostic.replaceAll("_", " ")}.
+          Nothing is being resent.
+        </p>
       )}
       {best && !fresh && !sent && (
         <p className="commerce-note">
@@ -968,20 +1085,6 @@ function LiveSwap({
           </p>
         </details>
       )}
-      {finalized && (
-        <Button
-          variant="outline"
-          onClick={() => {
-            dispatched.current = false;
-            setSent(false);
-            setFinalized(false);
-            setSignature("");
-            clear();
-          }}
-        >
-          Start a new swap
-        </Button>
-      )}
       {notice && (
         <p role="status" className="commerce-note">
           {notice}
@@ -1022,10 +1125,16 @@ function LiveSwap({
                 it.
               </p>
               <p>
-                If wallet Activity has a transaction signature, paste it below
-                and choose Check receipt. If Activity is empty, the hold needs
-                an independent expiry and transaction-history check. An empty
-                Activity list alone does not clear it.
+                {recovering?.signature ? (
+                  "The transaction signature is saved. Outcome checks continue automatically, including after you leave this page. Use the saved receipt link for independent transaction details."
+                ) : (
+                  <>
+                    If wallet Activity has a transaction signature, paste it
+                    below and choose Check receipt. If Activity is empty, the
+                    hold needs an independent expiry and transaction-history
+                    check. An empty Activity list alone does not clear it.
+                  </>
+                )}
               </p>
               {connected && (
                 <a

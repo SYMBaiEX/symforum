@@ -106,6 +106,7 @@ const tokenValidator = v.object({
 export const getConfig = query({
   args: {},
   returns: v.object({
+    signatureFirstEnabled: v.boolean(),
     swapsEnabled: v.boolean(),
     promotionsEnabled: v.boolean(),
     treasury: v.union(v.string(), v.null()),
@@ -121,6 +122,7 @@ export const getConfig = query({
   handler: async () => {
     const c = commerceConfig(env);
     return {
+      signatureFirstEnabled: env.FORUM_SWAP_SIGNATURE_FIRST_ENABLED === "true",
       swapsEnabled: c.swapsEnabled,
       promotionsEnabled: c.promotionsEnabled,
       treasury: c.treasury,

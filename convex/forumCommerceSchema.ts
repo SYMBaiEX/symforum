@@ -1,6 +1,9 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
-import { swapReconciliationAudit } from "./forumSwapReconciliationSchema";
+import {
+  swapReconciliationAudit,
+  signatureExpiryProof,
+} from "./forumSwapReconciliationSchema";
 export const promotionStatus = v.union(
   v.literal("checkout"),
   v.literal("submitted"),
@@ -9,6 +12,25 @@ export const promotionStatus = v.union(
   v.literal("expired"),
 );
 export const forumCommerceTables = {
+  forumSwapReconciliationAttempts: defineTable({
+    authorization: v.string(),
+    quoteId: v.id("forumSwapQuotes"),
+    reservedAt: v.number(),
+  }).index("by_authorization", ["authorization"]),
+  // Never store signed bearer transaction bytes in the submission ledger.
+  forumSwapSubmissions: defineTable({
+    quoteId: v.id("forumSwapQuotes"),
+    signature: v.string(),
+    wireHash: v.string(),
+    registeredAt: v.number(),
+    attemptedAt: v.optional(v.number()),
+    rpcState: v.optional(v.union(v.literal("accepted"), v.literal("unknown"))),
+    expiryProofHash: v.optional(v.string()),
+    previousQuoteHash: v.optional(v.string()),
+    expiryProof: v.optional(
+      v.object({ helius: signatureExpiryProof, solana: signatureExpiryProof }),
+    ),
+  }).index("by_quoteId", ["quoteId"]),
   // High-churn checking/leases stay separate from the immutable payment binding.
   forumSwapRecoveries: defineTable({
     quoteId: v.id("forumSwapQuotes"),
@@ -40,6 +62,14 @@ export const forumCommerceTables = {
     ),
     receiptHash: v.optional(v.string()),
     previousQuoteHash: v.optional(v.string()),
+    diagnostic: v.optional(v.string()),
+    progress: v.optional(
+      v.union(
+        v.literal("processed"),
+        v.literal("confirmed"),
+        v.literal("finalized"),
+      ),
+    ),
   }).index("by_quoteId", ["quoteId"]),
   forumSwapRequests: defineTable({
     wallet: v.string(),
@@ -135,6 +165,7 @@ export const forumCommerceTables = {
     .index("by_categoryId_and_endsAt", ["categoryId", "endsAt"])
     .index("by_threadId_and_createdAt", ["threadId", "createdAt"]),
   forumSwapQuotes: defineTable({
+    signatureFirst: v.optional(v.boolean()),
     authUserId: v.string(),
     userId: v.id("users"),
     wallet: v.string(),

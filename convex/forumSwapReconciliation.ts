@@ -81,16 +81,47 @@ export const reserve = internalMutation({
   returns: v.null(),
   handler: async (ctx) => {
     const approval = target(Date.now());
-    const gate = await commerceLimiter.limit(ctx, "commerceReconciliation", {
-      key: approval.quoteId,
-    });
-    if (!gate.ok)
-      throw new ConvexError("Reconciliation check already reserved.");
+    const oneShot = approval.authorization.startsWith("one-shot-diagnostic-");
+    if (oneShot) {
+      const job = await ctx.db
+        .query("forumSwapRecoveries")
+        .withIndex("by_quoteId", (q) => q.eq("quoteId", approval.quoteId))
+        .unique();
+      if (job && job.leaseUntil > Date.now())
+        throw new ConvexError("An ordinary outcome check is still running.");
+      const existing = await ctx.db
+        .query("forumSwapReconciliationAttempts")
+        .withIndex("by_authorization", (q) =>
+          q.eq("authorization", approval.authorization),
+        )
+        .unique();
+      if (existing)
+        throw new ConvexError(
+          "This diagnostic authorization was already used.",
+        );
+      const sub = await commerceLimiter.limit(ctx, "commerceRecoveryDaily", {
+        key: "all",
+        count: 10,
+      });
+      if (!sub.ok) throw new ConvexError("Recovery data budget reached.");
+    } else {
+      const gate = await commerceLimiter.limit(ctx, "commerceReconciliation", {
+        key: approval.quoteId,
+      });
+      if (!gate.ok)
+        throw new ConvexError("Reconciliation check already reserved.");
+    }
     const daily = await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
       key: "all",
       count: 10,
     });
     if (!daily.ok) throw new ConvexError("Free-tier data budget reached.");
+    if (oneShot)
+      await ctx.db.insert("forumSwapReconciliationAttempts", {
+        authorization: approval.authorization,
+        quoteId: approval.quoteId,
+        reservedAt: Date.now(),
+      });
     return null;
   },
 });
@@ -130,49 +161,77 @@ export const settleNotLanded = internalMutation({
         solana: args.solana,
       },
     });
+    const job = await ctx.db
+      .query("forumSwapRecoveries")
+      .withIndex("by_quoteId", (q) => q.eq("quoteId", row._id))
+      .unique();
+    if (job)
+      await ctx.db.patch("forumSwapRecoveries", job._id, {
+        state: "resolved",
+        reason: "resolved",
+        nextCheckAt: 0,
+        leaseUntil: 0,
+        outcome: "not_landed",
+        previousQuoteHash: args.snapshotHash,
+      });
     return "reconciled_not_landed" as const;
   },
 });
+export class ExpiryCheckError extends Error {
+  constructor(readonly stage: string) {
+    super("Expiry check inconclusive.");
+  }
+}
 export async function inspectProvider(
   url: string,
   row: Doc<"forumSwapQuotes">,
   hash: string,
 ): Promise<RpcExpiryProof> {
-  const genesis = await commerceRpc(url, "getGenesisHash", []);
-  if (genesis !== MAINNET_GENESIS) throw new Error("Wrong cluster.");
-  const invalid = record(
-    await commerceRpc(url, "isBlockhashValid", [
-      hash,
-      { commitment: "finalized", minContextSlot: row.simulationSlot },
-    ]),
-  );
-  const slot = record(invalid.context).slot;
-  if (
-    invalid.value !== false ||
-    !Number.isSafeInteger(slot) ||
-    Number(slot) <= Number(row.simulationSlot)
-  )
-    throw new Error("Blockhash expiry not proven.");
-  const options = { commitment: "finalized", minContextSlot: slot };
-  const height = await commerceRpc(url, "getBlockHeight", [options]);
-  const first = await commerceRpc(url, "getFirstAvailableBlock", []);
-  const history = await commerceRpc(url, "getSignaturesForAddress", [
-    row.wallet,
-    { ...options, limit: 10 },
-  ]);
-  const proof: RpcExpiryProof = {
-    checkedAt: Date.now(),
-    genesis: MAINNET_GENESIS,
-    invalidAtSlot: Number(slot),
-    finalizedHeight: Number(height),
-    firstAvailableSlot: Number(first),
-    ...(await proveQuietHistory(history, row)),
-  };
-  // Require numeric RPC results, not coercible strings.
-  if (typeof height !== "number" || typeof first !== "number")
-    throw new Error("Invalid chain metadata.");
-  requireExpiryProof(row, proof, Date.now());
-  return proof;
+  let stage = "genesis";
+  try {
+    const genesis = await commerceRpc(url, "getGenesisHash", []);
+    if (genesis !== MAINNET_GENESIS) throw new Error("Wrong cluster.");
+    stage = "blockhash_expiry";
+    const invalid = record(
+      await commerceRpc(url, "isBlockhashValid", [
+        hash,
+        { commitment: "finalized", minContextSlot: row.simulationSlot },
+      ]),
+    );
+    const slot = record(invalid.context).slot;
+    if (
+      invalid.value !== false ||
+      !Number.isSafeInteger(slot) ||
+      Number(slot) <= Number(row.simulationSlot)
+    )
+      throw new Error("Blockhash expiry not proven.");
+    const options = { commitment: "finalized", minContextSlot: slot };
+    stage = "finalized_height";
+    const height = await commerceRpc(url, "getBlockHeight", [options]);
+    stage = "history_retention";
+    const first = await commerceRpc(url, "getFirstAvailableBlock", []);
+    stage = "wallet_history";
+    const history = await commerceRpc(url, "getSignaturesForAddress", [
+      row.wallet,
+      { ...options, limit: 10 },
+    ]);
+    stage = "history_coverage";
+    const proof: RpcExpiryProof = {
+      checkedAt: Date.now(),
+      genesis: MAINNET_GENESIS,
+      invalidAtSlot: Number(slot),
+      finalizedHeight: Number(height),
+      firstAvailableSlot: Number(first),
+      ...(await proveQuietHistory(history, row)),
+    };
+    // Require numeric RPC results, not coercible strings.
+    if (typeof height !== "number" || typeof first !== "number")
+      throw new Error("Invalid chain metadata.");
+    requireExpiryProof(row, proof, Date.now());
+    return proof;
+  } catch {
+    throw new ExpiryCheckError(stage);
+  }
 }
 export const reconcileApproved = internalAction({
   args: {},
@@ -186,6 +245,7 @@ export const reconcileApproved = internalAction({
     const row = await ctx.runQuery(internal.forumSwapReconciliation.context, {
       now: Date.now(),
     });
+    let provider = "eligibility";
     if (
       row.reconciliation?.kind === "expired_not_landed" &&
       row.status === "failed"
@@ -207,8 +267,11 @@ export const reconcileApproved = internalAction({
         url.pathname !== "/"
       )
         throw new Error("Expected configured Helius endpoint.");
+      provider = "reservation";
       await ctx.runMutation(internal.forumSwapReconciliation.reserve, {});
+      provider = "helius";
       const helius = await inspectProvider(url.toString(), row, hash);
+      provider = "solana";
       const solana = await inspectProvider(
         "https://api.mainnet-beta.solana.com",
         row,
@@ -222,10 +285,13 @@ export const reconcileApproved = internalAction({
         status,
         reason: "two_independent_finalized_expiry_and_history_checks",
       };
-    } catch {
+    } catch (error) {
       return {
         status: "held",
-        reason: "evidence_inconclusive_or_record_changed_no_replay",
+        reason:
+          error instanceof ExpiryCheckError
+            ? `${provider}_${error.stage}`
+            : `${provider}_inconclusive_no_replay`,
       };
     }
   },

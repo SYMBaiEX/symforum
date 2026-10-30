@@ -11,8 +11,11 @@ import {
   compileTransaction,
   getBase64EncodedWireTransaction,
   getBase58Decoder,
+  getBase64Encoder,
 } from "@solana/kit";
 import { createHash } from "node:crypto";
+import { signedSwapFixture } from "../fixtures/signed-swap";
+import { inspectSignedSwap } from "../../lib/swap-signed-wire";
 const wallet = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
   SOL = "So11111111111111111111111111111111111111112",
   USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -102,6 +105,16 @@ function prepared() {
   };
 }
 async function harness(page: Page, query = "") {
+  const signed = query.includes("signaturefirst")
+    ? await signedSwapFixture(0)
+    : null;
+  const wallet =
+    signed?.wallet ?? "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
+  const binding = signed
+    ? await inspectSignedSwap(signed.signedTransactionBase64, signed.prepared)
+    : null;
+  let registered = false,
+    relayed = false;
   const requests: string[] = [];
   let quoteCalls = 0;
   const now = Date.now();
@@ -134,14 +147,49 @@ async function harness(page: Page, query = "") {
     if (url.pathname === "/")
       return route.fulfill({
         contentType: "text/html",
-        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><output id="wallet-calls">0</output><script src="/fixture.js"></script>`,
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><output id="wallet-calls">0</output><script>window.__commerceFixtureWallet=${JSON.stringify(wallet)}</script><script src="/fixture.js"></script>`,
       });
     if (url.pathname === "/fixture.js")
       return route.fulfill({ contentType: "text/javascript", body: bundle });
     const name = url.pathname.replace("/__commerce/", "");
     requests.push(name);
     let result: unknown;
-    if (name === "forumTokenDiscovery:search")
+    if (name === "wallet:sign" && signed) {
+      expect(route.request().postDataJSON().bytes).toEqual(
+        Array.from(
+          getBase64Encoder().encode(signed.prepared.transactionBase64),
+        ),
+      );
+      result = { wire: signed.signedTransactionBase64 };
+    } else if (name === "forumSwapSubmission:registerSigned" && signed) {
+      expect(route.request().postDataJSON().signedTransactionBase64).toBe(
+        signed.signedTransactionBase64,
+      );
+      registered = !query.includes("registerfail");
+      result = registered
+        ? { quoteId: "quote-fixture", signature: binding!.signature }
+        : null;
+    } else if (name === "forumSwapSubmission:cancelUnsubmitted") {
+      result = !relayed;
+    } else if (name === "forumSwapSubmission:relay" && signed) {
+      expect(registered).toBe(true);
+      relayed = true;
+      await page.evaluate(
+        ({ signature, finalized }) =>
+          window.dispatchEvent(
+            new CustomEvent("commerce:signed-receipt", {
+              detail: { signature, finalized },
+            }),
+          ),
+        {
+          signature: binding!.signature,
+          finalized: !query.includes("relaytimeout"),
+        },
+      );
+      result = query.includes("relaytimeout")
+        ? null
+        : { quoteId: "quote-fixture", signature: binding!.signature };
+    } else if (name === "forumTokenDiscovery:search")
       result = Array.from({ length: 30 }, (_, index) => ({
         mint: getBase58Decoder().decode(new Uint8Array(32).fill(index + 2)),
         symbol: `TOKEN${index}`,
@@ -205,7 +253,7 @@ async function harness(page: Page, query = "") {
     } else if (name === "forumSwaps:prepare")
       result = query.includes("simulatefail")
         ? null
-        : { quoteId: "quote-fixture", ...prepared() };
+        : { quoteId: "quote-fixture", ...(signed?.prepared ?? prepared()) };
     else if (name === "forumSwaps:confirm")
       result = query.includes("confirmfail")
         ? null
@@ -264,6 +312,77 @@ async function reviewSwap(page: Page) {
   await expect(page.locator(".swap-receive")).toHaveText("1");
   await page.getByRole("button", { name: "Swap", exact: true }).click();
 }
+test("signature-first swap saves the verified signature before one relay and unlocks after finality", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&signaturefirst");
+  await page.getByLabel("You pay", { exact: true }).fill(".01");
+  await reviewSwap(page);
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New swap", exact: true }),
+  ).toBeEnabled();
+  expect(requests.indexOf("wallet:sign")).toBeLessThan(
+    requests.indexOf("forumSwapSubmission:registerSigned"),
+  );
+  expect(requests.indexOf("forumSwapSubmission:registerSigned")).toBeLessThan(
+    requests.indexOf("forumSwapSubmission:relay"),
+  );
+  expect(
+    requests.filter((r) => r === "forumSwapSubmission:relay"),
+  ).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  expect(requests).not.toContain("forumSwaps:confirm");
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+  await page.getByRole("button", { name: "New swap", exact: true }).click();
+  await expect(page.getByLabel("You pay", { exact: true })).toHaveValue("");
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
+for (const mode of ["signfail", "registerfail"])
+  test(`${mode} is closed before any app submission without send fallback`, async ({
+    page,
+  }) => {
+    const requests = await harness(page, `?authorized&signaturefirst&${mode}`);
+    await page.getByLabel("You pay", { exact: true }).fill("0.01");
+    await reviewSwap(page);
+    await expect(page.getByRole("alert")).toContainText(
+      mode === "signfail"
+        ? "Wallet signing did not complete"
+        : "Submission did not start",
+    );
+    expect(requests).toContain("forumSwapSubmission:cancelUnsubmitted");
+    expect(requests).not.toContain("forumSwapSubmission:relay");
+    expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+    await expect(page.locator("#wallet-calls")).toHaveText("1");
+    await expect(
+      page.getByRole("button", { name: "Swap", exact: true }),
+    ).toBeEnabled();
+  });
+test("relay timeout retains a known signature and clickable status without another payment request", async ({
+  page,
+}) => {
+  const requests = await harness(
+    page,
+    "?authorized&signaturefirst&relaytimeout",
+  );
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await reviewSwap(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "The signature is available",
+  );
+  const button = page.getByRole("button", { name: "Confirmed · finalizing…" });
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(
+    page.getByRole("link", { name: "View transaction" }).first(),
+  ).toBeVisible();
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+  expect(
+    requests.filter((r) => r === "forumSwapSubmission:relay"),
+  ).toHaveLength(1);
+});
 test("one Swap click -> simulation -> one wallet approval -> finalized receipt", async ({
   page,
 }) => {
@@ -370,7 +489,7 @@ test("automatic recovery enrolls once and unlocks a proven expired swap without 
   const requests = await harness(page, "?authorized&held&auto");
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await expect(
-    page.getByRole("button", { name: "Verifying previous swap…" }),
+    page.getByRole("button", { name: "Waiting for verification" }),
   ).toBeEnabled();
   await expect(
     page.getByText("Checking automatically after the transaction expires.", {
