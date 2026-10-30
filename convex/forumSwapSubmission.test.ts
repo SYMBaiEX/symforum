@@ -273,6 +273,33 @@ test("a claimed/crashed relay cannot be reclaimed, even without an RPC result", 
     }),
   ).toBe(false);
 });
+test("manual receipt checks cannot bypass two-provider recovery or change a signed operation", async () => {
+  const x = await fixture();
+  await x.client.mutation(api.forumSwapSubmission.registerSigned, x.args);
+  const before = await x.t.run((ctx) =>
+    ctx.db.get("forumSwapQuotes", x.quoteId),
+  );
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  expect(
+    await x.client.action(api.forumSwaps.confirm, {
+      quoteId: x.quoteId,
+      signature: x.binding.signature,
+    }),
+  ).toMatchObject({ status: "submitted", signature: x.binding.signature });
+  await expect(
+    x.client.mutation(internal.forumSwaps.settle, {
+      quoteId: x.quoteId,
+      signature: x.binding.signature,
+      verified: true,
+      issue: "",
+    }),
+  ).rejects.toThrow("independent recovery evidence");
+  expect(
+    await x.t.run((ctx) => ctx.db.get("forumSwapQuotes", x.quoteId)),
+  ).toEqual(before);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 test("a cancelled registration that outlives the browser is closed after expiry with no network IO", async () => {
   const x = await fixture();
   await x.client.mutation(api.forumSwapSubmission.registerSigned, x.args);

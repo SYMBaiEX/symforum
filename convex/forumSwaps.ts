@@ -9,7 +9,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { commerceActor } from "./forumCommerceAccess";
 import { commerceLimiter, refreshBenefitForActor } from "./forumCommerce";
@@ -854,6 +854,7 @@ export const claimSignature = internalMutation({
     wallet: v.string(),
     messageHash: v.string(),
     confirmed: v.boolean(),
+    signatureFirst: v.boolean(),
   }),
   handler: async (ctx, { quoteId, signature }) => {
     if (!/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(signature))
@@ -887,6 +888,13 @@ export const claimSignature = internalMutation({
       throw new ConvexError(
         "This transaction already belongs to another swap.",
       );
+    if (row.signatureFirst)
+      return {
+        wallet: row.wallet,
+        messageHash: row.messageHash,
+        confirmed: row.status === "confirmed",
+        signatureFirst: true,
+      };
     if (row.status !== "confirmed")
       await ctx.db.patch("forumSwapQuotes", quoteId, {
         status: "submitted",
@@ -904,6 +912,7 @@ export const claimSignature = internalMutation({
       wallet: row.wallet,
       messageHash: row.messageHash,
       confirmed: row.status === "confirmed",
+      signatureFirst: false,
     };
   },
 });
@@ -924,6 +933,10 @@ export const settle = internalMutation({
       row.signature !== args.signature
     )
       throw new ConvexError("Swap receipt mismatch.");
+    if (row.signatureFirst)
+      throw new ConvexError(
+        "Signature-first swaps require independent recovery evidence.",
+      );
     if (row.status !== "confirmed")
       await ctx.db.patch("forumSwapQuotes", row._id, {
         status: args.verified ? "confirmed" : "held",
@@ -949,6 +962,10 @@ export const confirm = action({
         signature: args.signature,
         issue: null,
       };
+    // New signed operations cannot use the legacy single-provider settlement
+    // path or spend extra verification quota through repeated manual clicks.
+    if (saved.signatureFirst)
+      return ctx.runQuery(api.forumSwaps.getStatus, { quoteId: args.quoteId });
     let verified = false,
       issue = "receipt_unavailable";
     try {
