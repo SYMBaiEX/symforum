@@ -91,14 +91,16 @@ export function TokenDetail({
               <p>{token.name}</p>
             </div>
           </div>
-          <a
-            href={`https://solscan.io/token/${encodeURIComponent(token.mint)}`}
-            {...external}
-            className={styles.headerLink}
-          >
-            Explorer
-            <ArrowUpRight className="size-4" aria-hidden="true" />
-          </a>
+          <dl className={styles.price}>
+            <div>
+              <dt>
+                {metrics[0][0]} <span>USD</span>
+              </dt>
+              <dd data-unavailable={metrics[0][1] === "Unavailable"}>
+                {metrics[0][1]}
+              </dd>
+            </div>
+          </dl>
         </div>
         <div className={styles.mint}>
           <span>Mint</span>
@@ -126,66 +128,99 @@ export function TokenDetail({
                 : ""}
           </span>
         </div>
-        <dl className={styles.metrics}>
-          {metrics.map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd data-unavailable={value === "Unavailable"}>{value}</dd>
-            </div>
-          ))}
+        <dl className={styles.topMetrics}>
+          {[metrics[1], metrics[2], metrics[6], metrics[7]].map(
+            ([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd data-unavailable={value === "Unavailable"}>{value}</dd>
+              </div>
+            ),
+          )}
         </dl>
+        <p className={styles.marketStatus} role="status">
+          {fresh ? "Checked market data" : "Indexed market sample"}
+          {market
+            ? now - market.metricsAsOf > 15 * 60_000
+              ? " · 1h change is a stale sample"
+              : " · 1h change uses the indexed sample"
+            : " · 1h change unavailable"}
+          . Not an executable quote.
+        </p>
       </div>
       <TokenPriceChart
+        compact
         key={token.mint}
         mint={token.mint}
         symbol={token.symbol}
         light={resolvedTheme === "light"}
         onMarket={setLiveMarket}
       />
-      <div className={styles.source} role="status">
-        {fresh
-          ? `Price, market cap, FDV, liquidity and 24h volume checked ${new Date(fresh.checkedAt).toLocaleString()}. `
-          : "Price, cap, FDV, liquidity and 24h volume use the indexed sample until a fresh checked market response arrives. "}
-        {market
-          ? `Holders and 1h volume/change sampled ${new Date(market.metricsAsOf).toLocaleString()}. ${now - market.metricsAsOf > 15 * 60_000 ? "Stale sampled metrics." : ""}`
-          : market === undefined
-            ? "Loading the indexed snapshot…"
-            : "No indexed snapshot for this token. No estimates substituted."}{" "}
-        Chart and sampled metrics can use different observation times. Only a
-        fresh swap quote is executable.
-      </div>
-      <div className={styles.body}>
-        {market?.description && (
-          <p className={styles.muted}>{market.description}</p>
-        )}
-        <div className={styles.links}>
-          {links.map((link) => (
-            <a key={link.label} href={link.href} {...external}>
-              {link.label}
-              <ArrowUpRight aria-hidden="true" />
-            </a>
-          ))}
+      <details className={styles.marketDetails}>
+        <summary className="focus-ring">Market details &amp; sources</summary>
+        <div className={styles.body}>
+          <dl className={styles.metrics}>
+            {[metrics[3], metrics[4], metrics[5]].map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd data-unavailable={value === "Unavailable"}>{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        {market?.threadUrl && safeForumThread(market.threadUrl) ? (
-          <ForumLink
-            href={safeForumThread(market.threadUrl)!}
-            className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
+        <div className={styles.source} role="status">
+          {fresh
+            ? `Price, market cap, FDV, liquidity and 24h volume checked ${new Date(fresh.checkedAt).toLocaleString()}. `
+            : "Price, cap, FDV, liquidity and 24h volume use the indexed sample until a fresh checked market response arrives. "}
+          {market
+            ? `Holders and 1h volume/change sampled ${new Date(market.metricsAsOf).toLocaleString()}. ${now - market.metricsAsOf > 15 * 60_000 ? "Stale sampled metrics." : ""}`
+            : market === undefined
+              ? "Loading the indexed snapshot…"
+              : "No indexed snapshot for this token. No estimates substituted."}{" "}
+          Chart and sampled metrics can use different observation times. Only a
+          fresh swap quote is executable.
+        </div>
+        <div className={styles.body}>
+          <a
+            href={`https://solscan.io/token/${encodeURIComponent(token.mint)}`}
+            {...external}
+            className={styles.headerLink}
           >
-            Read the token discussion
-            <ArrowUpRight className="size-4" aria-hidden="true" />
-          </ForumLink>
-        ) : (
-          <p className={`${styles.muted} mt-3`}>
-            No canonical discussion is indexed for this mint yet.{" "}
+            Token explorer{" "}
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </a>
+          {market?.description && (
+            <p className={styles.muted}>{market.description}</p>
+          )}
+          <div className={styles.links}>
+            {links.map((link) => (
+              <a key={link.label} href={link.href} {...external}>
+                {link.label}
+                <ArrowUpRight aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+          {market?.threadUrl && safeForumThread(market.threadUrl) ? (
             <ForumLink
-              className="underline underline-offset-4"
-              href="/forum/crypto"
+              href={safeForumThread(market.threadUrl)!}
+              className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
             >
-              Browse Web3
+              Read the token discussion
+              <ArrowUpRight className="size-4" aria-hidden="true" />
             </ForumLink>
-          </p>
-        )}
-      </div>
+          ) : (
+            <p className={`${styles.muted} mt-3`}>
+              No canonical discussion is indexed for this mint yet.{" "}
+              <ForumLink
+                className="underline underline-offset-4"
+                href="/forum/crypto"
+              >
+                Browse Web3
+              </ForumLink>
+            </p>
+          )}
+        </div>
+      </details>
     </section>
   );
 }

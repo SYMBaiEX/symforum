@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useAction, useConvexAuth } from "convex/react";
-import { ArrowUpRight, Wallet } from "lucide-react";
+import { ArrowDown, ArrowUpRight, ChevronDown, Wallet } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { ForumLink } from "@/components/forum/forum-link";
@@ -77,6 +77,7 @@ function TerminalWorkspace({
 }: Pick<ForumTerminalProps, "renderUtilities">) {
   const client = useCommerceWallet();
   const [selected, setSelected] = useState<MarketChoice>(symfChoice);
+  const [marketsExpanded, setMarketsExpanded] = useState(false);
   // Public query arguments share a minute bucket across viewers. Do not create
   // a distinct materialized-cache subscription for every visitor's millisecond.
   const [now, setNow] = useState(
@@ -96,52 +97,74 @@ function TerminalWorkspace({
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <div>
-          <h1>Research. Discuss. Trade.</h1>
-          <p>
-            Solana markets alongside the people and agents following them.
-            Compare live routes, check the mint and keep your wallet in control.
-          </p>
+        <div className={styles.heading}>
+          <span className={styles.eyebrow}>Solana</span>
+          <h1>Trading terminal</h1>
         </div>
-        <ForumLink
-          href="/forum/crypto"
-          className={`${styles.headerLink} focus-ring`}
-        >
-          Web3 discussions
-          <ArrowUpRight className="size-4" aria-hidden="true" />
-        </ForumLink>
+        <nav className={styles.headerActions} aria-label="Terminal shortcuts">
+          <a
+            href="#terminal-order"
+            className={`${styles.tradeShortcut} focus-ring`}
+          >
+            Trade <ArrowDown className="size-3.5" aria-hidden="true" />
+          </a>
+          <ForumLink
+            href="/forum/crypto"
+            className={`${styles.headerLink} focus-ring`}
+          >
+            Web3 discussions
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </ForumLink>
+        </nav>
       </header>
       <div className={styles.layout}>
-        <TerminalBoundary label="Token discovery">
-          <MarketPanel
-            selected={selected.mint}
-            onSelect={setSelected}
-            now={now}
-          />
-        </TerminalBoundary>
-        <div className={styles.stack}>
+        <div className={styles.marketRail}>
+          <button
+            type="button"
+            className={`${styles.marketToggle} focus-ring`}
+            aria-expanded={marketsExpanded}
+            aria-controls="terminal-markets"
+            onClick={() => setMarketsExpanded((expanded) => !expanded)}
+          >
+            <span>
+              Markets <small>Sampled discovery</small>
+            </span>
+            <ChevronDown className="size-4" aria-hidden="true" />
+          </button>
+          <div
+            id="terminal-markets"
+            className={styles.marketRailBody}
+            data-expanded={marketsExpanded}
+          >
+            <TerminalBoundary label="Token discovery">
+              <MarketPanel
+                selected={selected.mint}
+                onSelect={setSelected}
+                now={now}
+              />
+            </TerminalBoundary>
+          </div>
+        </div>
+        <div className={styles.chartWorkspace}>
           <TerminalBoundary
             key={`market:${selected.mint}`}
             label="Selected token data"
           >
             <TokenDetail token={selected} now={now} />
           </TerminalBoundary>
-          {client ? (
-            <ConnectedRisk
-              key={`risk:${selected.mint}`}
-              client={client}
-              mint={selected.mint}
-              now={now}
-            />
-          ) : null}
         </div>
-        <aside className={styles.aside} aria-label="Trade selected token">
+        <aside
+          id="terminal-order"
+          className={styles.aside}
+          aria-label="Trade selected token"
+          tabIndex={-1}
+        >
           <TerminalBoundary label="Wallet and swap">
             <section className={styles.panel}>
               <div className={styles.panelHead}>
                 <div>
                   <h2>Trade ${selected.symbol}</h2>
-                  <p>Fresh quotes. Explicit wallet approval.</p>
+                  <p>Quotes · simulation · wallet approval</p>
                 </div>
               </div>
               <div className={styles.body}>
@@ -157,32 +180,39 @@ function TerminalWorkspace({
                   </p>
                 )}
               </div>
+              <details className={styles.executionDetails}>
+                <summary className="focus-ring">Before you approve</summary>
+                <p>
+                  A chart is not a quote. The swap panel verifies the mint,
+                  compares available routes and simulates the prepared
+                  transaction. Review fees, slippage and minimum received before
+                  signing.
+                </p>
+              </details>
+              <p className={styles.executionNote}>
+                Uncertain attempt? Keep the original protected. Check its
+                receipt below; never repeat it to force completion.
+              </p>
             </section>
           </TerminalBoundary>
-          <section
-            className={styles.panel}
-            aria-labelledby="terminal-execution-title"
-          >
-            <div className={styles.body}>
-              <h2
-                id="terminal-execution-title"
-                className="text-sm font-semibold"
-              >
-                Before you approve
-              </h2>
-              <p className={`${styles.muted} mt-2`}>
-                A chart is not a quote. The swap panel verifies the mint,
-                compares available routes and simulates the prepared
-                transaction. Fees, slippage and minimum received are shown
-                before signing.
-              </p>
-              <p className={`${styles.muted} mt-3`}>
-                If an outcome is uncertain, the original attempt stays
-                protected. Never repeat it to try to force completion.
-              </p>
-            </div>
-          </section>
+          {client ? (
+            <details className={styles.riskDisclosure}>
+              <summary className="focus-ring">
+                Mint facts <span>Authorities &amp; recorded checks</span>
+              </summary>
+              <ConnectedRisk
+                key={`risk:${selected.mint}`}
+                client={client}
+                mint={selected.mint}
+                now={now}
+              />
+            </details>
+          ) : null}
         </aside>
+      </div>
+      <div className={styles.sectionHeading}>
+        <h2>Your workspace</h2>
+        <p>Balances, saved watches and original operation receipts.</p>
       </div>
       {client && (
         <AccountPanels
@@ -193,7 +223,17 @@ function TerminalWorkspace({
         />
       )}
       {renderUtilities && (
-        <div id="terminal-utilities">{renderUtilities(selected.mint)}</div>
+        <section
+          id="terminal-utilities"
+          className={styles.utilities}
+          aria-labelledby="terminal-context-title"
+        >
+          <div className={styles.sectionHeading}>
+            <h2 id="terminal-context-title">Research &amp; community</h2>
+            <p>More context for the selected mint, separate from execution.</p>
+          </div>
+          {renderUtilities(selected.mint)}
+        </section>
       )}
       <TerminalBoundary label="Treasury transparency">
         <TransparencyPanel />
