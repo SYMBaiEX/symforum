@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useAction, useConvexAuth } from "convex/react";
-import { ArrowDown, ArrowUpRight, ChevronDown, Wallet } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUpRight,
+  ChartNoAxesCombined,
+  ListFilter,
+  Wallet,
+} from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { ForumLink } from "@/components/forum/forum-link";
@@ -16,7 +28,8 @@ import { TokenSwap, type TradeToken } from "@/components/swap/token-swap";
 import { Button } from "@/components/ui/button";
 import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 import { forumSiteUrl } from "@/lib/site-urls";
-import { MarketPanel, symfChoice, type MarketChoice } from "./market-panel";
+import { symfChoice, type MarketChoice } from "./market-panel";
+import { MarketExplorer } from "./market-explorer";
 import { TokenDetail, RiskPanel } from "./token-detail";
 import { TerminalBoundary } from "./terminal-boundary";
 import { SwapHistory, WalletPanel } from "./wallet-panel";
@@ -26,11 +39,13 @@ import styles from "./forum-terminal.module.css";
 
 export type ForumTerminalProps = {
   enabled: boolean;
+  initialMint?: string;
   renderUtilities?: (mint: string) => ReactNode;
 };
 
 export function ForumTerminal({
   enabled,
+  initialMint,
   renderUtilities,
 }: ForumTerminalProps) {
   const { host } = useForumRuntime();
@@ -67,17 +82,46 @@ export function ForumTerminal({
     );
   return (
     <CommerceWalletProvider>
-      <TerminalWorkspace renderUtilities={renderUtilities} />
+      <TerminalWorkspace
+        initialMint={initialMint}
+        renderUtilities={renderUtilities}
+      />
     </CommerceWalletProvider>
   );
 }
 
 function TerminalWorkspace({
+  initialMint,
   renderUtilities,
-}: Pick<ForumTerminalProps, "renderUtilities">) {
+}: Pick<ForumTerminalProps, "initialMint" | "renderUtilities">) {
   const client = useCommerceWallet();
-  const [selected, setSelected] = useState<MarketChoice>(symfChoice);
-  const [marketsExpanded, setMarketsExpanded] = useState(false);
+  const [selected, setSelected] = useState<MarketChoice>(() =>
+    initialMint && initialMint !== symfChoice.mint
+      ? { mint: initialMint, symbol: "TOKEN", name: "Selected Solana token" }
+      : symfChoice,
+  );
+  const [view, setView] = useState<"chart" | "markets">("chart");
+  const chartTab = useRef<HTMLButtonElement>(null);
+  const marketsTab = useRef<HTMLButtonElement>(null);
+  function selectToken(token: MarketChoice) {
+    setSelected(token);
+    setView("chart");
+    chartTab.current?.focus();
+  }
+  function navigateViews(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? "chart"
+        : event.key === "End"
+          ? "markets"
+          : view === "chart"
+            ? "markets"
+            : "chart";
+    setView(next);
+    (next === "chart" ? chartTab : marketsTab).current?.focus();
+  }
   // Public query arguments share a minute bucket across viewers. Do not create
   // a distinct materialized-cache subscription for every visitor's millisecond.
   const [now, setNow] = useState(
@@ -98,8 +142,40 @@ function TerminalWorkspace({
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <span className={styles.eyebrow}>Solana</span>
           <h1>Trading terminal</h1>
+          <span className={styles.network}>Solana</span>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Terminal views"
+          className={styles.viewTabs}
+        >
+          <button
+            ref={chartTab}
+            id="terminal-chart-tab"
+            type="button"
+            role="tab"
+            aria-selected={view === "chart"}
+            aria-controls="terminal-chart"
+            tabIndex={view === "chart" ? 0 : -1}
+            onClick={() => setView("chart")}
+            onKeyDown={navigateViews}
+          >
+            <ChartNoAxesCombined size={15} aria-hidden="true" /> Chart
+          </button>
+          <button
+            ref={marketsTab}
+            id="terminal-markets-tab"
+            type="button"
+            role="tab"
+            aria-selected={view === "markets"}
+            aria-controls="terminal-markets"
+            tabIndex={view === "markets" ? 0 : -1}
+            onClick={() => setView("markets")}
+            onKeyDown={navigateViews}
+          >
+            <ListFilter size={15} aria-hidden="true" /> Markets
+          </button>
         </div>
         <nav className={styles.headerActions} aria-label="Terminal shortcuts">
           <a
@@ -107,6 +183,12 @@ function TerminalWorkspace({
             className={`${styles.tradeShortcut} focus-ring`}
           >
             Trade <ArrowDown className="size-3.5" aria-hidden="true" />
+          </a>
+          <a
+            href="#terminal-account"
+            className={`${styles.headerLink} focus-ring`}
+          >
+            Your workspace
           </a>
           <ForumLink
             href="/forum/crypto"
@@ -118,40 +200,36 @@ function TerminalWorkspace({
         </nav>
       </header>
       <div className={styles.layout}>
-        <div className={styles.marketRail}>
-          <button
-            type="button"
-            className={`${styles.marketToggle} focus-ring`}
-            aria-expanded={marketsExpanded}
-            aria-controls="terminal-markets"
-            onClick={() => setMarketsExpanded((expanded) => !expanded)}
+        <div className={styles.analysis}>
+          <div
+            id="terminal-chart"
+            role="tabpanel"
+            aria-labelledby="terminal-chart-tab"
+            hidden={view !== "chart"}
+            className={styles.chartWorkspace}
           >
-            <span>
-              Markets <small>Sampled discovery</small>
-            </span>
-            <ChevronDown className="size-4" aria-hidden="true" />
-          </button>
+            <TerminalBoundary
+              key={`market:${selected.mint}`}
+              label="Selected token data"
+            >
+              <TokenDetail token={selected} now={now} />
+            </TerminalBoundary>
+          </div>
           <div
             id="terminal-markets"
-            className={styles.marketRailBody}
-            data-expanded={marketsExpanded}
+            role="tabpanel"
+            aria-labelledby="terminal-markets-tab"
+            hidden={view !== "markets"}
+            className={styles.marketsWorkspace}
           >
             <TerminalBoundary label="Token discovery">
-              <MarketPanel
+              <MarketExplorer
                 selected={selected.mint}
-                onSelect={setSelected}
+                onSelect={selectToken}
                 now={now}
               />
             </TerminalBoundary>
           </div>
-        </div>
-        <div className={styles.chartWorkspace}>
-          <TerminalBoundary
-            key={`market:${selected.mint}`}
-            label="Selected token data"
-          >
-            <TokenDetail token={selected} now={now} />
-          </TerminalBoundary>
         </div>
         <aside
           id="terminal-order"
@@ -160,11 +238,15 @@ function TerminalWorkspace({
           tabIndex={-1}
         >
           <TerminalBoundary label="Wallet and swap">
-            <section className={styles.panel}>
+            <section className={styles.orderSurface}>
               <div className={styles.panelHead}>
                 <div>
-                  <h2>Trade ${selected.symbol}</h2>
-                  <p>Quotes · simulation · wallet approval</p>
+                  <h2>
+                    {selected.symbol === "TOKEN"
+                      ? "Trade selected token"
+                      : `Trade $${selected.symbol}`}
+                  </h2>
+                  <p>Market order</p>
                 </div>
               </div>
               <div className={styles.body}>
@@ -190,8 +272,11 @@ function TerminalWorkspace({
                 </p>
               </details>
               <p className={styles.executionNote}>
-                Uncertain attempt? Keep the original protected. Check its
-                receipt below; never repeat it to force completion.
+                Protected attempt?{" "}
+                <a href="#terminal-account">
+                  Check the original receipt below.
+                </a>{" "}
+                Never repeat it to force completion.
               </p>
             </section>
           </TerminalBoundary>
@@ -210,18 +295,25 @@ function TerminalWorkspace({
           ) : null}
         </aside>
       </div>
-      <div className={styles.sectionHeading}>
-        <h2>Your workspace</h2>
-        <p>Balances, saved watches and original operation receipts.</p>
-      </div>
-      {client && (
-        <AccountPanels
-          key={selected.mint}
-          client={client}
-          selected={selected}
-          onSelect={setSelected}
-        />
-      )}
+      <section
+        id="terminal-account"
+        className={styles.accountWorkspace}
+        aria-labelledby="terminal-account-title"
+        tabIndex={-1}
+      >
+        <div className={styles.sectionHeading}>
+          <h2 id="terminal-account-title">Your workspace</h2>
+          <p>Wallet · watches · original receipts</p>
+        </div>
+        {client && (
+          <AccountPanels
+            key={selected.mint}
+            client={client}
+            selected={selected}
+            onSelect={selectToken}
+          />
+        )}
+      </section>
       {renderUtilities && (
         <section
           id="terminal-utilities"

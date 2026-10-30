@@ -149,7 +149,7 @@ function CandleCanvas({
           className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
         >
           {failed
-            ? "The chart could not start. Use Open full chart above."
+            ? "The chart could not start. Open Read candle data below for the checked values."
             : "Drawing chart…"}
         </p>
       )}
