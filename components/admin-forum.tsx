@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "./admin-forum.module.css";
+import { AdminForumTaxonomy } from "./admin-forum-taxonomy";
 
 import { reportAppError } from "@/components/app-error-surface";
 import { FORUM_CALENDAR_TIME_ZONE } from "@/components/forum/forum-refs";
@@ -2037,6 +2038,7 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
 
       {!moderationOnly ? (
         <>
+          <AdminForumTaxonomy />
           <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(18rem,0.9fr)_minmax(0,1.2fr)]">
             <section className="border-y border-row-border py-4">
               <div className="flex items-center justify-between gap-3">
