@@ -188,12 +188,13 @@ export function ForumNavigationLayout({
         (a.position ?? Number.MAX_SAFE_INTEGER) -
         (b.position ?? Number.MAX_SAFE_INTEGER),
     );
-  const archive = overview?.categories.find(
-    (category) =>
-      category.slug === "archive" &&
-      category.kind === "section" &&
-      category.status === "active",
-  );
+  const archive =
+    overview?.sections.find(
+      ({ section }) =>
+        section?.slug === "archive" &&
+        section.kind === "section" &&
+        section.status === "active",
+    )?.section ?? undefined;
   const path = normalizedForumPathname(pathname);
   let currentBoard = boards.find(
     (board) =>

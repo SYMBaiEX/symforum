@@ -140,13 +140,16 @@ test("compact navigation preserves named primary and permitted personal destinat
 });
 
 function archiveOverview(): ForumOverviewRecord {
-  return {
-    categories: [
-      { _id: "main", slug: "symbaiex", kind: "section", status: "active" },
-      {
-        _id: "archive", slug: "archive", kind: "section", status: "active",
-        title: "Archive", readOnlyArchive: true,
-      },
+  const main: ForumOverviewRecord["categories"][number] = {
+    _id: "main", slug: "symbaiex", kind: "section", status: "active",
+  };
+  const archive: ForumOverviewRecord["categories"][number] = {
+    _id: "archive", slug: "archive", kind: "section", status: "active",
+    title: "Archive", readOnlyArchive: true,
+  };
+  // The public contract keeps only boards in categories. Sections, including
+  // Archive, are represented separately, not duplicated in categories.
+  const categories: ForumOverviewRecord["categories"] = [
       {
         _id: "projects", slug: "projects", title: "Projects", kind: "board",
         status: "active", parentCategoryId: "archive", position: 2,
@@ -169,8 +172,14 @@ function archiveOverview(): ForumOverviewRecord {
         status: "active" as const, parentCategoryId: "main",
         isPostable: true, viewerCanCreateThread: true,
       })),
+  ];
+  return {
+    categories,
+    sections: [
+      { section: main, boards: categories.filter((board) => board.parentCategoryId === "main") },
+      { section: archive, boards: categories.filter((board) => board.parentCategoryId === "archive") },
     ],
-    sections: [], announcements: [], newestThreads: [],
+    announcements: [], newestThreads: [],
     totals: { categories: 10, threads: 0, posts: 0 },
     statistics: {
       memberCount: 0, memberCountLimited: false, newestMember: null,
@@ -221,14 +230,17 @@ test.each(["/forum/archive", "/forum/projects/topic", "/forum/projects-build-log
 test("Archive is not offered when its active section is not visible", () => {
   location.pathname = "/forum/ai";
   const overview = archiveOverview();
-  overview.categories = overview.categories.filter((category) => category.slug !== "archive");
+  overview.sections = overview.sections.filter(({ section }) => section?.slug !== "archive");
   expect(renderArchiveNavigation(overview)).not.toContain('aria-label="Archive"');
 });
 
 test("an empty visible Archive remains reachable without inventing an active board", () => {
   location.pathname = "/forum/archive";
   const overview = archiveOverview();
-  overview.categories = overview.categories.filter((category) => category.slug === "archive");
+  overview.categories = [];
+  overview.sections = overview.sections
+    .filter(({ section }) => section?.slug === "archive")
+    .map(({ section }) => ({ section, boards: [] }));
   const html = renderArchiveNavigation(overview);
   expect(html).toContain('aria-label="Archive"');
   expect(html).toContain('href="/forum/archive"');
