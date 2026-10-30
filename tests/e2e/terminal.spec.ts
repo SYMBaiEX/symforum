@@ -490,8 +490,8 @@ test("a current bounded cohort keeps source timestamps and selects only the exac
   page,
 }) => {
   const frozenNow = Date.parse("2026-10-30T18:00:00.000Z");
-  await page.clock.install({ time: frozenNow - 1_000 });
-  await page.clock.pauseAt(frozenNow);
+  // Freeze Date only: React, chart animation frames and transport timers must run.
+  await page.clock.setFixedTime(frozenNow);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const { errors, chartMints } = await harness(page, "guest&currentcohort");
   await expect(
@@ -532,7 +532,14 @@ test("a current bounded cohort keeps source timestamps and selects only the exac
     .filter({ has: page.getByRole("button", { name: /^View FRESH6,/ }) })
     .locator("time");
   const originalSourceTime = await source.getAttribute("datetime");
-  await page.clock.fastForward(120_000);
+  await expect(source).toHaveText("6m ago");
+  await page.clock.setFixedTime(frozenNow + 120_000);
+  // Exercise the terminal's real foreground refresh without pausing React work.
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  expect(await page.evaluate(() => Date.now())).toBe(frozenNow + 120_000);
+  await expect(source).toHaveText("8m ago");
   await expect(source).toHaveAttribute("datetime", originalSourceTime!);
   await page.getByRole("button", { name: /^View FRESH6,/ }).click();
   await expect(
