@@ -41,17 +41,26 @@ function number(value: unknown): number | null {
     : null;
 }
 
-export function parseSymfStats(value: unknown): SymfStats {
+export type MarketBinding = { mint: string; pool: string; quote: string };
+const symfBinding: MarketBinding = {
+  mint: SYMF_TOKEN.mint,
+  pool: SYMF_TOKEN.pool,
+  quote: "So11111111111111111111111111111111111111112",
+};
+
+export function parseMarketStats(
+  value: unknown,
+  expected: MarketBinding,
+): SymfStats {
   if (!Array.isArray(value)) throw Error("invalid_market_snapshot");
   const pair = value
     .map(record)
     .find(
       (p) =>
         p.chainId === "solana" &&
-        p.pairAddress === SYMF_TOKEN.pool &&
-        record(p.baseToken).address === SYMF_TOKEN.mint &&
-        record(p.quoteToken).address ===
-          "So11111111111111111111111111111111111111112",
+        p.pairAddress === expected.pool &&
+        record(p.baseToken).address === expected.mint &&
+        record(p.quoteToken).address === expected.quote,
     );
   if (!pair) throw Error("wrong_market_token");
   return {
@@ -62,7 +71,11 @@ export function parseSymfStats(value: unknown): SymfStats {
   };
 }
 
-export function parseSymfTrades(value: unknown, now: number): SymfTrade[] {
+export function parseMarketTrades(
+  value: unknown,
+  now: number,
+  expected: Pick<MarketBinding, "mint" | "quote">,
+): SymfTrade[] {
   const rows = record(value).data;
   if (!Array.isArray(rows) || rows.length > 300)
     throw Error("invalid_trade_response");
@@ -82,10 +95,10 @@ export function parseSymfTrades(value: unknown, now: number): SymfTrade[] {
     if (side !== "buy" && side !== "sell") continue;
     if (
       side === "buy"
-        ? a.to_token_address !== SYMF_TOKEN.mint ||
-          a.from_token_address !== "So11111111111111111111111111111111111111112"
-        : a.from_token_address !== SYMF_TOKEN.mint ||
-          a.to_token_address !== "So11111111111111111111111111111111111111112"
+        ? a.to_token_address !== expected.mint ||
+          a.from_token_address !== expected.quote
+        : a.from_token_address !== expected.mint ||
+          a.to_token_address !== expected.quote
     )
       continue;
     const time =
@@ -121,4 +134,12 @@ export function parseSymfTrades(value: unknown, now: number): SymfTrade[] {
     });
   }
   return result.sort((a, b) => b.time - a.time).slice(0, 20);
+}
+
+export function parseSymfStats(value: unknown): SymfStats {
+  return parseMarketStats(value, symfBinding);
+}
+
+export function parseSymfTrades(value: unknown, now: number): SymfTrade[] {
+  return parseMarketTrades(value, now, symfBinding);
 }
