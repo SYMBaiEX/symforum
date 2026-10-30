@@ -42,6 +42,30 @@ export function selectMarketBinding(
   };
 }
 
+export function marketPrice(
+  value: unknown,
+  expected: MarketBinding,
+): number | null {
+  if (!Array.isArray(value)) return null;
+  const pair = value
+    .map(record)
+    .find(
+      (p) =>
+        p.chainId === "solana" &&
+        p.pairAddress === expected.pool &&
+        record(p.baseToken).address === expected.mint &&
+        record(p.quoteToken).address === expected.quote,
+    );
+  const raw = pair?.priceUsd;
+  if (
+    typeof raw !== "string" ||
+    !/^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw)
+  )
+    return null;
+  const price = Number(raw);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 /** Enforce the byte ceiling while reading, not after buffering a hostile body. */
 export async function readPublicMarket(
   url: string,

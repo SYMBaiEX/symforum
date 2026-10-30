@@ -10,6 +10,7 @@ import type { TerminalMarket } from "../lib/forum-terminal-model";
 import {
   readPublicMarket,
   selectMarketBinding,
+  marketPrice,
 } from "../lib/terminal-market-source";
 import {
   parseMarketCandles,
@@ -83,7 +84,10 @@ export const claim = internalMutation({
       if (
         !market ||
         !Number.isFinite(market.metricsAsOf) ||
-        market.metricsAsOf < now - 15 * 60_000 ||
+        // This is an identity allowlist, not use of a stale sample as a quote.
+        // The indexed list retains24h; the fetched chart binds a fresh response
+        // to that exact mint/pool. Scout selection still requires <=15m data.
+        market.metricsAsOf < now - 24 * 3_600_000 ||
         market.metricsAsOf > now + 60_000
       )
         return {
@@ -242,6 +246,8 @@ export const read = action({
           ...binding,
           interval,
           checkedAt,
+          stats: parseMarketStats(pairs, binding),
+          priceUsd: marketPrice(pairs, binding),
           candles: parseMarketCandles(data, checkedAt, binding),
         });
       } else {
