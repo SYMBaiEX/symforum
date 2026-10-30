@@ -7,6 +7,7 @@ import { getBase58Decoder } from "@solana/kit";
 import schema from "./schema";
 import { api, components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { commerceBenefit } from "./forumCommerceRpc";
 import { IDENTITY_MARKER } from "../lib/identity-config";
 import {
   COMMERCE_MINT,
@@ -219,6 +220,176 @@ test("cached quotes stay wallet-owned, preserve expiry and stop being reusable a
   ).toMatchObject({ status: "preparing" });
 });
 type Test = ReturnType<typeof setup>;
+test("managed quotes keep the standard referral fee despite cached holder eligibility", async () => {
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "50");
+  vi.stubEnv("FORUM_SWAP_MANAGED_ENABLED", "true");
+  vi.stubEnv("FORUM_SWAP_SIGNATURE_FIRST_ENABLED", "true");
+  vi.stubEnv("JUPITER_API_KEY", "fixture-not-a-key");
+  vi.stubEnv("JUPITER_REFERRAL_ACCOUNT", treasury);
+  const t = setup(),
+    a = await actor(t, 204),
+    now = Date.now();
+  const benefitId = await t.run((ctx) =>
+    ctx.db.insert("forumWalletBenefits", {
+      wallet: a.wallet,
+      eligible: true,
+      status: "verified",
+      balanceRaw: "1000001",
+      decimals: 6,
+      priceUsd: "1",
+      checkedAt: now,
+      expiresAt: now + 60000,
+      leaseUntil: 0,
+    }),
+  );
+  const before = await t.run((ctx) =>
+    ctx.db.get("forumWalletBenefits", benefitId),
+  );
+  const request = {
+    wallet: a.wallet,
+    inputMint: "So11111111111111111111111111111111111111112",
+    outputMint: COMMERCE_MINT,
+    amountRaw: "10000000",
+    slippageBps: 50,
+    supportsV1: false,
+  };
+  const fetcher = vi.fn(async (url: RequestInfo | URL) => {
+    expect(String(url)).toContain("https://api.jup.ag/swap/v2/order?");
+    return Response.json({
+      router: "metis",
+      gasless: false,
+      inputMint: request.inputMint,
+      outputMint: request.outputMint,
+      taker: a.wallet,
+      swapMode: "ExactIn",
+      inAmount: request.amountRaw,
+      outAmount: "990000",
+      otherAmountThreshold: "985050",
+      slippageBps: 50,
+      priceImpactPct: "0.01",
+      feeBps: 50,
+      feeMint: request.inputMint,
+      platformFee: { feeBps: 50, feeMint: request.inputMint },
+      referralAccount: treasury,
+      signatureFeeLamports: 5000,
+      prioritizationFeeLamports: 10000,
+      rentFeeLamports: 2000000,
+      transaction: "AQAAAA==",
+      transactionVersion: 0,
+      requestId: "holder-regression-order",
+      lastValidBlockHeight: "400000001",
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const result = await a.client.action(api.forumSwaps.quote, request);
+  expect(result).toMatchObject({
+    platformFeeBps: 50,
+    benefitEligible: false,
+    benefitStatus: "unavailable",
+  });
+  expect(result.quotes[0]).toMatchObject({
+    platformFeeBps: 50,
+    execution: "jupiter-managed",
+  });
+  const url = new URL(String(fetcher.mock.calls[0][0]));
+  expect(url.searchParams.get("referralFee")).toBe("50");
+  expect(url.searchParams.get("referralAccount")).toBe(treasury);
+  expect(await a.client.action(api.forumSwaps.quote, request)).toEqual(result);
+  expect(fetcher).toHaveBeenCalledTimes(1); // Cache reuse, no balance or price fetch.
+  expect(
+    await t.run((ctx) => ctx.db.get("forumWalletBenefits", benefitId)),
+  ).toEqual(before);
+  // Simulate a pre-deploy cached waived quote. It cannot be reused or consumed.
+  const quoteId = result.quotes[0].quoteId;
+  await t.run(async (ctx) => {
+    await ctx.db.patch("forumSwapQuotes", quoteId, { platformFeeBps: 0 });
+    const cache = await ctx.db
+      .query("forumSwapRequests")
+      .withIndex("by_wallet", (q) => q.eq("wallet", a.wallet))
+      .unique();
+    await ctx.db.patch("forumSwapRequests", cache!._id, {
+      leaseUntil: 0,
+      payload: JSON.stringify({
+        ...result,
+        platformFeeBps: 0,
+        benefitEligible: true,
+      }),
+    });
+  });
+  await expect(
+    a.client.mutation(internal.forumSwaps.consumeQuote, { quoteId }),
+  ).rejects.toThrow("Swap fee changed");
+  vi.spyOn(Date, "now").mockReturnValue(now + 2000); // Existing admission limits remain enforced.
+  expect(
+    await a.client.mutation(internal.forumSwaps.claimQuoteRequest, {
+      ...request,
+      lease: "fresh-fee",
+    }),
+  ).toBeNull();
+  expect(
+    await t.run((ctx) => ctx.db.get("forumSwapQuotes", quoteId)),
+  ).toMatchObject({ status: "quoted", platformFeeBps: 0 });
+});
+
+test("waived quote save/preparation is rejected without touching an uncertain hold", async () => {
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "50");
+  const t = setup(),
+    a = await actor(t, 205),
+    now = Date.now();
+  const row = {
+    authUserId: a.authUserId,
+    userId: a.userId,
+    wallet: a.wallet,
+    provider: "jupiter" as const,
+    quoteJson: "{}",
+    treasury,
+    createdAt: now,
+    expiresAt: now + 25000,
+    platformFeeBps: 0,
+  };
+  const [preparing, held] = await t.run(async (ctx) => [
+    await ctx.db.insert("forumSwapQuotes", { ...row, status: "preparing" }),
+    await ctx.db.insert("forumSwapQuotes", {
+      ...row,
+      status: "held",
+      issue: "wallet_outcome_unknown",
+    }),
+  ]);
+  const hold = await t.run((ctx) => ctx.db.get("forumSwapQuotes", held));
+  await expect(
+    a.client.mutation(internal.forumSwaps.prepared, {
+      quoteId: preparing,
+      transactionBase64: "AQAAAA==",
+      messageHash: "a".repeat(64),
+      lastValidBlockHeight: 100,
+      simulationSlot: 10,
+      transactionVersion: 0,
+      estimatedNetworkFeeLamports: "5000",
+    }),
+  ).rejects.toThrow("Swap fee changed");
+  await expect(
+    a.client.mutation(internal.forumSwaps.saveQuotes, {
+      wallet: a.wallet,
+      quotesJson: JSON.stringify([
+        {
+          provider: "jupiter",
+          request: {
+            wallet: a.wallet,
+            inputMint: "So11111111111111111111111111111111111111112",
+            outputMint: COMMERCE_MINT,
+            amountRaw: "10000000",
+            slippageBps: 50,
+            platformFeeBps: 0,
+          },
+          expiresAt: now + 25000,
+        },
+      ]),
+    }),
+  ).rejects.toThrow("Invalid quote");
+  expect(await t.run((ctx) => ctx.db.get("forumSwapQuotes", held))).toEqual(
+    hold,
+  );
+});
 function key(n: number, size = 32) {
   return getBase58Decoder().decode(new Uint8Array(size).fill(n));
 }
@@ -226,6 +397,7 @@ beforeEach(() => {
   vi.stubEnv("CONVEX_SITE_URL", issuer);
   vi.stubEnv("BETTER_AUTH_ENABLED", "true");
   vi.stubEnv("FORUM_SWAPS_ENABLED", "true");
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "25"); // Historical non-managed fixtures.
   vi.stubEnv("FORUM_PROMOTIONS_ENABLED", "true");
   vi.stubEnv("FORUM_COMMERCE_TREASURY", treasury);
   vi.stubEnv("FORUM_COMMERCE_RPC_URL", "https://api.mainnet-beta.solana.com");
@@ -516,25 +688,37 @@ function chainReceipt(i: {
     },
   };
 }
-describe("commerce authorization and cached holder checks", () => {
-  test("frozen SYMF does not grant a fee waiver and providers cannot redirect", async () => {
+describe("commerce authorization and retired holder checks", () => {
+  test("historical balance proof excludes frozen SYMF and providers cannot redirect", async () => {
     const t = setup(),
       a = await actor(t, 91),
       fetcher = installBalanceFetch(a.wallet, "100000000000", "frozen");
     expect(
-      await a.client.action(api.forumCommerce.refreshBenefit, {
-        wallet: a.wallet,
-      }),
-    ).toMatchObject({ status: "verified", eligible: false, balanceRaw: "0" });
+      await commerceBenefit("https://api.mainnet-beta.solana.com", a.wallet),
+    ).toMatchObject({ eligible: false, balanceRaw: "0" });
     expect(
       fetcher.mock.calls.every((call) => call[1]?.redirect === "error"),
     ).toBe(true);
   });
-  test("only a current linked human wallet can trigger or read a benefit lookup", async () => {
+  test("retired benefit endpoint remains owner-only, never fetches or changes historical eligibility", async () => {
     const t = setup(),
       a = await actor(t, 1),
       other = await actor(t, 2),
       fetcher = installBalanceFetch(a.wallet);
+    const oldId = await t.run((ctx) =>
+      ctx.db.insert("forumWalletBenefits", {
+        wallet: a.wallet,
+        status: "verified",
+        eligible: true,
+        balanceRaw: "1000001",
+        decimals: 6,
+        priceUsd: "1",
+        checkedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+        leaseUntil: 0,
+      }),
+    );
+    const old = await t.run((ctx) => ctx.db.get("forumWalletBenefits", oldId));
     await expect(
       t.action(api.forumCommerce.refreshBenefit, { wallet: a.wallet }),
     ).rejects.toThrow("Sign in");
@@ -548,29 +732,33 @@ describe("commerce authorization and cached holder checks", () => {
       wallet: a.wallet,
     });
     expect(benefit).toMatchObject({
-      status: "verified",
-      eligible: true,
-      balanceRaw: "1000001",
-      priceUsd: "1",
+      status: "unavailable",
+      eligible: false,
+      balanceRaw: "0",
+      priceUsd: null,
+      expiresAt: 0,
     });
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).not.toHaveBeenCalled();
     expect(
       await a.client.action(api.forumCommerce.refreshBenefit, {
         wallet: a.wallet,
         refresh: true,
       }),
-    ).toEqual(benefit);
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    ).toMatchObject({ eligible: false, status: "unavailable", expiresAt: 0 });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(
+      await t.run((ctx) => ctx.db.get("forumWalletBenefits", oldId)),
+    ).toEqual(old);
     await expect(
       other.client.action(api.forumCommerce.refreshBenefit, {
         wallet: a.wallet,
       }),
     ).rejects.toThrow("Link and verify");
   });
-  test("unavailable or suspicious token/price metadata never grants a waiver", async () => {
+  test("retired benefit endpoint does not create cache rows or consume provider quota", async () => {
     const t = setup(),
       a = await actor(t, 3);
-    installBalanceFetch(key(4));
+    const fetcher = installBalanceFetch(key(4));
     expect(
       await a.client.action(api.forumCommerce.refreshBenefit, {
         wallet: a.wallet,
@@ -584,8 +772,13 @@ describe("commerce authorization and cached holder checks", () => {
     const records = await t.run((ctx) =>
       ctx.db.query("forumWalletBenefits").take(3),
     );
-    expect(records).toHaveLength(1);
-    expect(records[0]).not.toHaveProperty("error");
+    expect(records).toHaveLength(0);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await a.client.query(api.forumCommerce.getConfig, {})).toMatchObject(
+      {
+        holderDiscountEnabled: false,
+      },
+    );
   });
   test("capability flags default off and missing treasury prevents all economic quotes", async () => {
     vi.stubEnv("FORUM_SWAPS_ENABLED", "");

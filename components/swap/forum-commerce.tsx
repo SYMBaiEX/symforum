@@ -342,7 +342,7 @@ function LivePromotion({
           <p>
             The interval is confirmed after finalization. Checkout expires{" "}
             {date(display.checkoutExpiresAt)}. Network fees and token-account
-            rent are additional. The holder swap-fee waiver does not apply.
+            rent are additional.
           </p>
           {!prepared && !sent && (
             <Button

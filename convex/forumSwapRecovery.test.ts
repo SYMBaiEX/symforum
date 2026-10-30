@@ -585,6 +585,7 @@ test("the two receipt providers must agree on the finalized outcome", async () =
 test("the normal wallet request fence queues recovery even if the browser never returns", async () => {
   const f = await fixture({ fresh: true });
   vi.stubEnv("FORUM_SWAPS_ENABLED", "true");
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "25"); // This legacy fixture's quoted fee.
   vi.stubEnv("FORUM_COMMERCE_TREASURY", f.row.wallet);
   await f.t.run(async (ctx) => {
     await ctx.db.patch("forumSwapQuotes", f.id, { status: "prepared" });

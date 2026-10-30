@@ -12,7 +12,7 @@ import {
 import { internal, api } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { commerceActor } from "./forumCommerceAccess";
-import { commerceLimiter, refreshBenefitForActor } from "./forumCommerce";
+import { commerceLimiter } from "./forumCommerce";
 import { commerceRpc } from "./forumCommerceRpc";
 import { commerceConfig, record } from "../lib/forum-commerce";
 import {
@@ -140,15 +140,7 @@ export const quote = action({
     );
     if (cached !== null) return JSON.parse(cached);
     try {
-      const benefit = await refreshBenefitForActor(ctx, {
-        wallet: args.wallet,
-      });
-      const platformFeeBps =
-        benefit.status === "verified" &&
-        benefit.eligible &&
-        benefit.expiresAt > Date.now()
-          ? 0
-          : config.platformFeeBps;
+      const platformFeeBps = config.platformFeeBps;
       const request = {
         ...args,
         supportsV1: args.supportsV1 === true,
@@ -181,8 +173,9 @@ export const quote = action({
       const response = {
         quotes,
         failures: result.failures,
-        benefitEligible: platformFeeBps === 0 && benefit.eligible,
-        benefitStatus: benefit.status,
+        // Retained for older clients; holder discounts are no longer offered.
+        benefitEligible: false,
+        benefitStatus: "unavailable" as const,
         platformFeeBps,
       };
       await ctx.runMutation(internal.forumSwaps.finishQuoteRequest, {
@@ -268,28 +261,19 @@ export const claimQuoteRequest = internalMutation({
       row.payload &&
       row.expiresAt > now + 8000
     ) {
-      const benefit = await ctx.db
-        .query("forumWalletBenefits")
-        .withIndex("by_wallet", (q) => q.eq("wallet", args.wallet))
-        .unique();
-      const fee =
-        benefit?.status === "verified" &&
-        benefit.eligible &&
-        benefit.expiresAt > now
-          ? 0
-          : config.platformFeeBps;
       const payload = JSON.parse(row.payload) as { platformFeeBps: number };
       const quotes = await Promise.all(
         row.quoteIds.map((id) => ctx.db.get("forumSwapQuotes", id)),
       );
       if (
         quotes.length > 0 &&
-        payload.platformFeeBps === fee &&
+        payload.platformFeeBps === config.platformFeeBps &&
         quotes.every(
           (q) =>
             q?.authUserId === actor.authUserId &&
             q.wallet === args.wallet &&
             q.status === "quoted" &&
+            q.platformFeeBps === config.platformFeeBps &&
             q.expiresAt > now + 8000 &&
             q.treasury === config.treasury,
         )
@@ -409,6 +393,7 @@ export const saveQuotes = internalMutation({
       validateSwapRequest(quote.request);
       if (
         quote.request.wallet !== wallet ||
+        quote.request.platformFeeBps !== config.platformFeeBps ||
         quote.expiresAt <= now ||
         quote.expiresAt > now + 30_000 ||
         !["jupiter", "raydium"].includes(quote.provider)
@@ -448,6 +433,10 @@ export const consumeQuote = internalMutation({
     if (!row || row.authUserId !== actor.authUserId)
       throw new ConvexError("Quote not found.");
     const config = commerceConfig(env);
+    if (row.platformFeeBps !== config.platformFeeBps)
+      throw new ConvexError(
+        "Swap fee changed. Review a fresh quote before signing.",
+      );
     if (
       !config.swapsEnabled ||
       config.treasury !== row.treasury ||
@@ -505,6 +494,10 @@ export const prepared = internalMutation({
     if (!config.swapsEnabled || config.treasury !== row.treasury)
       throw new ConvexError(
         "Swaps are paused or treasury configuration changed.",
+      );
+    if (row.platformFeeBps !== config.platformFeeBps)
+      throw new ConvexError(
+        "Swap fee changed. Review a fresh quote before signing.",
       );
     if (
       args.transactionBase64.length > 6000 ||
@@ -568,18 +561,9 @@ export const prepare = action({
       config = commerceConfig(env);
     try {
       if (!config.rpcUrl || !config.treasury) throw new Error("Unavailable.");
-      const benefit = await refreshBenefitForActor(ctx, {
-        wallet: saved.wallet,
-      });
-      const fee =
-        benefit.status === "verified" &&
-        benefit.eligible &&
-        benefit.expiresAt > Date.now()
-          ? 0
-          : config.platformFeeBps;
-      if (fee !== saved.platformFeeBps)
+      if (config.platformFeeBps !== saved.platformFeeBps)
         throw new ConvexError(
-          "Holder benefit changed. Request fresh routes before signing.",
+          "Swap fee changed. Review a fresh quote before signing.",
         );
       await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
         wallet: saved.wallet,
@@ -845,6 +829,7 @@ export const beginWalletRequest = mutation({
     if (
       row.expiresAt <= Date.now() ||
       !config.swapsEnabled ||
+      row.platformFeeBps !== config.platformFeeBps ||
       config.treasury !== row.treasury
     )
       throw new ConvexError(

@@ -24,6 +24,7 @@ async function fixture() {
   for (const [key, value] of Object.entries({
     BETTER_AUTH_ENABLED: "true",
     FORUM_SWAPS_ENABLED: "true",
+    FORUM_PLATFORM_FEE_BPS: "50",
     FORUM_SWAP_SIGNATURE_FIRST_ENABLED: "true",
     FORUM_SWAP_AUTORECOVERY_ENABLED: "true",
     FORUM_COMMERCE_TREASURY: f.wallet,
@@ -91,7 +92,7 @@ async function fixture() {
     treasury: f.wallet,
     createdAt: now,
     expiresAt: now + 25000,
-    platformFeeBps: 0,
+    platformFeeBps: 50,
     status: "prepared" as const,
     ...f.prepared,
   };
@@ -116,6 +117,36 @@ async function fixture() {
     );
   return { t, client, f, row, args, quoteId, binding, ledger };
 }
+test("new waived submissions are refused but existing signed records keep their original recovery terms", async () => {
+  const x = await fixture(),
+    fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  await x.t.run((ctx) =>
+    ctx.db.patch("forumSwapQuotes", x.quoteId, { platformFeeBps: 0 }),
+  );
+  await expect(
+    x.client.mutation(api.forumSwapSubmission.registerSigned, x.args),
+  ).rejects.toThrow("Swap fee changed");
+  expect(await x.ledger()).toBeNull();
+  await x.t.run((ctx) =>
+    ctx.db.patch("forumSwapQuotes", x.quoteId, { platformFeeBps: 50 }),
+  );
+  await x.client.mutation(api.forumSwapSubmission.registerSigned, x.args);
+  // Historical already-registered record is idempotent, even if its fee differs.
+  await x.t.run((ctx) =>
+    ctx.db.patch("forumSwapQuotes", x.quoteId, { platformFeeBps: 0 }),
+  );
+  const before = await x.t.run((ctx) =>
+    ctx.db.get("forumSwapQuotes", x.quoteId),
+  );
+  await expect(
+    x.client.mutation(api.forumSwapSubmission.registerSigned, x.args),
+  ).resolves.toEqual({ quoteId: x.quoteId, signature: x.binding.signature });
+  expect(
+    await x.t.run((ctx) => ctx.db.get("forumSwapQuotes", x.quoteId)),
+  ).toEqual(before);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 test("registration saves and binds the signature before any submission and does no network IO", async () => {
   const x = await fixture(),
     fetcher = vi.fn();

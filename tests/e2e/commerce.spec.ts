@@ -106,7 +106,7 @@ function prepared() {
 }
 async function harness(page: Page, query = "") {
   const managed = query.includes("managed");
-  const feeBps = managed ? (query.includes("waived") ? 0 : 50) : 25;
+  const feeBps = managed ? 50 : 25;
   const signed = query.includes("signaturefirst")
     ? await signedSwapFixture(0)
     : null;
@@ -233,9 +233,9 @@ async function harness(page: Page, query = "") {
                   execution: "jupiter-managed",
                   fees: {
                     feeMint: input.inputMint,
-                    totalFeeBps: feeBps || 10,
+                    totalFeeBps: feeBps,
                     integratorFeeBps: feeBps,
-                    jupiterFeeBps: feeBps ? 0 : 10,
+                    jupiterFeeBps: 0,
                   },
                 }
               : {}),
@@ -260,8 +260,8 @@ async function harness(page: Page, query = "") {
         ],
         failures: [],
         platformFeeBps: feeBps,
-        benefitEligible: feeBps === 0,
-        benefitStatus: "verified",
+        benefitEligible: false,
+        benefitStatus: "unavailable",
       };
     } else if (name === "forumSwaps:prepare")
       result = query.includes("simulatefail")
@@ -427,34 +427,33 @@ test("one Swap click -> simulation -> one wallet approval -> finalized receipt",
     requests.indexOf("forumSwaps:confirm"),
   );
 });
-for (const waived of [false, true])
-  test(`managed fee disclosure (${waived ? "holder waiver" : "50 bps"}) and SDK sign-only completion`, async ({
+test("managed standard fee disclosure and SDK sign-only completion without holder lookups", async ({
+  page,
+}) => {
+  const requests = await harness(
     page,
-  }) => {
-    const requests = await harness(
-      page,
-      `?authorized&signaturefirst&managed${waived ? "&waived" : ""}&hideaftersign`,
-    );
-    await page.getByLabel("You pay", { exact: true }).fill(".01");
-    await expect(
-      page.getByText(
-        waived
-          ? /SYMBaiEX waived · Jupiter 0.1%/
-          : /0.5% integrator fee \(Jupiter share included\)/,
-      ),
-    ).toBeVisible();
-    await expect(page.locator("#wallet-calls")).toHaveText("0");
-    await reviewSwap(page);
-    await expect(
-      page.getByText("Swap finalized.", { exact: false }),
-    ).toBeVisible();
-    expect(
-      requests.filter((x) => x === "forumSwapSubmission:relay"),
-    ).toHaveLength(1);
-    expect(requests).not.toContain("forumSwaps:beginWalletRequest");
-    expect(requests).not.toContain("forumSwaps:confirm");
-    await expect(page.locator("#wallet-calls")).toHaveText("1");
-  });
+    "?authorized&signaturefirst&managed&hideaftersign",
+  );
+  await page.getByLabel("You pay", { exact: true }).fill(".01");
+  await expect(
+    page.getByText(/0.5% integrator fee \(Jupiter share included\)/),
+  ).toBeVisible();
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+  await reviewSwap(page);
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  expect(
+    requests.filter((x) => x === "forumSwapSubmission:relay"),
+  ).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  expect(requests).not.toContain("forumSwaps:confirm");
+  expect(requests).not.toContain("forumCommerce:refreshBenefit");
+  await expect(
+    page.getByRole("button", { name: "Refresh benefit" }),
+  ).toHaveCount(0);
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
 test("failed simulation never opens a wallet request", async ({ page }) => {
   const requests = await harness(page, "?simulatefail");
   await connect(page);

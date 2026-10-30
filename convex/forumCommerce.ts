@@ -10,12 +10,11 @@ import {
   internalQuery,
   mutation,
   query,
-  type ActionCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import { commerceActor, publicCommerceThread } from "./forumCommerceAccess";
-import { commerceBenefit, commerceMint } from "./forumCommerceRpc";
+import { commerceMint } from "./forumCommerceRpc";
 import {
   commerceConfig,
   COMMERCE_MINT,
@@ -117,6 +116,7 @@ export const getConfig = query({
     promotionBurnBps: v.number(),
     holderThresholdUsd: v.number(),
     holderCacheTtlMs: v.number(),
+    holderDiscountEnabled: v.boolean(),
     maxPromotedPerBoard: v.number(),
     symfMint: v.string(),
   }),
@@ -134,6 +134,7 @@ export const getConfig = query({
       promotionBurnBps: c.promotionBurnBps,
       holderThresholdUsd: c.holderThresholdUsd,
       holderCacheTtlMs: c.holderCacheTtlMs,
+      holderDiscountEnabled: false,
       maxPromotedPerBoard: c.maxPromotedPerBoard,
       symfMint: COMMERCE_MINT,
     };
@@ -308,67 +309,23 @@ export const saveBenefit = internalMutation({
     };
   },
 });
-export type CommerceBenefit = {
-  wallet: string;
-  eligible: boolean;
-  status: "checking" | "verified" | "unavailable";
-  balanceRaw: string;
-  decimals: number;
-  priceUsd: string | null;
-  checkedAt: number;
-  expiresAt: number;
-};
-export async function refreshBenefitForActor(
-  ctx: ActionCtx,
-  args: { wallet: string; refresh?: boolean },
-): Promise<CommerceBenefit> {
-  const saved: {
-    fetch: boolean;
-    benefit: {
-      wallet: string;
-      eligible: boolean;
-      status: "checking" | "verified" | "unavailable";
-      balanceRaw: string;
-      decimals: number;
-      priceUsd: string | null;
-      checkedAt: number;
-      expiresAt: number;
-    };
-  } = await ctx.runMutation(internal.forumCommerce.reserveBenefit, {
-    wallet: args.wallet,
-    refresh: args.refresh === true,
-  });
-  if (!saved.fetch) return saved.benefit;
-  const config = commerceConfig(env);
-  let proof: {
-      balanceRaw: string;
-      decimals: number;
-      priceUsd?: string;
-      eligible: boolean;
-    } = { balanceRaw: "0", decimals: SYMF_TOKEN.decimals, eligible: false },
-    success = false;
-  try {
-    if (!config.rpcUrl) throw new Error("RPC unavailable.");
-    await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
-      wallet: args.wallet,
-      cost: 3,
-    });
-    proof = await commerceBenefit(config.rpcUrl, args.wallet);
-    success = true;
-  } catch {
-    /* No private provider errors or wallet history are stored. */
-  }
-  return await ctx.runMutation(internal.forumCommerce.saveBenefit, {
-    wallet: args.wallet,
-    checkedAt: saved.benefit.checkedAt,
-    ...proof,
-    success,
-  });
-}
+/** Compatibility endpoint for old tabs. Never fetch balances or modify history. */
 export const refreshBenefit = action({
   args: { wallet: v.string(), refresh: v.optional(v.boolean()) },
   returns: benefitValidator,
-  handler: refreshBenefitForActor,
+  handler: async (ctx, { wallet }) => {
+    await ctx.runQuery(internal.forumCommerce.authorizeWallet, { wallet });
+    return {
+      wallet,
+      eligible: false,
+      status: "unavailable" as const,
+      balanceRaw: "0",
+      decimals: SYMF_TOKEN.decimals,
+      priceUsd: null,
+      checkedAt: Date.now(),
+      expiresAt: 0,
+    };
+  },
 });
 
 export const builtinTokens = [

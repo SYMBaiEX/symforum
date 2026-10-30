@@ -76,6 +76,12 @@ export const registerSigned = mutation({
         throw new ConvexError("Submission binding mismatch.");
       return { quoteId: row._id, signature: signed.signature };
     }
+    // New submissions must use the current fee. Already-registered operations
+    // retain their immutable terms and recovery path; never replay them.
+    if (row.platformFeeBps !== commerceConfig(env).platformFeeBps)
+      throw new ConvexError(
+        "Swap fee changed. Review a fresh quote before signing.",
+      );
     if (
       row.status !== "prepared" ||
       row.signature ||
