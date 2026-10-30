@@ -21,6 +21,11 @@ import {
 } from "../lib/swap-preparation-errors";
 import { verifiedMint } from "../lib/swap-rpc";
 import { SOL_MINT } from "../lib/swap-router";
+import {
+  queueSwapRecovery,
+  recoveryView,
+  recoveryViewValidator,
+} from "./forumSwapRecovery";
 import { COMMERCE_MINT } from "../lib/forum-commerce";
 import {
   collectSwapQuotes,
@@ -717,6 +722,7 @@ export const listMine = query({
       inputMint: v.string(),
       outputMint: v.string(),
       amountRaw: v.string(),
+      recovery: v.optional(recoveryViewValidator),
     }),
   ),
   handler: async (ctx) => {
@@ -742,17 +748,24 @@ export const listMine = query({
     const unique = new Map(
       [...important, ...rows].map((row) => [row._id, row]),
     );
-    return [...unique.values()].slice(0, 10).map((row) => {
-      const saved = JSON.parse(row.quoteJson) as SwapRouteQuote;
-      return {
-        ...receiptView(row),
-        wallet: row.wallet,
-        createdAt: row.createdAt,
-        inputMint: saved.request.inputMint,
-        outputMint: saved.request.outputMint,
-        amountRaw: saved.request.amountRaw,
-      };
-    });
+    return Promise.all(
+      [...unique.values()].slice(0, 10).map(async (row) => {
+        const saved = JSON.parse(row.quoteJson) as SwapRouteQuote;
+        const recovery = await ctx.db
+          .query("forumSwapRecoveries")
+          .withIndex("by_quoteId", (q) => q.eq("quoteId", row._id))
+          .unique();
+        return {
+          ...receiptView(row),
+          wallet: row.wallet,
+          createdAt: row.createdAt,
+          inputMint: saved.request.inputMint,
+          outputMint: saved.request.outputMint,
+          amountRaw: saved.request.amountRaw,
+          ...(recovery ? { recovery: recoveryView(recovery) } : {}),
+        };
+      }),
+    );
   },
 });
 export const markUnknown = mutation({
@@ -775,6 +788,7 @@ export const markUnknown = mutation({
       });
     const current = await ctx.db.get("forumSwapQuotes", row._id);
     if (!current) throw new Error("Swap missing.");
+    await queueSwapRecovery(ctx, current);
     return receiptView(current);
   },
 });
@@ -815,6 +829,11 @@ export const beginWalletRequest = mutation({
         );
     }
     await ctx.db.patch("forumSwapQuotes", row._id, {
+      status: "submitted",
+      issue: "wallet_request_started",
+    });
+    await queueSwapRecovery(ctx, {
+      ...row,
       status: "submitted",
       issue: "wallet_request_started",
     });
@@ -866,6 +885,13 @@ export const claimSignature = internalMutation({
       );
     if (row.status !== "confirmed")
       await ctx.db.patch("forumSwapQuotes", quoteId, {
+        status: "submitted",
+        signature,
+        issue: "awaiting_finalized_receipt",
+      });
+    if (row.status !== "confirmed")
+      await queueSwapRecovery(ctx, {
+        ...row,
         status: "submitted",
         signature,
         issue: "awaiting_finalized_receipt",

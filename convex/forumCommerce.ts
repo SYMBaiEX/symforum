@@ -25,6 +25,13 @@ import {
 } from "../lib/forum-commerce";
 
 export const commerceLimiter = new RateLimiter(components.rateLimiter, {
+  // Recovery shares the existing 1,000/day cap, with a tighter sub-budget.
+  commerceRecoveryDaily: {
+    kind: "fixed window",
+    rate: 100,
+    period: 86_400_000,
+    start: 0,
+  },
   commerceReconciliation: {
     kind: "token bucket",
     rate: 1,
@@ -375,13 +382,17 @@ export const builtinTokens = [
     decimals: 6,
     tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   },
-  ...(COMMERCE_MINT ? [{
-    mint: COMMERCE_MINT,
-    symbol: SYMF_TOKEN.symbol,
-    name: SYMF_TOKEN.name,
-    decimals: SYMF_TOKEN.decimals,
-    tokenProgram: SYMF_TOKEN.tokenProgram,
-  }] : []),
+  ...(COMMERCE_MINT
+    ? [
+        {
+          mint: COMMERCE_MINT,
+          symbol: SYMF_TOKEN.symbol,
+          name: SYMF_TOKEN.name,
+          decimals: SYMF_TOKEN.decimals,
+          tokenProgram: SYMF_TOKEN.tokenProgram,
+        },
+      ]
+    : []),
 ];
 type TradeToken = (typeof builtinTokens)[number];
 async function mappedMint(

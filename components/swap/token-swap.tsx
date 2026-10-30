@@ -151,6 +151,11 @@ function LiveSwap({
     begin = useMutation(api.forumSwaps.beginWalletRequest);
   const refresh = useConvexAction(api.forumCommerce.refreshBenefit);
   const mine = useQuery(api.forumSwaps.listMine, isAuthenticated ? {} : "skip");
+  const ensureRecovery = useMutation(api.forumSwapRecovery.ensure);
+  const recoveryAdmissions = useRef(new Set<string>());
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState<string | null>(
+    null,
+  );
   const [inputMint, setInputMint] = useState(SOL),
     [outputMint, setOutputMint] = useState(outputToken?.mint ?? USDC),
     [amount, setAmount] = useState(""),
@@ -181,6 +186,57 @@ function LiveSwap({
         row.wallet === connected?.account.address &&
         ["held", "submitted"].includes(row.status),
     ) ?? false;
+  const recovering = mine?.find(
+    (row) =>
+      row.wallet === connected?.account.address &&
+      ["held", "submitted"].includes(row.status),
+  );
+  // Admission is idempotent and ownership-checked. Durable verification runs on
+  // Convex, never in a browser interval; remounts cannot reset its attempt cap.
+  useEffect(() => {
+    if (!recovering || !linked || !isAuthenticated) return;
+    const key = `${session?.authUserId}:${recovering.quoteId}`;
+    if (recoveryAdmissions.current.has(key)) return;
+    recoveryAdmissions.current.add(key);
+    void ensureRecovery({ quoteId: recovering.quoteId })
+      .then((job) => {
+        if (!job) setRecoveryUnavailable(recovering.quoteId);
+      })
+      .catch(() => setRecoveryUnavailable(recovering.quoteId));
+  }, [
+    recovering,
+    linked,
+    isAuthenticated,
+    session?.authUserId,
+    ensureRecovery,
+  ]);
+  useEffect(() => {
+    if (!selected || !sent) return;
+    const saved = mine?.find((row) => row.quoteId === selected.quoteId);
+    if (saved?.status === "confirmed") setFinalized(true);
+    else if (
+      saved?.status === "failed" &&
+      [
+        "reconciled_expired_not_landed",
+        "finalized_transaction_failed",
+      ].includes(saved.issue ?? "")
+    ) {
+      // Unlock the form, not the payment. Only a new explicit Buy can sign.
+      dispatched.current = false;
+      purchaseActive.current = false;
+      attemptedQuote.current = "";
+      setSent(false);
+      setPrepared(null);
+      setSelected(null);
+      setResult(null);
+      setError("");
+      setNotice(
+        saved.issue === "finalized_transaction_failed"
+          ? "The previous swap failed on-chain. Network fees may apply. Nothing will be retried automatically."
+          : "The previous swap expired without landing. Trading is unlocked; nothing was resent.",
+      );
+    }
+  }, [mine, selected, sent]);
   const id = useId();
   const history = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -582,7 +638,9 @@ function LiveSwap({
         {send.isRunning
           ? "Waiting for wallet / receipt…"
           : needsRecovery
-            ? "Check previous swap"
+            ? recovering?.recovery && recovering.recovery.state !== "review"
+              ? "Verifying previous swap…"
+              : "View swap status"
             : sent
               ? finalized
                 ? "Swap complete"
@@ -601,6 +659,53 @@ function LiveSwap({
                           ? `Buy ${output?.symbol ?? "token"}`
                           : "Swap"}
       </Button>
+      {recovering && (
+        <div className="commerce-note" role="status">
+          {recovering.recovery?.state === "review" ? (
+            <p>
+              Automatic checks could not prove the outcome. This swap needs
+              review; it has not been retried. Receipt details are available
+              below.
+            </p>
+          ) : recovering.recovery?.state === "checking" ? (
+            <p>
+              Verifying the outcome against independent chain records. Nothing
+              is being resent.
+            </p>
+          ) : recovering.recovery?.reason === "waiting_expiry" ? (
+            <p>
+              Checking automatically after the transaction expires. A 15-minute
+              safety window and two independent chain checks protect against
+              duplicate payments.
+              {recovering.recovery.nextCheckAt > now
+                ? ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 60_000)} min.`
+                : " Verification is due now."}
+            </p>
+          ) : recovering.recovery?.reason === "budget_unavailable" ? (
+            <p>
+              Verification is waiting for free-tier capacity. The swap stays
+              protected; no extra fees or automatic payment retry.
+              {recovering.recovery.nextCheckAt > now
+                ? ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 60_000)} min.`
+                : ""}
+            </p>
+          ) : !recovering.recovery ? (
+            <p>
+              {recoveryUnavailable === recovering.quoteId
+                ? "Automatic verification could not be scheduled. The saved swap remains protected; open swap status for receipt details. Nothing was resent."
+                : "Requesting automatic outcome verification. Nothing is being resent."}
+            </p>
+          ) : (
+            <p>
+              Automatic outcome verification is queued. You do not need to click
+              again or keep this page open. Nothing will be resent.
+              {recovering.recovery.nextCheckAt > now
+                ? ` Next check in ${Math.ceil((recovering.recovery.nextCheckAt - now) / 60_000)} min.`
+                : ""}
+            </p>
+          )}
+        </div>
+      )}
       {best && !fresh && !sent && (
         <p className="commerce-note">
           Quote expired. A fresh quote will be checked when you swap.

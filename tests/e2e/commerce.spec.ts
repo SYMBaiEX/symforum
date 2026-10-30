@@ -126,7 +126,16 @@ async function harness(page: Page, query = "") {
         decimals: 6,
         tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
       };
-    } else if (name === "forumSwaps:quote")
+    } else if (name === "forumSwapRecovery:ensure")
+      result = query.includes("auto")
+        ? {
+            state: "scheduled",
+            reason: "waiting_expiry",
+            attempts: 0,
+            nextCheckAt: Date.now() + 900000,
+          }
+        : null;
+    else if (name === "forumSwaps:quote")
       result = {
         quotes: [
           {
@@ -264,9 +273,9 @@ test("an existing hold offers clickable recovery without new buying or quote spe
   const requests = await harness(page, "?authorized&held");
   await page.getByLabel("You pay", { exact: true }).fill("0.01");
   await expect(
-    page.getByRole("button", { name: "Check previous swap" }),
+    page.getByRole("button", { name: "View swap status" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Check previous swap" }).click();
+  await page.getByRole("button", { name: "View swap status" }).click();
   await expect(
     page
       .getByRole("group")
@@ -300,6 +309,37 @@ test("a receipt-check error is distinguished from a missing wallet signature", a
   );
   await expect(page.locator("#wallet-calls")).toHaveText("1");
 });
+test("automatic recovery enrolls once and unlocks a proven expired swap without a new wallet request", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&held&auto");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await expect(
+    page.getByRole("button", { name: "Verifying previous swap…" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByText("Checking automatically after the transaction expires.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect
+    .poll(() => requests.filter((r) => r === "forumSwapRecovery:ensure").length)
+    .toBe(1);
+  expect(requests).not.toContain("forumSwaps:quote");
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("commerce:resolve-recovery")),
+  );
+  await expect(
+    page.getByRole("button", { name: "Swap", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".swap-receive")).toHaveText("1");
+  expect(requests.filter((r) => r === "forumSwapRecovery:ensure")).toHaveLength(
+    1,
+  );
+  expect(requests).not.toContain("forumSwaps:prepare");
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+});
 test("a leading decimal is normalized and automatically quoted exactly once", async ({
   page,
 }) => {
@@ -330,9 +370,9 @@ test("uncertain wallet request is held and cannot be resent", async ({
   await reviewSwap(page);
   await expect(page.getByRole("alert")).toContainText("Do not repeat");
   await expect(
-    page.getByRole("button", { name: "Check previous swap" }),
+    page.getByRole("button", { name: "View swap status" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Check previous swap" }).click();
+  await page.getByRole("button", { name: "View swap status" }).click();
   await expect(
     page.getByText("A previous wallet request needs verification.", {
       exact: false,

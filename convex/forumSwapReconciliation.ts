@@ -133,7 +133,7 @@ export const settleNotLanded = internalMutation({
     return "reconciled_not_landed" as const;
   },
 });
-async function inspectProvider(
+export async function inspectProvider(
   url: string,
   row: Doc<"forumSwapQuotes">,
   hash: string,
