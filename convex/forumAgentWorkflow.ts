@@ -151,6 +151,14 @@ export const queuePublication = internalMutation({
     slot: v.number(),
     runDate: v.optional(v.string()),
   },
+  returns: v.union(
+    v.object({
+      queued: v.literal(false),
+      reason: v.optional(v.string()),
+      retryAfter: v.optional(v.number()),
+    }),
+    v.object({ queued: v.literal(true), workflowId: v.string() }),
+  ),
   handler: async (
     ctx,
     args,

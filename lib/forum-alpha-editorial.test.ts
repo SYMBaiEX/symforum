@@ -4,6 +4,7 @@ import {
   alphaCandidateBoards,
   alphaPublisherUrl,
   alphaPagePublishedAt,
+  alphaOriginalPublicationTime,
   alphaShareText,
   alphaLeadMs,
   alphaProjectMention,
@@ -18,6 +19,25 @@ const candidate = {
   publishedAt: now - 60_000,
 };
 describe("fresh Solana editorial", () => {
+  test("retains the oldest known publication time across page and feed evidence", () => {
+    expect(
+      alphaOriginalPublicationTime({
+        publishedAt: now - 5 * 3600_000,
+        originalPublishedAt: now - 60_000,
+      }),
+    ).toBe(now - 5 * 3600_000);
+    expect(
+      alphaOriginalPublicationTime({
+        publishedAt: now - 60_000,
+        originalPublishedAt: now - 7 * 3600_000,
+      }),
+    ).toBe(now - 7 * 3600_000);
+    expect(alphaOriginalPublicationTime({ publishedAt: now })).toBe(now);
+    expect(alphaOriginalPublicationTime({ originalPublishedAt: now })).toBe(
+      now,
+    );
+    expect(alphaOriginalPublicationTime({ publishedAt: NaN })).toBeUndefined();
+  });
   test("Telegram keeps a complete reviewed paragraph including its qualifier", () => {
     expect(
       alphaTelegramText(

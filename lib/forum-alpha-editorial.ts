@@ -9,6 +9,17 @@ export type AlphaBoard = (typeof ALPHA_BOARDS)[number];
 export const ALPHA_MAX_AGE_MS = 24 * 60 * 60_000;
 export const ALPHA_DISCOVERY_TTL_MS = 30 * 60_000;
 
+/** A newer page timestamp must never refresh an older feed announcement. */
+export function alphaOriginalPublicationTime(source: {
+  publishedAt?: number;
+  originalPublishedAt?: number;
+}): number | undefined {
+  const known = [source.publishedAt, source.originalPublishedAt].filter(
+    (at): at is number => typeof at === "number" && Number.isFinite(at) && at > 0,
+  );
+  return known.length ? Math.min(...known) : undefined;
+}
+
 type AlphaDesk = { board: AlphaBoard; focus: string };
 export const ALPHA_DESKS: Readonly<Record<string, AlphaDesk>> = {
   "mara-venn": {

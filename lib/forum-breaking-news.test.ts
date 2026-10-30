@@ -76,4 +76,30 @@ describe("breaking Solana news policy", () => {
     expect(newsInterval("urgent")).toBe(30 * 60_000);
     expect(newsInterval("priority")).toBe(60 * 60_000);
   });
+  test("general mainnet or funding guidance does not become breaking news", () => {
+    for (const title of [
+      "Solana mainnet account guide",
+      "Solana funding options explained",
+    ])
+      expect(
+        newsPriority(
+          {
+            ...story,
+            title,
+            summary: "Documentation for Solana mainnet accounts.",
+          },
+          now,
+        ),
+      ).toBeNull();
+    expect(
+      newsPriority(
+        {
+          ...story,
+          title: "Solana project announces $20 million funding",
+          summary: "The seed round is closed.",
+        },
+        now,
+      ),
+    ).toBe("urgent");
+  });
 });

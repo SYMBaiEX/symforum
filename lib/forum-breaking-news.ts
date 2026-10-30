@@ -69,16 +69,23 @@ export function newsPriority(
       text,
     );
   const materialChange =
-    /\b(?:raises?|raised|funding|launch(?:es|ed)?|releases?|released|integrat(?:es|ed|ion)|mainnet|upgrade|deploy(?:s|ed)?|acquir(?:es|ed))\b/i.test(
+    /\b(?:raises?|raised|funding round|(?:announces?|announced|secures?|secured)\s+(?:\S+\s+){0,4}funding|launch(?:es|ed)?|releases?|released|integrat(?:es|ed|ion)|upgrade|deploy(?:s|ed)?|acquir(?:es|ed))\b/i.test(
       text,
     );
+  if (
+    !networkEvent &&
+    !materialChange &&
+    !/\b(?:announc\w*|grant\w*|hackathon|adoption|milestone)\b/i.test(text)
+  )
+    return null;
   if (
     age <= 60 * 60_000 &&
     (primarySolanaSource(args.url) || args.verifiedPrimary === true) &&
     (networkEvent || materialChange)
   )
     return "urgent";
-  if (age <= 3 * 60 * 60_000 && materialChange) return "priority";
+  if (age <= 3 * 60 * 60_000 && (networkEvent || materialChange))
+    return "priority";
   return "routine";
 }
 

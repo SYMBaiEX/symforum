@@ -14,6 +14,7 @@ import {
   alphaPublisherUrl,
   alphaCandidateBoards,
   alphaPagePublishedAt,
+  alphaOriginalPublicationTime,
   type ResearchFeed,
 } from "../lib/forum-alpha-editorial";
 import { internal } from "./_generated/api";
@@ -566,7 +567,7 @@ export async function runForumResearchSlot(
               {
                 ...snapshot,
                 publishedAt:
-                  snapshot.originalPublishedAt ?? snapshot.publishedAt,
+                  alphaOriginalPublicationTime(snapshot),
               },
               Date.now(),
             ).includes(
@@ -575,7 +576,7 @@ export async function runForumResearchSlot(
             ),
           ).filter(snapshot => !config.alphaSourceKey ||
             (snapshot.sourceKey === config.alphaSourceKey && newsPriority({
-              ...snapshot, publishedAt: snapshot.originalPublishedAt ?? snapshot.publishedAt,
+              ...snapshot, publishedAt: alphaOriginalPublicationTime(snapshot),
             }, Date.now()) !== null))
         : fetchedSourceSnapshots;
     if (verifiedSourceSnapshots.length === 0) {
@@ -1241,7 +1242,7 @@ export async function runForumResearchSlot(
       config.researchPool === "solana-alpha"
         ? Math.min(
             ...snapshots.map(
-              (s) => s.originalPublishedAt ?? s.publishedAt ?? 0,
+              (s) => alphaOriginalPublicationTime(s) ?? 0,
             ),
           )
         : undefined;
