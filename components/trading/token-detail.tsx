@@ -107,12 +107,13 @@ export function TokenDetail({
                   ? "Selected token"
                   : `$${displayToken.symbol}`}
               </h2>
-              <p>{displayToken.name}</p>
+              <p>
+                <span className={styles.tokenName}>{displayToken.name}</span>
+                <span className={styles.tokenMint} title={token.mint}>
+                  {shortMint(token.mint)}
+                </span>
+              </p>
             </div>
-          </div>
-          <div className={styles.mint}>
-            <span className="sr-only">Mint</span>
-            <code title={token.mint}>{token.mint}</code>
             <button
               className={`${styles.iconButton} focus-ring`}
               type="button"
@@ -125,16 +126,10 @@ export function TokenDetail({
                 <Copy aria-hidden="true" />
               )}
             </button>
-            <span
-              role="status"
-              className={copy === "failed" ? styles.muted : "sr-only"}
-            >
-              {copy === "copied"
-                ? "Mint copied."
-                : copy === "failed"
-                  ? "Select the mint above to copy it."
-                  : ""}
-            </span>
+          </div>
+          <div className={styles.mint}>
+            <span className="sr-only">Mint</span>
+            <code title={token.mint}>{token.mint}</code>
           </div>
           <dl className={styles.price}>
             <div>
@@ -147,6 +142,16 @@ export function TokenDetail({
             </div>
           </dl>
         </div>
+        <span
+          role="status"
+          className={copy === "failed" ? styles.copyStatus : "sr-only"}
+        >
+          {copy === "copied"
+            ? "Mint copied."
+            : copy === "failed"
+              ? "Copy unavailable. The full mint is in Market details & sources."
+              : ""}
+        </span>
         <dl className={styles.topMetrics}>
           {[metrics[1], metrics[2], metrics[6], metrics[7]].map(
             ([label, value]) => (
@@ -178,6 +183,9 @@ export function TokenDetail({
       <details className={styles.marketDetails}>
         <summary className="focus-ring">Market details &amp; sources</summary>
         <div className={styles.body}>
+          <p className={styles.fullMint}>
+            <span>Mint</span> <code>{token.mint}</code>
+          </p>
           <dl className={styles.metrics}>
             {[metrics[3], metrics[4], metrics[5]].map(([label, value]) => (
               <div key={label}>

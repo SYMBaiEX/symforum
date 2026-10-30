@@ -136,7 +136,7 @@ function CandleCanvas({
   }, [api, candles]);
 
   return (
-    <div className="relative">
+    <div className={`relative ${compact ? terminalStyles.chartFrame : ""}`}>
       <div
         ref={container}
         className={`${styles.candleCanvas} ${compact ? terminalStyles.chartCanvas : ""}`}
@@ -243,10 +243,16 @@ function ChartData({
         className={`${styles.priceBar} ${compact ? terminalStyles.chartQuote : ""}`}
       >
         <p className="font-mono tabular-nums">
+          {compact && <span>Close </span>}
           {priceFormat.format(data.candles[data.candles.length - 1].close)}{" "}
-          <span>USD · latest candle close</span>
+          {compact && (
+            <span className="sr-only">USD · latest candle close</span>
+          )}
+          {!compact && <span>USD · latest candle close</span>}
         </p>
-        <p>
+        <p
+          title={`Checked ${new Date(data.checkedAt).toLocaleString()}. USD candles, UTC.`}
+        >
           {error || data.stale
             ? "Refresh unavailable. Showing the last checked data."
             : `Checked ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
@@ -328,7 +334,7 @@ export function TokenPriceChart({
 }) {
   const [interval, setInterval] = useState<SymfChartInterval>("15m");
   return (
-    <>
+    <div className={compact ? terminalStyles.chartLayout : undefined}>
       <div
         className={`${styles.chartControls} ${compact ? terminalStyles.chartControls : ""}`}
         role="group"
@@ -345,7 +351,7 @@ export function TokenPriceChart({
             {value}
           </button>
         ))}
-        <span>USD candles · UTC</span>
+        {!compact && <span>USD candles · UTC</span>}
       </div>
       <ChartData
         compact={compact}
@@ -357,6 +363,6 @@ export function TokenPriceChart({
         endpoint={endpoint}
         onMarket={onMarket}
       />
-    </>
+    </div>
   );
 }

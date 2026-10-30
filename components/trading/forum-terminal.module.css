@@ -13,21 +13,21 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0 20px;
-  min-height: 44px;
+  gap: 0 12px;
+  min-height: 36px;
   padding-inline: 12px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  min-height: 44px;
+  min-height: 36px;
 }
 .header h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.035em;
@@ -38,6 +38,9 @@
   gap: 6px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
+}
+.compactTitle {
+  display: none;
 }
 .network::before {
   width: 6px;
@@ -51,20 +54,22 @@
   align-items: center;
   flex: 1 0 auto;
   justify-content: end;
-  gap: 16px;
+  gap: 12px;
 }
 .headerLink,
+.receiptsLink,
 .tradeShortcut {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: 36px;
   color: hsl(var(--foreground));
   font-size: 12px;
   text-decoration: none;
   text-underline-offset: 4px;
 }
 .headerLink:hover,
+.receiptsLink:hover,
 .tradeShortcut:hover {
   text-decoration: underline;
 }
@@ -81,15 +86,15 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  gap: 7px;
-  min-width: 76px;
-  min-height: 44px;
-  padding: 8px 12px;
+  gap: 6px;
+  min-width: 68px;
+  min-height: 36px;
+  padding: 4px 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: hsl(var(--muted-foreground));
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 .viewTabs button:hover {
@@ -109,6 +114,7 @@
   content: "";
 }
 .layout {
+  --terminal-chart-height: clamp(380px, 46dvh, 420px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 328px;
   align-items: stretch;
@@ -129,18 +135,18 @@
   min-width: 0;
 }
 .marketsWorkspace {
-  min-height: 620px;
+  min-height: 0;
 }
 .tokenHead {
   min-width: 0;
 }
 .tokenTop {
   display: grid;
-  grid-template-columns: minmax(130px, 0.75fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(160px, 0.75fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
-  padding: 2px 12px;
+  min-height: 40px;
+  padding: 0 12px;
 }
 .identity {
   display: flex;
@@ -153,8 +159,8 @@
   position: relative;
   place-items: center;
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   overflow: hidden;
   border: 1px solid hsl(var(--border));
   border-radius: 50%;
@@ -172,7 +178,7 @@
 .identity h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 20px;
   letter-spacing: -0.025em;
@@ -182,10 +188,34 @@
   margin: 1px 0 0;
   overflow: hidden;
   color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 11px;
+  line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.tokenMint {
+  display: none;
+  font-family: var(--font-geist-mono), monospace;
+}
+.identity .iconButton {
+  margin-left: auto;
+}
+.fullMint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+.fullMint code {
+  overflow-wrap: anywhere;
+  color: hsl(var(--foreground));
+}
+.copyStatus {
+  display: block;
+  padding: 4px 12px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
 }
 .mint {
   display: flex;
@@ -239,10 +269,10 @@
   margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 23px;
+  font-size: 17px;
   font-weight: 550;
-  line-height: 28px;
-  letter-spacing: -0.06em;
+  line-height: 20px;
+  letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
 .price dd[data-unavailable="true"] {
@@ -254,22 +284,22 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
-  padding: 3px 12px 4px;
+  padding: 0 12px 2px;
 }
 .topMetrics > div {
   min-width: 0;
 }
 .topMetrics dt {
   color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 11px;
+  line-height: 14px;
 }
 .topMetrics dd {
-  margin: 1px 0 0;
+  margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-geist-mono), monospace;
   font-size: 13px;
-  line-height: 18px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
 }
 .topMetrics dd[data-unavailable="true"] {
@@ -279,25 +309,31 @@
 }
 .marketStatus {
   margin: 0;
-  padding: 0 12px 5px;
+  padding: 0 12px 2px;
   color: hsl(var(--muted-foreground));
-  font-size: 12px;
+  font-size: 11px;
   line-height: 16px;
+}
+.chartLayout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  border-top: 1px solid hsl(var(--border));
 }
 .chartWorkspace .chartControls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0;
-  min-height: 40px;
-  padding: 0 8px;
-  border-top: 1px solid hsl(var(--border));
-  border-bottom: 1px solid hsl(var(--border));
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
 }
 .chartWorkspace .chartControls button {
-  min-width: 40px;
-  min-height: 40px;
-  padding: 4px 10px;
+  min-width: 32px;
+  min-height: 36px;
+  padding: 4px 8px;
   border-radius: 0;
   font-size: 12px;
 }
@@ -316,37 +352,48 @@
 .chartWorkspace .chartQuote {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 2px 12px;
-  min-height: 28px;
-  padding: 4px 12px;
+  justify-content: end;
+  gap: 0 12px;
+  min-height: 36px;
+  padding: 0 12px 0 4px;
 }
-.chartWorkspace .chartQuote p {
+.chartWorkspace .chartQuote > p:first-child,
+.chartWorkspace .chartQuote > p:last-child {
   margin: 0;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
   font-weight: 400;
+}
+.chartWorkspace .chartQuote > p:first-child {
+  white-space: nowrap;
 }
 .chartWorkspace .chartQuote span {
   display: inline;
-  margin: 0 0 0 4px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 11px;
+}
+.chartWorkspace .chartFrame {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 .chartWorkspace .chartCanvas {
-  height: clamp(480px, 60dvh, 560px);
+  grid-column: 1 / -1;
+  height: var(--terminal-chart-height);
+  border-top: 1px solid hsl(var(--border));
 }
 .chartWorkspace .chartDataDisclosure {
+  grid-column: 1 / -1;
   padding: 0;
   font-size: 12px;
 }
 .chartWorkspace details > summary {
-  min-height: 36px;
+  min-height: 32px;
   align-content: center;
 }
 .chartDataDisclosure > summary {
-  padding: 8px 12px;
+  padding: 4px 12px;
 }
 .chartDataDisclosure > div {
   padding-inline: 12px;
@@ -358,8 +405,8 @@
 .marketDetails > summary,
 .executionDetails > summary,
 .riskDisclosure > summary {
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: 32px;
+  padding: 4px 12px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
   line-height: 20px;
@@ -455,7 +502,7 @@
 }
 .executionNote {
   margin: 0;
-  padding: 8px 12px;
+  padding: 4px 12px;
   border-top: 1px solid hsl(var(--border));
   color: hsl(var(--muted-foreground));
   font-size: 12px;
@@ -485,8 +532,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 36px;
+  padding: 4px 12px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .panelHead h2 {
@@ -504,7 +551,7 @@
 }
 .body {
   min-width: 0;
-  padding: 12px;
+  padding: 10px 12px;
 }
 .body > :first-child {
   margin-top: 0;
@@ -568,8 +615,8 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 16px;
-  min-height: 40px;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 8px 12px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .sectionHeading h2 {
@@ -830,15 +877,22 @@
 @container (max-width: 760px) {
   .tokenTop {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0 12px;
+    gap: 0 8px;
   }
   .mint {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    min-height: 36px;
+    display: none;
+  }
+  .tokenName {
+    display: none;
+  }
+  .tokenMint {
+    display: inline;
   }
 }
 @container (max-width: 840px) {
+  .layout {
+    --terminal-chart-height: 272px;
+  }
   .layout,
   .below,
   .utilityGrid {
@@ -857,39 +911,72 @@
   .headerActions .headerLink {
     display: none;
   }
-  .chartWorkspace .chartCanvas {
-    height: 320px;
-  }
-  .marketsWorkspace {
-    min-height: 480px;
-  }
 }
 @container (max-width: 600px) {
   .header {
-    gap: 0 8px;
+    flex-wrap: nowrap;
+    gap: 0 4px;
+    min-height: 44px;
+    padding-inline: 8px;
   }
   .heading {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    min-height: 44px;
   }
   .network {
     display: none;
   }
   .headerActions {
-    flex: 0 0 auto;
-    order: 2;
+    flex: 1 0 auto;
+    gap: 8px;
   }
   .viewTabs {
-    flex: 1 0 100%;
-    order: 3;
+    flex: 0 0 auto;
+    gap: 0;
   }
   .viewTabs button {
-    flex: 1 1 auto;
+    min-width: 58px;
+    min-height: 44px;
+    padding-inline: 6px;
+    font-size: 11px;
+  }
+  .viewTabs svg,
+  .tradeShortcut svg,
+  .desktopTitle {
+    display: none;
+  }
+  .compactTitle {
+    display: inline;
+  }
+  .receiptsLink,
+  .tradeShortcut {
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 11px;
   }
   .header h1 {
-    font-size: 17px;
+    font-size: 14px;
   }
   .price dd {
-    font-size: 20px;
+    font-size: 16px;
+  }
+  .tokenTop {
+    min-height: 44px;
+  }
+  .chartWorkspace .chartQuote {
+    gap: 0 8px;
+    padding-right: 8px;
+  }
+  .chartWorkspace .chartQuote > p:first-child,
+  .chartWorkspace .chartQuote > p:last-child {
+    font-size: 11px;
+  }
+  .chartWorkspace .chartControls button {
+    padding-inline: 5px;
+  }
+  .chartWorkspace .chartQuote > p {
+    white-space: normal;
   }
   .identity p {
     max-width: 19ch;
@@ -904,6 +991,11 @@
     min-height: 44px;
   }
   .chartWorkspace .chartControls button,
+  .chartWorkspace .chartQuote,
+  .viewTabs button,
+  .headerLink,
+  .receiptsLink,
+  .tradeShortcut,
   .chartWorkspace details > summary,
   .marketDetails > summary,
   .executionDetails > summary,
@@ -911,6 +1003,24 @@
   .links a,
   .discussionBar a {
     min-height: 44px;
+  }
+  .chartWorkspace .chartControls button {
+    min-width: 44px;
+  }
+  .receiptsLink,
+  .tradeShortcut {
+    justify-content: center;
+    min-width: 44px;
+  }
+}
+@container (max-width: 360px) {
+  .chartLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chartWorkspace .chartQuote {
+    justify-content: space-between;
+    min-height: 28px;
+    padding-inline: 8px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

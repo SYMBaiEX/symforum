@@ -27,7 +27,7 @@ test.beforeAll(() => {
   );
 });
 
-async function harness(page: Page, scenario = "") {
+async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
   const errors: string[] = [];
   const chartMints: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -44,7 +44,7 @@ async function harness(page: Page, scenario = "") {
     const mint = url.pathname.match(/^\/api\/token\/([^/]+)\/chart$/)?.[1];
     if (mint) {
       chartMints.push(mint);
-      const now = Date.now();
+      const now = clockNow();
       return route.fulfill({
         json: {
           mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
@@ -91,6 +91,51 @@ async function sampleSymbols(page: Page) {
     );
 }
 
+async function expectCompactChart(page: Page, narrow: boolean) {
+  const canvas = page.getByRole("img", { name: /SYMF USD candlestick chart/ });
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.height).toBeGreaterThanOrEqual(narrow ? 256 : 380);
+  expect(box!.height).toBeLessThanOrEqual(narrow ? 280 : 420);
+  const close = page
+    .locator("#terminal-chart p")
+    .filter({ hasText: /^Close / });
+  await expect(close).toHaveCount(1);
+  const quoteStyle = await close.evaluate((element) => ({
+    size: parseFloat(getComputedStyle(element).fontSize),
+    weight: Number(getComputedStyle(element).fontWeight),
+  }));
+  // Only the asset price is emphasized; candle close is compact context.
+  expect(quoteStyle.size).toBeLessThanOrEqual(12);
+  expect(quoteStyle.weight).toBeLessThanOrEqual(500);
+  const tabs = await page
+    .getByRole("tablist", { name: "Terminal views" })
+    .boundingBox();
+  const heading = await page
+    .getByRole("heading", { name: "Trading terminal", exact: true })
+    .boundingBox();
+  expect(tabs).not.toBeNull();
+  expect(heading!.y + heading!.height / 2).toBeGreaterThanOrEqual(tabs!.y);
+  expect(heading!.y + heading!.height / 2).toBeLessThanOrEqual(
+    tabs!.y + tabs!.height,
+  );
+  if (!narrow) {
+    const intervals = await page
+      .getByRole("group", { name: "Candle interval" })
+      .boundingBox();
+    const checked = await page
+      .locator("#terminal-chart p[title^='Checked ']")
+      .boundingBox();
+    expect(checked).not.toBeNull();
+    expect(checked!.y + checked!.height / 2).toBeGreaterThanOrEqual(
+      intervals!.y,
+    );
+    expect(checked!.y + checked!.height / 2).toBeLessThanOrEqual(
+      intervals!.y + intervals!.height,
+    );
+  }
+}
+
 test("saved research receipt can finalize after reload without repeating settlement", async ({
   page,
 }) => {
@@ -129,6 +174,7 @@ for (const width of [390, 1440])
     await expect(
       page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
     ).toBeVisible();
+    await expectCompactChart(page, width === 390);
     const chartBox = await page
       .getByRole("img", { name: /SYMF USD candlestick chart/ })
       .boundingBox();
@@ -410,6 +456,10 @@ test("sample source links reject unsafe metadata and keep stale observations exp
     .filter({ has: page.getByRole("button", { name: /^View NOVA,/ }) });
   await expect(nova.getByText("Stale", { exact: true })).toBeVisible();
   await expect(nova.locator("time")).toHaveAttribute("datetime", /T.*Z$/);
+  const sourceTime = await nova.locator("time").getAttribute("datetime");
+  expect(Date.now() - Date.parse(sourceTime!)).toBeGreaterThanOrEqual(
+    3_500_000,
+  );
   await expect(
     nova.getByRole("link", { name: "View NOVA source" }),
   ).toHaveAttribute("href", "https://example.com/source");
@@ -434,6 +484,146 @@ test("sample source links reject unsafe metadata and keep stale observations exp
     }),
   ).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test("a current bounded cohort keeps source timestamps and selects only the exact requested market", async ({
+  page,
+}) => {
+  const frozenNow = Date.parse("2026-10-30T18:00:00.000Z");
+  let currentClock = frozenNow;
+  // Freeze Date only: React, chart animation frames and transport timers must run.
+  await page.clock.setFixedTime(frozenNow);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&currentcohort",
+    () => currentClock,
+  );
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const order = await page
+    .getByRole("complementary", { name: "Trade selected token" })
+    .elementHandle();
+  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  const table = page.getByRole("table", {
+    name: "Sampled markets",
+    exact: true,
+  });
+  await expect(table.getByRole("button", { name: /^View / })).toHaveCount(10);
+  const firstSource = table
+    .getByRole("row")
+    .filter({ has: page.getByRole("button", { name: /^View FRESH1,/ }) })
+    .locator("time");
+  await expect(firstSource).toHaveAttribute(
+    "datetime",
+    new Date(frozenNow - 60_000).toISOString(),
+  );
+  await expect(table.getByText("Stale", { exact: true })).toHaveCount(0);
+  for (const platform of ["pumpfun", "bags"]) {
+    await page
+      .getByRole("combobox", { name: "Platform", exact: true })
+      .selectOption(platform);
+    await expect(table.getByRole("button", { name: /^View / })).toHaveCount(5);
+  }
+  const unknown = table
+    .getByRole("row")
+    .filter({ has: page.getByRole("button", { name: /^View FRESH10,/ }) });
+  await expect(unknown.getByRole("cell").nth(3)).toHaveText("Unavailable");
+  // Neither opening the table nor filtering ten rows can create chart fanout.
+  expect(chartMints).toHaveLength(1);
+  const source = table
+    .getByRole("row")
+    .filter({ has: page.getByRole("button", { name: /^View FRESH6,/ }) })
+    .locator("time");
+  const originalSourceTime = await source.getAttribute("datetime");
+  await expect(source).toHaveText("6m ago");
+  currentClock = frozenNow + 120_000;
+  await page.clock.setFixedTime(currentClock);
+  // Exercise the terminal's real foreground refresh without pausing React work.
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  expect(await page.evaluate(() => Date.now())).toBe(frozenNow + 120_000);
+  await expect(source).toHaveText("8m ago");
+  await expect(source).toHaveAttribute("datetime", originalSourceTime!);
+  await page.getByRole("button", { name: /^View FRESH6,/ }).click();
+  await expect(
+    page.getByRole("tab", { name: "Chart", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("heading", { name: "$FRESH6", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /FRESH6 USD candlestick chart/ }),
+  ).toBeVisible();
+  expect(chartMints.at(-1)).toBe(`${"1".repeat(31)}7`);
+  expect(
+    chartMints.every(
+      (mint) => mint === chartMints[0] || mint === `${"1".repeat(31)}7`,
+    ),
+  ).toBe(true);
+  expect(await order?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test("compact touch controls retain 44px targets and original protected receipts", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+  });
+  try {
+    const page = await context.newPage();
+    const { errors } = await harness(page, "held");
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    await expectCompactChart(page, true);
+    const targets = [
+      ...(await page
+        .getByRole("tablist", { name: "Terminal views" })
+        .getByRole("tab")
+        .all()),
+      ...(await page
+        .getByRole("group", { name: "Candle interval" })
+        .getByRole("button")
+        .all()),
+      page.getByRole("link", { name: "Receipts", exact: true }),
+      page.getByRole("link", { name: "Trade", exact: true }),
+    ];
+    for (const target of targets) {
+      const box = await target.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+    }
+    const receipt = page.getByText("Outcome protected", { exact: true });
+    await expect(receipt).toBeVisible();
+    const original = await receipt.elementHandle();
+    await page.getByRole("tab", { name: "Markets", exact: true }).click();
+    for (const control of [
+      page.getByRole("textbox", { name: "Search sampled tokens" }),
+      page.getByRole("combobox", { name: "Market cap", exact: true }),
+      page.getByRole("combobox", { name: "Platform", exact: true }),
+    ])
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(receipt).toBeVisible();
+    await page.getByRole("tab", { name: "Chart", exact: true }).click();
+    expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(
+      page.getByText("No signature recorded", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /repeat|replay|resend/i }),
+    ).toHaveCount(0);
+    expect(
+      await page.locator("html").evaluate((node) => node.scrollWidth),
+    ).toBeLessThanOrEqual(390);
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
 });
 
 test("keyboard view changes keep the chart, order node and protected receipts mounted", async ({
@@ -536,6 +726,7 @@ for (const width of [640, 1024])
     const { errors } = await harness(page, "guest");
     const image = page.getByRole("img", { name: /SYMF USD candlestick chart/ });
     await expect(image).toBeVisible();
+    await expectCompactChart(page, width === 640);
     const toolbar = page.getByRole("group", { name: "Candle interval" });
     const bounds = await toolbar.boundingBox();
     const chartBounds = await image.boundingBox();
@@ -579,6 +770,10 @@ test("an empty market sample keeps the forum token shortcut without invented tra
   await expect(
     page.getByText("No recent tokens match this sample.", { exact: true }),
   ).toBeVisible();
+  const emptyPanel = await page
+    .getByRole("tabpanel", { name: "Markets", exact: true })
+    .boundingBox();
+  expect(emptyPanel!.height).toBeLessThan(420);
   await expect(
     page
       .getByRole("table", { name: "Sampled markets", exact: true })
@@ -617,6 +812,13 @@ for (const width of [1024, 1440])
     await expect(route).toHaveCSS("padding-right", "0px");
     const chart = page.getByRole("img", { name: /SYMF USD candlestick chart/ });
     await expect(chart).toBeVisible();
+    await expectCompactChart(page, width === 1024);
+    if (width === 1440) {
+      const workspace = await page
+        .getByRole("heading", { name: "Your workspace", exact: true })
+        .boundingBox();
+      expect(workspace!.y).toBeLessThanOrEqual(730);
+    }
     expect((await chart.boundingBox())?.y).toBeLessThanOrEqual(300);
     if (width === 1440)
       expect((await chart.boundingBox())?.width).toBeGreaterThan(800);

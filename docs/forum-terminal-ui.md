@@ -43,6 +43,14 @@ Chart refresh is one minute while visible. Discovery/watch alerts use existing
 scheduled samples, not a real-time or exhaustive feed. Individual stale samples
 are marked. Price alerts are in-app, not promised external notifications.
 
+Ordinary hourly scout invocations first run a separately fenced, data-only
+observation. This can refresh Markets while an unresolved model operation keeps
+drafting and publishing blocked. Admitted drafting reuses that exact observation
+instead of buying another ranking read. See [market observation](forum-market-observation.md)
+for quota, fencing and retention details. Source timestamps, not page refresh
+times, determine freshness; hourly coverage is fresh for 15 minutes and retained
+for display for 24 hours with explicit stale labels.
+
 Treasury totals include only confirmed recorded promotion receipts. Incomplete
 historical projections are explicitly labeled; neither pending payments nor
 estimated swap fees are counted.
@@ -61,9 +69,13 @@ separated by a thin rule. Accessible Chart/Markets tabs switch only the mounted
 analytical panels. The former permanent discovery rail and card implementation
 are removed; shared token identity/logo primitives live in `market-identity`.
 On smaller content widths the order panel stacks below, with a visible Trade
-link transferring keyboard focus to it. Desktop candles occupy 480–560px of
-height, with 320px in compact contexts. The asset header and metric strip are
-compact; the real interval controls wrap intrinsically rather than clipping.
+link transferring keyboard focus to it. Desktop candles occupy 380–420px of
+height, with 272px when the desk stacks. The asset header and metric strip are
+compact; intervals, candle close and checked time share one toolbar. The actual
+chart frame spans that grid, not just its nested drawing element. Small screens
+retain a single-row header and 44px touch controls; extremely narrow chart
+toolbars wrap rather than clip financial values. Markets uses content-driven
+height instead of reserving an empty 620px panel.
 Primary price,
 market cap, liquidity, 24h volume and sampled hourly change lead; secondary
 metrics, public sources and exact timestamps remain in Market details. The

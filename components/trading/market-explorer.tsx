@@ -247,7 +247,7 @@ function MarketDataRow({
     <tr data-selected={selected}>
       <td className={styles.tokenColumn}>
         <button
-          className={styles.tokenButton}
+          className={styles.assetChoice}
           type="button"
           aria-label={`View ${market.symbol}, mint ${shortMint(market.mint)}`}
           aria-pressed={selected}
