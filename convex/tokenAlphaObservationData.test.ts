@@ -5,7 +5,10 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { TokenPlatform, TokenSnapshot } from "../lib/token-alpha";
 import { internal } from "./_generated/api";
-import type { ObservationClaim } from "./tokenAlphaObservationData";
+import {
+  validObservationSnapshots,
+  type ObservationClaim,
+} from "./tokenAlphaObservationData";
 import schema from "./schema";
 
 const modules = {
@@ -320,4 +323,221 @@ test("pre-cutover ordinary run occupancy fences another source purchase", async 
     (await t.mutation(claim, { platform: "bags", claimToken: "new-source" }))
       .state,
   ).toBe("unavailable");
+});
+
+test("expired completed samples stay unchanged and cannot authorize a same-hour refetch", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  await t.mutation(complete, {
+    runKey: first.runKey,
+    claimToken: "source-1",
+    snapshots: [snapshot()],
+  });
+  vi.setSystemTime(NOW + 16 * 60_000);
+  expect(
+    (await t.mutation(claim, { platform: "bags", claimToken: "source-2" }))
+      .state,
+  ).toBe("unavailable");
+  const rows = await t.run((ctx) =>
+    ctx.db
+      .query("forumTerminalMarkets")
+      .withIndex("by_mint", (q) => q.eq("mint", MINT))
+      .take(2),
+  );
+  expect(rows[0].snapshot.metricsAsOf).toBe(NOW);
+  expect(rows[0].snapshot.observedAt).toBe(NOW);
+});
+
+test("a downstream projection failure rolls back the receipt and every earlier row", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  const otherMint = "So11111111111111111111111111111111111111112";
+  const other = snapshot({
+    mint: otherMint,
+    sourceRank: 2,
+    sourceUrl: `https://www.solanatracker.io/token/${otherMint}`,
+  });
+  // Simulate a corrupted downstream unique binding after the first candidate.
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 2; i++)
+      await ctx.db.insert("forumTerminalMarkets", {
+        mint: otherMint,
+        platform: "bags",
+        band: "50k100k",
+        observedAt: NOW,
+        snapshot: other,
+      });
+  });
+  await expect(
+    t.mutation(complete, {
+      runKey: first.runKey,
+      claimToken: "source-1",
+      snapshots: [snapshot(), other],
+    }),
+  ).rejects.toThrow();
+  const state = await t.run(async (ctx) => ({
+    receipt: await ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", first.runKey))
+      .unique(),
+    firstMint: await ctx.db
+      .query("forumTerminalMarkets")
+      .withIndex("by_mint", (q) => q.eq("mint", MINT))
+      .take(2),
+  }));
+  expect(state.receipt?.status).toBe("running");
+  expect(state.receipt?.snapshots).toBeUndefined();
+  expect(state.firstMint).toEqual([]);
+});
+
+test("expired payload pruning retains the permanent fence, source count and original metadata", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  await t.mutation(complete, {
+    runKey: first.runKey,
+    claimToken: "source-1",
+    snapshots: [snapshot()],
+  });
+  const before = await t.run((ctx) =>
+    ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", first.runKey))
+      .unique(),
+  );
+  expect(before?.sourceCount).toBe(1);
+  expect(before?.payloadExpiresAt).toBe(NOW + 24 * 60 * 60_000);
+  vi.setSystemTime(NOW + 24 * 60 * 60_000 + 1);
+  await t.mutation(claim, { platform: "bags", claimToken: "next-day-source" });
+  const after = await t.run((ctx) =>
+    ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", first.runKey))
+      .unique(),
+  );
+  expect(after?.snapshots).toBeUndefined();
+  expect(after?.payloadExpiresAt).toBeUndefined();
+  const {
+    snapshots: ignoredPayload,
+    payloadExpiresAt: ignoredExpiry,
+    ...metadata
+  } = before!;
+  void ignoredPayload;
+  void ignoredExpiry;
+  expect(after).toEqual(metadata);
+  // Even restoring that old hour cannot reopen a pruned permanent intent.
+  vi.setSystemTime(NOW);
+  expect(
+    (await t.mutation(claim, { platform: "bags", claimToken: "cannot-reopen" }))
+      .state,
+  ).toBe("unavailable");
+});
+
+test("payload pruning is capped at five and never touches fresh, failed or in-flight rows", async () => {
+  const { t } = await setup();
+  const day = 24 * 60 * 60_000;
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 7; i++)
+      await ctx.db.insert("tokenAlphaObservations", {
+        runKey: `bags:expired-${i}`,
+        platform: "bags",
+        claimToken: `old-${i}`,
+        status: "completed",
+        createdAt: NOW - 2 * day,
+        updatedAt: NOW - 2 * day,
+        expiresAt: NOW - 2 * day + 30 * 60_000,
+        payloadExpiresAt: NOW - day,
+        sourceCount: 1,
+        snapshots: [
+          snapshot({ observedAt: NOW - 2 * day, metricsAsOf: NOW - 2 * day }),
+        ],
+      });
+    for (const status of ["completed", "running", "failed"] as const)
+      await ctx.db.insert("tokenAlphaObservations", {
+        runKey: `pumpfun:protected-${status}`,
+        platform: "pumpfun",
+        claimToken: `protected-${status}`,
+        status,
+        createdAt: NOW,
+        updatedAt: NOW,
+        expiresAt: NOW + 30 * 60_000,
+        payloadExpiresAt: status === "completed" ? NOW + day : NOW - 1,
+        sourceCount: 1,
+        snapshots: [snapshot({ platform: "pumpfun" })],
+      });
+  });
+  const protectedBefore = await t.run((ctx) =>
+    ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) =>
+        q.gte("runKey", "pumpfun:").lt("runKey", "pumpfun;"),
+      )
+      .take(3),
+  );
+  await t.mutation(claim, { platform: "bags", claimToken: "source-1" });
+  const after = await t.run(async (ctx) => ({
+    expired: await ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) =>
+        q.gte("runKey", "bags:expired-").lt("runKey", "bags:expired."),
+      )
+      .take(7),
+    protected: await ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) =>
+        q.gte("runKey", "pumpfun:").lt("runKey", "pumpfun;"),
+      )
+      .take(3),
+  }));
+  expect(after.expired).toHaveLength(7);
+  expect(
+    after.expired.filter((row) => row.snapshots === undefined),
+  ).toHaveLength(5);
+  expect(
+    after.expired.every(
+      (row) =>
+        row.status === "completed" &&
+        row.sourceCount === 1 &&
+        row.updatedAt === NOW - 2 * day,
+    ),
+  ).toBe(true);
+  expect(after.protected).toEqual(protectedBefore);
+});
+
+test("observation proof preserves ordinal ranks and nonincreasing hourly volume", () => {
+  const otherMint = "So11111111111111111111111111111111111111112";
+  const other = snapshot({
+    mint: otherMint,
+    sourceRank: 2,
+    volume1hUsd: 4000,
+    sourceUrl: `https://www.solanatracker.io/token/${otherMint}`,
+  });
+  expect(validObservationSnapshots([snapshot(), other], "bags", NOW)).toBe(
+    true,
+  );
+  expect(
+    validObservationSnapshots([snapshot({ sourceRank: 2 })], "bags", NOW),
+  ).toBe(false);
+  expect(
+    validObservationSnapshots(
+      [snapshot(), { ...other, sourceRank: 1 }],
+      "bags",
+      NOW,
+    ),
+  ).toBe(false);
+  expect(
+    validObservationSnapshots(
+      [snapshot(), { ...other, volume1hUsd: 6000 }],
+      "bags",
+      NOW,
+    ),
+  ).toBe(false);
 });

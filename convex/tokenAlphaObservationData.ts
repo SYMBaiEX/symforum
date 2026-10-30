@@ -19,6 +19,8 @@ import {
 } from "./tokenAlphaSchema";
 
 const LIFETIME_MS = 30 * 60_000;
+const PAYLOAD_RETENTION_MS = 24 * 60 * 60_000;
+const PRUNE_BATCH_SIZE = 5;
 const snapshotList = v.array(tokenSnapshotValidator);
 
 export type ObservationClaim = {
@@ -55,7 +57,7 @@ export function validObservationSnapshots(
 ) {
   if (snapshots.length > 5) return false;
   const seen = new Set<string>();
-  for (const snapshot of snapshots) {
+  for (const [index, snapshot] of snapshots.entries()) {
     if (
       snapshot.platform !== platform ||
       !isSolanaAddress(snapshot.mint) ||
@@ -71,8 +73,10 @@ export function validObservationSnapshots(
       snapshot.metricsAsOf > now + 60_000 ||
       snapshot.observedAt > now + 60_000 ||
       !Number.isSafeInteger(snapshot.sourceRank) ||
-      snapshot.sourceRank < 1 ||
-      snapshot.sourceRank > 5 ||
+      snapshot.sourceRank !== index + 1 ||
+      (index > 0 &&
+        Number(snapshot.volume1hUsd) >
+          Number(snapshots[index - 1].volume1hUsd)) ||
       snapshot.sourceUrl !==
         `https://www.solanatracker.io/token/${snapshot.mint}` ||
       [
@@ -89,6 +93,25 @@ export function validObservationSnapshots(
     seen.add(snapshot.mint);
   }
   return true;
+}
+
+/** Keep the permanent idempotency receipt, not unbounded historical payloads.
+ * The completed/expiry index excludes fresh, failed and in-flight records. */
+async function pruneExpiredPayloads(ctx: MutationCtx, now: number) {
+  const expired = await ctx.db
+    .query("tokenAlphaObservations")
+    .withIndex("by_status_and_payloadExpiresAt", (q) =>
+      q
+        .eq("status", "completed")
+        .gte("payloadExpiresAt", 0)
+        .lte("payloadExpiresAt", now),
+    )
+    .take(PRUNE_BATCH_SIZE);
+  for (const row of expired)
+    await ctx.db.patch("tokenAlphaObservations", row._id, {
+      snapshots: undefined,
+      payloadExpiresAt: undefined,
+    });
 }
 
 export const claim = internalMutation({
@@ -113,6 +136,7 @@ export const claim = internalMutation({
       snapshots: [],
     };
     if (!(await observationEnabled(ctx, platform))) return unavailable;
+    await pruneExpiredPayloads(ctx, now);
     const existing = await ctx.db
       .query("tokenAlphaObservations")
       .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -173,6 +197,8 @@ export const complete = internalMutation({
     await ctx.db.patch("tokenAlphaObservations", row._id, {
       status: "completed",
       snapshots: args.snapshots,
+      payloadExpiresAt: now + PAYLOAD_RETENTION_MS,
+      sourceCount: args.snapshots.length,
       updatedAt: now,
     });
     return true;
