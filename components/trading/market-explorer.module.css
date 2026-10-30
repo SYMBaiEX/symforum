@@ -194,9 +194,17 @@
   color: hsl(var(--foreground));
   font-size: 12px;
   font-weight: 600;
-  overflow-wrap: anywhere;
+}
+.assetChoice .symbol {
+  flex: 0 0 auto;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .assetChoice small {
+  flex: 1 1 auto;
+  min-width: 0;
   display: block;
   max-width: 104px;
   overflow: hidden;
