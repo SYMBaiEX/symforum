@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { generateText, Output } from "ai";
 import { v } from "convex/values";
+import { makeFunctionReference } from "convex/server";
 import { z } from "zod";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
@@ -41,6 +42,8 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { tokenPlatformValidator } from "./tokenAlphaSchema";
 import { discoveryBandForSlot } from "../lib/forum-terminal-data";
 import type { MarketCapBand } from "../lib/forum-market-cap";
+import { tokenAlphaRunKey } from "./tokenAlphaData";
+import type { ObservationClaim } from "./tokenAlphaObservationData";
 
 const analysisSchema = z.object({ analysis: z.string().min(80).max(700) });
 const reviewSchema = z.object({
@@ -115,6 +118,90 @@ async function loadTokenCandidates(
     .map((item, index) => ({ ...item, sourceRank: index + 1 }));
   return { indexed: indexed.length, candidates };
 }
+
+// Explicit typed references let this additive phase compile before codegen is
+// refreshed by the integrated release. These functions remain internal-only.
+const claimObservation = makeFunctionReference<
+  "mutation",
+  { platform: TokenPlatform; claimToken: string },
+  ObservationClaim
+>("tokenAlphaObservationData:claim");
+const completeObservation = makeFunctionReference<
+  "mutation",
+  { runKey: string; claimToken: string; snapshots: TokenSnapshot[] },
+  boolean
+>("tokenAlphaObservationData:complete");
+const failObservation = makeFunctionReference<
+  "mutation",
+  { runKey: string; claimToken: string; reason: string },
+  null
+>("tokenAlphaObservationData:fail");
+
+/** Ordinary source observation has no model, draft, publication or recovery
+ * authority. Its own permanent hourly intent fences every external read. */
+export async function observeTokenData(
+  ctx: ActionCtx,
+  platform: TokenPlatform,
+): Promise<ObservationClaim> {
+  const claimToken = randomUUID();
+  const claim = await ctx.runMutation(claimObservation, {
+    platform,
+    claimToken,
+  });
+  if (claim.state !== "claimed") return claim;
+  let stage: DataStage = "configuration";
+  try {
+    const { candidates } = await loadTokenCandidates(
+      ctx,
+      platform,
+      (value) => {
+        stage = value;
+      },
+      discoveryBandForSlot(Date.now(), platform),
+    );
+    const completed = await ctx.runMutation(completeObservation, {
+      runKey: claim.runKey,
+      claimToken,
+      snapshots: candidates,
+    });
+    return completed
+      ? { runKey: claim.runKey, state: "ready", snapshots: candidates }
+      : { runKey: claim.runKey, state: "unavailable", snapshots: [] };
+  } catch (error) {
+    const code = dataFailureCode(error);
+    await ctx.runMutation(failObservation, {
+      runKey: claim.runKey,
+      claimToken,
+      reason: `token-source-${stage}-failed${code ? `:${code}` : ""}`,
+    });
+    return { runKey: claim.runKey, state: "unavailable", snapshots: [] };
+  }
+}
+
+/** Operator verification and the ordinary scheduler share the exact same
+ * current-hour source intent. This action can never draft or publish. */
+export const observe = internalAction({
+  args: { platform: tokenPlatformValidator },
+  returns: v.object({
+    runKey: v.string(),
+    state: v.union(v.literal("ready"), v.literal("unavailable")),
+    verified: v.union(v.number(), v.null()),
+  }),
+  handler: async (ctx, { platform }) => {
+    const result = await observeTokenData(ctx, platform);
+    return result.state === "ready"
+      ? {
+          runKey: result.runKey,
+          state: "ready" as const,
+          verified: result.snapshots.length,
+        }
+      : {
+          runKey: result.runKey,
+          state: "unavailable" as const,
+          verified: null,
+        };
+  },
+});
 
 /** Operator-only bounded data diagnostic: no generation, draft or publication. */
 export async function probeTokenData(ctx: ActionCtx, platform: TokenPlatform) {
@@ -431,6 +518,7 @@ export async function runTokenPilot(
     operatorFirstPost?: boolean;
     operatorRetryOf?: string;
   },
+  observation?: Pick<ObservationClaim, "runKey" | "snapshots">,
 ): Promise<TokenPilotResult> {
   const claimToken = randomUUID();
   const claim = await ctx.runMutation(internal.tokenAlphaData.claimRun, {
@@ -447,19 +535,26 @@ export async function runTokenPilot(
   try {
     const apiKey = env.SOLANA_TRACKER_API_KEY;
     if (!apiKey) throw new Error("token_pilot_configuration_unavailable");
-    const { candidates } = await loadTokenCandidates(
-      ctx,
-      platform,
-      (value) => {
-        phase = value;
-      },
-      discoveryBandForSlot(Date.now(), platform),
-    );
-    // Cache all verified candidates inside this already-reserved ordinary slot.
-    // Diagnostic/probe calls never update the public feed or generate alerts.
-    await ctx.runMutation(internal.forumTerminalData.recordSnapshots, {
-      snapshots: candidates,
-    });
+    if (observation && observation.runKey !== runKey)
+      throw new Error("token_source_hour_mismatch");
+    const candidates = observation
+      ? observation.snapshots
+      : (
+          await loadTokenCandidates(
+            ctx,
+            platform,
+            (value) => {
+              phase = value;
+            },
+            discoveryBandForSlot(Date.now(), platform),
+          )
+        ).candidates;
+    // Ordinary observations already projected these exact candidates atomically.
+    // Legacy explicitly authorized paths retain their original projection.
+    if (!observation)
+      await ctx.runMutation(internal.forumTerminalData.recordSnapshots, {
+        snapshots: candidates,
+      });
     const rankingEvidence = candidates.map(
       ({ mint, volume1hUsd, sourceRank, metricsAsOf }) => ({
         mint,
@@ -669,6 +764,29 @@ export async function runTokenPilot(
   }
 }
 
+/** Only ordinary invocations take the display-only phase. Operator exceptions
+ * keep their existing separately authorized source/admission semantics. */
+export async function runScheduledTokenPilot(
+  ctx: ActionCtx,
+  args: {
+    platform: TokenPlatform;
+    operatorFirstPost?: boolean;
+    operatorRetryOf?: string;
+  },
+): Promise<TokenPilotResult> {
+  if (args.operatorFirstPost === true || args.operatorRetryOf !== undefined)
+    return runTokenPilot(ctx, args);
+  const observation = await observeTokenData(ctx, args.platform);
+  if (
+    observation.state !== "ready" ||
+    observation.runKey !== tokenAlphaRunKey(args.platform, Date.now())
+  )
+    return { status: "skipped", reason: "source-observation-unavailable" };
+  // claimRun still independently enforces every hold, health/failure circuit,
+  // publication and model-budget check; observation cannot authorize generation.
+  return runTokenPilot(ctx, args, observation);
+}
+
 export const run = internalAction({
   args: {
     platform: tokenPlatformValidator,
@@ -686,5 +804,5 @@ export const run = internalAction({
     threadId: v.optional(v.id("forumThreads")),
     postId: v.optional(v.id("forumPosts")),
   }),
-  handler: runTokenPilot,
+  handler: runScheduledTokenPilot,
 });
