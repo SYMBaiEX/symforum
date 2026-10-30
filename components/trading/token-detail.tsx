@@ -11,6 +11,7 @@ import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
 import type { ChartMarketData } from "./price-chart-data";
 import { TokenLogo, type MarketChoice } from "./market-panel";
+import { formatMarketPercent } from "./market-explorer-model";
 import {
   marketMoney,
   marketQuantity,
@@ -75,12 +76,7 @@ export function TokenDetail({
       "24h volume",
       marketMoney(fresh ? fresh.stats?.volume24h : market?.volume24hUsd, true),
     ],
-    [
-      "1h change",
-      market?.priceChange1hPercent == null
-        ? "Unavailable"
-        : `${market.priceChange1hPercent > 0 ? "+" : ""}${market.priceChange1hPercent.toFixed(2)}%`,
-    ],
+    ["1h change", formatMarketPercent(market?.priceChange1hPercent)],
   ];
   const links = [
     ["Website", market?.website],

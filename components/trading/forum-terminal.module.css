@@ -124,7 +124,8 @@
 }
 .chartWorkspace,
 .marketsWorkspace,
-.tokenSurface {
+.tokenSurface,
+.discovery {
   min-width: 0;
 }
 .marketsWorkspace {
@@ -734,7 +735,7 @@
   outline: 2px solid hsl(var(--primary));
   outline-offset: -2px;
 }
-/* The earlier compact market picker is also consumed by the shared logo module. */
+/* Keep the existing compact market-picker primitives compatible for callers. */
 .filters {
   display: grid;
   gap: 12px;
