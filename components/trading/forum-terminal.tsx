@@ -128,6 +128,7 @@ function TerminalWorkspace({
               key={selected.mint}
               client={client}
               mint={selected.mint}
+              now={now}
             />
           ) : null}
         </div>
@@ -208,15 +209,17 @@ function TerminalWorkspace({
 function ConnectedRisk({
   client,
   mint,
+  now,
 }: {
   client: CommerceWalletClient;
   mint: string;
+  now: number;
 }) {
   const identity = useCommerceIdentity(client, "solana:signTransaction");
   const wallet = identity.linked ? identity.connected!.account.address : null;
   return (
     <TerminalBoundary label="Mint facts">
-      <RiskPanel mint={mint} wallet={wallet} />
+      <RiskPanel mint={mint} wallet={wallet} now={now} />
     </TerminalBoundary>
   );
 }

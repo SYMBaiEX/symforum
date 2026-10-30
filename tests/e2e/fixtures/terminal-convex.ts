@@ -94,7 +94,18 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     };
   } else if (name === "forumTerminal:getMarket")
     result = [symf, nova].find((token) => token.mint === input.mint) ?? null;
-  else if (name === "forumTerminal:getRisk") result = null;
+  else if (name === "forumTerminal:getRisk")
+    result = location.search.includes("stalerisk")
+      ? {
+          mint: input.mint,
+          checkedAt: now - 1_200_000,
+          mintAuthority: null,
+          freezeAuthority: null,
+          tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          unsupportedExtensions: [],
+          status: "checked",
+        }
+      : null;
   else if (name === "forumTerminal:listWatchlist") result = watches;
   else if (name === "forumTerminal:listAlerts") result = [];
   else if (name === "forumTerminalTransparency:getTransparency")

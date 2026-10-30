@@ -68,3 +68,17 @@ export function balanceLabel(raw: string, decimals: number) {
   const fraction = decimals ? digits.slice(-decimals).replace(/0+$/, "") : "";
   return `${whole}${fraction ? `.${fraction}` : ""}`;
 }
+
+export function riskIsStale(checkedAt: number, now: number) {
+  return (
+    !Number.isFinite(checkedAt) ||
+    checkedAt > now + 60_000 ||
+    now - checkedAt >= 600_000
+  );
+}
+
+export function riskRefreshMessage(result: { checkedAt: number } | null) {
+  return result
+    ? `Showing mint facts checked ${new Date(result.checkedAt).toLocaleString()}.`
+    : "Mint facts could not be refreshed. Any previous facts remain dated below; no new on-chain check was obtained.";
+}

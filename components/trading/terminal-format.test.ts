@@ -5,10 +5,21 @@ import {
   marketMoney,
   safeExternalUrl,
   searchMarkets,
+  riskIsStale,
+  riskRefreshMessage,
 } from "./terminal-format";
 import { readChartData } from "./price-chart-data";
 
 describe("terminal public-data boundaries", () => {
+  it("dates risk facts and never reports a failed refresh as successful", () => {
+    const now = 1_800_000_000_000;
+    expect(riskIsStale(now - 599_999, now)).toBe(false);
+    expect(riskIsStale(now - 600_000, now)).toBe(true);
+    expect(riskIsStale(Number.NaN, now)).toBe(true);
+    expect(riskRefreshMessage(null)).toContain("could not be refreshed");
+    expect(riskRefreshMessage(null)).not.toContain("Showing mint facts");
+    expect(riskRefreshMessage({ checkedAt: now })).toContain("checked");
+  });
   it("does not invent missing, negative or non-finite dollar values", () => {
     expect(marketMoney(null)).toBe("Unavailable");
     expect(marketMoney(Number.NaN)).toBe("Unavailable");

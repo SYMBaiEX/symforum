@@ -154,3 +154,17 @@ test("native host does not initialize wallet or market transport", async ({
   expect(chartMints).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test("old mint facts remain explicitly dated rather than current safety claims", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "guest&stalerisk");
+  await expect(
+    page.getByText("These mint facts are stale.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("Not set at check", { exact: true })).toHaveCount(
+    2,
+  );
+  await expect(page.getByText("Revoked", { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

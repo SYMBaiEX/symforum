@@ -15,6 +15,8 @@ import {
   marketQuantity,
   safeExternalUrl,
   shortMint,
+  riskIsStale,
+  riskRefreshMessage,
 } from "./terminal-format";
 import styles from "./forum-terminal.module.css";
 
@@ -205,9 +207,11 @@ function safeForumThread(value: string) {
 export function RiskPanel({
   mint,
   wallet,
+  now,
 }: {
   mint: string;
   wallet: string | null;
+  now: number;
 }) {
   const risk = useQuery(terminalApi.getRisk, { mint });
   const refresh = useAction(terminalApi.refreshRisk);
@@ -219,11 +223,7 @@ export function RiskPanel({
     setMessage("");
     try {
       const result = await refresh({ wallet, mint });
-      setMessage(
-        result
-          ? "Mint facts refreshed."
-          : "Mint facts are unavailable or the shared data allowance is busy. Try later.",
-      );
+      setMessage(riskRefreshMessage(result));
     } catch {
       setMessage(
         "Mint facts could not be refreshed. No wallet request was made.",
@@ -244,14 +244,26 @@ export function RiskPanel({
       <div className={styles.body}>
         {risk ? (
           <>
+            {riskIsStale(risk.checkedAt, now) && (
+              <p role="status" className={`${styles.warning} mb-4`}>
+                These mint facts are stale. They describe the recorded check,
+                not the mint’s current state.
+              </p>
+            )}
             <dl className={styles.metrics}>
               <div>
                 <dt>Mint authority</dt>
-                <dd>{risk.mintAuthority ? "Present" : "Revoked"}</dd>
+                <dd>
+                  {risk.mintAuthority ? "Present at check" : "Not set at check"}
+                </dd>
               </div>
               <div>
                 <dt>Freeze authority</dt>
-                <dd>{risk.freezeAuthority ? "Present" : "Revoked"}</dd>
+                <dd>
+                  {risk.freezeAuthority
+                    ? "Present at check"
+                    : "Not set at check"}
+                </dd>
               </div>
             </dl>
             <p className={`${styles.muted} mt-4`}>
