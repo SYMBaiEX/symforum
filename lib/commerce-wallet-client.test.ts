@@ -101,6 +101,14 @@ test("sign-only requests exactly the simulated transaction and never broadcasts 
     ),
   ]);
   expect(send).not.toHaveBeenCalled();
+  await expect(
+    signReviewedSwap(client, { ...f.prepared, messageHash: "0".repeat(64) }),
+  ).rejects.toMatchObject({
+    phase: "validation",
+    responseIssue: "signed_binding",
+    bindingIssue: "message_mismatch",
+  });
+  expect(send).not.toHaveBeenCalled();
   sign.mockRejectedValueOnce({
     code: -32603,
     message: "private signing error",

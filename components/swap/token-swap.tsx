@@ -456,10 +456,14 @@ function LiveSwap({
               reason instanceof CommerceWalletRequestError
                 ? reason.responseIssue
                 : null,
+            bindingIssue:
+              reason instanceof CommerceWalletRequestError
+                ? reason.bindingIssue
+                : null,
           }),
         );
         setWalletDiagnostic(
-          `Stage: ${stage}; code: ${code ?? "none"}${reason instanceof CommerceWalletRequestError ? `; wallet phase: ${reason.phase}; issue: ${reason.responseIssue ?? "none"}` : ""}.`,
+          `Stage: ${stage}; code: ${code ?? "none"}${reason instanceof CommerceWalletRequestError ? `; wallet phase: ${reason.phase}; issue: ${reason.responseIssue ?? "none"}; binding check: ${reason.bindingIssue ?? "none"}` : ""}.`,
         );
         const cancelled = await cancelUnsubmitted({
           quoteId: selected.quoteId,
@@ -474,7 +478,7 @@ function LiveSwap({
           setNotice("");
           setError(
             stage === "signing"
-              ? "Wallet signing did not complete. The app did not submit a transaction. You can request a fresh quote."
+              ? `Wallet signing did not complete${reason instanceof CommerceWalletRequestError && reason.bindingIssue ? ` (check: ${reason.bindingIssue})` : ""}. The app did not submit a transaction. You can request a fresh quote.`
               : "Submission did not start. The saved attempt was cancelled before any relay was authorized. You can request a fresh quote.",
           );
         } else {

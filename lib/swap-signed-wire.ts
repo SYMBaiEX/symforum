@@ -14,6 +14,30 @@ export type SignedSwapBinding = {
   messageHash: string;
   transactionVersion: number;
 };
+/** Fixed categories only: never expose the signed wire or a provider error. */
+export type SignedSwapValidationIssue =
+  | "wire_format"
+  | "wire_size"
+  | "wire_decode"
+  | "wire_encode"
+  | "noncanonical_wire"
+  | "version_mismatch"
+  | "payer_mismatch"
+  | "signer_count"
+  | "signature_missing"
+  | "signature_length"
+  | "message_mismatch"
+  | "crypto_unavailable"
+  | "invalid_signature";
+export class SignedSwapValidationError extends Error {
+  constructor(
+    readonly issue: SignedSwapValidationIssue,
+    message: string,
+  ) {
+    super(message);
+    this.name = "SignedSwapValidationError";
+  }
+}
 async function digest(bytes: Uint8Array) {
   return Array.from(
     new Uint8Array(
@@ -33,39 +57,72 @@ export async function inspectSignedSwap(
     wire.length > 6000 ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(wire)
   )
-    throw Error("Invalid signed transaction.");
+    throw new SignedSwapValidationError(
+      "wire_format",
+      "Invalid signed transaction.",
+    );
   const bytes = getBase64Encoder().encode(wire);
   if (bytes.length > (expected.transactionVersion === 1 ? 4096 : 1232))
-    throw Error("Invalid signed transaction.");
-  const tx = getTransactionDecoder().decode(bytes),
+    throw new SignedSwapValidationError(
+      "wire_size",
+      "Invalid signed transaction.",
+    );
+  let tx: ReturnType<ReturnType<typeof getTransactionDecoder>["decode"]>;
+  let message: ReturnType<
+    ReturnType<typeof getCompiledTransactionMessageDecoder>["decode"]
+  >;
+  try {
+    tx = getTransactionDecoder().decode(bytes);
     message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+  } catch {
+    throw new SignedSwapValidationError(
+      "wire_decode",
+      "Invalid signed transaction.",
+    );
+  }
   const signature = tx.signatures[address(expected.wallet)];
-  if (
-    getBase64EncodedWireTransaction(tx) !== wire ||
-    message.version !== expected.transactionVersion ||
-    message.staticAccounts[0] !== expected.wallet ||
-    Object.keys(tx.signatures).length !== 1 ||
-    !signature ||
-    signature.length !== 64 ||
-    (await digest(Uint8Array.from(tx.messageBytes))) !== expected.messageHash
-  )
-    throw Error("Signed transaction differs from the simulated message.");
-  const key = await crypto.subtle.importKey(
-    "raw",
-    Uint8Array.from(getAddressEncoder().encode(address(expected.wallet))),
-    { name: "Ed25519" },
-    false,
-    ["verify"],
-  );
-  if (
-    !(await crypto.subtle.verify(
+  const mismatch = (issue: SignedSwapValidationIssue): never => {
+    throw new SignedSwapValidationError(
+      issue,
+      "Signed transaction differs from the simulated message.",
+    );
+  };
+  if (getBase64EncodedWireTransaction(tx) !== wire)
+    mismatch("noncanonical_wire");
+  if (message.version !== expected.transactionVersion)
+    mismatch("version_mismatch");
+  if (message.staticAccounts[0] !== expected.wallet) mismatch("payer_mismatch");
+  if (Object.keys(tx.signatures).length !== 1) mismatch("signer_count");
+  if (!signature) return mismatch("signature_missing");
+  if (signature.length !== 64) mismatch("signature_length");
+  if ((await digest(Uint8Array.from(tx.messageBytes))) !== expected.messageHash)
+    mismatch("message_mismatch");
+  let valid: boolean;
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      Uint8Array.from(getAddressEncoder().encode(address(expected.wallet))),
+      { name: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    valid = await crypto.subtle.verify(
       "Ed25519",
       key,
       Uint8Array.from(signature),
       Uint8Array.from(tx.messageBytes),
-    ))
-  )
-    throw Error("Invalid transaction signature.");
+    );
+  } catch {
+    throw new SignedSwapValidationError(
+      "crypto_unavailable",
+      "Signature verification is unavailable.",
+    );
+  }
+  if (!valid)
+    throw new SignedSwapValidationError(
+      "invalid_signature",
+      "Invalid transaction signature.",
+    );
   return {
     signature: getBase58Decoder().decode(signature),
     wireHash: await digest(Uint8Array.from(bytes)),

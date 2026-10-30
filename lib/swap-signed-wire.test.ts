@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { getBase64EncodedWireTransaction } from "@solana/kit";
 import { inspectSignedSwap, signedBytesToBase64 } from "./swap-signed-wire";
 import { signedSwapFixture } from "../tests/fixtures/signed-swap";
@@ -39,6 +39,48 @@ test("rejects altered bytes, wrong message/payer/version and forged signatures",
   await expect(
     inspectSignedSwap(f.signedTransactionBase64 + "AAAA", f.prepared),
   ).rejects.toThrow();
+});
+test("fixed diagnostics distinguish message, payer, version, missing and invalid signatures without weakening rejection", async () => {
+  const f = await signedSwapFixture(),
+    other = await signedSwapFixture();
+  for (const [binding, issue] of [
+    [{ ...f.prepared, messageHash: "0".repeat(64) }, "message_mismatch"],
+    [{ ...f.prepared, wallet: other.wallet }, "payer_mismatch"],
+    [{ ...f.prepared, transactionVersion: 0 }, "version_mismatch"],
+  ] as const) {
+    await expect(
+      inspectSignedSwap(f.signedTransactionBase64, binding),
+    ).rejects.toMatchObject({ issue });
+  }
+  await expect(
+    inspectSignedSwap(f.prepared.transactionBase64, f.prepared),
+  ).rejects.toMatchObject({ issue: "signature_missing" });
+  const forged = getBase64EncodedWireTransaction({
+    ...f.transaction,
+    signatures: { [f.wallet]: new Uint8Array(64).fill(1) },
+  } as unknown as Parameters<typeof getBase64EncodedWireTransaction>[0]);
+  await expect(inspectSignedSwap(forged, f.prepared)).rejects.toMatchObject({
+    issue: "invalid_signature",
+  });
+  await expect(inspectSignedSwap("!!", f.prepared)).rejects.toMatchObject({
+    issue: "wire_format",
+  });
+});
+test("unavailable browser verification fails closed with no raw exception leakage", async () => {
+  const f = await signedSwapFixture();
+  const spy = vi
+    .spyOn(crypto.subtle, "importKey")
+    .mockRejectedValueOnce(new Error("private crypto exception"));
+  try {
+    await expect(
+      inspectSignedSwap(f.signedTransactionBase64, f.prepared),
+    ).rejects.toMatchObject({
+      issue: "crypto_unavailable",
+      message: "Signature verification is unavailable.",
+    });
+  } finally {
+    spy.mockRestore();
+  }
 });
 test.each([
   new Uint16Array(100),

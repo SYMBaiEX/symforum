@@ -47,7 +47,9 @@ getWallets().register({
   features: {
     "solana:signTransaction": {
       version: "1.0.0",
-      supportedTransactionVersions: [0],
+      supportedTransactionVersions: location.search.includes("v1")
+        ? [0, 1]
+        : [0],
       signTransaction: async (input: {
         account: typeof account;
         transaction: Uint8Array;
