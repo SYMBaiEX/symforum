@@ -38,3 +38,4 @@ Generated from project sources at 2026-10-29T21:17:56.710Z.
 ## Decisions
 
 - Compact sell/receive panels and a searchable token directory, based on the supplied Jupiter reference. Preserve SYMBaiEX colors, shared Dialog/Button primitives, responsive behavior and explicit transaction review.
+- Full-width connected trading desk, based on the supplied Birdeye reference: wide chart, persistent order column, compact asset/metric strips and sortable sampled-market rows. Keep forum navigation, Geist/magenta/teal identity, real source timestamps and mounted protected receipts; no invented rankings or unsupported trading controls.

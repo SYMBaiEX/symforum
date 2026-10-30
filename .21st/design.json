@@ -46,7 +46,8 @@
     "avoid": []
   },
   "decisions": [
-    "Swap UI uses a compact sell/receive card and searchable token directory inspired by the user's Jupiter reference, while retaining SYMBaiEX forum colors, existing Dialog/Button primitives, responsive layout and explicit transaction review."
+    "Swap UI uses a compact sell/receive card and searchable token directory inspired by the user's Jupiter reference, while retaining SYMBaiEX forum colors, existing Dialog/Button primitives, responsive layout and explicit transaction review.",
+    "Trading terminal uses the user's Birdeye reference as a composition guide: a full-width connected analytical pane, persistent order column, compact asset/metric strips and a sortable sampled-market table. Retain forum navigation, Geist typography and magenta/teal identity, real source freshness and mounted protected receipts. Do not copy branding or invent trader rankings, order books or unsupported controls."
   ],
   "evidence": [
     {
