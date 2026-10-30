@@ -308,6 +308,8 @@
 .forum-app-shell .forum-rail-heading:hover { color: hsl(var(--foreground)); }
 .forum-app-shell .forum-compact-shortcuts { display: none; }
 .forum-app-shell .forum-main > .forum-surface > .page-frame { padding: 18px 24px 24px; }
+/* A trading desk uses the full work area; reading/community pages keep their frame. */
+.forum-app-shell .forum-main > .forum-surface > .page-frame[data-forum-layout=terminal] { width: 100%; max-width: none; margin: 0; padding: 0; }
 .forum-app-shell .forum-body-grid { margin-top: 12px; gap: 16px; }
 .forum-app-shell .forum-body-content { display: flex; flex-direction: column; gap: 12px; }
 .forum-app-shell .forum-body-content > * { margin-block: 0; }
