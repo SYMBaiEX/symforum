@@ -27,6 +27,8 @@ export default defineConfig({
       "**/node_modules/**",
       "**/.claude/worktrees/**",
       "tests/e2e/**",
+      // Broadcast tooling uses the Node test runner and an isolated browser harness.
+      "scripts/broadcast/**",
       "workers/eliza-shadow/**",
       "workers/eliza-shadow-gateway/**",
     ],

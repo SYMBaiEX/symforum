@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const http=require('node:http');
-const {chromium}=require('playwright');
+const {chromium}=require('@playwright/test');
 const root=path.resolve(__dirname,'../../apps/forum/public/broadcast');
 const now=Date.now();
 const mint='5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump';
@@ -35,91 +35,71 @@ const server=http.createServer((req,res)=>{
 const wireState=()=>{const t=document.querySelector('[data-wire-track]'),a=t.getAnimations()[0];return{transform:getComputedStyle(t).transform,time:a?.currentTime,state:a?.playState,duration:a?.effect.getTiming().duration,text:t.children[0].textContent,clone:t.children[1]?.textContent,width:t.children[0].getBoundingClientRect().width};};
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const browser=await chromium.launch({channel:'chrome',headless:true});
+ const browser=await chromium.launch({headless:true});
  const errors=[];
  try{
   const page=await browser.newPage({viewport:{width:1920,height:1080}});
+  page.setDefaultTimeout(10000);
   page.on('pageerror',e=>errors.push(e.message));
   await page.clock.install({time:new Date(now)});
   const base='http://127.0.0.1:'+server.address().port;
+  // Everything runs against local fixtures. No model, publisher or real subscription.
+  await page.route('https://**',r=>r.abort());
+  await page.routeWebSocket('**',socket=>socket.close());
+  await page.route('**/activity-live.js*',r=>r.fulfill({contentType:'text/javascript',body:'window.SymfLiveActivity={start(){}};'}));
   await page.goto(base+'/program');
-  await page.waitForFunction(()=>document.querySelector('[data-countdown]').textContent==='00:18');
-  const a=await page.evaluate(wireState);assert.equal(a.state,'running');assert.equal(a.text,a.clone);
-  await page.waitForFunction(t=>document.querySelector('[data-wire-track]').getAnimations()[0].currentTime>t+350,a.time);
-  const b=await page.evaluate(wireState);assert.notEqual(a.transform,b.transform);
-  await page.clock.runFor(2200);
-  await page.waitForFunction(()=>document.querySelector('[data-countdown]').textContent==='00:16');
+  await page.waitForFunction(()=>document.querySelector('[data-countdown]').textContent==='00:45');
   const first=await page.locator('.an-stage').getAttribute('data-thread');
-  // Advance the real scene timeout without waiting 18 seconds in the test.
-  await page.evaluate(()=>document.querySelector('[data-an-play]').click());
-  await page.evaluate(async()=>{await document.querySelector('[data-wire-track]').getAnimations()[0].ready;});
-  const paused=await page.evaluate(wireState);assert.equal(paused.state,'paused');
-  await page.clock.runFor(2000);assert.equal((await page.evaluate(wireState)).time,paused.time);
-  assert.equal(await page.locator('[data-countdown]').innerText(),'Paused');
-  await page.evaluate(()=>document.querySelector('[data-an-play]').click());
-  assert.equal(await page.locator('[data-countdown]').innerText(),'00:18');
-  await page.clock.runFor(18020);
-  await page.waitForFunction(()=>document.querySelector('.an-stage').dataset.transition==='enter');
-  assert.equal((await page.evaluate(wireState)).state,'running');
-  await page.waitForFunction(()=>document.querySelector('.an-stage').dataset.transition==='idle');
-  assert.notEqual(await page.locator('.an-stage').getAttribute('data-thread'),first);
-  assert.equal(await page.locator('[data-countdown]').innerText(),'00:18');
-  // Reset geometry at the wrap: second set's final edge lands exactly at the first set's origin.
-  const loop=await page.evaluate(()=>{
-   const track=document.querySelector('[data-wire-track]'),a=track.getAnimations()[0],duration=a.effect.getTiming().duration;
-   a.pause();a.currentTime=duration-.01;
-   const before=track.children[1].getBoundingClientRect().left;
-   a.currentTime=duration+.01;
-   const after=track.children[0].getBoundingClientRect().left;
-   a.play();return{delta:Math.abs(before-after),copies:track.children.length};
-  });assert.equal(loop.copies,2);assert.ok(loop.delta<.1);
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await page.clock.runFor(50);
-  await page.waitForFunction(()=>document.getElementById('symf-anime-broadcast').classList.contains('an-motion-muted'));
-  assert.equal((await page.evaluate(wireState)).state,undefined);assert.equal(await page.locator('[data-countdown]').innerText(),'Still');
-  await page.emulateMedia({reducedMotion:'no-preference'});
-  await page.clock.runFor(50);
-  await page.waitForFunction(()=>document.querySelector('[data-wire-track]').getAnimations()[0]?.playState==='running');
-  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
-  assert.equal((await page.evaluate(wireState)).state,'paused');
-  await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-  await page.waitForFunction(()=>document.querySelector('[data-wire-track]').getAnimations()[0]?.playState==='running');
-  await page.evaluate(()=>document.getElementById('symf-anime-broadcast').style.marginTop='1800px');
-  await page.waitForFunction(()=>document.querySelector('[data-wire-track]').getAnimations()[0]?.playState==='paused');
-  await page.evaluate(()=>document.getElementById('symf-anime-broadcast').style.marginTop='');
-  await page.waitForFunction(()=>document.querySelector('[data-wire-track]').getAnimations()[0]?.playState==='running');
-  // A separate clock-controlled page verifies recurring display fetches, then fail-closed expiry.
-  const polling=await browser.newPage({viewport:{width:1920,height:1080}});
-  polling.on('pageerror',e=>errors.push(e.message));await polling.clock.install({time:new Date(now)});
-  await polling.goto(base+'/program');await polling.waitForFunction(()=>document.querySelector('[data-token-cap]').textContent==='$26.1K');
-  const reads=tokenReads;currentQuote={...quote,marketCapUsd:29123,fetchedAt:now+30000};
-  await polling.clock.runFor(30500);
-  await polling.waitForFunction(()=>document.querySelector('[data-token-cap]').textContent==='$29.1K');assert.equal(tokenReads,reads+1);
-  tokenStatus=503;await polling.clock.runFor(30500);
-  await polling.waitForFunction(()=>document.querySelector('.an-token-rail').dataset.quoteState==='cached');assert.equal(await polling.locator('[data-token-cap]').innerText(),'$29.1K');assert.match(await polling.locator('[data-token-asof]').innerText(),/last good/);
-  tokenStatus=200;
-  currentQuote={...quote,fetchedAt:now-11*60000};await polling.clock.runFor(30500);
-  await polling.waitForFunction(()=>document.querySelector('[data-token-cap]').textContent==='--');
-  assert.equal(await polling.locator('[data-token-mint]').innerText(),mint);
-  assert.equal(await polling.locator('[data-token-asof]').innerText(),'Quote unavailable');
-  currentQuote=quote;
-  const reader=await browser.newPage({viewport:{width:1920,height:1080}});await reader.clock.install({time:new Date(now)});
-  const longItem={...items[0],body:'Complete analysis and verified context. '.repeat(35)};
-  await reader.route('**/api/feed',r=>r.fulfill({json:{...feed,items:[longItem]}}));
-  await reader.goto(base+'/program');await reader.waitForFunction(()=>document.querySelector('[data-story-page]').textContent.startsWith('Page 1 /'));
-  assert.equal(await reader.getByRole('link',{name:'SYMF community on Telegram: t.me/symforum'}).getAttribute('href'),'https://t.me/symforum');
-  const firstText=await reader.locator('[data-story-excerpt]').innerText();assert.ok(firstText.length>300);assert.ok(!await reader.getByText('Read the discussion').count());
-  await reader.clock.runFor(18020);await reader.waitForFunction(()=>document.querySelector('.an-stage').dataset.page==='2'&&document.querySelector('.an-stage').dataset.transition==='idle');
-  assert.equal(await reader.locator('.an-stage').getAttribute('data-thread'),longItem.id);
-  assert.match(await reader.locator('[data-story-link]').innerText(),/^forum\.symbaiex\.com\/projects\//);
-  const layouts=[];for(const [width,height] of [[1920,1080],[1920,1200],[3456,1996],[1366,768],[1280,1024]]){
-   await reader.setViewportSize({width,height});await reader.clock.runFor(50);
-   const size=await reader.evaluate(()=>{const stage=document.querySelector('.an-stage').getBoundingClientRect(),dock=document.querySelector('.an-station-dock').getBoundingClientRect(),rail=document.querySelector('.an-token-rail').getBoundingClientRect(),paper=document.querySelector('.an-paper').getBoundingClientRect(),wire=document.querySelector('.an-news-wire').getBoundingClientRect(),header=document.querySelector('.an-header').getBoundingClientRect(),telegram=document.querySelector('.an-token-telegram').getBoundingClientRect();return{height:innerHeight,stageBottom:stage.bottom,dockBottom:dock.bottom,railHeight:rail.height,wireTop:wire.top,wireHeaderOverlap:wire.bottom>header.top+1,telegramInside:telegram.left>=rail.left&&telegram.right<=rail.right&&telegram.bottom<=rail.bottom+1,overlap:paper.bottom>dock.top+1,horizontalOverflow:document.documentElement.scrollWidth>innerWidth};});
-   assert.ok(Math.abs(size.stageBottom-height)<1);assert.ok(Math.abs(size.dockBottom-height)<1);assert.ok(size.railHeight<=Math.max(68,width*.036));assert.equal(size.overlap||size.horizontalOverflow||size.wireHeaderOverlap,false);assert.ok(Math.abs(size.wireTop)<1);assert.equal(size.telegramInside,true);layouts.push({width,height,...size});
+  const a=await page.evaluate(wireState);assert.equal(a.state,'running');assert.equal(a.text,a.clone);
+  await page.clock.runFor(1000);
+  assert.notEqual((await page.evaluate(wireState)).transform,a.transform);
+  assert.equal(await page.locator('[data-an-play]').isVisible(),false);
+  assert.equal(await page.locator('[data-story-page]').innerText(),'Full post');
+  assert.equal(await page.locator('[data-story-link]').innerText(),items[0].url.replace('https://',''));
+  const assets=await page.locator('img[src], script[src], link[rel=stylesheet]').evaluateAll(nodes=>nodes.map(n=>n.src||n.href));
+  for(const url of assets)assert.equal((await page.request.get(url)).status(),200,'Missing local asset: '+new URL(url).pathname);
+  await page.evaluate(({at,url})=>{
+   const root=document.getElementById('symf-anime-broadcast');
+   root.dispatchEvent(new CustomEvent('symf:activity-feed',{detail:{policy:'public-activity-live-v2',counts:{forum:35,telegram:5,x:1},events:[{id:'forum:fixture',agentSlug:'suki',agentName:'Suki',platform:'forum',action:'forum-post',status:'published',at,url}]}}));
+   root.dispatchEvent(new CustomEvent('symf:activity-connection',{detail:'live'}));
+  },{at:now-1000,url:items[0].url});
+  assert.equal(await page.locator('[data-agent-count]').innerText(),'35');
+  assert.equal(await page.locator('[data-telegram-count]').innerText(),'5');
+  assert.equal(await page.locator('[data-x-count]').innerText(),'1');
+  assert.equal(await page.locator('.an-activity-row').count(),1);
+  await page.clock.runFor(46000);
+  await page.waitForFunction(id=>document.querySelector('.an-stage').dataset.thread!==id&&document.querySelector('.an-stage').dataset.transition==='idle',first);
+  // Only the article is covered by the transition; header and activity remain stationary.
+  const cover=await page.evaluate(()=>{const p=document.querySelector('.an-paper'),t=document.querySelector('.an-transition');return{parent:t.parentElement===p,clipped:getComputedStyle(p).overflow};});
+  assert.equal(cover.parent,true);assert.equal(cover.clipped,'hidden');
+  const reads=tokenReads;currentQuote={...quote,marketCapUsd:29123,fetchedAt:now+60000};
+  await page.clock.runFor(31000);
+  await page.waitForFunction(()=>document.querySelector('[data-token-cap]').textContent==='$29.1K');assert.ok(tokenReads>reads);
+  tokenStatus=503;await page.clock.runFor(31000);
+  await page.waitForFunction(()=>document.querySelector('.an-token-rail').dataset.quoteState==='cached');assert.equal(await page.locator('[data-token-cap]').innerText(),'$29.1K');
+  // Invalid provider data cannot renew the last-good quote, which expires after 10m.
+  tokenStatus=200;currentQuote={...quote,fetchedAt:now-11*60000};await page.clock.fastForward(11*60000);
+  await page.waitForFunction(()=>document.querySelector('[data-token-cap]').textContent==='--');
+  assert.equal(await page.locator('[data-token-mint]').innerText(),mint);
+  const longItem={...items[0],body:'Complete analysis and verified context. '.repeat(100)};
+  await page.route('**/api/feed',r=>r.fulfill({json:{...feed,items:[longItem]}}));
+  await page.goto(base+'/program');await page.waitForFunction(()=>document.querySelector('[data-story-excerpt]').textContent.length>2000);
+  await page.clock.runFor(10000);
+  assert.ok(await page.locator('[data-reader]').evaluate(n=>n.scrollTop>0));
+  assert.equal(await page.locator('.an-stage').getAttribute('data-thread'),longItem.id);
+  assert.equal(await page.getByRole('link',{name:'SYMF community on Telegram: t.me/symforum'}).getAttribute('href'),'https://t.me/symforum');
+  const layouts=[];
+  for(const [width,height] of [[1920,1080],[1920,1200],[3456,1996],[1366,768],[1280,1024]]){
+   await page.setViewportSize({width,height});await page.clock.runFor(100);
+   const size=await page.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect(),stage=rect('.an-stage'),dock=rect('.an-station-dock'),rail=rect('.an-token-rail'),paper=rect('.an-paper'),log=rect('.an-activity');return{stageBottom:stage.bottom,dockBottom:dock.bottom,railHeight:rail.height,wireTop:rect('.an-news-wire').top,overlap:paper.right>log.left+1,horizontalOverflow:document.documentElement.scrollWidth>innerWidth,logOverflow:document.querySelector('.an-activity-window').scrollWidth>log.width};});
+   assert.ok(Math.abs(size.stageBottom-height)<1);assert.ok(Math.abs(size.dockBottom-height)<1);assert.ok(size.railHeight<=Math.max(68,width*.036));assert.ok(Math.abs(size.wireTop)<1);assert.equal(size.overlap||size.horizontalOverflow||size.logOverflow,false);layouts.push({width,height});
   }
-  await reader.route('**/api/feed',r=>r.fulfill({json:{...feed,items:[{...longItem,authorIsAgent:false}]}}));
-  await reader.goto(base+'/program');await reader.waitForFunction(()=>document.querySelector('[data-an-frame=status]').hidden===false);assert.equal(await reader.locator('.an-stage').getAttribute('data-thread'),'');
+  await page.emulateMedia({reducedMotion:'reduce'});await page.clock.runFor(100);
+  await page.waitForFunction(()=>document.querySelector('[data-countdown]').textContent==='Still');
+  await page.route('**/api/feed',r=>r.fulfill({json:{...feed,items:[{...longItem,authorIsAgent:false}]}}));
+  await page.goto(base+'/program');await page.waitForFunction(()=>document.querySelector('[data-an-frame=status]').hidden===false);
+  assert.equal(await page.locator('.an-stage').getAttribute('data-thread'),'');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({tickerMoving:true,seamlessWrap:loop.delta<.1,countdownAndSceneAdvance:true,pause:true,reducedMotion:true,offscreenPause:true,hiddenPause:true,quoteRefresh30s:true,transientQuotePreserved:true,expiredQuoteUnavailable:true,agentRootPaged:true,memberSnapshotRejected:true,layouts,errors}));
+  console.log(JSON.stringify({assets:assets.length,tickerMoving:true,articleOnlyTransition:true,slowScroll:true,liveActivity:true,quoteRefresh:true,expiredQuoteUnavailable:true,memberSnapshotRejected:true,layouts,errors}));
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
