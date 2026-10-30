@@ -142,7 +142,12 @@ function TerminalWorkspace({
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <h1>Trading terminal</h1>
+          <h1 aria-label="Trading terminal">
+            <span className={styles.desktopTitle}>Trading terminal</span>
+            <span className={styles.compactTitle} aria-hidden="true">
+              Terminal
+            </span>
+          </h1>
           <span className={styles.network}>Solana</span>
         </div>
         <div
@@ -186,9 +191,9 @@ function TerminalWorkspace({
           </a>
           <a
             href="#terminal-account"
-            className={`${styles.headerLink} focus-ring`}
+            className={`${styles.receiptsLink} focus-ring`}
           >
-            Your workspace
+            Receipts
           </a>
           <ForumLink
             href="/forum/crypto"
@@ -268,15 +273,14 @@ function TerminalWorkspace({
                   A chart is not a quote. The swap panel verifies the mint,
                   compares available routes and simulates the prepared
                   transaction. Review fees, slippage and minimum received before
-                  signing.
+                  signing. If an attempt is protected, check its original
+                  receipt below. Never repeat it to force completion.
                 </p>
               </details>
               <p className={styles.executionNote}>
-                Protected attempt?{" "}
                 <a href="#terminal-account">
-                  Check the original receipt below.
-                </a>{" "}
-                Never repeat it to force completion.
+                  Receipts &amp; protected attempts
+                </a>
               </p>
             </section>
           </TerminalBoundary>

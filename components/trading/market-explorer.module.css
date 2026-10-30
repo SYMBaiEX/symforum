@@ -8,8 +8,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 6px 12px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .toolbar label {
@@ -21,9 +21,9 @@
 }
 .toolbar select {
   min-width: 0;
-  min-height: 44px;
-  max-width: 190px;
-  padding: 8px 28px 8px 10px;
+  min-height: 34px;
+  max-width: 160px;
+  padding: 4px 24px 4px 8px;
   border: 1px solid hsl(var(--border));
   border-radius: 7px;
   background: hsl(var(--card));
@@ -32,22 +32,23 @@
 }
 .search {
   position: relative;
-  flex: 1 1 200px;
-  min-width: 160px;
-  max-width: 360px;
+  flex: 1 1 160px;
+  min-width: 144px;
+  max-width: 320px;
 }
 .search > svg {
   position: absolute;
-  top: 14px;
-  left: 12px;
-  width: 16px;
-  height: 16px;
+  top: 10px;
+  left: 10px;
+  width: 14px;
+  height: 14px;
   color: hsl(var(--muted-foreground));
   pointer-events: none;
 }
 .toolbar .search input {
-  min-height: 44px;
-  padding-inline-start: 40px;
+  height: 34px;
+  min-height: 34px;
+  padding-inline-start: 32px;
   border-radius: 7px;
   font-size: 13px;
 }
@@ -55,8 +56,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 4px 16px;
+  gap: 4px 12px;
+  padding: 0 12px;
   border-bottom: 1px solid hsl(var(--border));
   font-size: 12px;
   color: hsl(var(--muted-foreground));
@@ -65,14 +66,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 34px;
   padding: 4px 8px;
   border-radius: 6px;
   color: hsl(var(--foreground));
 }
 .pinned button > span:first-child {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 .pinned button[aria-pressed="true"] {
   background: hsl(var(--primary) / 0.065);
@@ -88,13 +89,13 @@
   position: relative;
   min-width: 0;
   overflow: auto;
-  max-height: 600px;
+  max-height: 440px;
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 .scroll table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 920px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
@@ -104,8 +105,8 @@
   position: sticky;
   z-index: 2;
   top: 0;
-  height: 44px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 8px;
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   color: hsl(var(--muted-foreground));
@@ -118,9 +119,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: end;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  min-height: 44px;
+  min-height: 34px;
   border-radius: 4px;
   color: inherit;
   white-space: nowrap;
@@ -138,8 +139,8 @@
   color: hsl(var(--primary));
 }
 .scroll td {
-  height: 56px;
-  padding: 4px 12px;
+  height: 44px;
+  padding: 2px 8px;
   border-bottom: 1px solid hsl(var(--border) / 0.65);
   background: hsl(var(--card));
   vertical-align: middle;
@@ -157,8 +158,8 @@
   position: sticky;
   z-index: 1;
   left: 0;
-  min-width: 208px;
-  max-width: 240px;
+  min-width: 176px;
+  max-width: 200px;
   text-align: left;
   box-shadow: 1px 0 0 hsl(var(--border) / 0.5);
 }
@@ -168,17 +169,17 @@
 .tokenButton {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 40px;
   border-radius: 4px;
   text-align: left;
 }
 .tokenButton > span:first-child {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
 }
 .tokenButton > span:last-child {
   display: grid;
@@ -207,7 +208,7 @@
 .tokenButton code {
   color: hsl(var(--muted-foreground));
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: 11px;
 }
 .number {
   font-family: var(--font-geist-mono), monospace;
@@ -227,7 +228,7 @@
   font-size: 11px;
 }
 .observation {
-  min-width: 190px;
+  min-width: 140px;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -245,7 +246,7 @@
   align-items: center;
   gap: 3px;
   min-height: 24px;
-  margin-left: 10px;
+  margin-left: 6px;
   color: hsl(var(--muted-foreground));
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -268,8 +269,8 @@
   margin-inline-start: 10px;
 }
 .scroll .empty {
-  height: 184px;
-  padding: 24px 16px;
+  height: 104px;
+  padding: 12px;
   text-align: left;
   color: hsl(var(--muted-foreground));
 }
@@ -285,7 +286,7 @@
 }
 .coverage {
   margin: 0;
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-top: 1px solid hsl(var(--border));
   color: hsl(var(--muted-foreground));
   font-size: 11px;
@@ -299,7 +300,7 @@
 @media (max-width: 600px) {
   .toolbar {
     gap: 8px;
-    padding: 12px;
+    padding: 8px 12px;
   }
   .search {
     flex-basis: 100%;
@@ -333,5 +334,27 @@
   }
   .observation a {
     min-height: 44px;
+  }
+}
+@media (max-width: 767px), (pointer: coarse) {
+  .toolbar select,
+  .toolbar .search input,
+  .pinned button,
+  .scroll th button,
+  .tokenButton,
+  .observation a {
+    min-height: 44px;
+  }
+  .toolbar .search input {
+    height: 44px;
+  }
+  .search > svg {
+    top: 15px;
+  }
+  .scroll th {
+    height: 44px;
+  }
+  .scroll td {
+    height: 48px;
   }
 }
