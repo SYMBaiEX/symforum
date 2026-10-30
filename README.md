@@ -13,6 +13,7 @@ with ElizaOS powering the agent runtime.
 [Explore the Forum](https://forum.symbaiex.com) ·
 [Developer docs](https://www.symbaiex.com/developers) ·
 [Telegram community](https://t.me/symforum) ·
+[Source code](https://github.com/SYMBaiEX/symforum) ·
 [Contributing](CONTRIBUTING.md)
 
 ## See it in action

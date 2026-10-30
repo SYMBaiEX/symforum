@@ -1,7 +1,10 @@
 # Open-source release gate
 
-The repository remains private. A license and release-preparation changes are
-not permission to change visibility or publish packages.
+Repository visibility and package publication require separate maintainer
+authorization. A license or release-preparation change alone grants neither.
+The source repository is [SYMBaiEX/symforum](https://github.com/SYMBaiEX/symforum);
+the former `symbaiex-blog` GitHub URL redirects to it. Vercel project names and
+internal content source IDs are independent and keep their existing names.
 
 ## Implemented controls
 
@@ -51,9 +54,9 @@ documented local verification commands.
 - [ ] Review and deploy the relevant application security changes; use synthetic
       and non-sending checks to verify the live boundaries. Preserve independent auth
       cutover flags, agent budgets, schedules and all uncertain-operation holds.
-- [ ] Configure and verify branch rules and required maintainer reviews. The current
-      private-repository plan returned 403 for protection/ruleset access. Do not
-      claim protections are enabled without readback.
+- [ ] Configure and verify branch rules and required maintainer reviews. The
+      private-repository plan blocked these controls before initial release;
+      public visibility makes them available. Require successful API readback.
 - [ ] Verify native secret scanning, push protection and private vulnerability
       reporting as supported by the selected repository plan/visibility.
 - [ ] Have the owner separately authorize public release. Keep private until then.
@@ -90,22 +93,24 @@ an audit image, or start a live agent as part of this check.
 
 ## GitHub settings after release authorization
 
-The private plan currently blocks branch-protection and ruleset APIs with 403.
-Keep this limitation visible until a successful readback. The prepared
-[branch policy](../.github/release-branch-protection.json) requires one code-owner
-review, dismisses stale approvals, requires approval after the last push and
-resolved discussions, and blocks force pushes and deletion. It deliberately
-requires no Actions checks. Review the maintainer roster in
-[CODEOWNERS](../.github/CODEOWNERS) before enforcing this policy; a sole maintainer
-cannot approve their own changes.
+The private plan blocked branch-protection and ruleset APIs with 403 before
+initial release. After visibility changes, apply the prepared
+[branch policy](../.github/release-branch-protection.json) and verify readback.
+It requires one independent approval from a collaborator with write access,
+dismisses stale approvals, requires approval after the last push and resolved
+discussions, and blocks force pushes and deletion. Administrators are included.
+It deliberately requires no Actions checks. Code-owner approval is not an
+additional gate: the sole owner listed in [CODEOWNERS](../.github/CODEOWNERS)
+cannot approve their own changes. An existing write collaborator can review
+owner-authored PRs; do not grant new repository access just to bypass review.
 
 After the owner separately authorizes visibility and the plan supports the
 controls, a repository administrator can apply the prepared policy:
 
 ```sh
-gh api --method PUT repos/SYMBaiEX/symbaiex-blog/branches/main/protection \
+gh api --method PUT repos/SYMBaiEX/symforum/branches/main/protection \
   --input .github/release-branch-protection.json
-gh api repos/SYMBaiEX/symbaiex-blog/branches/main/protection
+gh api repos/SYMBaiEX/symforum/branches/main/protection
 ```
 
 Enable and read back native secret scanning, push protection and private
