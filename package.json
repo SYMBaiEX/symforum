@@ -106,6 +106,8 @@
     "@wallet-standard/ui-registry": "1.1.1",
     "@workos-inc/authkit-nextjs": "4.4.0",
     "@workos-inc/node": "10.13.0",
+    "@x402/core": "2.29.0",
+    "@x402/svm": "2.29.0",
     "ai": "7.0.111",
     "better-auth": "1.7.14",
     "class-variance-authority": "^0.7.1",

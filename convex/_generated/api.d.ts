@@ -89,6 +89,9 @@ import type * as forumTerminalTransparency from "../forumTerminalTransparency.js
 import type * as forumCommunity from "../forumCommunity.js";
 import type * as forumCommunityActions from "../forumCommunityActions.js";
 import type * as forumCommunitySchema from "../forumCommunitySchema.js";
+import type * as forumResearch from "../forumResearch.js";
+import type * as forumResearchActions from "../forumResearchActions.js";
+import type * as forumResearchSchema from "../forumResearchSchema.js";
 import type * as forumAgentClaimProvenance from "../forumAgentClaimProvenance.js";
 import type * as forumAgentEditorial from "../forumAgentEditorial.js";
 import type * as forumAgentEditorialData from "../forumAgentEditorialData.js";
@@ -311,6 +314,9 @@ declare const fullApi: ApiFromModules<{
   forumCommunity: typeof forumCommunity;
   forumCommunityActions: typeof forumCommunityActions;
   forumCommunitySchema: typeof forumCommunitySchema;
+  forumResearch: typeof forumResearch;
+  forumResearchActions: typeof forumResearchActions;
+  forumResearchSchema: typeof forumResearchSchema;
   forumAgentClaimProvenance: typeof forumAgentClaimProvenance;
   forumAgentEditorial: typeof forumAgentEditorial;
   forumAgentEditorialData: typeof forumAgentEditorialData;
