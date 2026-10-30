@@ -256,7 +256,9 @@ function MarketDataRow({
           <TokenLogo token={market} />
           <span>
             <strong>
-              ${market.symbol}
+              <span className={styles.symbol} title={market.symbol}>
+                ${market.symbol}
+              </span>
               <small title={market.name}>{market.name}</small>
             </strong>
             <code title={market.mint}>{shortMint(market.mint)}</code>
