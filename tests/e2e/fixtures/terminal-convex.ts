@@ -132,9 +132,10 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   const input = args as Record<string, unknown>;
   const name = getFunctionName(ref);
   let result: unknown;
-  if (name === "forumCommunity:listProjects") result = projects;
+  if (name === "forumCommunity:listProjects")
+    result = location.search.includes("empty") ? [] : projects;
   else if (name === "forumCommunity:listBounties")
-    result = works.filter(
+    result = (location.search.includes("empty") ? [] : works).filter(
       (work) => !input.status || work.status === input.status,
     );
   else if (name === "forumCommunity:listPayments") result = [protectedPayment];

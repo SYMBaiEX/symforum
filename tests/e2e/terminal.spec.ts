@@ -110,6 +110,12 @@ for (const width of [390, 1440])
     await expect(
       page.getByRole("heading", { name: "Trading terminal", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: `tmp/forum-render-tests/terminal-workspace-${width}.png`,
+    });
     if (width === 390)
       await page.getByRole("button", { name: /^Markets/ }).click();
     await page
@@ -127,11 +133,12 @@ for (const width of [390, 1440])
       page.getByRole("heading", { name: "$SYMF", exact: true }),
     ).toHaveCount(0);
     await expect(page.locator("#terminal-token-title")).toHaveCount(1);
-    await expect(page.getByText(/Stale sampled metrics\./)).toBeVisible();
+    await expect(page.getByText(/1h change is a stale sample/)).toBeVisible();
     await expect(
       page.getByRole("img", { name: /NOVA USD candlestick chart/ }),
     ).toBeVisible();
     await page.getByText("Market details & sources", { exact: true }).click();
+    await expect(page.getByText(/Stale sampled metrics\./)).toBeVisible();
     const selectedToken = page.getByRole("region").filter({
       has: page.getByRole("heading", { name: "$NOVA", exact: true }),
     });
@@ -225,6 +232,12 @@ test("mobile markets is an explicit disclosure and trade remains one tap away", 
   await expect(trade).toHaveAttribute("href", "#terminal-order");
   const box = await trade.boundingBox();
   expect(box?.y).toBeLessThan(844);
+  await trade.click();
+  const order = page.getByRole("complementary", {
+    name: "Trade selected token",
+  });
+  await expect(order).toBeFocused();
+  expect((await order.boundingBox())?.y).toBeLessThan(844);
   await markets.focus();
   await page.keyboard.press("Enter");
   await expect(markets).toHaveAttribute("aria-expanded", "true");
@@ -280,11 +293,15 @@ for (const width of [390, 1440])
       page.getByRole("button", { name: "Add project", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "View market and discussion" }),
+      page.getByRole("link", { name: "Market & discussion" }),
     ).toHaveAttribute("href", /\/trade\?mint=/);
     expect(
       await page.locator("html").evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/community-projects-${width}.png`,
+      fullPage: true,
+    });
     await page
       .getByRole("button", { name: "Bounties & research", exact: true })
       .click();
@@ -302,6 +319,10 @@ for (const width of [390, 1440])
     ).toBeLessThanOrEqual(width);
     expect(chartMints).toEqual([]);
     expect(errors).toEqual([]);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/community-research-${width}.png`,
+      fullPage: true,
+    });
   });
 
 test("guest project dialog explains its wallet prerequisite and restores keyboard focus", async ({
@@ -323,6 +344,34 @@ test("guest project dialog explains its wallet prerequisite and restores keyboar
   await expect(add).toBeFocused();
   expect(errors).toEqual([]);
 });
+
+for (const width of [390, 1440])
+  test(`empty community at ${width}px explains how to start without invented activity`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const { errors } = await harness(page, "community&guest&empty");
+    await expect(
+      page.getByRole("heading", { name: "The next project starts here." }),
+    ).toBeVisible();
+    await expect(page.getByRole("article")).toHaveCount(0);
+    await expect(page.getByLabel("Exact Solana mint")).toHaveCount(0);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/community-empty-${width}.png`,
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Bounties & research", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Create brief", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("article")).toHaveCount(0);
+    expect(
+      await page.locator("html").evaluate((element) => element.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    expect(errors).toEqual([]);
+  });
 
 test("community section buttons expose their controlled region with keyboard navigation", async ({
   page,
@@ -394,3 +443,41 @@ test("native community host stays read-only without initializing wallet or trans
   expect(chartMints).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+for (const width of [390, 1440])
+  test(`terminal and community retain their dark theme at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const scenario of ["guest&dark", "community&guest&dark"]) {
+      const { errors } = await harness(page, scenario);
+      await expect(page.locator("html")).toHaveClass(/dark/);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      expect(
+        await page.locator("html").evaluate((element) => element.scrollWidth),
+      ).toBeLessThanOrEqual(width);
+      if (!scenario.includes("community")) {
+        await expect(
+          page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+        ).toBeVisible();
+        await expect
+          .poll(async () =>
+            page
+              .getByRole("img", { name: /SYMF USD candlestick chart/ })
+              .locator("canvas")
+              .first()
+              .evaluate((canvas) => {
+                const context = (canvas as HTMLCanvasElement).getContext("2d");
+                return context
+                  ? [...context.getImageData(0, 0, 1, 1).data].slice(0, 3)
+                  : [];
+              }),
+          )
+          .toEqual([19, 19, 21]);
+      }
+      await page.screenshot({
+        path: `tmp/forum-render-tests/${scenario.includes("community") ? "community" : "terminal"}-dark-${width}.png`,
+      });
+      expect(errors).toEqual([]);
+    }
+  });
