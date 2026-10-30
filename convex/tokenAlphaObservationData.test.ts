@@ -541,3 +541,59 @@ test("observation proof preserves ordinal ranks and nonincreasing hourly volume"
     ),
   ).toBe(false);
 });
+
+test("a current-hour completed stub with a missing payload never becomes ready empty or a new intent", async () => {
+  const { t } = await setup();
+  const runKey = "bags:2026-10-30T19";
+  await t.run((ctx) =>
+    ctx.db.insert("tokenAlphaObservations", {
+      runKey,
+      platform: "bags",
+      claimToken: "retained-source",
+      status: "completed",
+      createdAt: NOW,
+      updatedAt: NOW,
+      expiresAt: NOW + 30 * 60_000,
+      sourceCount: 3,
+      // Deliberately no snapshots or payloadExpiresAt: a pruned metadata stub.
+    }),
+  );
+  const before = await t.run((ctx) =>
+    ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+      .take(2),
+  );
+  expect(
+    await t.mutation(claim, { platform: "bags", claimToken: "must-not-fetch" }),
+  ).toEqual({ runKey, state: "unavailable", snapshots: [] });
+  const after = await t.run((ctx) =>
+    ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+      .take(2),
+  );
+  expect(after).toEqual(before);
+  expect(after).toHaveLength(1);
+});
+
+test("an explicitly completed zero-result observation can still be reused", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  expect(
+    await t.mutation(complete, {
+      runKey: first.runKey,
+      claimToken: "source-1",
+      snapshots: [],
+    }),
+  ).toBe(true);
+  expect(
+    await t.mutation(claim, {
+      platform: "bags",
+      claimToken: "reuse-actual-empty",
+    }),
+  ).toEqual({ runKey: first.runKey, state: "ready", snapshots: [] });
+});
