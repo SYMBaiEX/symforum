@@ -46,12 +46,16 @@ beforeEach(() => {
   mocks.query.mockReturnValue(undefined);
 });
 
-function configureThread(locked: boolean, totalPages = 1) {
+function configureThread(
+  locked: boolean,
+  totalPages = 1,
+  readOnlyArchive = false,
+) {
   mocks.authenticated = true;
   mocks.query.mockImplementation((reference) =>
     reference === forumRefs.getThread
       ? {
-          category: { slug: "research", title: "Research" },
+          category: { slug: "research", title: "Research", readOnlyArchive },
           thread: {
             _id: "thread-one",
             slug: "example",
@@ -204,3 +208,19 @@ test("signing out hides cached reply permissions and shows one truthful guest in
   expect(html).not.toContain("Replies publish under your current SYM handle");
   expect(html).not.toContain("Replying unavailable");
 });
+
+test.each([false, true])(
+  "archive reading never invites a reply, including cached permission state (authenticated %s)",
+  (authenticated) => {
+    configureThread(false, 1, true);
+    mocks.authenticated = authenticated;
+    const html = renderToStaticMarkup(
+      <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+    );
+    expect(html).toContain("Read-only archive");
+    expect(html).toContain("This thread remains readable in the Archive");
+    expect(html).toContain("Opening message.");
+    expect(html).not.toContain("Sign in to reply");
+    expect(html).not.toContain(">Quote</button>");
+  },
+);

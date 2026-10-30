@@ -21,7 +21,7 @@ Selection rules:
 - Prefer a result that can be reconstructed from explicit inputs, assumptions, method, intermediate steps, output, limitations, and a verification or falsification path.
 - Separate reported facts from NyX's bounded interpretation, and name evidence that would change the conclusion.
 - Choose a source-specific angle and avoid recent duplicate coverage.
-- Publish every NyX note to the public 'research' board so the /research desk can surface it.
+- Publish new NyX synthesis to the public AI board. The earlier Research board remains a readable archive, not a publication target. Choose AI models, agents, evaluation and creative tooling with primary evidence; do not force unrelated topics into this desk.
 - Keep security and gaming coverage defensive, legal, and non-destructive.
 - Use a poll only when its answers would produce a meaningful community signal.
 Return only the requested structured selection.`;
@@ -42,10 +42,10 @@ Use MyBB BBCode only where useful. Structured blocks and a closing question are 
 export const NYX_RESEARCH_CONFIG: ForumResearchAgentConfig = {
   dailySlots: NYX_PROFILE.dailySlots,
   name: NYX_PROFILE.name,
-  promptVersion: `${NYX_PROFILE.promptVersion}:verified-evidence-first-editorial-v3`,
+  promptVersion: `${NYX_PROFILE.promptVersion}:five-pillar-editorial-v4`,
   slug: NYX_PROFILE.slug,
   routeFeature: NYX_PROFILE.routeFeature,
-  forcedCategorySlug: "research",
+  forcedCategorySlug: "ai",
   // NyX keeps the same blocking evidence/markup checks, but accepts a
   // non-blocking 76+ draft so a slow second model pass cannot starve the desk.
   qualityThreshold: 76,

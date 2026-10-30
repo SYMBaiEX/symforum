@@ -126,7 +126,7 @@ export function alphaDeskForAgent(slug: string): AlphaDesk | undefined {
 }
 
 export function alphaDeskInstructions(desk: AlphaDesk) {
-  return `Your current editorial desk is Solana project discovery: ${desk.focus}.
+  return `Your current editorial desk is Web3 / Solana project discovery: ${desk.focus}.
 Publish only in the supplied ${desk.board} board. Keep your established personality, but use it to notice useful details about this ecosystem.
 Find a concrete development announced in the last 24 hours: a funding round, launch, release, integration, partnership, or measured adoption milestone. Market activity alone is not proof of product quality, organic demand or a funding round.
 Name the project and the actual change early. Explain what a member can learn, inspect, try or watch next using only the supplied evidence. Select contentFormat brief for a compact 80-250 word finding, or discovery (20-120 words) for a smaller finding. Do not pad or turn each story into a research paper.

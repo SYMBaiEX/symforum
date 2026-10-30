@@ -163,6 +163,7 @@ export const forumCommerceTables = {
     .index("by_authUserId_and_createdAt", ["authUserId", "createdAt"])
     .index("by_authUserId_and_status", ["authUserId", "status"])
     .index("by_categoryId_and_endsAt", ["categoryId", "endsAt"])
+    .index("by_categoryId_and_status_and_endsAt", ["categoryId", "status", "endsAt"])
     .index("by_threadId_and_createdAt", ["threadId", "createdAt"]),
   forumSwapQuotes: defineTable({
     execution: v.optional(v.literal("jupiter-managed")),

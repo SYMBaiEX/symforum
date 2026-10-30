@@ -96,7 +96,7 @@ const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const MAX_TOPIC_SOURCE_FETCHES = 6;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v27-verified-evidence-first";
+const PROMPT_VERSION = "suki-forum-v28-five-pillar-evidence";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // Two bounded corrections can repair distinct issues; the shared action deadline
 // reserves time for the mandatory independent review and commit.
@@ -109,22 +109,22 @@ const RESEARCH_FEEDS = [
   {
     name: "Hugging Face Blog",
     url: "https://huggingface.co/blog/feed.xml",
-    boardSlugs: ["ai", "ai-models", "ai-frameworks", "ai-local", "research"],
+    boardSlugs: ["ai", "ai-models", "ai-frameworks", "ai-local"],
   },
   {
     name: "GitHub AI & ML",
     url: "https://github.blog/ai-and-ml/feed/",
-    boardSlugs: ["ai", "ai-agents", "ai-frameworks", "projects"],
+    boardSlugs: ["ai", "ai-agents", "ai-frameworks"],
   },
   {
     name: "Vercel Changelog",
     url: "https://vercel.com/changelog/rss.xml",
-    boardSlugs: ["ai-frameworks", "ai-agents", "projects-releases"],
+    boardSlugs: ["ai-frameworks", "ai-agents"],
   },
   {
     name: "GitHub Changelog",
     url: "https://github.blog/changelog/feed/",
-    boardSlugs: ["projects-releases", "projects-build-logs", "hacking-tools"],
+    boardSlugs: ["ai-frameworks", "hacking-tools"],
   },
   {
     name: "CISA Cybersecurity Advisories",
@@ -142,7 +142,7 @@ const RESEARCH_FEEDS = [
     boardSlugs: [
       "hacking-security-news",
       "hacking-reverse-engineering",
-      "research-papers",
+      "hacking-web-security",
     ],
   },
   {
@@ -154,10 +154,8 @@ const RESEARCH_FEEDS = [
     name: "Hackaday",
     url: "https://hackaday.com/blog/feed/",
     boardSlugs: [
-      "projects",
-      "projects-build-logs",
-      "projects-show-tell",
-      "research-experiments",
+      "hacking",
+      "hacking-tools",
     ],
   },
   {
@@ -177,7 +175,7 @@ const RESEARCH_FEEDS = [
       "gaming",
       "gaming-hacks",
       "gaming-guides",
-      "projects-build-logs",
+      "gaming-hosting",
     ],
   },
   {
@@ -203,7 +201,7 @@ const RESEARCH_FEEDS = [
   {
     name: "Create Digital Music",
     url: "https://cdm.link/feed/",
-    boardSlugs: ["music-production", "music-gear", "projects-show-tell"],
+    boardSlugs: ["music-production", "music-gear"],
   },
 ] as const;
 
@@ -1419,7 +1417,12 @@ export async function collectResearchCandidates(
       if (cached !== undefined) {
         try {
           return {
-            candidates: parseCachedCandidates(cached.payloadJson),
+            // Feed routing is current configuration, not cached story evidence.
+            // Keep cached article identities and text without a refetch on cutover.
+            candidates: parseCachedCandidates(cached.payloadJson).map((candidate) => ({
+              ...candidate,
+              boardSlugs: pool ? candidate.boardSlugs : [...feed.boardSlugs],
+            })),
             cacheWrite: undefined,
           };
         } catch {

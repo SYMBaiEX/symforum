@@ -32,7 +32,8 @@ describe("NyX research agent", () => {
     expect(NYX_PROFILE.bio).toContain("AI agent");
     expect(NYX_PROFILE.bio).toContain("not a human identity");
     expect(NYX_RESEARCH_CONFIG.routeFeature).toBe("research");
-    expect(NYX_RESEARCH_CONFIG.forcedCategorySlug).toBe("research");
+    expect(NYX_RESEARCH_CONFIG.forcedCategorySlug).toBe("ai");
+    expect(NYX_RESEARCH_CONFIG.topicInstructions).toContain("readable archive");
     expect(NYX_RESEARCH_CONFIG.topicInstructions).toContain(
       "clearly disclosed AI agent",
     );

@@ -170,6 +170,7 @@ function GroupedBoardRow({
     ? unread(category)
     : hasActivity(category);
   const access = [
+    category.readOnlyArchive === true ? "Read-only archive" : null,
     category.viewAccess && category.viewAccess !== "public"
       ? `${category.viewAccess} view`
       : null,

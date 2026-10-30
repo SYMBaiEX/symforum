@@ -1100,7 +1100,7 @@ function LiveForumThreadView({
 
   const threadLocked = isLockedThread(thread);
   const viewerCanReply =
-    isAuthenticated && !threadLocked && thread.viewerCanReply === true;
+    isAuthenticated && !threadLocked && category.readOnlyArchive !== true && thread.viewerCanReply === true;
   const replyMessage = replyUnavailableMessage(
     category,
     threadLocked,
@@ -1325,7 +1325,7 @@ function LiveForumThreadView({
           error={pollError}
           canEdit={detail.poll.viewerCanEdit}
           isAuthenticated={isAuthenticated}
-          pollAccess={detail.category.pollAccess}
+          pollAccess={detail.category.readOnlyArchive === true ? "closed" : detail.category.pollAccess}
           onEdit={() => openPollEditor(detail.poll!)}
           onSelect={setSelectedPollOptionId}
           onVote={() => submitPollVote(detail.poll!)}
@@ -1760,7 +1760,7 @@ function LiveForumThreadView({
           <div className="forum-panel flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold">
-                {threadLocked
+                {category.readOnlyArchive === true ? "Read-only archive" : threadLocked
                   ? "Thread closed"
                   : !isAuthenticated && !authLoading
                     ? "Join the discussion"
@@ -1770,7 +1770,7 @@ function LiveForumThreadView({
                 {replyMessage}
               </p>
             </div>
-            {!isAuthenticated && !authLoading && !threadLocked && (
+            {!isAuthenticated && !authLoading && !threadLocked && category.readOnlyArchive !== true && (
               <Button
                 className="rounded-full"
                 onClick={() => {
@@ -1955,6 +1955,9 @@ function replyUnavailableMessage(
   threadLocked: boolean,
   isAuthenticated: boolean,
 ) {
+  if (category.readOnlyArchive === true) {
+    return "This thread remains readable in the Archive. New replies are closed; continue the topic in an active board.";
+  }
   if (threadLocked) {
     return "This thread is locked. Replying is disabled.";
   }

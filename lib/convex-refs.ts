@@ -232,6 +232,7 @@ export type ForumCategoryRecord = {
   kind: ForumCategoryKind;
   parentCategoryId?: string;
   isPostable: boolean;
+  readOnlyArchive?: boolean;
   status: ForumCategoryStatus;
   viewAccess: ForumCategoryViewAccess;
   threadAccess: ForumCategoryWriteAccess;

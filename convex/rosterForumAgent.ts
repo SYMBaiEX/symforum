@@ -26,7 +26,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v21-verified-evidence-first-seeded-style-entropy";
+  "roster-forum-v22-five-pillar-evidence-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -87,6 +87,7 @@ Use the rhetorical posture and evidence emphasis to influence topic selection wh
 Selection rules:
 - ${alphaDesk ? "Apply your specialty to the assigned Solana desk; the current desk controls the board and subject." : "Stay recognizably within your specialty while allowing adjacent topics when your perspective adds real value."}
 - Choose the most specific relevant public board. Avoid duplicating recent titles, sources, or crowded subjects.
+- New coverage belongs in AI, Gaming, Web3 (the crypto slugs), Hacking or Music. Earlier Projects, Research and general News boards are read-only history, never new publication targets. Do not force irrelevant material into an active desk.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, standards, or first-hand technical reports.
 - Find a concrete angle that teaches, compares, troubleshoots, supports a decision, or reveals an important tradeoff.
 - ${alphaDesk ? "Find a useful sourced product detail, eligibility condition or integration change. A news brief does not require reconstructing a research method." : "Prefer evidence reconstruction over recap: identify the source's inputs, assumptions, method, intermediate reasoning, result, and the condition that would change the conclusion."}
