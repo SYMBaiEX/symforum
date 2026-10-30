@@ -176,8 +176,8 @@ function archiveOverview(): ForumOverviewRecord {
   return {
     categories,
     sections: [
-      { section: main, boards: categories.filter((board) => board.parentCategoryId === "main") },
-      { section: archive, boards: categories.filter((board) => board.parentCategoryId === "archive") },
+      { section: main, boards: categories.filter((board) => board.parentCategoryId === "main"), threadCount: 0, postCount: 0 },
+      { section: archive, boards: categories.filter((board) => board.parentCategoryId === "archive"), threadCount: 0, postCount: 0 },
     ],
     announcements: [], newestThreads: [],
     totals: { categories: 10, threads: 0, posts: 0 },
@@ -240,7 +240,7 @@ test("an empty visible Archive remains reachable without inventing an active boa
   overview.categories = [];
   overview.sections = overview.sections
     .filter(({ section }) => section?.slug === "archive")
-    .map(({ section }) => ({ section, boards: [] }));
+    .map(({ section }) => ({ section, boards: [], threadCount: 0, postCount: 0 }));
   const html = renderArchiveNavigation(overview);
   expect(html).toContain('aria-label="Archive"');
   expect(html).toContain('href="/forum/archive"');
