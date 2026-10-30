@@ -357,8 +357,71 @@ test("signature-first swap saves the verified signature before one relay and unl
   await expect(page.getByLabel("You pay", { exact: true })).toHaveValue("");
   await expect(page.locator("#wallet-calls")).toHaveText("1");
 });
+for (const { version, restore } of [
+  { version: 0, restore: false },
+  { version: 1, restore: true },
+])
+  test(`sign-only wallet ${restore ? "restores a linked account" : "connects explicitly"} and completes a v${version} swap without a send feature`, async ({
+    page,
+  }) => {
+    const requests = await harness(
+      page,
+      `?signaturefirst&managed&signonly${restore ? "&authorized" : ""}${version === 1 ? "&v1" : ""}`,
+    );
+    if (!restore) await connect(page);
+    else
+      await expect(
+        page.getByRole("button", { name: "Connect wallet", exact: true }),
+      ).toHaveCount(0);
+    await page.getByLabel("You pay", { exact: true }).fill("0.01");
+    await reviewSwap(page);
+    await expect(
+      page.getByText("Swap finalized.", { exact: false }),
+    ).toBeVisible();
+    for (const operation of [
+      "wallet:sign",
+      "forumSwapSubmission:registerSigned",
+      "forumSwapSubmission:relay",
+    ])
+      expect(requests.filter((request) => request === operation)).toHaveLength(
+        1,
+      );
+    expect(requests.indexOf("wallet:sign")).toBeLessThan(
+      requests.indexOf("forumSwapSubmission:registerSigned"),
+    );
+    expect(requests.indexOf("forumSwapSubmission:registerSigned")).toBeLessThan(
+      requests.indexOf("forumSwapSubmission:relay"),
+    );
+    expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+    expect(requests).not.toContain("forumSwaps:confirm");
+    await expect(page.locator("#wallet-calls")).toHaveText("1");
+  });
+for (const mode of ["", "&promotion"])
+  test(`sign-only wallet is excluded from ${mode ? "promotion" : "legacy swap"} sending`, async ({
+    page,
+  }) => {
+    const requests = await harness(page, `?signonly&authorized${mode}`);
+    await page
+      .getByRole("button", { name: "Connect wallet", exact: true })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Test Solana Wallet" }),
+    ).toHaveCount(0);
+    await expect(
+      dialog.getByText(
+        "Open this page in a Wallet Standard compatible Solana browser.",
+      ),
+    ).toBeVisible();
+    expect(requests).not.toContain("forumSwaps:prepare");
+    expect(requests).not.toContain("forumPromotions:prepare");
+    await expect(page.locator("#wallet-calls")).toHaveText("0");
+  });
 for (const mode of [
   "signfail",
+  "signfail&signonly",
   "registerfail",
   "unsignedresponse",
   "unsignedresponse&v1",

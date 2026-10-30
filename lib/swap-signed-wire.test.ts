@@ -1,5 +1,14 @@
 import { expect, test, vi } from "vitest";
-import { getBase64EncodedWireTransaction } from "@solana/kit";
+import {
+  address,
+  blockhash,
+  compileTransaction,
+  createTransactionMessage,
+  getAddressDecoder,
+  getBase64EncodedWireTransaction,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+} from "@solana/kit";
 import { inspectSignedSwap, signedBytesToBase64 } from "./swap-signed-wire";
 import { signedSwapFixture } from "../tests/fixtures/signed-swap";
 test.each([0, 1] as const)(
@@ -71,6 +80,81 @@ test("unavailable browser verification fails closed with no raw exception leakag
   const spy = vi
     .spyOn(crypto.subtle, "importKey")
     .mockRejectedValueOnce(new Error("private crypto exception"));
+  try {
+    await expect(
+      inspectSignedSwap(f.signedTransactionBase64, f.prepared),
+    ).rejects.toMatchObject({
+      issue: "crypto_unavailable",
+      message: "Signature verification is unavailable.",
+    });
+  } finally {
+    spy.mockRestore();
+  }
+});
+test.each(["public key", "signature R"] as const)(
+  "rejects a forged small-order %s even with permissive WebCrypto",
+  async (smallOrderPart) => {
+    const f = await signedSwapFixture();
+    // Identity-point encoding. Such keys/signature R values must never pass
+    // Solana's strict verifier, regardless of the host's Ed25519 implementation.
+    const identity = new Uint8Array(32);
+    identity[0] = 1;
+    const wallet =
+      smallOrderPart === "public key"
+        ? getAddressDecoder().decode(identity)
+        : f.wallet;
+    const transaction = compileTransaction(
+      setTransactionMessageLifetimeUsingBlockhash(
+        {
+          blockhash: blockhash("11111111111111111111111111111111"),
+          lastValidBlockHeight: 100n,
+        },
+        setTransactionMessageFeePayer(
+          address(wallet),
+          createTransactionMessage({ version: 1 }),
+        ),
+      ),
+    );
+    const forgedSignature = new Uint8Array(64);
+    // Keep the other point non-small-order to isolate each strictness check.
+    forgedSignature.set(
+      smallOrderPart === "signature R" ? identity : new Uint8Array(32).fill(2),
+    );
+    const wire = getBase64EncodedWireTransaction({
+      ...transaction,
+      signatures: { [wallet]: forgedSignature },
+    } as unknown as Parameters<typeof getBase64EncodedWireTransaction>[0]);
+    const messageHash = Array.from(
+      new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          Uint8Array.from(transaction.messageBytes),
+        ),
+      ),
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("");
+    // Reproduce a host that accepts weak signatures: Kit must reject them
+    // before delegating to the underlying WebCrypto verifier.
+    const verify = vi.spyOn(crypto.subtle, "verify").mockResolvedValue(true);
+    try {
+      await expect(
+        inspectSignedSwap(wire, {
+          wallet,
+          messageHash,
+          transactionVersion: 1,
+        }),
+      ).rejects.toMatchObject({ issue: "invalid_signature" });
+      expect(verify).not.toHaveBeenCalled();
+    } finally {
+      verify.mockRestore();
+    }
+  },
+);
+test("unavailable key export fails closed with its existing safe category", async () => {
+  const f = await signedSwapFixture();
+  const spy = vi
+    .spyOn(crypto.subtle, "exportKey")
+    .mockRejectedValueOnce(new Error("private key export exception"));
   try {
     await expect(
       inspectSignedSwap(f.signedTransactionBase64, f.prepared),

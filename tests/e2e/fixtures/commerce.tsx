@@ -13,14 +13,14 @@ declare global {
 const wallet =
   window.__commerceFixtureWallet ??
   "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
+const signOnly = location.search.includes("signonly");
 const account = {
   address: wallet,
   publicKey: Uint8Array.from(getAddressEncoder().encode(address(wallet))),
   chains: ["solana:mainnet"] as const,
-  features: [
-    "solana:signAndSendTransaction",
-    "solana:signTransaction",
-  ] as const,
+  features: signOnly
+    ? (["solana:signTransaction"] as const)
+    : (["solana:signAndSendTransaction", "solana:signTransaction"] as const),
 };
 let connected: readonly (typeof account)[] = location.search.includes(
   "authorized",
@@ -98,38 +98,40 @@ getWallets().register({
         return { accounts: connected };
       },
     },
-    "solana:signAndSendTransaction": {
-      version: "1.0.0",
-      supportedTransactionVersions: [0],
-      signAndSendTransaction: async (input: {
-        account: typeof account;
-        transaction: Uint8Array;
-        options: {
-          skipPreflight: boolean;
-          maxRetries: number;
-          preflightCommitment: string;
-          minContextSlot: number;
-        };
-      }) => {
-        calls++;
-        document.getElementById("wallet-calls")!.textContent = String(calls);
-        if (
-          input.account !== account ||
-          input.options.skipPreflight ||
-          input.options.maxRetries !== 0 ||
-          input.options.preflightCommitment !== "confirmed" ||
-          input.options.minContextSlot !== 1
-        )
-          throw new Error("Wrong raw account or unsafe wallet options");
-        if (location.search.includes("walletfail"))
-          throw new Error("Mock ambiguous outcome");
-        if (location.search.includes("walletinternal"))
-          throw Object.assign(new Error("private wallet provider body"), {
-            code: -32603,
-          });
-        return [{ signature: new Uint8Array(64).fill(1) }];
+    ...(!signOnly && {
+      "solana:signAndSendTransaction": {
+        version: "1.0.0",
+        supportedTransactionVersions: [0],
+        signAndSendTransaction: async (input: {
+          account: typeof account;
+          transaction: Uint8Array;
+          options: {
+            skipPreflight: boolean;
+            maxRetries: number;
+            preflightCommitment: string;
+            minContextSlot: number;
+          };
+        }) => {
+          calls++;
+          document.getElementById("wallet-calls")!.textContent = String(calls);
+          if (
+            input.account !== account ||
+            input.options.skipPreflight ||
+            input.options.maxRetries !== 0 ||
+            input.options.preflightCommitment !== "confirmed" ||
+            input.options.minContextSlot !== 1
+          )
+            throw new Error("Wrong raw account or unsafe wallet options");
+          if (location.search.includes("walletfail"))
+            throw new Error("Mock ambiguous outcome");
+          if (location.search.includes("walletinternal"))
+            throw Object.assign(new Error("private wallet provider body"), {
+              code: -32603,
+            });
+          return [{ signature: new Uint8Array(64).fill(1) }];
+        },
       },
-    },
+    }),
   },
 });
 createRoot(document.getElementById("root")!).render(

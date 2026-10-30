@@ -25,6 +25,9 @@ import {
 } from "@/components/auth/solana-wallet-provider";
 import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 
+export type CommerceWalletFeature =
+  "solana:signTransaction" | "solana:signAndSendTransaction";
+
 export function CommerceWalletProvider({ children }: { children: ReactNode }) {
   return <SolanaWalletBoundary>{children}</SolanaWalletBoundary>;
 }
@@ -32,7 +35,10 @@ export function useCommerceWallet() {
   return useSessionWalletClient() ?? null;
 }
 
-export function useCommerceIdentity(client: CommerceWalletClient) {
+export function useCommerceIdentity(
+  client: CommerceWalletClient,
+  requiredFeature: CommerceWalletFeature = "solana:signAndSendTransaction",
+) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const session = useQuery(
     api.forumCommerce.getWalletSession,
@@ -58,7 +64,7 @@ export function useCommerceIdentity(client: CommerceWalletClient) {
         (a) =>
           session.wallets.includes(a.address) &&
           a.chains.includes("solana:mainnet") &&
-          a.features.includes("solana:signAndSendTransaction"),
+          a.features.includes(requiredFeature),
       );
     if (matches.length === 1) {
       restoredFor.current = session.authUserId;
@@ -68,19 +74,25 @@ export function useCommerceIdentity(client: CommerceWalletClient) {
         /* Explicit selection remains available. */
       }
     }
-  }, [session, connected, wallets, client, status]);
+  }, [session, connected, wallets, client, status, requiredFeature]);
   const linked =
     !!connected && !!session?.wallets.includes(connected.account.address);
   return { isAuthenticated, isLoading, session, linked, connected };
 }
 export function CommerceWalletButton({
   disabled = false,
+  requiredFeature = "solana:signAndSendTransaction",
 }: {
   disabled?: boolean;
+  requiredFeature?: CommerceWalletFeature;
 }) {
   const client = useCommerceWallet();
   return client ? (
-    <ConnectedButton client={client} disabled={disabled} />
+    <ConnectedButton
+      client={client}
+      disabled={disabled}
+      requiredFeature={requiredFeature}
+    />
   ) : (
     <Button disabled variant="outline">
       <Wallet aria-hidden="true" />
@@ -91,14 +103,16 @@ export function CommerceWalletButton({
 function ConnectedButton({
   client,
   disabled,
+  requiredFeature,
 }: {
   client: CommerceWalletClient;
   disabled: boolean;
+  requiredFeature: CommerceWalletFeature;
 }) {
   const { isAuthenticated, isLoading, session, connected, linked } =
-    useCommerceIdentity(client);
+    useCommerceIdentity(client, requiredFeature);
   const wallets = useWallets(client).filter((w) =>
-    w.features.includes("solana:signAndSendTransaction"),
+    w.features.includes(requiredFeature),
   );
   const connect = useConnect(client);
   const [open, setOpen] = useState(false);

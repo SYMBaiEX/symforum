@@ -1,12 +1,29 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_SCRIPT } from "../../lib/forum-plugin-app";
 import { matchForumRoute } from "../../lib/forum-native-routing";
 import { FORUM_NATIVE_ROUTES } from "../../lib/forum-native-app.generated";
 
 // Public snapshots only; no cookies, access tokens, private data or live writes.
 const fixtures = JSON.parse(readFileSync("tests/e2e/fixtures/forum-public.json", "utf8"));
-const html = `<!doctype html><body style="margin:0"><iframe title="Forum fixture" style="border:0;width:100vw;height:100vh"></iframe><script>
+let FORUM_PLUGIN_APP_HTML: string, FORUM_PLUGIN_APP_SCRIPT: string, FORUM_PLUGIN_ASSET_ORIGIN: string;
+let html: string;
+test.beforeAll(async () => {
+  // This branded snapshot must not depend on an operator's .env files. The
+  // public URL enables the mocked MCP transport; every HTTP request is blocked
+  // below unless it is one of the explicit fixture documents/assets.
+  const previousInstallation = process.env.NEXT_PUBLIC_INSTALLATION_CONFIG;
+  const previousBackend = process.env.NEXT_PUBLIC_CONVEX_URL;
+  try {
+    process.env.NEXT_PUBLIC_INSTALLATION_CONFIG = readFileSync("tests/fixtures/installation.symbaiex.json", "utf8");
+    process.env.NEXT_PUBLIC_CONVEX_URL = "https://strong-bee-384.convex.cloud";
+    ({ FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_SCRIPT, FORUM_PLUGIN_ASSET_ORIGIN } = await import("../../lib/forum-plugin-app"));
+  } finally {
+    if (previousInstallation === undefined) delete process.env.NEXT_PUBLIC_INSTALLATION_CONFIG;
+    else process.env.NEXT_PUBLIC_INSTALLATION_CONFIG = previousInstallation;
+    if (previousBackend === undefined) delete process.env.NEXT_PUBLIC_CONVEX_URL;
+    else process.env.NEXT_PUBLIC_CONVEX_URL = previousBackend;
+  }
+  html = `<!doctype html><body style="margin:0"><iframe title="Forum fixture" style="border:0;width:100vw;height:100vh"></iframe><script>
 const frame = document.querySelector('iframe');
 window.addEventListener('message', event => {
   if (event.source !== frame.contentWindow) return;
@@ -18,6 +35,7 @@ window.addEventListener('message', event => {
 });
 frame.src = '/forum-fixture';
 </script>`;
+});
 
 for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
   test(`renders and navigates the shipped forum at ${viewport.width}px`, async ({ page }) => {
@@ -29,7 +47,7 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
       const url = route.request().url();
       if (url === "http://127.0.0.1:43191/") return route.fulfill({ contentType: "text/html", body: html });
       if (url === "http://127.0.0.1:43191/forum-fixture") return route.fulfill({contentType: "text/html", body: FORUM_PLUGIN_APP_HTML});
-      if (url === "https://www.symbaiex.com/api/plugin/assets/current/forum.js")
+      if (url === `${FORUM_PLUGIN_ASSET_ORIGIN}/api/plugin/assets/current/forum.js`)
         return route.fulfill({ contentType: "text/javascript", body: FORUM_PLUGIN_APP_SCRIPT });
       return route.abort();
     });

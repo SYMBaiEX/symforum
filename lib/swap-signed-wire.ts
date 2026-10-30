@@ -1,12 +1,13 @@
 import {
   address,
-  getAddressEncoder,
+  getPublicKeyFromAddress,
   getBase64Encoder,
   getBase64Decoder,
   getBase58Decoder,
   getTransactionDecoder,
   getCompiledTransactionMessageDecoder,
   getBase64EncodedWireTransaction,
+  verifySignature,
 } from "@solana/kit";
 
 export type SignedSwapBinding = {
@@ -99,19 +100,10 @@ export async function inspectSignedSwap(
     mismatch("message_mismatch");
   let valid: boolean;
   try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      Uint8Array.from(getAddressEncoder().encode(address(expected.wallet))),
-      { name: "Ed25519" },
-      false,
-      ["verify"],
-    );
-    valid = await crypto.subtle.verify(
-      "Ed25519",
-      key,
-      Uint8Array.from(signature),
-      Uint8Array.from(tx.messageBytes),
-    );
+    // Kit rejects small-order public keys and signature R points consistently
+    // with the Solana runtime, even when a browser's WebCrypto accepts them.
+    const key = await getPublicKeyFromAddress(address(expected.wallet));
+    valid = await verifySignature(key, signature, tx.messageBytes);
   } catch {
     throw new SignedSwapValidationError(
       "crypto_unavailable",

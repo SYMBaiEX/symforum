@@ -4,6 +4,7 @@ import { resolve, relative } from "node:path";
 import { compareForumRoutePatterns } from "../lib/forum-native-routing.ts";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
+import { transformSync } from "esbuild";
 const root = resolve(import.meta.dirname, "..");
 // Tailwind's content globs resolve against cwd. App-local Vercel builds must
 // generate the same styles as root development and CI commands.
@@ -24,6 +25,8 @@ async function collect(path) {
   }
 }
 await collect(resolve(root, forumAppRoot, "forum"));
+// Module numbering must not depend on a filesystem's directory iteration order.
+pages.sort();
 const routes = pages
   .map((page, index) => {
     const path =
@@ -84,7 +87,9 @@ const result = await Bun.build({
   // This is a classic inline script in a host-owned document. Keep all bundled
   // names private so injected host scripts cannot collide with minified globals.
   format: "iife",
-  minify: true,
+  // Graph-wide identifier allocation can vary with parallel module traversal.
+  // Keep stable names here, then minify the emitted script without re-bundling.
+  minify: { whitespace: true, syntax: true, identifiers: false },
   splitting: false,
   define: {
     "process.env.NODE_ENV": '"production"',
@@ -108,7 +113,15 @@ const result = await Bun.build({
 if (!result.success) throw new Error(result.logs.map(String).join("\n"));
 const javascript = result.outputs.find(output => output.path.endsWith(".js"));
 if (!javascript) throw new Error("Native forum build did not emit JavaScript.");
-const code = await javascript.text();
+// A transform-only pass preserves the IIFE and its existing compatibility
+// helpers. Re-bundling this emitted graph can reinterpret those helpers and
+// change entry execution; no imports, globals or dependency graph are rewritten.
+const code = transformSync(await javascript.text(), {
+  minify: true,
+  target: "esnext",
+  charset: "utf8",
+  legalComments: "none",
+}).code;
 // Bun emits CSS modules and component stylesheet imports separately. Include
 // those outputs as well as the root styles; otherwise a normal forum component
 // can silently lose its styles in the plugin even though its React is shared.
