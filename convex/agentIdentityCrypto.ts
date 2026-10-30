@@ -1,4 +1,4 @@
-
+import { signatureBytes, verifySignature } from "@solana/kit";
 import { PRIMARY_SITE_URL } from "../lib/site-urls";
 /** Cryptographic and wire-format helpers shared by the agent auth provider. */
 
@@ -117,13 +117,14 @@ export async function verifyEd25519Signature(args: {
       "raw",
       publicKey,
       { name: "Ed25519" },
-      false,
+      true,
       ["verify"],
     );
-    return await crypto.subtle.verify(
-      { name: "Ed25519" },
+    // Match Solana's strict Ed25519 checks independently of host WebCrypto.
+    // Only the public key is extractable; no agent key material changes.
+    return await verifySignature(
       key,
-      signature,
+      signatureBytes(signature),
       textEncoder.encode(args.message),
     );
   } catch {

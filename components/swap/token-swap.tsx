@@ -145,10 +145,18 @@ function LiveSwap({
   client: CommerceWalletClient;
   outputToken?: TradeToken;
 }) {
-  const { connected, isAuthenticated, linked, session } =
-    useCommerceIdentity(client);
   const config = useQuery(api.forumCommerce.getConfig, {}),
     tokens = useQuery(api.forumCommerce.searchTokens, {});
+  // Match discovery/restoration to the actual signing lane. A sign-only
+  // wallet is sufficient for managed swaps; promotions and legacy payments
+  // still require their explicit sign-and-send capability.
+  const requiredFeature = config?.signatureFirstEnabled
+    ? "solana:signTransaction"
+    : "solana:signAndSendTransaction";
+  const { connected, isAuthenticated, linked, session } = useCommerceIdentity(
+    client,
+    requiredFeature,
+  );
   const quoteAction = useConvexAction(api.forumSwaps.quote),
     prepareAction = useConvexAction(api.forumSwaps.prepare),
     confirm = useConvexAction(api.forumSwaps.confirm),
@@ -658,7 +666,10 @@ function LiveSwap({
           Solana mainnet
         </span>
       </div>
-      <CommerceWalletButton disabled={locked} />
+      <CommerceWalletButton
+        disabled={locked}
+        requiredFeature={requiredFeature}
+      />
       {!isAuthenticated && (
         <p>
           <ForumLink

@@ -21,6 +21,7 @@ export function createIdentityWalletClient() {
       filter: (wallet) =>
         wallet.features.includes("solana:signIn") ||
         wallet.features.includes("solana:signMessage") ||
+        wallet.features.includes("solana:signTransaction") ||
         wallet.features.includes("solana:signAndSendTransaction"),
     }),
   );
