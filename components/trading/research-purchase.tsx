@@ -322,6 +322,51 @@ function ResearchPurchaseConnected({
           {error}
         </p>
       )}
+      {!!history?.length && (
+        <details className="mt-4 border-t pt-3 text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            Your recent research receipts
+          </summary>
+          <ul className="mt-3 space-y-3">
+            {history.slice(0, 5).map((item) => (
+              <li
+                key={item.intentKey}
+                className="flex flex-wrap items-center justify-between gap-2"
+              >
+                <span className="text-xs text-muted-foreground">
+                  {item.mint.slice(0, 4)}…{item.mint.slice(-4)} ·{" "}
+                  {item.state === "quoted" && item.expiresAt <= now
+                    ? "expired quote"
+                    : item.state.replaceAll("_", " ")}
+                </span>
+                {item.state === "fulfilled" ? (
+                  <a
+                    className="text-xs underline"
+                    href={`/api/research/token/${item.intentKey}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open report + receipt
+                  </a>
+                ) : item.signature ? (
+                  <a
+                    className="text-xs underline"
+                    href={`https://solscan.io/tx/${item.signature}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View transaction
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    No finalized payment receipt
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <Dialog
         open={open}
         onOpenChange={(value) => {
