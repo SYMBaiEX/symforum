@@ -2,7 +2,7 @@
 
 ## Integration contract
 
-`ForumTerminal({enabled, renderUtilities?})` is the first-party trading surface.
+`ForumTerminal({enabled, initialMint?, renderUtilities?})` is the first-party trading surface.
 `renderUtilities(mint)` is the integration slot for `ResearchPurchase({mint})`
 and `CommunityHub({mint, compact?})`; those feature lanes own their payment flows.
 The standalone route is `/trade` (mirrored for the forum and platform apps).
@@ -13,6 +13,14 @@ existing authenticated `forumCommerce.resolveMint` before `TokenSwap` mounts.
 The existing shared identity, Wallet Standard client, quote comparison,
 simulation, signing, delivery and uncertainty protections remain the only swap
 path. This UI adds no send or recovery method.
+
+`TerminalPage` reads the mint query only in its website child, under the shared
+route's Suspense boundary. A single exact 32-byte Solana address selects that
+mint; missing parameters use the configured default. Empty, malformed or
+duplicate parameters render an alert before any terminal/wallet/chart mounts,
+never an executable default-token fallback. The platform redirect preserves
+valid mint intent and forwards invalid intent to the same fail-closed page.
+Indexed metadata may supply display identity; it never authorizes trading.
 
 Public APIs are typed in `components/trading/terminal-api.ts`; the integrated
 release must verify these references against the generated backend contracts.
@@ -47,16 +55,34 @@ Research/discussion belongs with market context; private balances/history and
 alerts follow below. The existing forum's Geist typography, neutral surfaces,
 magenta selected states and restrained teal chart marks remain unchanged.
 
-The desktop uses a 232px discovery rail, flexible chart and 320–344px trade
-column. At intermediate widths discovery becomes an explicit, closed-by-default
-Markets disclosure above chart/trade; at narrow widths the same DOM order
-becomes one column. A visible Trade link moves focus directly to the order
-panel. The chart is 360px high on desktop and 280px on mobile. Primary price,
+The terminal alone opts out of the forum's reading-width cap. The connected
+desk has one flexible analytical pane and a persistent 328px order column,
+separated by a thin rule. Accessible Chart/Markets tabs switch only the mounted
+analytical panels. The former permanent discovery rail and card implementation
+are removed; shared token identity/logo primitives live in `market-identity`.
+On smaller content widths the order panel stacks below, with a visible Trade
+link transferring keyboard focus to it. Desktop candles occupy 480–560px of
+height, with 320px in compact contexts. The asset header and metric strip are
+compact; the real interval controls wrap intrinsically rather than clipping.
+Primary price,
 market cap, liquidity, 24h volume and sampled hourly change lead; secondary
 metrics, public sources and exact timestamps remain in Market details. The
 visible status line still labels stale hourly change. Mint facts follow the
-trade panel, without hiding operation receipts. Disclosure children remain
-mounted rather than restarting data or payment components.
+trade panel, without hiding operation receipts. Tabs and disclosures preserve
+mounted children rather than restarting data or payment components. An adjacent
+forum discussion bar uses the indexed canonical thread or, for the exact
+configured SYMF mint only, its configured announcement path.
+
+The Markets view is a semantic, sortable table of retained scout samples, not
+a market-wide leaderboard. It uses the same bounded query and minute buckets
+as the replaced rail. Search and sort are local; cap/platform filters retain
+their existing query contract. Missing/invalid metrics sort last in both
+directions, with actual market cap never replaced by FDV. Safe source links,
+observation timestamps and per-row stale labels remain available. The table
+has a named keyboard-scrollable region and sticky identity/header cells.
+There is no fabricated top-trader PnL, order book, live trade feed or unsupported
+indicator toolbar. Research, community payments and owner receipts stay outside
+the analytical tabs.
 
 Overflowing history and candle tables have named, keyboard-focusable scroll
 regions. Long mints wrap or truncate with a labeled copy control rather than
@@ -79,6 +105,12 @@ is absent in this checkout. Manual inspection addressed min-width on all grid
 tracks, touch targets, overflow, nested swap-panel padding, table regions,
 consistent 4-unit spacing, and reduced-motion behavior. The final release also
 requires rendered browser verification below.
+
+Container queries use unnamed nearest-container rules intentionally. The native
+bundle compiler rewrites named query identifiers but not their shorthand
+declarations; the first browser run exposed that mismatch. The corrected rules
+are verified in both bare fixtures and the real 192px forum-rail frame at
+1024/1440px, with small/zoom-equivalent layouts and chart hide/show resizing.
 
 ## Verification ownership
 

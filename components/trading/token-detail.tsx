@@ -10,7 +10,7 @@ import { ForumLink } from "@/components/forum/forum-link";
 import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
 import type { ChartMarketData } from "./price-chart-data";
-import { TokenLogo, type MarketChoice } from "./market-panel";
+import { TokenLogo, type MarketChoice } from "./market-identity";
 import { formatMarketPercent } from "./market-explorer-model";
 import {
   marketMoney,

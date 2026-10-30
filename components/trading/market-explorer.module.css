@@ -264,6 +264,9 @@
 .unavailable {
   color: hsl(var(--muted-foreground));
 }
+.observation > .unavailable {
+  margin-inline-start: 10px;
+}
 .scroll .empty {
   height: 184px;
   padding: 24px 16px;

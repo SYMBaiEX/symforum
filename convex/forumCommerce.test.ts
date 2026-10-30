@@ -107,7 +107,10 @@ test("200 concurrent duplicate quote requests admit one wallet-bound lease, not 
 });
 test("200 independent wallets get bounded admission while provider and daily caps stay intact", async () => {
   const t = setup();
-  vi.spyOn(Date, "now").mockReturnValue(1793300000000);
+  // Auth checks use new Date(), while admission uses Date.now(). Freeze both
+  // so fixture sessions cannot expire against the advancing real wall clock.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(1793300000000);
   const actors = [];
   for (let i = 1; i <= 200; i++) actors.push(await actor(t, i));
   const results = await Promise.allSettled(
@@ -406,6 +409,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 async function actor(
   t: Test,

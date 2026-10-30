@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { terminalApi, type TokenAlert } from "./terminal-api";
 import { marketMoney, shortMint } from "./terminal-format";
-import type { MarketChoice } from "./market-panel";
+import type { MarketChoice } from "./market-identity";
 import styles from "./forum-terminal.module.css";
 
 export function WatchlistPanel({
