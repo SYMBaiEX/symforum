@@ -35,6 +35,29 @@ export const tokenSnapshotValidator = v.object({
 });
 
 export const tokenAlphaTables = {
+  // One source-only observation per ordinary platform/hour. The permanent
+  // intent is separate from model/publication runs: neither a crashed source
+  // worker nor an ambiguous model call can authorize a duplicate source fetch.
+  tokenAlphaObservations: defineTable({
+    runKey: v.string(),
+    platform: tokenPlatformValidator,
+    claimToken: v.string(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+    // Strictly bounded to five verified candidates by the committing mutation.
+    snapshots: v.optional(v.array(tokenSnapshotValidator)),
+    payloadExpiresAt: v.optional(v.number()),
+    sourceCount: v.optional(v.number()),
+    reason: v.optional(v.string()),
+  })
+    .index("by_runKey", ["runKey"])
+    .index("by_status_and_payloadExpiresAt", ["status", "payloadExpiresAt"]),
   tokenAlphaControl: defineTable({
     key: v.literal("pilot"),
     enabled: v.boolean(),

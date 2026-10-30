@@ -86,7 +86,7 @@ export function tokenAlphaRunKey(platform: TokenPlatform, now: number): string {
   return `${platform}:${new Date(now).toISOString().slice(0, 13)}`;
 }
 
-function identityUsable(user: Doc<"users">, now: number): boolean {
+export function identityUsable(user: Doc<"users">, now: number): boolean {
   return (
     user.isAgent === true &&
     user.role === "reader" &&
@@ -138,7 +138,7 @@ async function availableUsername(
   throw new Error("Token scout username collision limit reached");
 }
 
-async function pilotEnabled(ctx: MutationCtx): Promise<boolean> {
+export async function pilotEnabled(ctx: MutationCtx): Promise<boolean> {
   const control = await ctx.db
     .query("tokenAlphaControl")
     .withIndex("by_key", (q) => q.eq("key", "pilot"))
