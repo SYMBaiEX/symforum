@@ -112,11 +112,48 @@ const nova: TerminalMarket = {
   symbol: "NOVA",
   name: "Simulated research token",
   marketCapUsd: 700_000,
+  fdvUsd: 9_000_000,
   priceUsd: 0.0007,
+  liquidityUsd: 42_000,
+  volume1hUsd: 90_000,
+  volume24hUsd: 900_000,
+  holders: 456,
+  priceChange1hPercent: -3.25,
   platform: "bags",
   metricsAsOf: now - 3_600_000,
   threadUrl: null,
 };
+const quiet: TerminalMarket = {
+  ...symf,
+  mint: "So11111111111111111111111111111111111111112",
+  symbol: "QUIET",
+  name: "Simulated low-volume token",
+  marketCapUsd: 90_000,
+  fdvUsd: 1_000_000,
+  priceUsd: 0.00009,
+  liquidityUsd: 8_000,
+  volume1hUsd: 5_000,
+  volume24hUsd: 60_000,
+  holders: 25,
+  priceChange1hPercent: 0,
+  sourceUrl: "javascript:alert('fixture-only')",
+};
+const missing: TerminalMarket = {
+  ...symf,
+  mint: "11111111111111111111111111111111",
+  symbol: "UNKNOWN",
+  name: "Simulated missing-metrics token",
+  marketCapUsd: null,
+  fdvUsd: 900_000,
+  priceUsd: null,
+  liquidityUsd: null,
+  volume1hUsd: null,
+  volume24hUsd: null,
+  holders: null,
+  priceChange1hPercent: null,
+  sourceUrl: "https://user:fixture@example.com/not-public",
+};
+const marketRows = [symf, nova, quiet, missing];
 export function useConvexAuth() {
   return {
     isAuthenticated: !location.search.includes("guest"),
@@ -175,7 +212,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumTerminal:listMarket") {
-    const rows = location.search.includes("empty") ? [] : [symf, nova];
+    const rows = location.search.includes("empty") ? [] : marketRows;
     result = {
       markets: rows.filter(
         (token) =>
@@ -191,7 +228,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       band: input.band ?? "all",
     };
   } else if (name === "forumTerminal:getMarket")
-    result = [symf, nova].find((token) => token.mint === input.mint) ?? null;
+    result = marketRows.find((token) => token.mint === input.mint) ?? null;
   else if (name === "forumTerminal:getRisk")
     result = location.search.includes("stalerisk")
       ? {
