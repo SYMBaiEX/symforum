@@ -1,0 +1,395 @@
+html,body{margin:0;background:#101e31}body{padding:24px}
+body:has(.an-program){padding:0;overflow:hidden}
+#symf-anime-broadcast.an-program .an-caption,#symf-anime-broadcast.an-program>.an-sr-only,#symf-anime-broadcast.an-program .an-controls{display:none}
+#symf-anime-broadcast.an-program .an-stage{border-radius:0}
+#symf-anime-broadcast{--an-font:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;--an-glass-blur:24px;--an-r-window:max(22px,3.125cqw);--an-r-panel:max(22px,2.734375cqw);--an-r-header:max(18px,2.34375cqw);--an-r-toolbar:28px;--an-r-picker:20px;--an-r-selection:16px;--an-r-button:20px;--an-shell-text:light-dark(#172b43,#eff5ff);--an-shell-muted:light-dark(#40546c,#c2d2e6);--an-focus:light-dark(#004fc4,#b9dbff);font-family:var(--an-font);font-optical-sizing:auto;-webkit-font-smoothing:antialiased;color:var(--an-shell-text);width:100%;container-type:inline-size;container-name:an-shell}
+#symf-anime-broadcast *{box-sizing:border-box}
+#symf-anime-broadcast [hidden]{display:none!important}
+#symf-anime-broadcast .an-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+#symf-anime-broadcast .an-caption{display:flex;gap:4px 16px;flex-wrap:wrap;font-size:.875rem;line-height:1.5;margin:0 0 16px;padding-right:100px;color:var(--an-shell-muted)}
+#symf-anime-broadcast .an-caption strong{font-weight:600;color:var(--an-shell-text)}
+#symf-anime-broadcast .an-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 40px 24px;padding:8px;width:calc(100% - 80px);max-width:100%;border-radius:var(--an-r-toolbar);background:linear-gradient(135deg,light-dark(#ffffffd9,#5b718b80),light-dark(#e4edf8ba,#16283ee6));border:1px solid light-dark(#fff,#8b9bb366);box-shadow:inset 0 1px 1px #ffffff66,0 8px 24px light-dark(#19365216,#020b1d38);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2)}
+#symf-anime-broadcast .an-actions{display:flex;gap:8px;flex-wrap:wrap}
+#symf-anime-broadcast button{min-height:48px;padding:12px 16px;font:500 .875rem/1.5 var(--an-font);border-radius:var(--an-r-button);border:0;background:transparent;color:inherit;touch-action:manipulation;transition:transform 160ms cubic-bezier(.22,1,.36,1),background-color 140ms linear}
+#symf-anime-broadcast button:focus-visible{outline:3px solid var(--an-focus);outline-offset:3px;box-shadow:0 0 0 6px light-dark(#fff,#142236);z-index:3}
+#symf-anime-broadcast button:active{transform:scale(.97);transition-duration:0ms}
+#symf-anime-broadcast button:disabled{opacity:.6}
+#symf-anime-broadcast .an-scene-picker{position:relative;isolation:isolate;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:416px;max-width:100%;align-items:stretch;padding:4px;border-radius:var(--an-r-picker);background:light-dark(#1e3e5b08,#06142624)}
+#symf-anime-broadcast .an-scene-picker button{position:relative;z-index:1;padding:12px 8px;background:transparent;border-radius:var(--an-r-selection)}
+#symf-anime-broadcast .an-scene-picker button[aria-pressed=true]{font-weight:700}
+#symf-anime-broadcast .an-selection{position:absolute;top:0;left:0;z-index:0;pointer-events:none;transform-origin:left top;height:48px;width:1px;border-radius:var(--an-r-selection);background:linear-gradient(135deg,light-dark(#ffffffed,#89a6c070),light-dark(#e5effba8,#354e6bb3));border:1px solid light-dark(#64778e,#a9c4e5);box-shadow:inset 0 1px 1px #fffffff0,inset 0 -1px 0 light-dark(#ffffff70,#ffffff24),0 2px 6px light-dark(#19324a1f,#020a1938)}
+#symf-anime-broadcast [data-an-play]{min-width:144px;font-weight:600;background:light-dark(#ffffffc9,#ffffff16)}
+#symf-anime-broadcast [data-an-play][aria-pressed=true]{background:light-dark(#98204e,#f7b1cb);color:light-dark(#fff,#201329)}
+#symf-anime-broadcast [data-an-art]{min-width:128px}
+#symf-anime-broadcast [data-an-art][aria-pressed=true]{box-shadow:inset 0 0 0 1px light-dark(#66788e,#a9c4e5)}
+#symf-anime-broadcast .an-stage{container-type:inline-size;container-name:an-scene;--an-flow:0;--an-glass-light:1.12;--s1:.390625cqw;--s2:.78125cqw;--s3:1.171875cqw;--s4:1.5625cqw;--s6:2.34375cqw;--s8:3.125cqw;--s10:3.90625cqw;--an-body:max(1.125rem,1.7578125cqw);--an-meta:max(.8125rem,1.26953125cqw);--an-label:max(.875rem,1.3671875cqw);--an-surface:linear-gradient(115deg,#ffffff30,transparent 38%,#ffffff08 75%),linear-gradient(155deg,#f4f9ffad,#e8f0faa6 58%,#dfeaf4b8);--an-text:#14263a;--an-muted:#233a52;--an-rule:#25405a38;--an-accent:#a11e53;--an-secondary:#405c7a;--an-edge:#ffffff40;--an-rim:#ffffff60;--an-shadow:inset 0 1px 0 #ffffff70,inset 0 -1px 0 #ffffff20,0 2px 4px #0a1b2f16,0 12px 32px #07192d2b,0 28px 64px #0a1b2f18;--an-logo-accent:#9c2854;position:relative;isolation:isolate;aspect-ratio:16/9;overflow:hidden;background:#122238;color:var(--an-text);border-radius:var(--an-r-window)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch],#symf-anime-broadcast .an-stage[data-scene=shadowgate]{--an-glass-light:.7;--an-logo-accent:#f9b6d1;--an-surface:linear-gradient(115deg,#ffffff14,transparent 42%,#bedaff08),linear-gradient(155deg,#253b5599,#15243a8c 58%,#132339a3);--an-text:#f6f8ff;--an-muted:#e0eafa;--an-rule:#dbe8fa45;--an-accent:#f5a9c8;--an-secondary:#bbd2ec;--an-edge:#d1e4ff26;--an-rim:#ffffff45;--an-shadow:inset 0 1px 0 #ffffff50,inset 0 -1px 0 #bedcff14,0 2px 4px #020b1e26,0 12px 32px #020b1e4d,0 28px 64px #020b1e29}
+#symf-anime-broadcast .an-stage,#symf-anime-broadcast button{overflow-wrap:anywhere}
+#symf-anime-broadcast .an-brand-description{min-width:0}
+#symf-anime-broadcast .an-backdrop{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:0;transform:scale(1.001);transition:opacity 700ms cubic-bezier(.22,1,.36,1)}
+#symf-anime-broadcast .an-backdrop.is-current{opacity:1}
+#symf-anime-broadcast .an-vignette{position:absolute;inset:0;background:linear-gradient(0deg,#10203860,transparent 30%,transparent 82%,#10203820);pointer-events:none}
+#symf-anime-broadcast .an-broadcast{position:absolute;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;row-gap:var(--s6);padding:var(--s6) var(--s10) var(--s8);transition:opacity 220ms linear,visibility 0s linear}
+#symf-anime-broadcast .an-stage.an-art-only .an-broadcast{opacity:0;visibility:hidden;transition:opacity 180ms linear,visibility 0s linear 180ms}
+#symf-anime-broadcast .an-brand-description{display:flex;flex-direction:column;justify-content:center;font-size:var(--an-meta);line-height:1.5;letter-spacing:0;color:var(--an-chrome-muted);border-left:1px solid #d5e5fc45;padding-left:var(--s4)}
+#symf-anime-broadcast .an-brand-description strong{font-weight:600;color:var(--an-chrome-text)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-frame{gap:var(--s3)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-analysis-heading{margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-chart-caption{margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-bar-group{margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-frame{display:flex;flex-direction:column;gap:var(--s3);min-width:0;position:relative}
+#symf-anime-broadcast .an-kicker{font-size:var(--an-label);line-height:1.5;letter-spacing:.025em;display:flex;align-items:center;gap:var(--s3);font-weight:600}
+#symf-anime-broadcast .an-kicker::before{content:"";width:var(--s6);height:3px;background:var(--an-accent);flex-shrink:0}
+#symf-anime-broadcast .an-deck{font-size:var(--an-body);line-height:1.5;letter-spacing:0;margin:0;text-wrap:pretty}
+#symf-anime-broadcast .an-fine{font-size:var(--an-meta);line-height:1.5;margin:0;color:var(--an-muted)}
+#symf-anime-broadcast .an-analysis-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:var(--s6);align-items:start}
+#symf-anime-broadcast .an-analysis-heading{margin:0 0 var(--s4)}
+#symf-anime-broadcast .an-analysis-heading h2{font-size:max(1.75rem,2.734375cqw);letter-spacing:-.025em;line-height:1.2;font-weight:600;margin:0}
+#symf-anime-broadcast .an-analysis-aside{border-left:1px solid var(--an-rule);padding-left:var(--s6);display:flex;flex-direction:column;gap:var(--s4)}
+#symf-anime-broadcast .an-gap{font-size:max(2rem,3.125cqw);line-height:1.2;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-weight:600}
+#symf-anime-broadcast .an-gap small{display:block;font-size:var(--an-meta);line-height:1.5;font-weight:400;letter-spacing:0;color:var(--an-muted);margin-top:var(--s1)}
+#symf-anime-broadcast .an-chart-caption{font-size:var(--an-meta);line-height:1.5;color:var(--an-muted);margin:0 0 var(--s3)}
+#symf-anime-broadcast .an-bar-group{margin-bottom:var(--s4)}
+#symf-anime-broadcast .an-bar-label{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s3);font-size:var(--an-label);line-height:1.5;margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-bar-label strong{font-weight:600;font-variant-numeric:tabular-nums}
+#symf-anime-broadcast .an-track{height:var(--s3);min-height:12px;background:color-mix(in srgb,var(--an-text) 12%,transparent);border-radius:3px;overflow:hidden}
+#symf-anime-broadcast .an-bar{height:100%;background:var(--an-secondary);transform-origin:left}
+#symf-anime-broadcast .an-bar[data-series=dabal]{background:var(--an-accent)}
+#symf-anime-broadcast .an-axis{display:flex;justify-content:space-between;font-size:var(--an-meta);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-pnl-split{display:flex;flex-direction:column;gap:var(--s3)}
+#symf-anime-broadcast .an-pnl-split div{font-size:var(--an-meta);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-pnl-split strong{display:block;color:var(--an-text);font-size:max(1.25rem,1.953125cqw);line-height:1.3;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
+#symf-anime-broadcast .an-quote{font-size:max(1.625rem,2.5390625cqw);font-weight:500;letter-spacing:-.02em;line-height:1.35;margin:0;text-wrap:pretty}
+#symf-anime-broadcast .an-author{display:flex;gap:var(--s3);align-items:center;padding-top:var(--s4);border-top:1px solid var(--an-rule);font-size:var(--an-meta);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-avatar{width:max(2.75rem,4.296875cqw);height:max(2.75rem,4.296875cqw);flex-shrink:0;display:grid;place-items:center;background:color-mix(in srgb,var(--an-text) 9%,transparent);color:var(--an-text);border-radius:50%;font-size:1.25rem;font-weight:500}
+#symf-anime-broadcast .an-hold-title{font-weight:600;font-size:max(2rem,3.125cqw);line-height:1.2;letter-spacing:-.025em;margin:0;text-wrap:balance}
+#symf-anime-broadcast .an-hold-list{display:flex;gap:var(--s3) var(--s4);flex-wrap:wrap;border-top:1px solid var(--an-rule);padding-top:var(--s4);font-size:var(--an-meta);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-hold-list span::before{content:"— ";color:var(--an-accent)}
+#symf-anime-broadcast .an-progress{position:absolute;bottom:0;left:0;right:0;transform-origin:left;transform:scaleX(0);height:3px;background:#f5a9c8;z-index:8}
+#symf-anime-broadcast .an-art-only .an-progress{opacity:0}
+@media(hover:hover) and (pointer:fine){#symf-anime-broadcast .an-controls button:not([aria-pressed=true]):hover{background-color:light-dark(#ffffff80,#ffffff16)}}
+
+
+/* Three coordinated material planes: channel rail, editorial pane, information dock. */
+#symf-anime-broadcast .an-header,#symf-anime-broadcast .an-paper,#symf-anime-broadcast .an-lower-third{background:var(--an-surface);color:var(--an-text);border:1px solid var(--an-edge);border-top-color:var(--an-rim);box-shadow:var(--an-shadow);backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45);-webkit-backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45);isolation:isolate;border-radius:var(--an-r-panel)}
+#symf-anime-broadcast .an-header::before,#symf-anime-broadcast .an-paper::before,#symf-anime-broadcast .an-lower-third::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;background:linear-gradient(135deg,#ffffff1f,transparent 34%,transparent 72%,#b9dfff0a)}
+#symf-anime-broadcast .an-header::after,#symf-anime-broadcast .an-paper::after,#symf-anime-broadcast .an-lower-third::after{content:"";position:absolute;inset:0;padding:1px;border-radius:inherit;pointer-events:none;background:linear-gradient(145deg,#ffffffad,#ffffff14 30%,#ffffff00 55%,#e2f1ff60);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+#symf-anime-broadcast .an-header{position:relative;display:flex;align-items:center;gap:var(--s6);padding:var(--s3) var(--s4);border-radius:var(--an-r-header)}
+#symf-anime-broadcast .an-brand{display:flex;align-items:center;gap:var(--s4);min-width:0}
+#symf-anime-broadcast .an-brand-description{display:flex;flex-direction:column;font-size:var(--an-meta);line-height:1.5;color:var(--an-muted);min-width:0}
+#symf-anime-broadcast .an-brand-description strong{color:var(--an-text);font-size:max(.9375rem,1.46484375cqw);line-height:1.35;font-weight:600}
+#symf-anime-broadcast .an-world-label{display:flex;align-items:baseline;gap:var(--s2);margin-left:auto;padding-left:var(--s6);border-left:1px solid var(--an-rule)}
+#symf-anime-broadcast .an-world-label span{font-size:var(--an-meta);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-world-label strong{font-size:var(--an-label);line-height:1.5;font-weight:600}
+#symf-anime-broadcast .an-edition{display:flex;flex-direction:column;font-size:var(--an-meta);line-height:1.5;color:var(--an-muted);padding-left:var(--s6);border-left:1px solid var(--an-rule)}
+#symf-anime-broadcast .an-paper{position:relative;align-self:start;width:50cqw;padding:var(--s6)}
+#symf-anime-broadcast .an-title{font-size:max(4rem,6.25cqw);line-height:1.08;letter-spacing:-.045em;font-weight:600;margin:0;text-wrap:balance}
+#symf-anime-broadcast .an-stage .an-kicker{letter-spacing:0}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-paper{width:70.3125cqw;padding:var(--s4)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-frame{gap:var(--s2)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-analysis-heading{margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-chart-caption{margin-bottom:var(--s2)}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch] .an-bar-group{margin-bottom:var(--s3)}
+#symf-anime-broadcast .an-stage[data-scene=harbor] .an-paper{width:76.5625cqw}
+#symf-anime-broadcast .an-stage[data-scene=shadowgate] .an-paper{width:54.6875cqw}
+#symf-anime-broadcast .an-stage .an-quote{font-size:max(1.625rem,2.9296875cqw);line-height:1.35}
+#symf-anime-broadcast .an-lower-third{position:relative;display:grid;grid-template-columns:minmax(0,1fr);overflow:hidden}
+#symf-anime-broadcast .an-snapshot{padding:var(--s4) var(--s6);border-right:1px solid var(--an-rule);min-width:0}
+#symf-anime-broadcast .an-stage:not([data-scene=daybreak]) .an-snapshot{display:none}
+#symf-anime-broadcast .an-story-facts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:var(--s6)}
+#symf-anime-broadcast .an-story-facts small{display:block;font-size:var(--an-label);line-height:1.5;color:var(--an-muted)}
+#symf-anime-broadcast .an-story-facts strong{display:block;font-size:max(2rem,3.125cqw);line-height:1.2;font-weight:500;letter-spacing:-.035em;font-variant-numeric:tabular-nums;margin-top:var(--s2)}
+#symf-anime-broadcast .an-snapshot .an-fine{margin-top:var(--s3)}
+#symf-anime-broadcast .an-stage[data-scene=daybreak] .an-lower-third{grid-template-columns:minmax(0,43fr) minmax(0,57fr)}
+
+@container an-shell (max-width:62rem){
+#symf-anime-broadcast .an-caption{padding-right:0}
+#symf-anime-broadcast .an-controls{width:100%;margin:0 0 24px;border-radius:var(--an-r-toolbar)}
+#symf-anime-broadcast .an-scene-picker{width:100%}
+#symf-anime-broadcast .an-actions{width:100%;justify-content:space-between}
+#symf-anime-broadcast .an-stage{--an-flow:1}
+
+#symf-anime-broadcast .an-stage{aspect-ratio:auto}
+#symf-anime-broadcast .an-stage:not(.an-art-only) .an-broadcast{position:relative;display:flex;flex-direction:column;gap:24px;padding:24px}
+#symf-anime-broadcast .an-stage .an-header{position:relative;inset:auto;flex-wrap:wrap;gap:16px;padding:16px}
+#symf-anime-broadcast .an-stage .an-world-label{padding-left:16px;gap:8px}
+#symf-anime-broadcast .an-stage .an-edition{padding-left:16px}
+#symf-anime-broadcast .an-stage .an-brand{gap:16px}
+#symf-anime-broadcast .an-stage .an-paper,#symf-anime-broadcast .an-stage.an-stage[data-scene] .an-paper{position:relative;inset:auto;width:auto;padding:24px}
+#symf-anime-broadcast .an-stage .an-frame{gap:16px}
+#symf-anime-broadcast .an-stage .an-analysis-grid{grid-template-columns:minmax(0,1fr);gap:24px}
+#symf-anime-broadcast .an-stage .an-analysis-aside{border-left:0;border-top:1px solid var(--an-rule);padding:24px 0 0;gap:16px}
+#symf-anime-broadcast .an-stage .an-pnl-split{flex-direction:row;flex-wrap:wrap;gap:16px 32px}
+#symf-anime-broadcast .an-stage.an-stage[data-scene] .an-lower-third{position:relative;inset:auto;width:auto;grid-template-columns:minmax(0,1fr)}
+#symf-anime-broadcast .an-stage .an-snapshot{padding:20px 24px;border-right:0;border-bottom:1px solid var(--an-rule)}
+#symf-anime-broadcast .an-stage .an-story-facts{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:24px}
+#symf-anime-broadcast .an-stage .an-snapshot .an-fine{margin-top:12px}
+#symf-anime-broadcast .an-stage .an-author,#symf-anime-broadcast .an-stage .an-hold-list{padding-top:16px;gap:12px}
+
+#symf-anime-broadcast .an-stage.an-art-only{aspect-ratio:16/9;min-height:360px}
+}
+
+#symf-anime-broadcast .an-reading{aspect-ratio:auto}
+#symf-anime-broadcast .an-reading:not(.an-art-only) .an-broadcast{position:relative;display:flex;flex-direction:column;gap:24px;padding:24px}
+#symf-anime-broadcast .an-reading .an-header{position:relative;inset:auto;flex-wrap:wrap;gap:16px;padding:16px}
+#symf-anime-broadcast .an-reading .an-world-label{padding-left:16px;gap:8px}
+#symf-anime-broadcast .an-reading .an-edition{padding-left:16px}
+#symf-anime-broadcast .an-reading .an-brand{gap:16px}
+#symf-anime-broadcast .an-reading .an-paper,#symf-anime-broadcast .an-stage.an-reading[data-scene] .an-paper{position:relative;inset:auto;width:auto;padding:24px}
+#symf-anime-broadcast .an-reading .an-frame{gap:16px}
+#symf-anime-broadcast .an-reading .an-analysis-grid{grid-template-columns:minmax(0,1fr);gap:24px}
+#symf-anime-broadcast .an-reading .an-analysis-aside{border-left:0;border-top:1px solid var(--an-rule);padding:24px 0 0;gap:16px}
+#symf-anime-broadcast .an-reading .an-pnl-split{flex-direction:row;flex-wrap:wrap;gap:16px 32px}
+#symf-anime-broadcast .an-stage.an-reading[data-scene] .an-lower-third{position:relative;inset:auto;width:auto;grid-template-columns:minmax(0,1fr)}
+#symf-anime-broadcast .an-reading .an-snapshot{padding:20px 24px;border-right:0;border-bottom:1px solid var(--an-rule)}
+#symf-anime-broadcast .an-reading .an-story-facts{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:24px}
+#symf-anime-broadcast .an-reading .an-snapshot .an-fine{margin-top:12px}
+#symf-anime-broadcast .an-reading .an-author,#symf-anime-broadcast .an-reading .an-hold-list{padding-top:16px;gap:12px}
+
+@container an-shell (max-width:30rem){
+#symf-anime-broadcast .an-scene-picker{grid-template-columns:repeat(2,minmax(0,1fr))}
+#symf-anime-broadcast .an-stage:not(.an-art-only) .an-broadcast{padding:16px;gap:16px}
+#symf-anime-broadcast .an-stage .an-paper{padding:20px}
+#symf-anime-broadcast .an-stage .an-header{gap:12px}
+#symf-anime-broadcast .an-stage .an-brand{width:100%}
+#symf-anime-broadcast .an-stage .an-world-label{padding-left:0;border-left:0;margin-left:0}
+#symf-anime-broadcast .an-stage .an-edition{margin-left:auto}
+#symf-anime-broadcast .an-stage .an-snapshot{padding:20px}
+#symf-anime-broadcast .an-stage .an-story-facts{grid-template-columns:minmax(0,1fr);gap:16px}
+#symf-anime-broadcast .an-title{font-size:clamp(2rem,10cqw,3rem)}
+#symf-anime-broadcast .an-actions button{flex:1;min-width:0}
+#symf-anime-broadcast .an-bar-label{flex-wrap:wrap;gap:0 12px}
+}
+@container an-shell (max-width:20rem){
+#symf-anime-broadcast .an-scene-picker{grid-template-columns:1fr}
+#symf-anime-broadcast .an-stage .an-brand{flex-wrap:wrap;gap:8px}
+#symf-anime-broadcast .an-stage .an-world-label,#symf-anime-broadcast .an-stage .an-edition{width:100%;padding-left:0;border-left:0;margin-left:0}
+#symf-anime-broadcast .an-hold-title{font-size:1.5rem;overflow-wrap:normal}
+}
+@supports(corner-shape:superellipse(1.4)){
+#symf-anime-broadcast .an-stage,#symf-anime-broadcast .an-controls,#symf-anime-broadcast button,#symf-anime-broadcast .an-scene-picker,#symf-anime-broadcast .an-selection,#symf-anime-broadcast .an-header,#symf-anime-broadcast .an-paper,#symf-anime-broadcast .an-lower-third{corner-shape:superellipse(1.4)}
+#symf-anime-broadcast .an-header::before,#symf-anime-broadcast .an-header::after,#symf-anime-broadcast .an-paper::before,#symf-anime-broadcast .an-paper::after,#symf-anime-broadcast .an-lower-third::before,#symf-anime-broadcast .an-lower-third::after{corner-shape:superellipse(1.4)}
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+#symf-anime-broadcast .an-controls{background:light-dark(#edf2f8,#18283e);backdrop-filter:none;-webkit-backdrop-filter:none}
+#symf-anime-broadcast .an-selection{background:light-dark(#fff,#3e5877)}
+#symf-anime-broadcast .an-stage{--an-surface:#f5f7fb;--an-text:#142236;--an-muted:#34485e;--an-edge:#536579;--an-rim:#536579}
+#symf-anime-broadcast .an-stage[data-scene=nightwatch],#symf-anime-broadcast .an-stage[data-scene=shadowgate]{--an-surface:#142236;--an-text:#f5f7fb;--an-muted:#d0deef;--an-edge:#a2b6cd;--an-rim:#a2b6cd}
+#symf-anime-broadcast .an-header,#symf-anime-broadcast .an-paper,#symf-anime-broadcast .an-lower-third{backdrop-filter:none;-webkit-backdrop-filter:none}
+#symf-anime-broadcast .an-header::before,#symf-anime-broadcast .an-header::after,#symf-anime-broadcast .an-paper::before,#symf-anime-broadcast .an-paper::after,#symf-anime-broadcast .an-lower-third::before,#symf-anime-broadcast .an-lower-third::after{display:none}
+}
+@media(prefers-reduced-motion:reduce){#symf-anime-broadcast button,#symf-anime-broadcast .an-backdrop,#symf-anime-broadcast .an-broadcast{transition:none}#symf-anime-broadcast button:active{transform:none}}
+#symf-anime-broadcast .an-logo{display:block;width:max(2.5rem,3.90625cqw);height:max(2.5rem,3.90625cqw);object-fit:contain;flex-shrink:0}
+#symf-anime-broadcast .an-scenery{position:absolute;inset:0;isolation:isolate;overflow:hidden}
+#symf-anime-broadcast .an-backdrop{mix-blend-mode:plus-lighter}
+#symf-anime-broadcast.an-motion-muted .an-backdrop{transition:none}
+@media(prefers-reduced-motion:reduce){#symf-anime-broadcast .an-stage.an-art-only .an-broadcast{transition:none}}
+
+/* Explicit entrance, identity hold, and decisive exit. */
+#symf-anime-broadcast .an-stage[data-scene] .an-paper{width:84cqw;padding:var(--s4)}
+#symf-anime-broadcast .an-stage .an-title{font-size:max(2rem,3.125cqw);line-height:1.16;letter-spacing:-.03em;text-wrap:pretty}
+#symf-anime-broadcast .an-stage .an-frame{gap:var(--s3)}
+#symf-anime-broadcast .an-author{justify-content:space-between;flex-wrap:wrap;gap:8px 20px}
+#symf-anime-broadcast .an-author a{color:var(--an-text);text-decoration:underline;text-underline-offset:4px;font-weight:500}
+#symf-anime-broadcast .an-stage[data-scene] .an-lower-third{grid-template-columns:minmax(0,1fr)}
+/* Silver identity plate recalls the earlier broadcast shutter, not a dark loading screen. */
+#symf-anime-broadcast .an-transition{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:linear-gradient(105deg,#e9edf2,#a8b7cd 73%,#f1f5fa);color:#142237;transform:translateX(101%);opacity:0;pointer-events:none;overflow:hidden;isolation:isolate}
+#symf-anime-broadcast .an-transition[hidden]{display:none}
+#symf-anime-broadcast .an-transition::before{content:"";position:absolute;inset:-50%;transform:rotate(-24deg);background:linear-gradient(90deg,transparent 24%,#ffffff36 24%,#ffffff06 47%,transparent 47%,transparent 67%,#ffffff52 67%,#ffffff0a 82%,transparent 82%);z-index:-1}
+#symf-anime-broadcast .an-transition::after{content:"";position:absolute;inset:var(--s4);border:1px solid #ffffff70;border-radius:calc(var(--an-r-window) * .72);box-shadow:inset 0 1px 0 #ffffffb3,inset 0 -1px 0 #637c9833;pointer-events:none}
+#symf-anime-broadcast .an-bumper-brand{position:relative;display:flex;align-items:center;gap:4cqw;padding:4cqw 5cqw;max-width:calc(100% - 64px);border:1px solid #ffffffad;border-bottom-color:#8197af52;border-radius:28px;background:linear-gradient(130deg,#ffffff70,#eff5fb30 48%,#ffffff4d);box-shadow:inset 0 1px 0 #ffffffd9,inset 0 -1px 0 #ffffff52,0 2px 6px #344c6712,0 24px 56px #344c671f;isolation:isolate}
+#symf-anime-broadcast .an-bumper-brand::before{content:"";position:absolute;inset:1px;border-radius:inherit;background:linear-gradient(120deg,#ffffff2e,transparent 45%,#ffffff1a);pointer-events:none;z-index:-1}
+#symf-anime-broadcast .an-bumper-logo{width:clamp(56px,11cqw,160px);height:auto;display:block;filter:drop-shadow(0 8px 12px #243b5726)}
+#symf-anime-broadcast .an-bumper-brand span{display:block;font-size:clamp(3rem,14cqw,14rem);line-height:.9;letter-spacing:-.075em;font-weight:600}
+#symf-anime-broadcast .an-bumper-brand span b{color:#b52265;font-weight:600;letter-spacing:-.1em}
+#symf-anime-broadcast .an-bumper-brand strong{display:block;font-size:clamp(1rem,2cqw,2rem);font-weight:500;letter-spacing:-.015em;margin-top:20px}
+#symf-anime-broadcast .an-bumper-brand small{display:block;font-size:clamp(.875rem,1.35cqw,1.5rem);color:#364b62;margin-top:8px}
+#symf-anime-broadcast .an-bumper-sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 32%,#ffffff00 40%,#ffffff66 49%,#ffffff00 58%,transparent 66%);transform:translateX(-105%);opacity:0;pointer-events:none}
+@supports(corner-shape:superellipse(1.4)){#symf-anime-broadcast .an-bumper-brand,#symf-anime-broadcast .an-bumper-brand::before,#symf-anime-broadcast .an-transition::after{corner-shape:superellipse(1.4)}}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#symf-anime-broadcast .an-bumper-brand{background:#edf2f8;box-shadow:none}#symf-anime-broadcast .an-bumper-sheen{display:none}}
+@container an-shell (max-width:62rem){
+#symf-anime-broadcast .an-stage[data-scene] .an-paper{width:auto;padding:24px}
+#symf-anime-broadcast .an-stage .an-frame{gap:16px}
+}
+#symf-anime-broadcast .an-stage.an-reading[data-scene] .an-paper{width:auto;padding:24px}
+@container an-shell (max-width:30rem){
+#symf-anime-broadcast .an-bumper-brand{gap:16px;padding:24px;max-width:calc(100% - 48px);border-radius:22px}
+#symf-anime-broadcast .an-bumper-brand strong{margin-top:12px}
+#symf-anime-broadcast .an-bumper-brand small{display:none}
+}
+/* Top editorial wire and a separate, stationary token/community footer. */
+#symf-anime-broadcast .an-stage{--an-wire-height:max(40px,2.2cqw);--an-identity-height:max(64px,3.4cqw);--an-token-reserve:var(--an-identity-height)}
+#symf-anime-broadcast .an-broadcast{grid-template-rows:auto minmax(0,1fr);row-gap:var(--s4);padding-top:calc(var(--s4) + var(--an-wire-height));padding-bottom:calc(var(--s4) + var(--an-token-reserve))}
+#symf-anime-broadcast .an-progress{bottom:var(--an-token-reserve);z-index:31;height:2px;background:#f6b4d0}
+#symf-anime-broadcast .an-station-dock{position:absolute;inset:auto 0 0;z-index:30;background:#101e31f7;color:#f5f8ff;box-shadow:0 -1px 0 #ffffff26,0 -12px 40px #07132224}
+#symf-anime-broadcast .an-news-wire{position:absolute;inset:0 0 auto;z-index:30;display:flex;align-items:center;gap:var(--s4);min-height:var(--an-wire-height);padding:0 var(--s10);border:0;border-bottom:1px solid #ffffff24;border-radius:0;background:linear-gradient(120deg,#f0f5f9f2,#dce5eff2);color:#192c43;box-shadow:inset 0 1px 0 #ffffffc9;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+#symf-anime-broadcast .an-news-wire::before,#symf-anime-broadcast .an-news-wire::after{display:none}
+#symf-anime-broadcast .an-wire-label{display:flex;align-items:center;gap:max(8px,.55cqw);flex:none;font-size:max(.75rem,.85cqw);font-weight:650;white-space:nowrap;letter-spacing:.02em}
+#symf-anime-broadcast .an-wire-label>span{display:block;width:3px;height:max(14px,1cqw);background:#a11e53;border-radius:2px}
+#symf-anime-broadcast .an-wire-window{flex:1;min-width:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 20px,#000 calc(100% - 20px),transparent)}
+#symf-anime-broadcast .an-ticker-track{display:flex;width:max-content}
+#symf-anime-broadcast .an-ticker-set{display:flex;flex:none;align-items:center}
+#symf-anime-broadcast .an-wire-headline{display:flex;flex:none;align-items:center;gap:max(10px,.7cqw);padding:6px max(28px,2cqw) 6px 0;font-size:max(.875rem,1cqw);line-height:1.3;white-space:nowrap}
+#symf-anime-broadcast .an-wire-headline::after{content:"/";color:#5f7186;margin-left:max(14px,1cqw);font-weight:400}
+#symf-anime-broadcast .an-wire-headline b{font-size:.8em;font-weight:600;color:#5b3150}
+#symf-anime-broadcast .an-wire-domain{flex:none;color:#243b54;text-decoration:none;font-size:max(.75rem,.85cqw);font-weight:500;white-space:nowrap;padding:8px 0 8px var(--s4);border-left:1px solid #243b5429}
+#symf-anime-broadcast .an-wire-domain:focus-visible{outline:3px solid #004fc4;outline-offset:3px}
+#symf-anime-broadcast .an-countdown{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-left:var(--s4);border-left:1px solid var(--an-rule);min-width:7cqw;font-size:var(--an-meta);line-height:1.4}
+#symf-anime-broadcast .an-countdown>span{color:var(--an-muted);font-size:.8em;white-space:nowrap}
+#symf-anime-broadcast .an-countdown strong{font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.02em;min-width:5ch;text-align:right}
+#symf-anime-broadcast .an-token-rail{position:relative;display:grid;grid-template-columns:8cqw minmax(0,1fr) auto auto;gap:var(--s4);align-items:center;padding:max(7px,.35cqw) var(--s10);min-height:var(--an-identity-height)}
+#symf-anime-broadcast .an-token-rail small{display:block;font-size:max(.6875rem,.6cqw);line-height:1.25;color:#c3d4eb;font-weight:400}
+#symf-anime-broadcast .an-token-identity strong{font-size:max(.9375rem,1.2cqw);font-weight:600;line-height:1.25;letter-spacing:-.02em}
+#symf-anime-broadcast .an-token-contract{min-width:0}
+#symf-anime-broadcast .an-token-contract a{display:block;color:#f5f8ff;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:max(.75rem,1.04cqw);line-height:1.5;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;margin-top:3px}
+#symf-anime-broadcast .an-token-contract a:focus-visible{outline:3px solid #b9dbff;outline-offset:3px}
+#symf-anime-broadcast .an-token-telegram a{display:inline-block;min-height:24px;padding:2px 0;color:#f5f8ff;text-decoration:none;font-size:max(.875rem,1.04cqw);line-height:1.4;font-weight:500;white-space:nowrap}
+#symf-anime-broadcast .an-token-telegram a:focus-visible{outline:3px solid #b9dbff;outline-offset:3px}
+#symf-anime-broadcast .an-token-cap strong{display:block;font-variant-numeric:tabular-nums;font-size:max(1.125rem,1.35cqw);letter-spacing:-.03em;line-height:1.15;font-weight:500}
+#symf-anime-broadcast .an-token-cap{min-width:0;text-align:right}
+#symf-anime-broadcast .an-token-value{display:flex;align-items:baseline;justify-content:flex-end;gap:max(10px,.8cqw);margin-bottom:3px}
+#symf-anime-broadcast .an-token-value small{color:#eff5ff;font-size:max(.75rem,.85cqw)}
+#symf-anime-broadcast .an-token-value small span{color:#c3d4eb;font-size:.8em;margin-left:4px}
+#symf-anime-broadcast .an-token-value small [data-token-caption]{display:inline;color:inherit;font-size:inherit;margin-left:0}
+#symf-anime-broadcast .an-reading .an-station-dock{position:relative}
+#symf-anime-broadcast .an-reading .an-news-wire{position:relative}
+@container an-shell (max-width:62rem){
+#symf-anime-broadcast .an-station-dock{position:relative}
+#symf-anime-broadcast .an-news-wire{position:relative;padding:0 24px;gap:16px}
+#symf-anime-broadcast .an-token-rail{gap:16px;padding:16px 24px;grid-template-columns:80px minmax(0,1fr) auto auto}
+#symf-anime-broadcast .an-countdown{margin-left:auto;padding-left:16px;min-width:80px}
+}
+@container an-shell (max-width:40rem){
+#symf-anime-broadcast .an-news-wire{padding:0 16px;gap:12px}
+#symf-anime-broadcast .an-wire-domain{display:none}
+#symf-anime-broadcast .an-token-rail{grid-template-columns:auto auto;padding:16px;gap:12px 16px}
+#symf-anime-broadcast .an-token-contract{grid-column:1/-1;grid-row:2}
+#symf-anime-broadcast .an-token-telegram{grid-column:1/-1;grid-row:3;display:flex;align-items:baseline;gap:12px}
+#symf-anime-broadcast .an-token-cap{grid-column:2;grid-row:1}
+#symf-anime-broadcast .an-token-value{gap:8px}
+}
+#symf-anime-broadcast .an-stage.an-art-only .an-station-dock{position:absolute}
+#symf-anime-broadcast .an-stage.an-art-only .an-news-wire{position:absolute;inset:0 0 auto}
+#symf-anime-broadcast .an-page-number{margin-left:auto;font-size:.75em;color:var(--an-muted);white-space:nowrap}
+#symf-anime-broadcast .an-author .an-post-source{font-size:max(.75rem,.85cqw);line-height:1.4;text-decoration:none;overflow-wrap:anywhere;flex-basis:100%;color:var(--an-muted)}
+/* The encoder canvas fills its actual viewport, including non-16:9 browser windows. */
+#symf-anime-broadcast.an-program .an-stage{height:100dvh;aspect-ratio:auto}
+#symf-anime-broadcast.an-program .an-station-dock{position:absolute;bottom:0}
+#symf-anime-broadcast.an-program .an-stage[data-scene] .an-news-wire{position:absolute;inset:0 0 auto}
+#symf-anime-broadcast .an-token-rail[data-quote-state=cached] [data-token-asof]{color:#f1ce9c}
+/* Reading desk: columns align exactly with the independently playing radio overlay. */
+#symf-anime-broadcast .an-stage{--desk-gap:24px;--desk-radius:24px}
+#symf-anime-broadcast .an-header{gap:32px;border-radius:24px}
+#symf-anime-broadcast .an-broadcast{padding:calc(var(--an-wire-height) + 24px) 4% 248px;row-gap:24px}
+#symf-anime-broadcast .an-header .an-brand-description{border:0;padding-left:0}
+#symf-anime-broadcast .an-agent-metrics{display:flex;align-items:center;gap:clamp(20px,2.1cqw,40px);margin:0 0 0 auto;padding:0;min-width:0}
+#symf-anime-broadcast .an-agent-metrics>div{display:flex;align-items:baseline;gap:12px;white-space:nowrap}
+#symf-anime-broadcast .an-agent-metrics dt,#symf-anime-broadcast .an-header .an-countdown>span{color:#344c65;font-size:clamp(13px,1cqw,18px);font-weight:500;line-height:1.4;letter-spacing:-.01em;margin:0}
+#symf-anime-broadcast .an-agent-metrics dd,#symf-anime-broadcast .an-header .an-countdown strong{color:#14263a;font-size:clamp(18px,1.35cqw,26px);font-weight:600;line-height:1.2;letter-spacing:-.025em;font-variant-numeric:tabular-nums;margin:0}
+#symf-anime-broadcast .an-header .an-countdown{flex-direction:row;align-items:baseline;gap:12px;border:0;padding-left:0;min-width:0;white-space:nowrap}
+#symf-anime-broadcast .an-header .an-countdown strong{min-width:5ch;text-align:right}
+#symf-anime-broadcast .an-content-grid{position:relative;inset:auto;display:grid;grid-template-columns:860px minmax(0,1fr);gap:var(--desk-gap);min-height:0}
+#symf-anime-broadcast .an-stage[data-scene] .an-paper{position:relative;inset:auto;width:auto;height:100%;align-self:stretch;min-width:0;min-height:0;padding:28px 32px 24px;border-radius:var(--desk-radius);overflow:hidden;isolation:isolate}
+#symf-anime-broadcast .an-paper .an-frame{height:100%;min-height:0;gap:16px}
+#symf-anime-broadcast .an-reader{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--an-secondary) transparent;padding-right:12px;scroll-padding:16px}
+#symf-anime-broadcast .an-reader:focus-visible,#symf-anime-broadcast .an-activity-window:focus-visible{outline:3px solid var(--an-accent);outline-offset:4px;border-radius:4px}
+#symf-anime-broadcast .an-stage .an-title{font-size:36px;line-height:1.16;font-weight:650;letter-spacing:-.03em;margin:0 0 24px;text-wrap:pretty}
+#symf-anime-broadcast .an-paper .an-deck{font-size:25px;line-height:1.52;letter-spacing:-.012em;text-wrap:pretty;white-space:pre-wrap}
+#symf-anime-broadcast .an-kicker{font-size:17px;line-height:1.4;gap:12px}
+#symf-anime-broadcast .an-kicker::before{width:24px;height:2px}
+#symf-anime-broadcast .an-paper .an-author{flex:none;padding-top:14px;font-size:15px;line-height:1.4;gap:6px}
+#symf-anime-broadcast .an-author .an-post-source{font-size:13px}
+#symf-anime-broadcast .an-paper .an-progress{inset:auto 0 0;height:3px;z-index:21}
+#symf-anime-broadcast .an-paper .an-transition{border-radius:inherit}
+#symf-anime-broadcast .an-bumper-brand{gap:28px;padding:32px;max-width:calc(100% - 64px);border-radius:20px}
+#symf-anime-broadcast .an-bumper-logo{width:100px}
+#symf-anime-broadcast .an-bumper-brand span{font-size:112px}
+#symf-anime-broadcast .an-bumper-brand strong{font-size:24px;margin-top:16px}
+#symf-anime-broadcast .an-bumper-brand small{font-size:16px;margin-top:8px}
+#symf-anime-broadcast .an-transition::after{inset:16px;border-radius:16px}
+#symf-anime-broadcast .an-activity{container-type:inline-size;container-name:activity-log;display:flex;flex-direction:column;min-width:0;min-height:0;padding:28px 24px 24px;border:1px solid var(--an-edge);border-top-color:var(--an-rim);border-radius:var(--desk-radius);color:var(--an-text);background:var(--an-surface);box-shadow:var(--an-shadow);backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45);-webkit-backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45);isolation:isolate;position:relative}
+#symf-anime-broadcast .an-activity::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;background:linear-gradient(135deg,#ffffff1f,transparent 34%,transparent 72%,#b9dfff0a)}
+#symf-anime-broadcast .an-activity-heading{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:0 8px}
+#symf-anime-broadcast .an-activity-heading::before{content:"";width:24px;height:2px;flex:none;background:var(--an-accent)}
+#symf-anime-broadcast .an-activity-heading h2{font-size:24px;line-height:1.25;font-weight:600;letter-spacing:-.025em;margin:0}
+#symf-anime-broadcast .an-activity-window{flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#526e8c80 transparent;margin:0;scrollbar-gutter:stable;border:1px solid #25405a1a;border-radius:12px;background:#f2f7fd24}
+#symf-anime-broadcast .an-log-table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5;text-align:left;font-variant-numeric:tabular-nums}
+#symf-anime-broadcast .an-log-table th{position:sticky;top:0;z-index:1;padding:11px 8px;background:#e2edf8f5;color:#40546b;font-family:var(--an-font);font-size:12px;font-weight:550;border-bottom:1px solid #25405a29;white-space:nowrap}
+#symf-anime-broadcast .an-log-table th:nth-child(1){width:124px}
+#symf-anime-broadcast .an-log-table th:nth-child(2){width:94px}
+#symf-anime-broadcast .an-log-table th:nth-child(3){width:120px}
+#symf-anime-broadcast .an-log-table th:nth-child(4){width:82px}
+#symf-anime-broadcast .an-activity-row td{padding:8px;height:36px;border-bottom:1px solid #25405a12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1a3047;font-weight:400}
+#symf-anime-broadcast .an-activity-row:nth-child(odd){background:#ffffff24}
+#symf-anime-broadcast .an-activity-row:nth-child(even){background:#23466206}
+#symf-anime-broadcast .an-log-status{display:inline-block;padding:1px 4px;border:1px solid #28745740;border-radius:5px;background:#d9f0e354;color:#145c40;font-size:11px;line-height:1.5;letter-spacing:.015em}
+#symf-anime-broadcast .an-log-status[data-status=queued]{color:#40546b;border-color:#40546b40;background:#e6ecf2}
+#symf-anime-broadcast .an-log-status[data-status=running]{color:#174c83;border-color:#174c8340;background:#dceafa}
+#symf-anime-broadcast .an-log-status[data-status=held],#symf-anime-broadcast .an-log-status[data-status=skipped]{color:#795014;border-color:#79501440;background:#fff0d7}
+#symf-anime-broadcast .an-log-status[data-status=failed],#symf-anime-broadcast .an-log-status[data-status=disconnected]{color:#8b2851;border-color:#8b285140;background:#fce4ee}
+#symf-anime-broadcast .an-activity-connection{margin-left:auto;font-size:12px;line-height:1.4;color:#795014;font-weight:500}
+#symf-anime-broadcast .an-log-action:not(a){cursor:default}
+#symf-anime-broadcast .an-activity-row time{font-size:12px;color:#40546b;white-space:nowrap}
+#symf-anime-broadcast .an-activity-row .an-log-platform{color:#40546b;font-size:12px}
+#symf-anime-broadcast .an-log-action{display:block;white-space:normal;overflow-wrap:break-word;color:#1a3047;text-decoration:none;line-height:1.45}
+#symf-anime-broadcast .an-log-action:focus-visible{outline:2px solid #004fc4;outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){#symf-anime-broadcast .an-activity-row:hover{background:#ffffff52}#symf-anime-broadcast .an-log-action:hover{text-decoration:underline;text-underline-offset:3px}}
+@container activity-log (max-width:650px){
+#symf-anime-broadcast .an-log-table{font-size:10px}
+#symf-anime-broadcast .an-log-table th{font-size:10px;padding:8px 5px}
+#symf-anime-broadcast .an-log-table th:nth-child(1){width:100px}
+#symf-anime-broadcast .an-log-table th:nth-child(2){width:74px}
+#symf-anime-broadcast .an-log-table th:nth-child(3){width:96px}
+#symf-anime-broadcast .an-log-table th:nth-child(4){width:62px}
+#symf-anime-broadcast .an-activity-row td{padding:6px 5px;height:32px}
+#symf-anime-broadcast .an-activity-row time,#symf-anime-broadcast .an-activity-row .an-log-platform{font-size:10px}
+#symf-anime-broadcast .an-log-status{font-size:9px;padding:1px 3px}
+}
+@container activity-log (max-width:420px){
+#symf-anime-broadcast .an-log-table th:nth-child(1){width:23%}
+#symf-anime-broadcast .an-log-table th:nth-child(2){width:20%}
+#symf-anime-broadcast .an-log-table th:nth-child(3){width:22%}
+#symf-anime-broadcast .an-log-table th:nth-child(4){width:15%}
+#symf-anime-broadcast .an-activity-row td{white-space:normal;overflow-wrap:anywhere;padding:6px 3px;vertical-align:top}
+#symf-anime-broadcast .an-log-table th{font-size:9px;padding:8px 3px;white-space:normal}
+#symf-anime-broadcast .an-activity-row time{white-space:normal;font-size:9px}
+#symf-anime-broadcast .an-log-status{font-size:8px;padding:1px 2px}
+}
+#symf-anime-broadcast .an-activity-empty{font-size:16px;line-height:1.6;color:#c1d3e4;padding:24px 0;margin:0}
+@supports(corner-shape:superellipse(1.3)){#symf-anime-broadcast .an-activity,#symf-anime-broadcast .an-paper{corner-shape:superellipse(1.3)}}
+@container an-shell (max-width:1650px){#symf-anime-broadcast .an-content-grid{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}}
+@container an-shell (max-width:1120px){
+#symf-anime-broadcast .an-agent-metrics{gap:20px;flex-wrap:wrap;margin-left:0}
+#symf-anime-broadcast .an-content-grid{position:relative;inset:auto;grid-template-columns:minmax(0,1fr);gap:24px}
+#symf-anime-broadcast .an-stage[data-scene] .an-paper{height:640px;padding:24px}
+#symf-anime-broadcast .an-activity{height:480px;padding:24px}
+#symf-anime-broadcast .an-stage{aspect-ratio:auto}
+#symf-anime-broadcast .an-stage:not(.an-art-only) .an-broadcast{position:relative;display:flex;flex-direction:column;padding:calc(var(--an-wire-height) + 24px) 24px 24px;gap:24px}
+#symf-anime-broadcast .an-stage .an-header{position:relative;inset:auto;flex-wrap:wrap;gap:16px}
+#symf-anime-broadcast.an-program .an-stage{height:auto;min-height:100dvh;padding-bottom:160px}
+#symf-anime-broadcast .an-paper .an-deck{font-size:20px}
+#symf-anime-broadcast .an-stage .an-title{font-size:30px}
+}
+@container an-shell (max-width:480px){
+#symf-anime-broadcast .an-stage[data-scene] .an-paper,#symf-anime-broadcast .an-activity{padding:20px}
+#symf-anime-broadcast .an-stage .an-title{font-size:26px}
+#symf-anime-broadcast .an-kicker{font-size:14px}
+#symf-anime-broadcast .an-bumper-brand{padding:20px;gap:16px;max-width:calc(100% - 40px)}
+#symf-anime-broadcast .an-bumper-logo{width:48px}
+#symf-anime-broadcast .an-bumper-brand span{font-size:56px}
+#symf-anime-broadcast .an-bumper-brand strong{font-size:16px}
+}
+#symf-anime-broadcast .an-station-dock{background:var(--an-surface);color:var(--an-text);border-top:1px solid var(--an-rim);box-shadow:inset 0 1px 0 #ffffff70,0 -8px 24px #142b4512;backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45);-webkit-backdrop-filter:blur(var(--an-glass-blur)) brightness(var(--an-glass-light)) saturate(1.45)}
+#symf-anime-broadcast .an-token-rail small,#symf-anime-broadcast .an-token-value small span{color:#40546b}
+#symf-anime-broadcast .an-token-identity strong,#symf-anime-broadcast .an-token-contract a,#symf-anime-broadcast .an-token-telegram a,#symf-anime-broadcast .an-token-cap strong,#symf-anime-broadcast .an-token-value small{color:#14263a}
+#symf-anime-broadcast .an-token-cap .an-token-value{margin:0;align-items:center;gap:12px}
+#symf-anime-broadcast .an-token-contract{display:flex;align-items:center;gap:12px;min-width:0}
+#symf-anime-broadcast .an-token-contract small{flex:none;white-space:nowrap}
+#symf-anime-broadcast .an-token-contract a{margin-top:0;white-space:nowrap;font-size:clamp(12px,1cqw,19px)}
+#symf-anime-broadcast .an-token-telegram a{display:flex;align-items:center;gap:10px;padding:0;white-space:nowrap}
+#symf-anime-broadcast .an-telegram-logo{flex:none;display:block;width:22px;height:22px}
+@container an-shell (max-width:1120px){#symf-anime-broadcast .an-token-contract{flex-wrap:wrap;gap:4px 12px}#symf-anime-broadcast .an-token-contract a{white-space:normal;overflow-wrap:anywhere}}
+#symf-anime-broadcast .an-token-rail[data-quote-state=cached] [data-token-caption]{color:#775200}
+#symf-anime-broadcast [data-token-asof]{display:none}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#symf-anime-broadcast .an-activity,#symf-anime-broadcast .an-station-dock{background:#f5f7fb;backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#symf-anime-broadcast .an-news-wire{background:#edf2f8;backdrop-filter:none;-webkit-backdrop-filter:none}}
