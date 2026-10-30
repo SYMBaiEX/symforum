@@ -12,6 +12,8 @@ import {
 import type { TerminalMarket } from "../../../lib/forum-terminal-model";
 import { SYMF_TOKEN } from "../../../lib/symf-token";
 import type { WatchToken } from "../../../components/trading/terminal-api";
+import type { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 let revision = 0;
 const listeners = new Set<() => void>();
@@ -25,6 +27,59 @@ const snapshot = () => revision;
 let watches: WatchToken[] = [];
 let researchVerified = false;
 const now = Date.now();
+// These branded IDs and identities are invented; no fixture can open a transport.
+const memberId = "fixture-member" as Id<"users">;
+const projects = [
+  {
+    projectId: "fixture-project" as Id<"forumCommunityProjects">,
+    mint: SYMF_TOKEN.mint,
+    name: "Fixture research collective",
+    symbol: "DEMO",
+    claims: [
+      {
+        userId: memberId,
+        username: "fixture_builder",
+        role: "Researcher",
+        description:
+          "An invented project affiliation for isolated interface coverage.",
+        website: "https://example.com/fixture",
+        updatedAt: now,
+      },
+    ],
+  },
+] satisfies FunctionReturnType<typeof api.forumCommunity.listProjects>;
+const works = [
+  {
+    workId: "fixture-work" as Id<"forumCommunityWork">,
+    sponsorId: "fixture-sponsor" as Id<"users">,
+    sponsor: "fixture_sponsor",
+    mint: SYMF_TOKEN.mint,
+    kind: "research",
+    title: "Review a simulated token report",
+    brief:
+      "Document the source timestamps and distinguish market cap from diluted value.",
+    amountLamports: "250000000",
+    status: "open",
+    selectedSubmissionId: null,
+    updatedAt: now,
+  },
+] satisfies FunctionReturnType<typeof api.forumCommunity.listBounties>;
+const protectedPayment = {
+  intentId: "fixture-held-payment" as Id<"forumCommunityPayments">,
+  wallet: "11111111111111111111111111111111",
+  recipient: "11111111111111111111111111111111",
+  amountLamports: "250000000",
+  purpose: "reward",
+  reference: "11111111111111111111111111111111",
+  memo: "isolated-fixture",
+  createdAt: now,
+  expiresAt: now - 1,
+  status: "held",
+  signature: null,
+  issue: null,
+  finalizedAt: null,
+  workId: works[0].workId,
+} satisfies FunctionReturnType<typeof api.forumCommunity.preparePayment>;
 const symf: TerminalMarket = {
   mint: SYMF_TOKEN.mint,
   symbol: SYMF_TOKEN.symbol,
@@ -77,7 +132,25 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   const input = args as Record<string, unknown>;
   const name = getFunctionName(ref);
   let result: unknown;
-  if (name === "forumResearch:getConfig")
+  if (name === "forumCommunity:listProjects") result = projects;
+  else if (name === "forumCommunity:listBounties")
+    result = works.filter(
+      (work) => !input.status || work.status === input.status,
+    );
+  else if (name === "forumCommunity:listPayments") result = [protectedPayment];
+  else if (name === "forumCommunity:getPayment") result = protectedPayment;
+  else if (name === "forumCommunity:getMine")
+    result = {
+      userId: memberId,
+      recipient: null,
+      supporter: null,
+    } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>;
+  else if (
+    name === "forumCommunity:listSubmissions" ||
+    name === "forumCommunity:listTipRecipients"
+  )
+    result = [];
+  else if (name === "forumResearch:getConfig")
     result = {
       enabled: true,
       amountRaw: "100000",
