@@ -12,7 +12,11 @@ import { getWalletAccountFeature } from "@wallet-standard/ui-features";
 import { getWalletAccountForUiWalletAccount } from "@wallet-standard/ui-registry";
 import type { SolanaSignAndSendTransactionFeature } from "@solana/wallet-standard-features";
 import type { PreparedSwap } from "./swap-router";
-import { inspectSignedSwap } from "./swap-signed-wire";
+import {
+  inspectSignedSwap,
+  SignedSwapValidationError,
+  type SignedSwapValidationIssue,
+} from "./swap-signed-wire";
 
 export function createCommerceWalletClient() {
   return createIdentityWalletClient();
@@ -24,7 +28,11 @@ export type ReviewedTransaction = PreparedSwap & { wallet: string };
 type WalletFailurePhase =
   "account" | "feature" | "request" | "response" | "validation";
 type WalletResponseIssue =
-  "result_count" | "signature_bytes" | "signed_binding" | null;
+  | "result_count"
+  | "signature_bytes"
+  | "signed_encoding"
+  | "signed_binding"
+  | null;
 
 /** Capability of the actual send feature, not another sign-only feature. No wallet request. */
 export function supportsCommerceTransaction(
@@ -53,6 +61,7 @@ export class CommerceWalletRequestError extends Error {
     readonly phase: WalletFailurePhase,
     cause?: unknown,
     readonly responseIssue: WalletResponseIssue = null,
+    readonly bindingIssue: SignedSwapValidationIssue | null = null,
   ) {
     super("Wallet outcome requires verification. Do not repeat this payment.");
     this.name = "CommerceWalletRequestError";
@@ -102,12 +111,27 @@ export async function signReviewedSwap(
   }
   if (!Array.isArray(result) || result.length !== 1)
     throw new CommerceWalletRequestError("response", undefined, "result_count");
+  let signedTransactionBase64: string;
   try {
-    const signedTransactionBase64 = getBase64EncodedWireTransaction(result[0]);
+    signedTransactionBase64 = getBase64EncodedWireTransaction(result[0]);
+  } catch (error) {
+    throw new CommerceWalletRequestError(
+      "validation",
+      error,
+      "signed_encoding",
+      "wire_encode",
+    );
+  }
+  try {
     const binding = await inspectSignedSwap(signedTransactionBase64, prepared);
     return { ...binding, signedTransactionBase64 };
   } catch (error) {
-    throw new CommerceWalletRequestError("validation", error, "signed_binding");
+    throw new CommerceWalletRequestError(
+      "validation",
+      error,
+      "signed_binding",
+      error instanceof SignedSwapValidationError ? error.issue : null,
+    );
   }
 }
 

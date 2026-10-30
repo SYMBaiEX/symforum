@@ -108,7 +108,7 @@ async function harness(page: Page, query = "") {
   const managed = query.includes("managed");
   const feeBps = managed ? 50 : 25;
   const signed = query.includes("signaturefirst")
-    ? await signedSwapFixture(0)
+    ? await signedSwapFixture(query.includes("v1") ? 1 : 0)
     : null;
   const wallet =
     signed?.wallet ?? "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY";
@@ -162,7 +162,11 @@ async function harness(page: Page, query = "") {
           getBase64Encoder().encode(signed.prepared.transactionBase64),
         ),
       );
-      result = { wire: signed.signedTransactionBase64 };
+      result = {
+        wire: query.includes("unsignedresponse")
+          ? signed.prepared.transactionBase64
+          : signed.signedTransactionBase64,
+      };
     } else if (name === "forumSwapSubmission:registerSigned" && signed) {
       expect(route.request().postDataJSON().signedTransactionBase64).toBe(
         signed.signedTransactionBase64,
@@ -353,7 +357,12 @@ test("signature-first swap saves the verified signature before one relay and unl
   await expect(page.getByLabel("You pay", { exact: true })).toHaveValue("");
   await expect(page.locator("#wallet-calls")).toHaveText("1");
 });
-for (const mode of ["signfail", "registerfail"])
+for (const mode of [
+  "signfail",
+  "registerfail",
+  "unsignedresponse",
+  "unsignedresponse&v1",
+])
   test(`${mode} is closed before any app submission without send fallback`, async ({
     page,
   }) => {
@@ -361,13 +370,19 @@ for (const mode of ["signfail", "registerfail"])
     await page.getByLabel("You pay", { exact: true }).fill("0.01");
     await reviewSwap(page);
     await expect(page.getByRole("alert")).toContainText(
-      mode === "signfail"
+      mode !== "registerfail"
         ? "Wallet signing did not complete"
         : "Submission did not start",
     );
     expect(requests).toContain("forumSwapSubmission:cancelUnsubmitted");
     expect(requests).not.toContain("forumSwapSubmission:relay");
     expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+    if (mode.startsWith("unsignedresponse")) {
+      await expect(page.getByRole("alert")).toContainText(
+        "check: signature_missing",
+      );
+      expect(requests).not.toContain("forumSwapSubmission:registerSigned");
+    }
     await expect(page.locator("#wallet-calls")).toHaveText("1");
     await expect(
       page.getByRole("button", { name: "Swap", exact: true }),
@@ -452,6 +467,24 @@ test("managed standard fee disclosure and SDK sign-only completion without holde
   await expect(
     page.getByRole("button", { name: "Refresh benefit" }),
   ).toHaveCount(0);
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
+test("managed v1 signs through the real Kit wallet bridge before one signature-first relay", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&signaturefirst&managed&v1");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await reviewSwap(page);
+  await expect(
+    page.getByText("Swap finalized.", { exact: false }),
+  ).toBeVisible();
+  expect(
+    requests.filter((x) => x === "forumSwapSubmission:registerSigned"),
+  ).toHaveLength(1);
+  expect(
+    requests.filter((x) => x === "forumSwapSubmission:relay"),
+  ).toHaveLength(1);
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
   await expect(page.locator("#wallet-calls")).toHaveText("1");
 });
 test("failed simulation never opens a wallet request", async ({ page }) => {

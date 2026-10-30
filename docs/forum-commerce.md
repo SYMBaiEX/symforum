@@ -90,6 +90,13 @@ Disabling a switch stops new preparation/wallet requests. Already submitted paym
 
 ## Validation boundary
 
+Client signing failures disclose only fixed validation categories (for example,
+`message_mismatch`, `signature_missing`, `invalid_signature` or `wire_encode`).
+The category appears on the page and in the existing safe diagnostic. It does not
+log signed bytes, signatures, wallet addresses or raw exception/provider bodies.
+Every original message, payer, version, size, canonical-encoding and cryptographic
+check remains mandatory; diagnostics do not authorize fallback, replay or relay.
+
 Local tests cover authorization, queue races/expiry, exact 50/50 burn settlement, replay and wrong-receipt rejection, unknown holds, mint blocking, quote/instruction binding, duplicate funding, exact final simulation, v0/v1 construction, consent and wallet UX. Browser tests use inert fake wallets and block external traffic.
 
 Unsigned mainnet simulations were also checked with the approved public treasury address, SOL → USDC, 0.01 SOL input and the approved platform fee: Jupiter v0, Raydium v0 and Jupiter v1 passed. No transaction was signed, sent, paid or burned. A real finalized user swap and promotion remain separate operating evidence, not something to infer from simulation.
