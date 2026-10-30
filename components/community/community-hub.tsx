@@ -1015,12 +1015,14 @@ function PaymentDialog({
     open = useMutation(api.forumCommunity.markPaymentOpened),
     verify = useAction(api.forumCommunityActions.verifyPayment),
     [signature, setSignature] = useState(""),
+    [handoffReady, setHandoffReady] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const row = live ?? payment;
   useEffect(() => {
     setSignature("");
     setMessage("");
+    setHandoffReady(false);
   }, [payment?.intentId]);
   return (
     <Dialog
@@ -1073,13 +1075,25 @@ function PaymentDialog({
             {row.status === "ready" && (
               <>
                 <p className={styles.muted}>
-                  Use a Solana Pay compatible wallet and the payer account shown
-                  above. Opening is recorded before leaving the forum. Approve
-                  once; do not reopen or send a manual transfer without this
+                  This uses a Solana Pay mobile wallet or a registered solana:
+                  link handler, not the connected browser extension. Confirm
+                  your device can open those links before continuing. The
+                  request is protected before leaving the forum. Approve once;
+                  do not reopen or send a manual transfer without this
                   request&apos;s reference and memo.
                 </p>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={handoffReady}
+                    onChange={(event) => setHandoffReady(event.target.checked)}
+                    className="mt-1"
+                  />
+                  I have a Solana Pay-compatible wallet or link handler on this
+                  device.
+                </label>
                 <Button
-                  disabled={busy}
+                  disabled={busy || !handoffReady}
                   onClick={() => {
                     setBusy(true);
                     setMessage("");
@@ -1087,7 +1101,7 @@ function PaymentDialog({
                       .then((result) => {
                         window.location.assign(result.paymentUrl);
                         setMessage(
-                          "Wallet request opened. Approve once, then verify its transaction signature below.",
+                          "Payment handoff requested. If your wallet opened, approve once and verify its signature below. Do not launch another payment if it did not open.",
                         );
                       })
                       .catch((error) => setMessage(safeMessage(error)))
