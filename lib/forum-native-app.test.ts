@@ -61,7 +61,12 @@ describe("automatic native forum parity", () => {
     );
     for (const route of FORUM_NATIVE_ROUTES)
       expect(imports).toContain(route.source.replace(".tsx", ""));
-    expect(FORUM_NATIVE_ROUTES).toHaveLength(29);
+    expect(FORUM_NATIVE_ROUTES).toHaveLength(31);
+    for (const route of ["trade", "community"])
+      expect(FORUM_NATIVE_ROUTES).toContainEqual({
+        path: `/forum/${route}`,
+        source: `apps/forum/app/forum/${route}/page.tsx`,
+      });
     expect(FORUM_NATIVE_ROUTES).toContainEqual({
       path: "/forum/swap",
       source: "apps/forum/app/forum/swap/page.tsx",

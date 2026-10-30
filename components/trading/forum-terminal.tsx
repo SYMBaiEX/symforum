@@ -120,12 +120,15 @@ function TerminalWorkspace({
           />
         </TerminalBoundary>
         <div className={styles.stack}>
-          <TerminalBoundary key={selected.mint} label="Selected token data">
+          <TerminalBoundary
+            key={`market:${selected.mint}`}
+            label="Selected token data"
+          >
             <TokenDetail token={selected} now={now} />
           </TerminalBoundary>
           {client ? (
             <ConnectedRisk
-              key={selected.mint}
+              key={`risk:${selected.mint}`}
               client={client}
               mint={selected.mint}
               now={now}

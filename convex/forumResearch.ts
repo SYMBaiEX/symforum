@@ -222,8 +222,8 @@ export const quote = mutation({
     ] as const) {
       const held = await ctx.db
         .query("forumResearchIntents")
-        .withIndex("by_wallet_and_state", (q) =>
-          q.eq("wallet", args.wallet).eq("state", state),
+        .withIndex("by_ownerUserId_and_state", (q) =>
+          q.eq("ownerUserId", actor.userId).eq("state", state),
         )
         .first();
       if (held)
@@ -332,15 +332,29 @@ export const listMine = query({
   returns: v.array(receiptValidator),
   handler: async (ctx) => {
     const actor = await commerceActor(ctx);
-    return (
-      await ctx.db
-        .query("forumResearchIntents")
-        .withIndex("by_ownerUserId_and_createdAt", (q) =>
-          q.eq("ownerUserId", actor.userId),
-        )
-        .order("desc")
-        .take(10)
-    ).map(view);
+    const held = (
+      await Promise.all(
+        (["verifying", "settlement_claimed", "unknown"] as const).map((state) =>
+          ctx.db
+            .query("forumResearchIntents")
+            .withIndex("by_ownerUserId_and_state", (q) =>
+              q.eq("ownerUserId", actor.userId).eq("state", state),
+            )
+            .order("desc")
+            .take(10),
+        ),
+      )
+    ).flat();
+    const recent = await ctx.db
+      .query("forumResearchIntents")
+      .withIndex("by_ownerUserId_and_createdAt", (q) =>
+        q.eq("ownerUserId", actor.userId),
+      )
+      .order("desc")
+      .take(10);
+    return [
+      ...new Map([...held, ...recent].map((row) => [row._id, row])).values(),
+    ].map(view);
   },
 });
 export const readIntent = internalQuery({
@@ -396,6 +410,24 @@ export const claimPayment = internalMutation({
       now = Date.now();
     await commerceActor(ctx, row.wallet);
     if (row.state !== "quoted") return false;
+    // One unresolved payment per owner, even across linked wallets. A second
+    // prepared quote is not new authority to bypass a protected receipt.
+    for (const state of [
+      "verifying",
+      "settlement_claimed",
+      "unknown",
+    ] as const) {
+      const held = await ctx.db
+        .query("forumResearchIntents")
+        .withIndex("by_ownerUserId_and_state", (q) =>
+          q.eq("ownerUserId", row.ownerUserId).eq("state", state),
+        )
+        .first();
+      if (held)
+        throw new ConvexError(
+          "A prior research payment is protected. Verify its saved receipt first.",
+        );
+    }
     if (row.expiresAt <= now) {
       await ctx.db.patch("forumResearchIntents", row._id, {
         state: "expired",

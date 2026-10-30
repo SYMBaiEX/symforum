@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { register as registerBetterAuth } from "@convex-dev/better-auth/test";
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
@@ -9,6 +9,9 @@ import { api, components, internal } from "./_generated/api";
 import { IDENTITY_MARKER } from "../lib/identity-config";
 import { COMMUNITY_PAYMENT_TTL_MS } from "../lib/forum-community";
 const modules = import.meta.glob("./**/*.ts");
+beforeEach(() =>
+  vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site"),
+);
 const key = (n: number) =>
   getBase58Decoder().decode(new Uint8Array(32).fill(n));
 const sig = (n: number) =>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ForumTerminal } from "@/components/trading/forum-terminal";
+import { TerminalPage } from "@/components/trading/terminal-page";
 import { forumSiteUrl } from "@/lib/site-urls";
 
 export const metadata: Metadata = {
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function TradePage() {
   return (
     <section className="page-frame page-frame-dense">
-      <ForumTerminal enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
+      <TerminalPage enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
     </section>
   );
 }

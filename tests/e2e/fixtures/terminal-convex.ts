@@ -23,6 +23,7 @@ const subscribe = (fn: () => void) => {
 };
 const snapshot = () => revision;
 let watches: WatchToken[] = [];
+let researchVerified = false;
 const now = Date.now();
 const symf: TerminalMarket = {
   mint: SYMF_TOKEN.mint,
@@ -76,7 +77,30 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   const input = args as Record<string, unknown>;
   const name = getFunctionName(ref);
   let result: unknown;
-  if (name === "forumTerminal:listMarket") {
+  if (name === "forumResearch:getConfig")
+    result = {
+      enabled: true,
+      amountRaw: "100000",
+      asset: "USDC",
+      network: "solana",
+      product: "solana-token-brief-v1",
+      priceLabel: "$0.10 USDC",
+      reason: "ready",
+    };
+  else if (name === "forumResearch:listMine")
+    result = [
+      {
+        intentKey: "a".repeat(64),
+        mint: SYMF_TOKEN.mint,
+        state: researchVerified ? "fulfilled" : "unknown",
+        createdAt: now,
+        expiresAt: now - 1,
+        signature: "2".repeat(88),
+        finalizedAt: researchVerified ? now : null,
+        report: null,
+      },
+    ];
+  else if (name === "forumTerminal:listMarket") {
     const rows = location.search.includes("empty") ? [] : [symf, nova];
     result = {
       markets: rows.filter(
@@ -171,6 +195,15 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
   const name = getFunctionName(ref);
   return useCallback(
     async (_args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> => {
+      if (
+        name === "forumResearchActions:check" &&
+        location.search.includes("research")
+      ) {
+        researchVerified = true;
+        revision++;
+        listeners.forEach((listener) => listener());
+        return true as FunctionReturnType<Ref>;
+      }
       throw new Error(
         `No wallet or RPC action authorized in terminal UI fixture: ${name}`,
       );

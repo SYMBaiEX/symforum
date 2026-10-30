@@ -74,6 +74,32 @@ async function harness(page: Page, scenario = "") {
   return { errors, chartMints };
 }
 
+test("saved research receipt can finalize after reload without repeating settlement", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "research");
+  await expect(
+    page.getByRole("button", { name: "Payment receipt protected" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Verify saved receipt" })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Finalized receipt verified" }),
+  ).toBeVisible();
+  await page
+    .getByText("Your recent research receipts", { exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Open report + receipt" }),
+  ).toHaveAttribute("href", `/api/research/token/${"a".repeat(64)}`);
+  await expect(
+    page.getByRole("button", { name: "Review research export" }),
+  ).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
 for (const width of [390, 1440])
   test(`terminal fits ${width}px and filters actual market cap`, async ({
     page,
@@ -83,7 +109,9 @@ for (const width of [390, 1440])
     await expect(
       page.getByRole("heading", { name: "Research. Discuss. Trade." }),
     ).toBeVisible();
-    await page.getByLabel("Market cap", { exact: true }).selectOption("500k1m");
+    await page
+      .getByRole("combobox", { name: "Market cap", exact: true })
+      .selectOption("500k1m");
     await expect(page.getByRole("button", { name: /View NOVA/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /View SYMF/ })).toHaveCount(
       0,
@@ -92,19 +120,26 @@ for (const width of [390, 1440])
     await expect(
       page.getByRole("heading", { name: "$NOVA", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "$SYMF", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator("#terminal-token-title")).toHaveCount(1);
     await expect(page.getByText(/Stale sampled metrics\./)).toBeVisible();
     await expect(
       page.getByRole("img", { name: /NOVA USD candlestick chart/ }),
     ).toBeVisible();
+    const selectedToken = page.getByRole("region").filter({
+      has: page.getByRole("heading", { name: "$NOVA", exact: true }),
+    });
     await expect(
-      page
+      selectedToken
         .locator("dt")
         .filter({ hasText: /^Market cap$/ })
         .locator("..")
         .locator("dd"),
     ).toHaveText("Unavailable");
     await expect(
-      page
+      selectedToken
         .locator("dt")
         .filter({ hasText: /^FDV$/ })
         .locator("..")
@@ -117,6 +152,10 @@ for (const width of [390, 1440])
       await page.locator("html").evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);
     expect(errors).toEqual([]);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/terminal-${width}.png`,
+      fullPage: true,
+    });
   });
 
 test("private watch updates preserve saved thresholds and protected swaps stay protected", async ({
