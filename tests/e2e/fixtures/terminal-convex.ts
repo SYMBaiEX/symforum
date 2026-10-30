@@ -154,6 +154,25 @@ const missing: TerminalMarket = {
   sourceUrl: "https://user:fixture@example.com/not-public",
 };
 const marketRows = [symf, nova, quiet, missing];
+// A bounded hourly cohort, not a simulated provider or an invented ranking.
+// Display timestamps must retain these source ages even when the UI clock ticks.
+const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
+  (suffix, index) => ({
+    ...symf,
+    mint: `${"1".repeat(31)}${suffix}`,
+    symbol: `FRESH${index + 1}`,
+    name: `Invented hourly observation ${index + 1}`,
+    platform: index < 5 ? "pumpfun" : "bags",
+    observedAt: now,
+    metricsAsOf: now - (index + 1) * 60_000,
+    marketCapUsd: index === 9 ? null : 55_000 + index * 10_000,
+    fdvUsd: 950_000,
+    volume1hUsd: 100_000 - index * 1_000,
+    sourceUrl: `https://example.com/observation/${index + 1}`,
+  }),
+);
+const selectedMarketRows = () =>
+  location.search.includes("currentcohort") ? currentCohort : marketRows;
 export function useConvexAuth() {
   return {
     isAuthenticated: !location.search.includes("guest"),
@@ -212,7 +231,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumTerminal:listMarket") {
-    const rows = location.search.includes("empty") ? [] : marketRows;
+    const rows = location.search.includes("empty") ? [] : selectedMarketRows();
     result = {
       markets: rows.filter(
         (token) =>
@@ -228,7 +247,8 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       band: input.band ?? "all",
     };
   } else if (name === "forumTerminal:getMarket")
-    result = marketRows.find((token) => token.mint === input.mint) ?? null;
+    result =
+      selectedMarketRows().find((token) => token.mint === input.mint) ?? null;
   else if (name === "forumTerminal:getRisk")
     result = location.search.includes("stalerisk")
       ? {
