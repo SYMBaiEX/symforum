@@ -23,6 +23,7 @@ import {
 } from "../lib/forum-commerce";
 import { promotionStatus } from "./forumCommerceSchema";
 import type { PreparedSwap } from "../lib/swap-router";
+import { recordTerminalPromotionReceipt } from "./forumTerminalTransparency";
 import { walletTokenAccount } from "../lib/swap-rpc";
 
 const intentValidator = v.object({
@@ -550,6 +551,7 @@ export const settleReceipt = internalMutation({
     } else {
       const now = Date.now(),
         thread = await publicCommerceThread(ctx, row.threadId);
+      await recordTerminalPromotionReceipt(ctx, row, now);
       if (!thread || thread.categoryId !== row.categoryId)
         await ctx.db.patch("forumPromotionIntents", row._id, {
           status: "held",

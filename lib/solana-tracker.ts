@@ -1,4 +1,9 @@
 import type { TokenPlatform, TokenSnapshot } from "./token-alpha";
+import {
+  MARKET_CAP_BANDS,
+  matchesMarketCap,
+  type MarketCapBand,
+} from "./forum-market-cap";
 
 const API_ORIGIN = "https://data.solanatracker.io";
 const MAX_RESPONSE_BYTES = 1_048_576;
@@ -425,7 +430,10 @@ function rankedSnapshot(
 
 /** Eligible indexed candidates, not a claim of platform-wide ranking coverage. */
 export async function fetchTokenRankings(
-  options: RequestOptions & { platform: TokenPlatform },
+  options: RequestOptions & {
+    platform: TokenPlatform;
+    capBand?: MarketCapBand;
+  },
 ): Promise<TokenSnapshot[]> {
   validateRequest(options);
   if (options.platform !== "bags" && options.platform !== "pumpfun") {
@@ -438,6 +446,18 @@ export async function fetchTokenRankings(
     limit: "30",
     showPriceChanges: "true",
   });
+  // Official search filters: https://docs.solanatracker.io/data-api/search/token-search
+  // The provider maximum may be inclusive; local half-open validation below
+  // prevents boundary overlap and never substitutes fully diluted value.
+  if (options.capBand && options.capBand !== "all") {
+    const band = MARKET_CAP_BANDS.find((b) => b.id === options.capBand);
+    if (!band || band.id === "unknown")
+      throw new SolanaTrackerError("invalid-request");
+    if (band.minimumUsd !== null)
+      params.set("minMarketCap", String(band.minimumUsd));
+    if (band.maximumUsd !== null)
+      params.set("maxMarketCap", String(band.maximumUsd));
+  }
   const response = await requestRanking(`/search?${params}`, options);
   if (response === undefined) return [];
   const result = object(response);
@@ -453,6 +473,9 @@ export async function fetchTokenRankings(
   return result.data
     .map((row) => rankedSnapshot(row, options))
     .filter((row): row is TokenSnapshot => row !== null)
+    .filter((row) =>
+      matchesMarketCap(row.marketCapUsd, options.capBand ?? "all"),
+    )
     .sort(
       (a, b) => b.volume1hUsd! - a.volume1hUsd! || a.mint.localeCompare(b.mint),
     )
@@ -462,7 +485,18 @@ export async function fetchTokenRankings(
       return true;
     })
     .slice(0, 5)
-    .map((row, index) => ({ ...row, sourceRank: index + 1 }));
+    .map((row, index) => ({
+      ...row,
+      sourceRank: index + 1,
+      ...(options.capBand && options.capBand !== "all"
+        ? {
+            warnings: [
+              ...(row.warnings ?? []),
+              `This scan is restricted to the ${MARKET_CAP_BANDS.find((b) => b.id === options.capBand)!.label} market-cap segment; ranks are within that segment.`,
+            ],
+          }
+        : {}),
+    }));
 }
 
 function withWarning(snapshot: TokenSnapshot, warning: string): TokenSnapshot {
