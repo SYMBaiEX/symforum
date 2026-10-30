@@ -59,7 +59,7 @@ test("managed order uses the full input and referral without a second fee transf
     fees: { totalFeeBps: 50, integratorFeeBps: 50, jupiterFeeBps: 0 },
   });
 });
-test("holder waiver omits referral; discloses rather than waives Jupiter's own fee", () => {
+test("historical no-referral order discloses Jupiter's own fee (not offered by new quotes)", () => {
   const waived = { ...request, platformFeeBps: 0 };
   expect(
     new URL(managedOrderUrl(waived, config)).searchParams.has(

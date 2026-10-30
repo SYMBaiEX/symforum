@@ -117,13 +117,11 @@ export function StandaloneSwap({ enabled }: { enabled: boolean }) {
               transaction delivery. We independently verify and simulate the
               transaction before your wallet signs. Execution is not guaranteed.
             </p>
-            <h3>Hold SYMF, skip the platform fee</h3>
+            <h3>Clear fees, before you sign</h3>
             <p>
-              Wallets holding strictly more than $1 of verified SYMF pay no
-              SYMBaiEX swap fee. The managed route’s regular integrator fee is
-              0.50%, including Jupiter’s 20% share of that fee. When our fee is
-              waived, Jupiter’s own quoted fee can still apply. Fees are shown
-              before approval; pool fees, network costs and account rent remain.
+              The managed route’s integrator fee is 0.50% for every wallet,
+              including Jupiter’s 20% share of that fee. Fees are shown before
+              approval; pool fees, network costs and account rent remain.
             </p>
             <h3>Know the mint</h3>
             <p>
@@ -156,7 +154,6 @@ function LiveSwap({
     confirm = useConvexAction(api.forumSwaps.confirm),
     hold = useMutation(api.forumSwaps.markUnknown),
     begin = useMutation(api.forumSwaps.beginWalletRequest);
-  const refresh = useConvexAction(api.forumCommerce.refreshBenefit);
   const mine = useQuery(api.forumSwaps.listMine, isAuthenticated ? {} : "skip");
   const ensureRecovery = useMutation(api.forumSwapRecovery.ensure);
   const registerSigned = useMutation(api.forumSwapSubmission.registerSigned);
@@ -289,10 +286,8 @@ function LiveSwap({
     output = all.find((t) => t.mint === outputMint);
   const feeLabel = (q: Quote) =>
     q.fees
-      ? `${q.platformFeeBps ? `${q.platformFeeBps / 100}% integrator fee (Jupiter share included)` : `SYMBaiEX waived · Jupiter ${q.fees.jupiterFeeBps / 100}%`} · collected in ${all.find((t) => t.mint === q.fees?.feeMint)?.symbol ?? short(q.fees.feeMint)}`
-      : q.platformFeeBps === 0
-        ? "Waived"
-        : `${formatTokenAmount(q.platformFeeRaw, input?.decimals ?? 9)} ${input?.symbol ?? ""} (${q.platformFeeBps / 100}%)`;
+      ? `${q.platformFeeBps / 100}% integrator fee (Jupiter share included) · collected in ${all.find((t) => t.mint === q.fees?.feeMint)?.symbol ?? short(q.fees.feeMint)}`
+      : `${formatTokenAmount(q.platformFeeRaw, input?.decimals ?? 9)} ${input?.symbol ?? ""} (${q.platformFeeBps / 100}%)`;
   let rawAmount = "";
   try {
     if (input) rawAmount = parseTokenAmount(amount, input.decimals);
@@ -561,26 +556,6 @@ function LiveSwap({
           : walletInvoked
             ? `${commerceWalletFailureMessage(reason)} The attempt remains protected; see its verification status below. Do not repeat this swap until its outcome is verified.`
             : "The wallet request could not be authorized. No wallet window was opened. Reload to inspect the saved operation status; nothing is resent automatically.",
-      );
-    }
-  });
-  const benefit = useAction(async () => {
-    if (!connected) return;
-    try {
-      const b = await refresh({
-        wallet: connected.account.address,
-        refresh: true,
-      });
-      setNotice(
-        b.status === "verified"
-          ? b.eligible
-            ? "Holder benefit verified for 60 seconds. Request routes to apply the fee waiver."
-            : "Balance verified: the wallet needs strictly more than $1 of SYMF for the waiver."
-          : "Holder value unavailable. Routes will disclose the regular platform fee before you approve.",
-      );
-    } catch {
-      setError(
-        "Link this wallet in Account Connections before checking benefits, or try later.",
       );
     }
   });
@@ -983,18 +958,11 @@ function LiveSwap({
       {result && (
         <details className="commerce-details commerce-routes">
           <summary>
-            Route and fees ·{" "}
-            {result.platformFeeBps === 0
-              ? "Platform fee waived"
-              : `${result.platformFeeBps / 100}% platform fee`}
+            Route and fees · {`${result.platformFeeBps / 100}% platform fee`}
           </summary>
           <div className="commerce-heading">
             <h3>Route comparison</h3>
-            <span>
-              {result.platformFeeBps === 0
-                ? "Platform fee waived"
-                : `${result.platformFeeBps / 100}% platform fee`}
-            </span>
+            <span>{`${result.platformFeeBps / 100}% platform fee`}</span>
           </div>
           <p>
             Highest quoted output first. Network costs and rent are not part of
@@ -1107,18 +1075,6 @@ function LiveSwap({
           {error}
         </p>
       )}
-      <div className="commerce-benefit">
-        <span>Hold more than $1 of SYMF to waive our swap fee.</span>
-        <Button
-          variant="ghost"
-          disabled={
-            !connected || !isAuthenticated || locked || benefit.isRunning
-          }
-          onClick={() => benefit.dispatch()}
-        >
-          Refresh benefit
-        </Button>
-      </div>
       <ForumLink className="commerce-account" href="/account/connections">
         Manage linked wallets
       </ForumLink>
