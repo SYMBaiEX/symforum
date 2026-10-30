@@ -28,9 +28,9 @@ export type SymfChartData = {
 const positive = z.number().positive();
 const responseSchema = z.object({
   meta: z.object({
-    base: z.object({ address: z.literal(SYMF_TOKEN.mint) }),
+    base: z.object({ address: z.string() }),
     quote: z.object({
-      address: z.literal("So11111111111111111111111111111111111111112"),
+      address: z.string(),
     }),
   }),
   data: z.object({
@@ -52,8 +52,17 @@ const responseSchema = z.object({
   }),
 });
 
-export function parseSymfCandles(value: unknown, now: number): SymfCandle[] {
+export function parseMarketCandles(
+  value: unknown,
+  now: number,
+  expected: { mint: string; quote: string },
+): SymfCandle[] {
   const parsed = responseSchema.parse(value);
+  if (
+    parsed.meta.base.address !== expected.mint ||
+    parsed.meta.quote.address !== expected.quote
+  )
+    throw new Error("wrong_market_token");
   const candles = parsed.data.attributes.ohlcv_list
     .map(([time, open, high, low, close, volume]) => ({
       time,
@@ -76,4 +85,11 @@ export function parseSymfCandles(value: unknown, now: number): SymfCandle[] {
   )
     throw new Error("invalid_market_data");
   return candles;
+}
+
+export function parseSymfCandles(value: unknown, now: number): SymfCandle[] {
+  return parseMarketCandles(value, now, {
+    mint: SYMF_TOKEN.mint,
+    quote: "So11111111111111111111111111111111111111112",
+  });
 }

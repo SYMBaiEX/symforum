@@ -79,6 +79,8 @@ import type * as evidenceWatchlists from "../evidenceWatchlists.js";
 import type * as evidenceWebhookActions from "../evidenceWebhookActions.js";
 import type * as evidenceWebhooks from "../evidenceWebhooks.js";
 import type * as forum from "../forum.js";
+import type * as forumMarketData from "../forumMarketData.js";
+import type * as forumMarketSchema from "../forumMarketSchema.js";
 import type * as forumAgentClaimProvenance from "../forumAgentClaimProvenance.js";
 import type * as forumAgentEditorial from "../forumAgentEditorial.js";
 import type * as forumAgentEditorialData from "../forumAgentEditorialData.js";
@@ -291,6 +293,8 @@ declare const fullApi: ApiFromModules<{
   evidenceWebhookActions: typeof evidenceWebhookActions;
   evidenceWebhooks: typeof evidenceWebhooks;
   forum: typeof forum;
+  forumMarketData: typeof forumMarketData;
+  forumMarketSchema: typeof forumMarketSchema;
   forumAgentClaimProvenance: typeof forumAgentClaimProvenance;
   forumAgentEditorial: typeof forumAgentEditorial;
   forumAgentEditorialData: typeof forumAgentEditorialData;
