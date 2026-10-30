@@ -28,7 +28,7 @@ import { TokenSwap, type TradeToken } from "@/components/swap/token-swap";
 import { Button } from "@/components/ui/button";
 import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 import { forumSiteUrl } from "@/lib/site-urls";
-import { symfChoice, type MarketChoice } from "./market-panel";
+import { symfChoice, type MarketChoice } from "./market-identity";
 import { MarketExplorer } from "./market-explorer";
 import { TokenDetail, RiskPanel } from "./token-detail";
 import { TerminalBoundary } from "./terminal-boundary";

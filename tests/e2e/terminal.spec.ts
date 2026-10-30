@@ -315,6 +315,7 @@ test("market search text clears its search icon and empty filters remain honest"
 test("sample table sorts real market metrics and keeps unknown values last in both directions", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const { errors } = await harness(page, "guest");
   await page.getByRole("tab", { name: "Markets", exact: true }).click();
   const table = page.getByRole("table", {
@@ -330,6 +331,9 @@ test("sample table sorts real market metrics and keeps unknown values last in bo
     "QUIET",
     "UNKNOWN",
   ]);
+  await page.screenshot({
+    path: "tmp/forum-render-tests/terminal-markets-1440.png",
+  });
   await table
     .getByRole("button", { name: "Sort by Market cap", exact: true })
     .click();

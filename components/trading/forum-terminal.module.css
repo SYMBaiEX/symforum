@@ -2,7 +2,7 @@
   --terminal-space: 12px;
   --terminal-panel-radius: 8px;
   --terminal-control-radius: 6px;
-  container: terminal / inline-size;
+  container-type: inline-size;
   display: grid;
   min-width: 0;
   color: hsl(var(--foreground));
@@ -116,7 +116,7 @@
   border-bottom: 1px solid hsl(var(--border));
 }
 .analysis {
-  container: analysis / inline-size;
+  container-type: inline-size;
   min-width: 0;
 }
 .analysis [role="tabpanel"][hidden] {
@@ -827,7 +827,7 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-@container analysis (max-width: 760px) {
+@container (max-width: 760px) {
   .tokenTop {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0 12px;
@@ -838,7 +838,7 @@
     min-height: 36px;
   }
 }
-@container terminal (max-width: 840px) {
+@container (max-width: 840px) {
   .layout,
   .below,
   .utilityGrid {
@@ -864,7 +864,7 @@
     min-height: 480px;
   }
 }
-@container terminal (max-width: 600px) {
+@container (max-width: 600px) {
   .header {
     gap: 0 8px;
   }

@@ -18,15 +18,18 @@ sponsor research/bounties, tips, holder profiles and paid report exports.
 
 ## Verification
 
-- Full unit/backend suite, including archive interface regressions: 4,041 tests
-  across 388 files.
-- Isolated browser suite: 85 tests, including 390/1440px terminal layouts,
+- Full unit/backend suite, including archive interface regressions: 4,077 tests
+  across 392 files.
+- Isolated browser suite: 96 tests, including 390/1440px terminal layouts,
   selected-token replacement, exact chart binding, FDV/cap separation, private
   watches, unknown holds and saved research receipt reconciliation.
   The presentation redesign adds content-first project/research views, empty
   states, creation-dialog focus, section-region relationships, protected
   community receipts, mobile Trade access, search/icon geometry and light/dark
   coverage. These tests block external traffic and use invented records only.
+  The connected-desk pass additionally checks sortable true-cap/null metrics,
+  safe sources, initial-mint links, chart mismatch rejection, mounted chart/order
+  state across tabs, 640px zoom-equivalent reflow and the real forum frame.
 - All five local production builds: platform, forum, blog, news, newsletter.
 - App/Convex types, lint and repeat native artifact checks. Lint retains three
   pre-existing warnings; no schedules were changed to silence them.
@@ -119,6 +122,35 @@ The archive interface follow-up removes Reply/new-promotion invitations from
 archived threads and archived boards from the primary navigation/post picker.
 Existing payment receipt checks, token swaps and author tips remain available;
 the backend's independent archive admission checks are unchanged.
+
+## Connected desk presentation follow-up
+
+The user's Birdeye reference informs composition, not copied branding or data:
+the terminal uses the full available forum work area, a wide chart, persistent
+order column and dense sampled-market table. The old discovery-rail component
+is removed. Initial-mint links now preserve exact identity and malformed links
+fail closed before chart/wallet mounting. Existing metadata remains display-only
+until the original linked-wallet verification path succeeds.
+
+The first browser pass caught named-container identifiers being rewritten
+inconsistently by the native CSS compiler. Unnamed nearest-container rules fix
+mobile stacking without weakening the responsive assertions. Separately, an
+existing 200-wallet test froze only Date.now(), so its authentication sessions
+expired against the advancing Date constructor. Its test clock now freezes both;
+the same 1-admitted/199-rejected assertions and all production code are unchanged.
+
+No new Birdeye subscription, provider endpoint, backend function or environment
+setting is introduced. The same data caps, budgets, original schedules and
+uncertain holds apply. No wallet signing or mainnet settlement is part of this
+presentation verification.
+
+The integrated presentation tree passed 4,077 tests across 392 files, all 96
+browser checks, application and Convex type checks, lint (no errors; three
+existing warnings), secret-scanner negative controls and all five local
+production builds. Browser coverage includes the actual forum-width rules,
+mobile/dark layouts, exact mint intent, accessible tabs, numeric table sorting
+and preservation of mounted order/receipt state. These isolated fixtures do not
+prove a real wallet payment or resumed scout coverage.
 
 ## Payment capability boundaries
 

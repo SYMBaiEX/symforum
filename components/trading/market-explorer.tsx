@@ -16,7 +16,7 @@ import {
   type MarketCapBand,
 } from "@/lib/forum-market-cap";
 import type { TerminalMarket } from "@/lib/forum-terminal-model";
-import { TokenLogo, symfChoice, type MarketChoice } from "./market-panel";
+import { TokenLogo, symfChoice, type MarketChoice } from "./market-identity";
 import { terminalApi } from "./terminal-api";
 import {
   marketMoney,
