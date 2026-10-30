@@ -41,24 +41,44 @@ estimated swap fees are counted.
 
 ## Design assessment
 
-Source-only layout assessment, before implementation: the primary path is
+The primary path is
 token selection, mint/metrics/chart, then the adjacent wallet-approved swap.
 Research/discussion belongs with market context; private balances/history and
 alerts follow below. The existing forum's Geist typography, neutral surfaces,
 magenta selected states and restrained teal chart marks remain unchanged.
 
-The desktop uses a compact discovery rail, flexible chart and trade column.
-At intermediate widths discovery becomes a horizontal list above chart/trade;
-at narrow widths the same DOM order becomes one column. Overflowing history
-and candle tables have named, keyboard-focusable scroll regions. Long mints
-wrap rather than force page width. Native chart drawing has a readable candle
-table alternative. No decorative entrance animations are added.
+The desktop uses a 232px discovery rail, flexible chart and 320–344px trade
+column. At intermediate widths discovery becomes an explicit, closed-by-default
+Markets disclosure above chart/trade; at narrow widths the same DOM order
+becomes one column. A visible Trade link moves focus directly to the order
+panel. The chart is 360px high on desktop and 280px on mobile. Primary price,
+market cap, liquidity, 24h volume and sampled hourly change lead; secondary
+metrics, public sources and exact timestamps remain in Market details. The
+visible status line still labels stale hourly change. Mint facts follow the
+trade panel, without hiding operation receipts. Disclosure children remain
+mounted rather than restarting data or payment components.
+
+Overflowing history and candle tables have named, keyboard-focusable scroll
+regions. Long mints wrap or truncate with a labeled copy control rather than
+force page width. Native chart drawing has a readable candle table alternative.
+No decorative entrance animations are added.
+
+The standalone community route leads with project affiliations or research
+briefs, not disabled creation forms. Deliberate Add project / Create brief
+actions open focused dialogs and restore focus on close. Underlined section
+buttons name their controlled content region. Compact terminal utilities reuse
+the same components, with a single-column support layout and no duplicate page
+header. Empty directories explain how to start without invented project counts
+or activity. Public roles stay explicitly self-declared and research rewards
+stay labeled unfunded sponsor pledges, not escrow. Protected receipts sort
+first and remain reachable from every section; the payment dialog stays at
+the same root, independently of the new metadata-creation dialogs.
 
 Independent mechanical source pass: the referenced Impeccable detector script
 is absent in this checkout. Manual inspection addressed min-width on all grid
 tracks, touch targets, overflow, nested swap-panel padding, table regions,
-consistent 4-unit spacing, and reduced-motion behavior. This source assessment
-is not a claim of rendered/browser verification.
+consistent 4-unit spacing, and reduced-motion behavior. The final release also
+requires rendered browser verification below.
 
 ## Verification ownership
 

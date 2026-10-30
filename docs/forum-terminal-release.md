@@ -20,9 +20,13 @@ sponsor research/bounties, tips, holder profiles and paid report exports.
 
 - Full unit/backend suite, including archive interface regressions: 4,041 tests
   across 388 files.
-- Isolated browser suite: 73 tests, including 390/1440px terminal layouts,
+- Isolated browser suite: 85 tests, including 390/1440px terminal layouts,
   selected-token replacement, exact chart binding, FDV/cap separation, private
   watches, unknown holds and saved research receipt reconciliation.
+  The presentation redesign adds content-first project/research views, empty
+  states, creation-dialog focus, section-region relationships, protected
+  community receipts, mobile Trade access, search/icon geometry and light/dark
+  coverage. These tests block external traffic and use invented records only.
 - All five local production builds: platform, forum, blog, news, newsletter.
 - App/Convex types, lint and repeat native artifact checks. Lint retains three
   pre-existing warnings; no schedules were changed to silence them.
