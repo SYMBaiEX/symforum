@@ -4,16 +4,15 @@ import {
   getBase58Decoder,
   getTransactionDecoder,
   getCompiledTransactionMessageDecoder,
+  getBase64EncodedWireTransaction,
+  isTransactionModifyingSigner,
 } from "@solana/kit";
 import { createIdentityWalletClient } from "./identity-wallet-client";
 import { getWalletAccountFeature } from "@wallet-standard/ui-features";
 import { getWalletAccountForUiWalletAccount } from "@wallet-standard/ui-registry";
-import type {
-  SolanaSignAndSendTransactionFeature,
-  SolanaSignTransactionFeature,
-} from "@solana/wallet-standard-features";
+import type { SolanaSignAndSendTransactionFeature } from "@solana/wallet-standard-features";
 import type { PreparedSwap } from "./swap-router";
-import { inspectSignedSwap, signedBytesToBase64 } from "./swap-signed-wire";
+import { inspectSignedSwap } from "./swap-signed-wire";
 
 export function createCommerceWalletClient() {
   return createIdentityWalletClient();
@@ -22,8 +21,10 @@ export type CommerceWalletClient = ReturnType<
   typeof createCommerceWalletClient
 >;
 export type ReviewedTransaction = PreparedSwap & { wallet: string };
-type WalletFailurePhase = "account" | "feature" | "request" | "response";
-type WalletResponseIssue = "result_count" | "signature_bytes" | null;
+type WalletFailurePhase =
+  "account" | "feature" | "request" | "response" | "validation";
+type WalletResponseIssue =
+  "result_count" | "signature_bytes" | "signed_binding" | null;
 
 /** Capability of the actual send feature, not another sign-only feature. No wallet request. */
 export function supportsCommerceTransaction(
@@ -78,46 +79,36 @@ export async function signReviewedSwap(
     !current.account.chains.includes("solana:mainnet")
   )
     throw new CommerceWalletRequestError("account");
-  let feature: SolanaSignTransactionFeature["solana:signTransaction"],
-    account: ReturnType<typeof getWalletAccountForUiWalletAccount>;
+  // Use the maintained Kit wallet signer rather than reconstructing the Wallet
+  // Standard feature request here. Explicitly choose sign-only, never Kit's
+  // sign-and-send helper or a wallet-specific injected provider.
+  if (
+    !current.signer ||
+    !isTransactionModifyingSigner(current.signer) ||
+    !supportsCommerceTransaction(client, prepared.transactionVersion, true)
+  )
+    throw new CommerceWalletRequestError("feature");
+  let result: Awaited<
+    ReturnType<typeof current.signer.modifyAndSignTransactions>
+  >;
   try {
-    feature = getWalletAccountFeature(
-      current.account,
-      "solana:signTransaction",
-    ) as typeof feature;
-    account = getWalletAccountForUiWalletAccount(current.account);
-    if (
-      !feature.supportedTransactionVersions.includes(
-        prepared.transactionVersion,
-      )
-    )
-      throw Error("Unsupported signing version");
-  } catch (error) {
-    throw new CommerceWalletRequestError("feature", error);
-  }
-  let result: unknown;
-  try {
-    result = await feature.signTransaction({
-      account,
-      chain: "solana:mainnet",
-      transaction: Uint8Array.from(
+    result = await current.signer.modifyAndSignTransactions([
+      getTransactionDecoder().decode(
         getBase64Encoder().encode(prepared.transactionBase64),
       ),
-      options: {
-        preflightCommitment: "confirmed",
-        minContextSlot: prepared.simulationSlot,
-      },
-    });
+    ]);
   } catch (error) {
     throw new CommerceWalletRequestError("request", error);
   }
   if (!Array.isArray(result) || result.length !== 1)
     throw new CommerceWalletRequestError("response", undefined, "result_count");
-  const signedTransactionBase64 = signedBytesToBase64(
-    result[0]?.signedTransaction,
-  );
-  const binding = await inspectSignedSwap(signedTransactionBase64, prepared);
-  return { ...binding, signedTransactionBase64 };
+  try {
+    const signedTransactionBase64 = getBase64EncodedWireTransaction(result[0]);
+    const binding = await inspectSignedSwap(signedTransactionBase64, prepared);
+    return { ...binding, signedTransactionBase64 };
+  } catch (error) {
+    throw new CommerceWalletRequestError("validation", error, "signed_binding");
+  }
 }
 
 export function commerceWalletFailureMessage(error: unknown) {

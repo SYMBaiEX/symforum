@@ -80,9 +80,12 @@ export function commerceConfig(values: {
   FORUM_PROMOTION_DURATION_HOURS?: string;
   FORUM_COMMERCE_RPC_URL?: string;
   JUPITER_API_KEY?: string;
+  JUPITER_REFERRAL_ACCOUNT?: string;
+  FORUM_SWAP_MANAGED_ENABLED?: string;
+  FORUM_SWAP_SIGNATURE_FIRST_ENABLED?: string;
 }) {
   const treasury = values.FORUM_COMMERCE_TREASURY?.trim() ?? "";
-  const fee = integer(values.FORUM_PLATFORM_FEE_BPS, 25, 0, 100);
+  const fee = integer(values.FORUM_PLATFORM_FEE_BPS, 50, 0, 100);
   const hours = integer(values.FORUM_PROMOTION_DURATION_HOURS, 24, 1, 168);
   let promotionAmountRaw = values.FORUM_PROMOTION_AMOUNT_RAW ?? "10000000000";
   try {
@@ -114,11 +117,21 @@ export function commerceConfig(values: {
     fee !== null &&
     hours !== null &&
     promotionAmountRaw !== "";
+  const managed = values.FORUM_SWAP_MANAGED_ENABLED === "true";
+  const managedReady =
+    !managed ||
+    (fee === 50 &&
+      Boolean(values.JUPITER_API_KEY) &&
+      isSolanaAddress(values.JUPITER_REFERRAL_ACCOUNT ?? "") &&
+      values.FORUM_SWAP_SIGNATURE_FIRST_ENABLED === "true");
   return {
-    swapsEnabled: values.FORUM_SWAPS_ENABLED === "true" && ready,
+    swapsEnabled:
+      values.FORUM_SWAPS_ENABLED === "true" && ready && managedReady,
     promotionsEnabled: values.FORUM_PROMOTIONS_ENABLED === "true" && ready,
     treasury: isSolanaAddress(treasury) ? treasury : null,
-    platformFeeBps: fee ?? 25,
+    platformFeeBps: fee ?? 50,
+    managedEnabled: managed,
+    referralAccount: values.JUPITER_REFERRAL_ACCOUNT,
     promotionAmountRaw: promotionAmountRaw || "10000000000",
     promotionDurationMs: (hours ?? 24) * 3_600_000,
     promotionBurnBps: 5000,

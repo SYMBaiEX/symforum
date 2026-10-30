@@ -5,6 +5,12 @@ type Preview = {
   minimumOutputAmountRaw: string;
   platformFeeRaw: string;
   platformFeeBps: number;
+  fees?: {
+    feeMint: string;
+    totalFeeBps: number;
+    integratorFeeBps: number;
+    jupiterFeeBps: number;
+  };
 };
 
 /** Refresh may improve execution, never silently worsen the user's protected floor or fee. */
@@ -15,6 +21,8 @@ export function refreshedQuoteNeedsReview(previous: Preview, next: Preview) {
     previous.amountRaw !== next.amountRaw ||
     previous.platformFeeBps !== next.platformFeeBps ||
     previous.platformFeeRaw !== next.platformFeeRaw ||
+    JSON.stringify(previous.fees ?? null) !==
+      JSON.stringify(next.fees ?? null) ||
     BigInt(next.minimumOutputAmountRaw) <
       BigInt(previous.minimumOutputAmountRaw)
   );

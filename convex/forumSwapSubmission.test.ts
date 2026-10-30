@@ -405,3 +405,67 @@ test("signature-first switch fails closed while historical receipt/recovery rema
     }),
   ).rejects.toThrow("Refresh the page");
 });
+
+test("managed execute is bound to the saved order, invoked once, and never uses sendTransaction", async () => {
+  const x = await fixture();
+  vi.stubEnv("FORUM_SWAP_MANAGED_ENABLED", "true");
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "50");
+  vi.stubEnv("JUPITER_API_KEY", "fixture");
+  vi.stubEnv("JUPITER_REFERRAL_ACCOUNT", x.f.wallet);
+  await x.t.run((ctx) =>
+    ctx.db.patch("forumSwapQuotes", x.quoteId, {
+      execution: "jupiter-managed",
+      platformFeeBps: 50,
+      quoteJson: JSON.stringify({
+        execution: "jupiter-managed",
+        opaque: { requestId: "saved-managed-order" },
+      }),
+    }),
+  );
+  const fetcher = vi.fn(async () =>
+    Response.json({
+      status: "Success",
+      code: 0,
+      signature: x.binding.signature,
+    }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  await x.client.mutation(api.forumSwapSubmission.registerSigned, x.args);
+  await Promise.all([
+    x.client.action(api.forumSwapSubmission.relay, x.args),
+    x.client.action(api.forumSwapSubmission.relay, x.args),
+  ]);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher).toHaveBeenCalledWith(
+    "https://api.jup.ag/swap/v2/execute",
+    expect.objectContaining({
+      body: JSON.stringify({
+        requestId: "saved-managed-order",
+        signedTransaction: x.args.signedTransactionBase64,
+      }),
+    }),
+  );
+  const row = await x.t.run((ctx) => ctx.db.get("forumSwapQuotes", x.quoteId));
+  expect(row?.status).toBe("submitted"); // Managed API success is not a finalized independent receipt.
+  expect((await x.ledger())?.rpcState).toBe("accepted");
+  expect(
+    await x.client.mutation(api.forumSwapSubmission.cancelUnsubmitted, {
+      quoteId: x.quoteId,
+    }),
+  ).toBe(false);
+});
+
+test("activation cannot convert an old prepared transaction into a managed order", async () => {
+  const x = await fixture();
+  vi.stubEnv("FORUM_SWAP_MANAGED_ENABLED", "true");
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "50");
+  vi.stubEnv("JUPITER_API_KEY", "fixture");
+  vi.stubEnv("JUPITER_REFERRAL_ACCOUNT", x.f.wallet);
+  await expect(
+    x.client.mutation(api.forumSwapSubmission.registerSigned, x.args),
+  ).rejects.toThrow("unavailable");
+  expect(await x.ledger()).toBeNull();
+  expect(
+    (await x.t.run((ctx) => ctx.db.get("forumSwapQuotes", x.quoteId)))?.status,
+  ).toBe("prepared");
+});

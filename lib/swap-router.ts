@@ -21,6 +21,8 @@ export type SwapRouterConfig = {
   treasury: string | null;
 };
 export type SwapRouteQuote = {
+  execution?: "jupiter-managed";
+  fees?: import("./jupiter-managed").ManagedFees;
   id: string;
   provider: SwapProvider;
   request: SwapRequest;
@@ -83,11 +85,12 @@ export async function providerJson(
   url: string,
   fetcher: typeof fetch = fetch,
   init: RequestInit = {},
+  timeoutMs = 8_000,
 ): Promise<Record<string, unknown>> {
   const response = await fetcher(url, {
     ...init,
     redirect: "error",
-    signal: AbortSignal.timeout(8_000),
+    signal: AbortSignal.timeout(Math.min(30_000, timeoutMs)),
   });
   if (!response.ok)
     throw new Error(

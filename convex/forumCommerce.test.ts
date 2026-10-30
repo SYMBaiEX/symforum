@@ -138,6 +138,7 @@ test("200 independent wallets get bounded admission while provider and daily cap
   ).rejects.toThrow("Routing is busy");
 });
 test("cached quotes stay wallet-owned, preserve expiry and stop being reusable after preparation", async () => {
+  vi.stubEnv("FORUM_PLATFORM_FEE_BPS", "25"); // Historical non-managed fixture.
   const t = setup(),
     a = await actor(t, 202),
     other = await actor(t, 203),

@@ -21,6 +21,7 @@ import {
 } from "../lib/swap-preparation-errors";
 import { verifiedMint } from "../lib/swap-rpc";
 import { SOL_MINT } from "../lib/swap-router";
+import { getManagedOrder } from "../lib/jupiter-managed";
 import {
   queueSwapRecovery,
   recoveryView,
@@ -45,6 +46,15 @@ const statusValidator = v.union(
   v.literal("failed"),
 );
 const routeValidator = v.object({
+  execution: v.optional(v.literal("jupiter-managed")),
+  fees: v.optional(
+    v.object({
+      feeMint: v.string(),
+      totalFeeBps: v.number(),
+      integratorFeeBps: v.number(),
+      jupiterFeeBps: v.number(),
+    }),
+  ),
   quoteId: v.id("forumSwapQuotes"),
   provider: providerValidator,
   inputMint: v.string(),
@@ -72,6 +82,7 @@ const preparedValidator = v.object({
 function routeView(row: Doc<"forumSwapQuotes">) {
   const q = JSON.parse(row.quoteJson) as SwapRouteQuote;
   return {
+    ...(row.execution ? { execution: row.execution, fees: q.fees } : {}),
     quoteId: row._id,
     provider: q.provider,
     inputMint: q.request.inputMint,
@@ -153,11 +164,16 @@ export const quote = action({
         cost: 2,
         jupiter: true,
       });
-      const result = await collectSwapQuotes(request, {
-        rpcUrl: config.rpcUrl,
-        jupiterApiKey: config.jupiterApiKey,
-        treasury: config.treasury,
-      });
+      const result = config.managedEnabled
+        ? {
+            quotes: [await getManagedOrder(request, config)],
+            failures: [],
+          }
+        : await collectSwapQuotes(request, {
+            rpcUrl: config.rpcUrl,
+            jupiterApiKey: config.jupiterApiKey,
+            treasury: config.treasury,
+          });
       const quotes = await ctx.runMutation(internal.forumSwaps.saveQuotes, {
         wallet: args.wallet,
         quotesJson: JSON.stringify(result.quotes),
@@ -239,6 +255,8 @@ export const claimQuoteRequest = internalMutation({
       args.supportsV1 === true,
       config.treasury,
       config.platformFeeBps,
+      config.managedEnabled,
+      config.referralAccount ?? null,
     ]);
     const row = await ctx.db
       .query("forumSwapRequests")
@@ -401,6 +419,7 @@ export const saveQuotes = internalMutation({
         userId: actor.userId,
         wallet,
         provider: quote.provider,
+        ...(quote.execution ? { execution: quote.execution } : {}),
         quoteJson: JSON.stringify(quote),
         treasury: config.treasury,
         createdAt: now,
@@ -432,6 +451,7 @@ export const consumeQuote = internalMutation({
     if (
       !config.swapsEnabled ||
       config.treasury !== row.treasury ||
+      config.managedEnabled !== (row.execution === "jupiter-managed") ||
       row.status !== "quoted" ||
       row.expiresAt <= Date.now()
     )
@@ -635,13 +655,13 @@ export const rpcHealthCheck = internalAction({
   },
 });
 export const reserveUnsignedDiagnostic = internalMutation({
-  args: {},
+  args: { managed: v.optional(v.literal(true)) },
   returns: v.boolean(),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const once = await commerceLimiter.limit(
       ctx,
       "commerceUnsignedDiagnostic",
-      { key: "operator-node-v1" },
+      { key: args.managed ? "operator-managed-order-v1" : "operator-node-v1" },
     );
     if (!once.ok) return false;
     const provider = await commerceLimiter.limit(

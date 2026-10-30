@@ -105,6 +105,8 @@ function prepared() {
   };
 }
 async function harness(page: Page, query = "") {
+  const managed = query.includes("managed");
+  const feeBps = managed ? (query.includes("waived") ? 0 : 50) : 25;
   const signed = query.includes("signaturefirst")
     ? await signedSwapFixture(0)
     : null;
@@ -226,28 +228,39 @@ async function harness(page: Page, query = "") {
           {
             quoteId: "quote-fixture",
             provider: "jupiter",
+            ...(managed
+              ? {
+                  execution: "jupiter-managed",
+                  fees: {
+                    feeMint: input.inputMint,
+                    totalFeeBps: feeBps || 10,
+                    integratorFeeBps: feeBps,
+                    jupiterFeeBps: feeBps ? 0 : 10,
+                  },
+                }
+              : {}),
             inputMint: input.inputMint,
             outputMint: input.outputMint,
             amountRaw: input.amountRaw,
             swapAmountRaw: (
-              (BigInt(input.amountRaw) * 9975n) /
+              (BigInt(input.amountRaw) * (managed ? 10000n : 9975n)) /
               10000n
             ).toString(),
             platformFeeRaw: (
-              (BigInt(input.amountRaw) * 25n) /
+              (BigInt(input.amountRaw) * BigInt(feeBps)) /
               10000n
             ).toString(),
             outputAmountRaw: changed ? "800000" : "1000000",
             minimumOutputAmountRaw: changed ? "796000" : "995000",
             priceImpactBps: query.includes("highimpact") ? 200 : 1,
-            platformFeeBps: 25,
+            platformFeeBps: feeBps,
             routeLabels: ["Pool"],
             expiresAt: (await page.evaluate(() => Date.now())) + 120000,
           },
         ],
         failures: [],
-        platformFeeBps: 25,
-        benefitEligible: false,
+        platformFeeBps: feeBps,
+        benefitEligible: feeBps === 0,
         benefitStatus: "verified",
       };
     } else if (name === "forumSwaps:prepare")
@@ -395,7 +408,9 @@ test("one Swap click -> simulation -> one wallet approval -> finalized receipt",
   ).toBeVisible();
   await page.getByText("Transaction details", { exact: true }).click();
   await expect(
-    page.locator(".commerce-review").getByText("0.000025 SOL", { exact: true }),
+    page
+      .locator(".commerce-review")
+      .getByText("0.000025 SOL (0.25%)", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Approve in wallet" }),
@@ -412,6 +427,34 @@ test("one Swap click -> simulation -> one wallet approval -> finalized receipt",
     requests.indexOf("forumSwaps:confirm"),
   );
 });
+for (const waived of [false, true])
+  test(`managed fee disclosure (${waived ? "holder waiver" : "50 bps"}) and SDK sign-only completion`, async ({
+    page,
+  }) => {
+    const requests = await harness(
+      page,
+      `?authorized&signaturefirst&managed${waived ? "&waived" : ""}&hideaftersign`,
+    );
+    await page.getByLabel("You pay", { exact: true }).fill(".01");
+    await expect(
+      page.getByText(
+        waived
+          ? /SYMBaiEX waived · Jupiter 0.1%/
+          : /0.5% integrator fee \(Jupiter share included\)/,
+      ),
+    ).toBeVisible();
+    await expect(page.locator("#wallet-calls")).toHaveText("0");
+    await reviewSwap(page);
+    await expect(
+      page.getByText("Swap finalized.", { exact: false }),
+    ).toBeVisible();
+    expect(
+      requests.filter((x) => x === "forumSwapSubmission:relay"),
+    ).toHaveLength(1);
+    expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+    expect(requests).not.toContain("forumSwaps:confirm");
+    await expect(page.locator("#wallet-calls")).toHaveText("1");
+  });
 test("failed simulation never opens a wallet request", async ({ page }) => {
   const requests = await harness(page, "?simulatefail");
   await connect(page);

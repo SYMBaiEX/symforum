@@ -14,6 +14,8 @@ import { commerceConfig } from "../lib/forum-commerce";
 import { inspectSignedSwap } from "../lib/swap-signed-wire";
 import { swapRpc } from "../lib/swap-rpc";
 import { queueSwapRecovery } from "./forumSwapRecovery";
+import { executeManagedOrder } from "../lib/jupiter-managed";
+import type { SwapRouteQuote } from "../lib/swap-router";
 
 const receipt = v.object({
   quoteId: v.id("forumSwapQuotes"),
@@ -25,7 +27,8 @@ function available(row: Doc<"forumSwapQuotes">) {
     env.FORUM_SWAP_SIGNATURE_FIRST_ENABLED !== "true" ||
     env.FORUM_SWAP_AUTORECOVERY_ENABLED !== "true" ||
     !c.swapsEnabled ||
-    c.treasury !== row.treasury
+    c.treasury !== row.treasury ||
+    c.managedEnabled !== (row.execution === "jupiter-managed")
   )
     throw new ConvexError("Signature-first swaps are unavailable.");
   return c;
@@ -212,6 +215,7 @@ export const claimRelay = internalMutation({
     await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
       wallet: row.wallet,
       cost: 1,
+      ...(row.execution === "jupiter-managed" ? { jupiter: true } : {}),
     });
     await ctx.db.patch("forumSwapSubmissions", job._id, {
       attemptedAt: Date.now(),
@@ -267,7 +271,8 @@ export const relay = action({
         "Signed transaction binding could not be verified.",
       );
     }
-    if (!c.rpcUrl) throw new ConvexError("Submission endpoint unavailable.");
+    if (!c.rpcUrl || (row.execution === "jupiter-managed" && !c.jupiterApiKey))
+      throw new ConvexError("Submission endpoint unavailable.");
     const url = new URL(c.rpcUrl);
     if (
       url.protocol !== "https:" ||
@@ -277,6 +282,19 @@ export const relay = action({
       url.password
     )
       throw new ConvexError("Submission endpoint unavailable.");
+    let managedOrderId: string | undefined;
+    if (row.execution === "jupiter-managed") {
+      const quote = JSON.parse(row.quoteJson) as SwapRouteQuote;
+      if (
+        quote.execution !== row.execution ||
+        typeof quote.opaque.requestId !== "string" ||
+        !/^[A-Za-z0-9_-]{1,150}$/.test(quote.opaque.requestId)
+      )
+        throw new ConvexError(
+          "Saved Jupiter order binding missing. Nothing was submitted.",
+        );
+      managedOrderId = quote.opaque.requestId;
+    }
     const allowed: boolean = await ctx.runMutation(
       internal.forumSwapSubmission.claimRelay,
       {
@@ -288,17 +306,29 @@ export const relay = action({
     if (allowed) {
       let accepted = false;
       try {
-        const result = await swapRpc<string>(c.rpcUrl, "sendTransaction", [
-          args.signedTransactionBase64,
-          {
-            encoding: "base64",
-            skipPreflight: false,
-            maxRetries: 0,
-            preflightCommitment: "confirmed",
-            minContextSlot: row.simulationSlot,
-          },
-        ]);
-        accepted = result === signed.signature;
+        if (row.execution === "jupiter-managed") {
+          const result = await executeManagedOrder(
+            managedOrderId!,
+            args.signedTransactionBase64,
+            c.jupiterApiKey!,
+          );
+          accepted =
+            result.status === "Success" &&
+            result.code === 0 &&
+            result.signature === signed.signature;
+        } else {
+          const result = await swapRpc<string>(c.rpcUrl, "sendTransaction", [
+            args.signedTransactionBase64,
+            {
+              encoding: "base64",
+              skipPreflight: false,
+              maxRetries: 0,
+              preflightCommitment: "confirmed",
+              minContextSlot: row.simulationSlot,
+            },
+          ]);
+          accepted = result === signed.signature;
+        }
       } catch {
         /* Known signature survives every RPC error; never resend or log bearer bytes. */
       }
