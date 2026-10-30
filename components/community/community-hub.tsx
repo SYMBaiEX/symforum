@@ -1,9 +1,23 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ExternalLink, Heart, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpRight,
+  ExternalLink,
+  Heart,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -109,19 +123,29 @@ function CommunityContent({
   const [section, setSection] = useState<Section>("projects"),
     [payment, setPayment] = useState<Payment | null>(null);
   const client = useCommerceWallet();
+  const contentId = useId();
+  const sectionLabels = {
+    projects: "Project hubs",
+    work: "Bounties & research",
+    support: "Tips & holder profile",
+    receipts: "Your receipts",
+  };
   return (
-    <div className={styles.hub}>
+    <div className={`${styles.hub} ${compact ? styles.compact : ""}`}>
       {!compact && (
         <header className={styles.header}>
           <div>
-            <h1>Build with the community</h1>
+            <span className={styles.eyebrow}>SYMBaiEX / Community</span>
+            <h1>Community utilities</h1>
             <p>
-              Find a project, publish a research brief or reward a contributor.
-              Project affiliations are self-declared; rewards are sponsor-funded
-              pledges, not escrow.
+              Meet the builders. Commission useful work. Support the people
+              behind the posts.
             </p>
           </div>
-          <CommerceWalletButton requiredFeature="solana:signTransaction" />
+          <div className={styles.wallet}>
+            <span className={styles.eyebrow}>Your community wallet</span>
+            <CommerceWalletButton requiredFeature="solana:signTransaction" />
+          </div>
         </header>
       )}
       <nav className={styles.nav} aria-label="Community utilities">
@@ -135,22 +159,36 @@ function CommunityContent({
         ).map(([id, label]) => (
           <Button
             key={id}
-            variant="outline"
+            variant="ghost"
             aria-pressed={section === id}
+            aria-controls={contentId}
             onClick={() => setSection(id)}
           >
             {label}
           </Button>
         ))}
       </nav>
-      {section === "projects" && <Projects mint={mint} client={client} />}
-      {section === "work" && (
-        <WorkBoard mint={mint} client={client} onPayment={setPayment} />
-      )}
-      {section === "support" && (
-        <Support client={client} onPayment={setPayment} />
-      )}
-      {section === "receipts" && <Receipts onPayment={setPayment} />}
+      <div id={contentId} role="region" aria-label={sectionLabels[section]}>
+        {section === "projects" && <Projects mint={mint} client={client} />}
+        {section === "work" && (
+          <WorkBoard mint={mint} client={client} onPayment={setPayment} />
+        )}
+        {section === "support" && (
+          <Support client={client} onPayment={setPayment} />
+        )}
+        {section === "receipts" && <Receipts onPayment={setPayment} />}
+      </div>
+      <p className={styles.safetyNote}>
+        <ShieldCheck size={15} aria-hidden="true" />
+        <span>
+          Have an unresolved payment?{" "}
+          <button type="button" onClick={() => setSection("receipts")}>
+            Open your receipts
+          </button>{" "}
+          to check the same attempt. Never pay again to resolve a missing
+          receipt.
+        </span>
+      </p>
       <PaymentDialog payment={payment} onClose={() => setPayment(null)} />
     </div>
   );
@@ -163,41 +201,71 @@ function Projects({
   client: CommerceWalletClient | null;
 }) {
   const projects = useQuery(api.forumCommunity.listProjects, { mint });
+  const [creating, setCreating] = useState(false);
+  const creationTrigger = useRef<HTMLButtonElement | null>(null);
+  function openCreation(event: MouseEvent<HTMLButtonElement>) {
+    creationTrigger.current = event.currentTarget;
+    setCreating(true);
+  }
   return (
-    <div className={styles.columns}>
+    <div className={styles.directory}>
       <section className={styles.panel}>
-        <h2>Project hubs</h2>
-        <p className={styles.muted}>
-          One hub per exact mint. A linked wallet proves an account controls
-          that wallet, not that a project is safe or that its claimed role is
-          verified.
-        </p>
+        <div className={styles.sectionHeading}>
+          <div>
+            <h2>Project hubs</h2>
+            <p className={styles.muted}>
+              An exact-mint directory of projects and their contributors.
+            </p>
+          </div>
+          <Button onClick={openCreation}>
+            <Plus aria-hidden="true" /> Add project
+          </Button>
+        </div>
         <div className={styles.list}>
           {projects === undefined ? (
-            <p className={styles.empty}>Loading project hubs…</p>
-          ) : !projects.length ? (
-            <p className={styles.empty}>
-              No hub for this mint yet. Add your affiliation and introduce what
-              you are building.
+            <p className={styles.empty} role="status">
+              Loading project hubs…
             </p>
+          ) : !projects.length ? (
+            <div className={styles.empty}>
+              <span className={styles.eyebrow}>Project directory</span>
+              <h3>
+                {mint
+                  ? "This mint has no project hub yet."
+                  : "The next project starts here."}
+              </h3>
+              <p>
+                Introduce what you are building, add an exact Solana mint and
+                make your role clear to the community.
+              </p>
+              <Button variant="outline" onClick={openCreation}>
+                Add the first affiliation <ArrowUpRight aria-hidden="true" />
+              </Button>
+            </div>
           ) : (
             projects.map((project) => (
               <article className={styles.item} key={project.projectId}>
-                <h3>
-                  {project.name}{" "}
-                  <span className={styles.muted}>{project.symbol}</span>
-                </h3>
-                <code className={styles.address}>{project.mint}</code>
-                <a
-                  className={styles.link}
-                  href={forumSiteUrl(
-                    `/trade?mint=${encodeURIComponent(project.mint)}`,
-                  )}
-                >
-                  View market and discussion
-                </a>
+                <div className={styles.rowHeading}>
+                  <h3>
+                    {project.name}{" "}
+                    <span className={styles.symbol}>{project.symbol}</span>
+                  </h3>
+                  <a
+                    className={styles.rowLink}
+                    href={forumSiteUrl(
+                      `/trade?mint=${encodeURIComponent(project.mint)}`,
+                    )}
+                  >
+                    Market & discussion{" "}
+                    <ArrowUpRight size={15} aria-hidden="true" />
+                  </a>
+                </div>
+                <div className={styles.mintLine}>
+                  <span>Mint</span>
+                  <code>{project.mint}</code>
+                </div>
                 {project.claims.map((claim) => (
-                  <div className={styles.details} key={claim.userId}>
+                  <div className={styles.claim} key={claim.userId}>
                     <div className={styles.meta}>
                       <strong>@{claim.username}</strong>
                       <span>{claim.role}</span>
@@ -222,13 +290,36 @@ function Projects({
           )}
         </div>
       </section>
-      <section className={styles.panel}>
-        {client ? (
-          <ProjectForm mint={mint} client={client} />
-        ) : (
-          <p className={styles.muted}>Loading wallet…</p>
-        )}
-      </section>
+      <aside className={styles.contextNote}>
+        <ShieldCheck size={18} aria-hidden="true" />
+        <div>
+          <strong>Identity is not endorsement.</strong>
+          <p>
+            Affiliations are self-declared. A linked wallet proves wallet
+            control, not project ownership or safety. Always verify the exact
+            mint.
+          </p>
+        </div>
+      </aside>
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent
+          data-surface="forum"
+          className={styles.creationDialog}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            creationTrigger.current?.focus();
+          }}
+        >
+          {client ? (
+            <ProjectForm mint={mint} client={client} />
+          ) : (
+            <DialogHeader>
+              <DialogTitle>Introduce your project</DialogTitle>
+              <DialogDescription>Loading wallet…</DialogDescription>
+            </DialogHeader>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -244,6 +335,7 @@ function ProjectForm({
     claim = useMutation(api.forumCommunity.createProjectClaim),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const requirementId = useId();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget,
@@ -273,11 +365,13 @@ function ProjectForm({
   }
   return (
     <>
-      <h2>Introduce your project</h2>
-      <p className={styles.muted}>
-        Your linked wallet is recorded privately with your claim. Your handle,
-        role, description and website are public.
-      </p>
+      <DialogHeader>
+        <DialogTitle>Introduce your project</DialogTitle>
+        <DialogDescription>
+          Your linked wallet is recorded privately with your claim. Your handle,
+          role, description and website are public.
+        </DialogDescription>
+      </DialogHeader>
       <div className={styles.actions}>
         <CommerceWalletButton requiredFeature="solana:signTransaction" />
       </div>
@@ -315,7 +409,17 @@ function ProjectForm({
             maxLength={1000}
           />
         </Field>
-        <Button disabled={busy || !identity.linked} type="submit">
+        {!identity.linked && (
+          <p id={requirementId} className={styles.status}>
+            Sign in and link the selected wallet to your account before saving a
+            public affiliation.
+          </p>
+        )}
+        <Button
+          disabled={busy || !identity.linked}
+          type="submit"
+          aria-describedby={!identity.linked ? requirementId : undefined}
+        >
           {busy ? "Checking mint…" : "Save public affiliation"}
         </Button>
         {message && (
@@ -340,20 +444,32 @@ function WorkBoard({
       "open" | "selected" | "paid" | "cancelled"
     >("open"),
     works = useQuery(api.forumCommunity.listBounties, { mint, status });
+  const [creating, setCreating] = useState(false);
+  const creationTrigger = useRef<HTMLButtonElement | null>(null);
+  function openCreation(event: MouseEvent<HTMLButtonElement>) {
+    creationTrigger.current = event.currentTarget;
+    setCreating(true);
+  }
   return (
-    <div className={styles.columns}>
+    <div className={styles.directory}>
       <section className={styles.panel}>
-        <h2>Bounties and research requests</h2>
-        <p className={styles.muted}>
-          Amounts are unfunded sponsor pledges. Submit a deliverable; the
-          sponsor chooses a submission and approves the exact reward in their
-          wallet. Only finalized receipts are labelled paid.
-        </p>
-        <div className={styles.actions}>
+        <div className={styles.sectionHeading}>
+          <div>
+            <h2>Bounties and research requests</h2>
+            <p className={styles.muted}>
+              Useful briefs, clear deliverables and direct contributor rewards.
+            </p>
+          </div>
+          <Button onClick={openCreation}>
+            <Plus aria-hidden="true" /> Create brief
+          </Button>
+        </div>
+        <div className={styles.filters} aria-label="Filter community work">
           {(["open", "selected", "paid"] as const).map((s) => (
             <Button
               key={s}
               variant={status === s ? "secondary" : "ghost"}
+              aria-pressed={status === s}
               onClick={() => setStatus(s)}
             >
               {s === "selected"
@@ -364,14 +480,36 @@ function WorkBoard({
             </Button>
           ))}
         </div>
-        <div className={`${styles.list} ${styles.details}`}>
+        <div className={styles.list}>
           {works === undefined ? (
-            <p className={styles.empty}>Loading community work…</p>
-          ) : !works.length ? (
-            <p className={styles.empty}>
-              No {status === "selected" ? "selected" : status} pledges here.
-              Publish a specific task with clear acceptance criteria.
+            <p className={styles.empty} role="status">
+              Loading community work…
             </p>
+          ) : !works.length ? (
+            <div className={styles.empty}>
+              <span className={styles.eyebrow}>
+                {status === "selected"
+                  ? "Awaiting payment"
+                  : status === "paid"
+                    ? "Verified payments"
+                    : "Open briefs"}
+              </span>
+              <h3>
+                No {status === "selected" ? "selected" : status} pledges here.
+              </h3>
+              <p>
+                {status === "paid"
+                  ? "Completed rewards appear here only after their finalized payment is verified."
+                  : status === "selected"
+                    ? "A sponsor-selected deliverable appears here until its reward is verified."
+                    : "Commission a specific task with useful sources, a clear deliverable and acceptance criteria."}
+              </p>
+              {status === "open" && (
+                <Button variant="outline" onClick={openCreation}>
+                  Create a community brief <ArrowUpRight aria-hidden="true" />
+                </Button>
+              )}
+            </div>
           ) : (
             works.map((work) => (
               <WorkItem
@@ -384,9 +522,29 @@ function WorkBoard({
           )}
         </div>
       </section>
-      <section className={styles.panel}>
-        <BountyForm mint={mint} />
-      </section>
+      <aside className={styles.contextNote}>
+        <ShieldCheck size={18} aria-hidden="true" />
+        <div>
+          <strong>A pledge, not escrow.</strong>
+          <p>
+            No funds are held when a brief is published. The sponsor selects a
+            deliverable and approves the exact reward in their wallet. Only
+            finalized receipts are labelled paid.
+          </p>
+        </div>
+      </aside>
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent
+          data-surface="forum"
+          className={styles.creationDialog}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            creationTrigger.current?.focus();
+          }}
+        >
+          <BountyForm mint={mint} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -395,6 +553,7 @@ function BountyForm({ mint }: { mint?: string }) {
     create = useMutation(api.forumCommunity.createBounty),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const requirementId = useId();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget,
@@ -421,7 +580,13 @@ function BountyForm({ mint }: { mint?: string }) {
   }
   return (
     <>
-      <h2>Commission useful work</h2>
+      <DialogHeader>
+        <DialogTitle>Commission useful work</DialogTitle>
+        <DialogDescription>
+          Publish a clear brief and an unfunded sponsor pledge. No payment is
+          requested when you create it.
+        </DialogDescription>
+      </DialogHeader>
       <form className={styles.form} onSubmit={submit}>
         <Field label="Type">
           <select name="kind" className={styles.select}>
@@ -457,11 +622,15 @@ function BountyForm({ mint }: { mint?: string }) {
             spellCheck={false}
           />
         </Field>
-        <Button type="submit" disabled={busy || !isAuthenticated}>
+        <Button
+          type="submit"
+          disabled={busy || !isAuthenticated}
+          aria-describedby={!isAuthenticated ? requirementId : undefined}
+        >
           {busy ? "Publishing…" : "Publish unfunded pledge"}
         </Button>
         {!isAuthenticated && (
-          <p className={styles.muted}>
+          <p id={requirementId} className={styles.muted}>
             Sign in to publish a pledge or submit work.
           </p>
         )}
@@ -493,16 +662,24 @@ function WorkItem({
   const sponsor = mine?.userId === work.sponsorId;
   return (
     <article className={styles.item}>
-      <div className={styles.meta}>
-        <span>{work.kind === "research" ? "Research request" : "Bounty"}</span>
-        <strong>{lamportsToSol(work.amountLamports)} SOL</strong>
-        <span>
-          {work.status === "paid"
-            ? "Finalized payment verified"
-            : "Unfunded sponsor pledge"}
-        </span>
+      <div className={styles.rowHeading}>
+        <div>
+          <span className={styles.eyebrow}>
+            {work.kind === "research" ? "Research request" : "Bounty"}
+          </span>
+          <h3>{work.title}</h3>
+        </div>
+        <div className={styles.reward}>
+          <strong>
+            {lamportsToSol(work.amountLamports)} <span>SOL</span>
+          </strong>
+          <span className={styles.badge}>
+            {work.status === "paid"
+              ? "Finalized payment verified"
+              : "Unfunded sponsor pledge"}
+          </span>
+        </div>
       </div>
-      <h3>{work.title}</h3>
       <div className={styles.meta}>By @{work.sponsor}</div>
       <p className={styles.prose}>{work.brief}</p>
       {work.mint && <code className={styles.address}>{work.mint}</code>}
@@ -718,6 +895,7 @@ function Support({
   return (
     <div className={styles.columns}>
       <section className={styles.panel}>
+        <span className={styles.eyebrow}>Direct support</span>
         <h2>Support a contributor</h2>
         <p className={styles.muted}>
           Tips are optional wallet-to-wallet SOL payments. Authors opt in to a
@@ -850,6 +1028,7 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
   const wallet = identity.connected?.account.address;
   return (
     <>
+      <span className={styles.eyebrow}>Your preferences</span>
       <h2>Your contributor profile</h2>
       <CommerceWalletButton requiredFeature="solana:signTransaction" />
       <div className={styles.details}>
@@ -937,8 +1116,8 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
         </div>
         {mine?.supporter?.checkedAt ? (
           <p className={styles.muted}>
-            Last check {new Date(mine.supporter.checkedAt).toLocaleTimeString()}
-            . Proof expires after ten minutes; refresh is explicit.
+            Checked {new Date(mine.supporter.checkedAt).toLocaleString()}. Proof
+            is valid for ten minutes; refresh is explicit.
           </p>
         ) : null}
       </div>
@@ -958,10 +1137,21 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
     );
   return (
     <section className={styles.panel}>
-      <h2>Your community payments</h2>
-      <p className={styles.muted}>
-        These private receipts do not include swaps or promotions. A missing or
-        unavailable receipt never authorizes another payment.
+      <div className={styles.sectionHeading}>
+        <div>
+          <h2>Your community payments</h2>
+          <p className={styles.muted}>
+            Private receipts for contributor tips and rewards. Swaps and
+            promotions have separate receipts.
+          </p>
+        </div>
+        <span className={styles.badge}>
+          <ShieldCheck size={14} aria-hidden="true" /> Private to you
+        </span>
+      </div>
+      <p className={styles.receiptNotice}>
+        A missing or unavailable receipt never authorizes another payment. Check
+        the saved attempt; do not pay again.
       </p>
       <div className={`${styles.list} ${styles.details}`}>
         {!isAuthenticated ? (
@@ -971,34 +1161,44 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
         ) : !rows.length ? (
           <p className={styles.empty}>No tips or reward payments yet.</p>
         ) : (
-          rows.map((row) => (
-            <div
-              className={`${styles.item} ${styles.receipt}`}
-              key={row.intentId}
-            >
-              <div>
-                <strong>
-                  {lamportsToSol(row.amountLamports)} SOL{" "}
-                  {row.purpose === "tip" ? "tip" : "reward"}
-                </strong>
-                <p className={styles.muted}>
-                  {row.status === "verified"
-                    ? "Finalized payment verified"
-                    : row.status === "held"
-                      ? "Outcome protected; verify the same receipt only"
-                      : row.status === "ready"
-                        ? "Prepared; not opened in wallet"
-                        : row.status === "expired"
-                          ? "Expired before opening"
-                          : "Awaiting finalized receipt"}
-                </p>
-                <code className={styles.address}>{row.recipient}</code>
+          [...rows]
+            .sort(
+              (a, b) =>
+                Number(b.status === "held") - Number(a.status === "held"),
+            )
+            .map((row) => (
+              <div
+                className={`${styles.item} ${styles.receipt} ${row.status === "held" ? styles.protectedReceipt : ""}`}
+                key={row.intentId}
+              >
+                <div>
+                  <strong>
+                    {lamportsToSol(row.amountLamports)} SOL{" "}
+                    {row.purpose === "tip" ? "tip" : "reward"}
+                  </strong>
+                  {row.status === "held" && (
+                    <span className={styles.badge}>Protected outcome</span>
+                  )}
+                  <p className={styles.muted}>
+                    {row.status === "verified"
+                      ? "Finalized payment verified"
+                      : row.status === "held"
+                        ? "Outcome protected; verify the same receipt only"
+                        : row.status === "ready"
+                          ? "Prepared; not opened in wallet"
+                          : row.status === "expired"
+                            ? "Expired before opening"
+                            : "Awaiting finalized receipt"}
+                  </p>
+                  <code className={styles.address}>{row.recipient}</code>
+                </div>
+                <Button variant="outline" onClick={() => onPayment(row)}>
+                  {row.status === "held"
+                    ? "Check protected receipt"
+                    : "View receipt"}
+                </Button>
               </div>
-              <Button variant="outline" onClick={() => onPayment(row)}>
-                View receipt
-              </Button>
-            </div>
-          ))
+            ))
         )}
       </div>
     </section>
