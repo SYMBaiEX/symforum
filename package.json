@@ -24,6 +24,8 @@
     "start": "bun run --cwd apps/platform start",
     "deps:audit": "bun scripts/audit-dependencies.mjs",
     "test": "vitest run",
+    "test:broadcast": "node --test scripts/broadcast/activity-live.test.mjs scripts/broadcast/desk.test.cjs scripts/broadcast/feed.test.cjs scripts/broadcast/obs-migration.test.mjs scripts/broadcast/token.test.mjs scripts/broadcast/worker.test.mjs scripts/broadcast/radio/radio.test.mjs",
+    "test:broadcast:browser": "node scripts/broadcast/studio.browser.test.cjs",
     "test:devtools": "vitest run convex/agentIdentity.test.ts packages/agent-sdk/src/index.test.ts packages/agent-cli/src/token-store.test.ts packages/agent-cli/bin/symbaiex.test.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:convex": "tsc --project convex/tsconfig.json --noEmit",

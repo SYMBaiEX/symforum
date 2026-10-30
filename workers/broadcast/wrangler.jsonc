@@ -1,0 +1,26 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "symf-broadcast",
+  "account_id": "c2fadb05722ca3df6528265a674ca69e",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-27",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../../apps/forum/public/broadcast",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none"
+  },
+  "kv_namespaces": [{
+    "binding": "FORUM_FEED",
+    "id": "8ea55b44ea5c4a809281669c037c511f"
+  }],
+  // One tick, two independent bounded lanes: forum every 5m, quote every 3m.
+  // 288 + 480 = 768 scheduled KV writes/day, below the 1,000-write free allowance.
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}
