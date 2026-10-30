@@ -321,3 +321,74 @@ test("pre-cutover ordinary run occupancy fences another source purchase", async 
       .state,
   ).toBe("unavailable");
 });
+
+test("expired completed samples stay unchanged and cannot authorize a same-hour refetch", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  await t.mutation(complete, {
+    runKey: first.runKey,
+    claimToken: "source-1",
+    snapshots: [snapshot()],
+  });
+  vi.setSystemTime(NOW + 16 * 60_000);
+  expect(
+    (await t.mutation(claim, { platform: "bags", claimToken: "source-2" }))
+      .state,
+  ).toBe("unavailable");
+  const rows = await t.run((ctx) =>
+    ctx.db
+      .query("forumTerminalMarkets")
+      .withIndex("by_mint", (q) => q.eq("mint", MINT))
+      .take(2),
+  );
+  expect(rows[0].snapshot.metricsAsOf).toBe(NOW);
+  expect(rows[0].snapshot.observedAt).toBe(NOW);
+});
+
+test("a downstream projection failure rolls back the receipt and every earlier row", async () => {
+  const { t } = await setup();
+  const first = await t.mutation(claim, {
+    platform: "bags",
+    claimToken: "source-1",
+  });
+  const otherMint = "So11111111111111111111111111111111111111112";
+  const other = snapshot({
+    mint: otherMint,
+    sourceRank: 2,
+    sourceUrl: `https://www.solanatracker.io/token/${otherMint}`,
+  });
+  // Simulate a corrupted downstream unique binding after the first candidate.
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 2; i++)
+      await ctx.db.insert("forumTerminalMarkets", {
+        mint: otherMint,
+        platform: "bags",
+        band: "50k100k",
+        observedAt: NOW,
+        snapshot: other,
+      });
+  });
+  await expect(
+    t.mutation(complete, {
+      runKey: first.runKey,
+      claimToken: "source-1",
+      snapshots: [snapshot(), other],
+    }),
+  ).rejects.toThrow();
+  const state = await t.run(async (ctx) => ({
+    receipt: await ctx.db
+      .query("tokenAlphaObservations")
+      .withIndex("by_runKey", (q) => q.eq("runKey", first.runKey))
+      .unique(),
+    firstMint: await ctx.db
+      .query("forumTerminalMarkets")
+      .withIndex("by_mint", (q) => q.eq("mint", MINT))
+      .take(2),
+  }));
+  expect(state.receipt?.status).toBe("running");
+  expect(state.receipt?.snapshots).toBeUndefined();
+  expect(state.firstMint).toEqual([]);
+});
