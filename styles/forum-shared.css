@@ -572,6 +572,9 @@
 .token-swap .commerce-amount>label{font-size:12px;font-weight:550;color:hsl(var(--muted-foreground))}
 .token-swap .commerce-amount input,.swap-receive{font-size:34px!important;line-height:1.3;letter-spacing:-.045em;min-width:0;flex:1;font-weight:550;font-variant-numeric:tabular-nums;color:hsl(var(--foreground))}
 .swap-receive{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.swap-preview{display:grid;gap:10px;padding:12px;border:1px solid hsl(var(--border)/.7);border-radius:12px;background:hsl(var(--muted)/.25);font-size:12px;line-height:1.5}
+.swap-preview dl{display:grid;gap:7px}.swap-preview dl>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.swap-preview dt{color:hsl(var(--muted-foreground));flex-shrink:0}.swap-preview dd{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0;font-weight:550}
+.swap-preview p,.swap-preview>.commerce-inline{color:hsl(var(--muted-foreground));font-size:11px}.swap-preview p[role=status]{color:hsl(var(--foreground));font-weight:600}.swap-mints code{overflow-wrap:anywhere;white-space:normal;font-size:11px}.swap-mints dd{min-width:0}.swap-mints>div{display:grid;gap:4px;margin-block:8px}
 .token-swap .commerce-amount code{font-size:10px;opacity:.85}.token-swap .commerce-reverse{z-index:1;margin-block:-25px;width:38px;height:38px;border:4px solid hsl(var(--card));background:hsl(var(--muted));color:hsl(var(--foreground));transition:transform .2s ease}
 .forum-app-shell .token-swap .commerce-amount input{border:0;border-radius:0;box-shadow:none;background:transparent;padding:0;height:52px}
 .token-swap .swap-token-select{border-radius:999px}.token-swap button.commerce-reverse{border-radius:50%}

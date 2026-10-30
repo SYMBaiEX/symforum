@@ -42,9 +42,10 @@ const SONNER_STYLE_HASHES = [
   "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='",
 ];
 // Exact static stylesheet in https://oauth.telegram.org/js/telegram-login.js?6.
-// Permit only on the two pages that opt into Telegram login, never unsafe-inline.
+// Exact styles must survive client navigation: CSP belongs to the original document.
+// Never permit arbitrary inline styles or third-party origins.
 const TELEGRAM_LOGIN_STYLE_HASH = "'sha256-wWU/dU8CreLlh2OcTlCbLUzZkxQ/Bdo2f9+XuzLyR/0='";
-// Exact, version-pinned Lightweight Charts attribution stylesheet. Token pages only.
+// Exact, version-pinned Lightweight Charts attribution stylesheet.
 const CHART_ATTRIBUTION_STYLE_HASH = "'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='";
 const proxy =
   process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== "true" && process.env.NEXT_PUBLIC_WORKOS_ENABLED !== "true" && convexConfigured
@@ -105,7 +106,7 @@ async function proxyRequest(
     request,
     authKit?.headers ?? new Headers(),
   );
-  const policy = contentSecurityPolicy(request.nextUrl.pathname);
+  const policy = contentSecurityPolicy();
   const response =
     isSignInPage(request) &&
     (authKitConfigured ? authKit?.session.user : legacyAuthenticated)
@@ -427,13 +428,13 @@ type SecurityPolicy = {
   value: string;
 };
 
-function contentSecurityPolicy(pathname: string): SecurityPolicy {
+function contentSecurityPolicy(): SecurityPolicy {
   const nonce = randomNonce();
   const isDev = process.env.NODE_ENV === "development";
   const styleHashes = [
     ...SONNER_STYLE_HASHES,
-    ...(["/signin", "/account/connections"].includes(pathname) ? [TELEGRAM_LOGIN_STYLE_HASH] : []),
-    ...(["/symf", "/forum/symf"].includes(pathname) ? [CHART_ATTRIBUTION_STYLE_HASH] : []),
+    TELEGRAM_LOGIN_STYLE_HASH,
+    CHART_ATTRIBUTION_STYLE_HASH,
   ];
   const policy = [
     "default-src 'self'",

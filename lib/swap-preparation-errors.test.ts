@@ -50,3 +50,18 @@ test("never forwards arbitrary server/provider error text", () => {
     swapPreparationIssue(new Error("Quote expired. Review a fresh quote.")),
   ).toBe("quote_expired");
 });
+test.each([
+  { jsonrpc: "1.0", id: 1, result: {} },
+  { jsonrpc: "2.0", id: 2, result: {} },
+  { jsonrpc: "2.0", result: {} },
+  { jsonrpc: "2.0", id: 1, error: { message: "private" } },
+])(
+  "rejects unbound or invalid RPC envelopes without exposing them",
+  async (body) => {
+    await expect(
+      swapRpc("https://rpc.example", "getBalance", [], async () =>
+        Response.json(body),
+      ),
+    ).rejects.toMatchObject({ code: "rpc_unavailable" });
+  },
+);

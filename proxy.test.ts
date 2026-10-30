@@ -76,11 +76,11 @@ describe("proxy forum routing", () => {
     expect(policy.match(/style-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
     expect(policy.match(/script-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
   });
-  test.each(["/", "/swap", "/signin"])("does not add chart stylesheet permission outside token pages: %s", async path => {
+  test.each(["/", "/swap", "/signin"])("retains the exact chart stylesheet permission when soft navigation starts at %s", async path => {
     vi.stubEnv("NODE_ENV", "production");
     const proxy = await loadProxy();
     const response = await proxy(requestFor(`https://forum.symbaiex.com${path}`));
-    expect(response.headers.get("content-security-policy")).not.toContain("3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY=");
+    expect(response.headers.get("content-security-policy")).toContain("3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY=");
   });
   test.each(["/signin", "/account/connections"])("allows only Telegram's exact stylesheet on %s", async path => {
     vi.stubEnv("NODE_ENV", "production");
@@ -92,11 +92,14 @@ describe("proxy forum routing", () => {
     expect(policy.match(/script-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
   });
 
-  test.each(["/", "/signin/other", "/account/connections/other", "/crypto-pumpfun"])("does not grant Telegram stylesheet permission on %s", async path => {
+  test.each(["/", "/signin/other", "/account/connections/other", "/crypto-pumpfun"])("retains only pinned library styles across client navigation from %s", async path => {
     vi.stubEnv("NODE_ENV", "production");
     const proxy = await loadProxy();
     const response = await proxy(requestFor(`https://forum.symbaiex.com${path}`));
-    expect(response.headers.get("content-security-policy")).not.toContain("wWU/dU8CreLlh2OcTlCbLUzZkxQ/Bdo2f9+XuzLyR/0=");
+    const policy = response.headers.get("content-security-policy") ?? "";
+    expect(policy).toContain("wWU/dU8CreLlh2OcTlCbLUzZkxQ/Bdo2f9+XuzLyR/0=");
+    expect(policy.match(/style-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
+    expect(policy.match(/script-src-elem[^;]+/)?.[0]).not.toContain("unsafe-inline");
   });
   test("the X callback stays on the API surface with private OAuth response headers", async () => {
     const proxy = await loadProxy();

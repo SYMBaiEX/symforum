@@ -283,7 +283,7 @@ describe("exact instruction binding", () => {
   });
 });
 describe("promotion transaction construction (mock RPC, never a real payment)", () => {
-  async function fixture(failFinal = false) {
+  async function fixture(failFinal = false, finalSlot = 2) {
     const source = await associatedAccount(wallet, mint),
       simulations: string[] = [];
     const fetcher: typeof fetch = async (_url, init) => {
@@ -336,8 +336,9 @@ describe("promotion transaction construction (mock RPC, never a real payment)", 
         };
       else if (method === "simulateTransaction") {
         simulations.push(params[0]);
+        if (simulations.length === 2) expect(params[1].minContextSlot).toBe(1);
         result = {
-          context: { slot: simulations.length },
+          context: { slot: simulations.length === 2 ? finalSlot : 1 },
           value: {
             err:
               failFinal && simulations.length === 2
@@ -411,6 +412,21 @@ describe("promotion transaction construction (mock RPC, never a real payment)", 
       ),
     ).rejects.toThrow(/Final transaction simulation failed/);
   });
+  test.each([0, -1, 1.5, null])(
+    "rejects stale or malformed final simulation slot %s",
+    async (slot) => {
+      const f = await fixture(false, slot as number);
+      await expect(
+        buildPromotionTransaction(
+          intent(),
+          { rpcUrl: "https://rpc.example", treasury },
+          false,
+          f.fetcher,
+        ),
+      ).rejects.toThrow(/Final transaction simulation failed/);
+      expect(f.simulations).toHaveLength(2);
+    },
+  );
   test("rejects modified split before any chain request", async () => {
     const f = await fixture();
     await expect(
@@ -427,6 +443,8 @@ describe("promotion transaction construction (mock RPC, never a real payment)", 
     await expect(
       verifiedMint("https://rpc.example", mint.mint, async () =>
         Response.json({
+          jsonrpc: "2.0",
+          id: 1,
           result: {
             value: {
               owner: TOKEN_2022_PROGRAM,

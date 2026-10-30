@@ -17,6 +17,39 @@ const wallet = "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
   SOL = "So11111111111111111111111111111111111111112",
   USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 let bundle: string, css: string;
+test("pinned chart CSS survives a soft navigation while altered CSS remains blocked", async ({
+  page,
+}) => {
+  const source = readFileSync(
+    "node_modules/lightweight-charts/dist/lightweight-charts.development.mjs",
+    "utf8",
+  );
+  const chartCss = source.match(/const css = `([^`]+)`;/)![1];
+  const hash = createHash("sha256").update(chartCss).digest("base64");
+  // Same exact static allowlist as the production proxy, carried by the original document.
+  expect(readFileSync("proxy.ts", "utf8")).toContain(`'sha256-${hash}'`);
+  await page.route("**/*", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      headers: {
+        "content-security-policy": `default-src 'none'; style-src-elem 'sha256-${hash}'; script-src 'none'`,
+      },
+      body: "<!doctype html><title>Isolated CSP navigation test</title><main>Test document</main>",
+    }),
+  );
+  await page.goto("http://127.0.0.1:43201/");
+  const result = await page.evaluate((css) => {
+    history.pushState({}, "", "/symf");
+    const allowed = document.createElement("style");
+    allowed.textContent = css;
+    document.head.append(allowed);
+    const rejected = document.createElement("style");
+    rejected.textContent = css + "body{opacity:0}";
+    document.head.append(rejected);
+    return { allowed: !!allowed.sheet, rejected: !!rejected.sheet };
+  }, chartCss);
+  expect(result).toEqual({ allowed: true, rejected: false });
+});
 test.beforeAll(() => {
   css =
     readFileSync("styles/forum-shared.css", "utf8") +
@@ -70,6 +103,7 @@ function prepared() {
 }
 async function harness(page: Page, query = "") {
   const requests: string[] = [];
+  let quoteCalls = 0;
   const now = Date.now();
   const intent = {
     intentId: "intent-fixture",
@@ -135,20 +169,29 @@ async function harness(page: Page, query = "") {
             nextCheckAt: Date.now() + 900000,
           }
         : null;
-    else if (name === "forumSwaps:quote")
+    else if (name === "forumSwaps:quote") {
+      quoteCalls++;
+      const input = route.request().postDataJSON();
+      const changed = quoteCalls > 1 && query.includes("worsequote");
       result = {
         quotes: [
           {
             quoteId: "quote-fixture",
             provider: "jupiter",
-            inputMint: SOL,
-            outputMint: USDC,
-            amountRaw: "10000000",
-            swapAmountRaw: "9975000",
-            platformFeeRaw: "25000",
-            outputAmountRaw: "1000000",
-            minimumOutputAmountRaw: "995000",
-            priceImpactBps: 1,
+            inputMint: input.inputMint,
+            outputMint: input.outputMint,
+            amountRaw: input.amountRaw,
+            swapAmountRaw: (
+              (BigInt(input.amountRaw) * 9975n) /
+              10000n
+            ).toString(),
+            platformFeeRaw: (
+              (BigInt(input.amountRaw) * 25n) /
+              10000n
+            ).toString(),
+            outputAmountRaw: changed ? "800000" : "1000000",
+            minimumOutputAmountRaw: changed ? "796000" : "995000",
+            priceImpactBps: query.includes("highimpact") ? 200 : 1,
             platformFeeBps: 25,
             routeLabels: ["Pool"],
             expiresAt: (await page.evaluate(() => Date.now())) + 120000,
@@ -159,7 +202,7 @@ async function harness(page: Page, query = "") {
         benefitEligible: false,
         benefitStatus: "verified",
       };
-    else if (name === "forumSwaps:prepare")
+    } else if (name === "forumSwaps:prepare")
       result = query.includes("simulatefail")
         ? null
         : { quoteId: "quote-fixture", ...prepared() };
@@ -180,12 +223,22 @@ async function harness(page: Page, query = "") {
     else if (
       name.endsWith(":beginWalletRequest") ||
       name.endsWith(":markUnknown")
-    )
+    ) {
+      if (
+        query.includes("hidehandoff") &&
+        name === "forumSwaps:beginWalletRequest"
+      )
+        await page.evaluate(() =>
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            get: () => "hidden",
+          }),
+        );
       result =
         query.includes("beginfail") && name.endsWith(":beginWalletRequest")
           ? null
           : { status: "held" };
-    else
+    } else
       return route.fulfill({
         status: 403,
         body: "Unexpected external request blocked",
@@ -222,7 +275,9 @@ test("one Swap click -> simulation -> one wallet approval -> finalized receipt",
     page.getByText("Swap finalized.", { exact: false }),
   ).toBeVisible();
   await page.getByText("Transaction details", { exact: true }).click();
-  await expect(page.getByText("0.000025 SOL", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".commerce-review").getByText("0.000025 SOL", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Approve in wallet" }),
   ).toHaveCount(0);
@@ -394,6 +449,47 @@ test("server refusal before the wallet boundary does not fabricate an uncertain 
     "No wallet window was opened",
   );
   await expect(page.locator("#wallet-calls")).toHaveText("0");
+  expect(requests).not.toContain("forumSwaps:markUnknown");
+});
+test("internal wallet errors display safe categories and never replay or expose provider text", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&walletinternal");
+  const warnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning") warnings.push(message.text());
+  });
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await reviewSwap(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "internal sign-and-send error",
+  );
+  await page.getByText("Safe wallet diagnostic", { exact: true }).click();
+  await expect(
+    page.getByText(
+      "Stage: wallet; wallet phase: request; code: -32603; response: none.",
+    ),
+  ).toBeVisible();
+  expect(warnings.join("\n")).toContain('"code":-32603');
+  expect(warnings.join("\n")).not.toContain("private wallet provider body");
+  expect(
+    requests.filter((r) => r === "forumSwaps:beginWalletRequest"),
+  ).toHaveLength(1);
+  await expect(page.locator("#wallet-calls")).toHaveText("1");
+});
+test("hiding the page during admission never opens a wallet prompt or releases its fence", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&hidehandoff");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await reviewSwap(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "No wallet window was opened",
+  );
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+  expect(
+    requests.filter((r) => r === "forumSwaps:beginWalletRequest"),
+  ).toHaveLength(1);
   expect(requests).not.toContain("forumSwaps:markUnknown");
 });
 test("promotion needs a separate explicit irreversible-burn consent", async ({
@@ -571,6 +667,85 @@ test("Swap refreshes an expired quote and opens the wallet without another revie
   await expect(
     page.getByRole("button", { name: /Compare routes|Refresh quote/ }),
   ).toHaveCount(0);
+});
+test("a worse refreshed quote updates the preview but never opens the wallet until a new click", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const requests = await harness(page, "?authorized&worsequote");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await page.clock.runFor(1100);
+  await expect(page.locator(".swap-receive")).toHaveText("1");
+  await page.clock.runFor(180000);
+  await page.getByRole("button", { name: "Swap", exact: true }).click();
+  await expect(
+    page.getByText("Quote updated:", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator(".swap-receive")).toHaveText("0.8");
+  expect(requests).not.toContain("forumSwaps:prepare");
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+  await expect(page.locator("#wallet-calls")).toHaveText("0");
+});
+test("minimum, fee and high impact warning are visible before any wallet request", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized&highimpact");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await expect(page.locator(".swap-preview")).toContainText("0.995 USDC");
+  await expect(page.locator(".swap-preview")).toContainText(
+    "0.000025 SOL (0.25%)",
+  );
+  await expect(page.locator(".swap-preview")).toContainText(
+    "High price impact",
+  );
+  expect(requests).not.toContain("forumSwaps:prepare");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+test("v0 compatibility invalidates the old preview and is sent in the next fresh quote only", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized");
+  const bodies: { supportsV1: boolean }[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("forumSwaps:quote"))
+      bodies.push(request.postDataJSON());
+  });
+  await page
+    .getByRole("group")
+    .filter({ has: page.getByText("Wallet compatibility", { exact: true }) })
+    .locator("summary")
+    .click();
+  await page
+    .getByLabel("Transaction format", { exact: true })
+    .selectOption("v0");
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0].supportsV1).toBe(false);
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
+});
+test("offline state stops automatic quotes and wallet approvals", async ({
+  page,
+}) => {
+  const requests = await harness(page, "?authorized");
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => false,
+    });
+    window.dispatchEvent(new Event("offline"));
+  });
+  await page.getByLabel("You pay", { exact: true }).fill("0.01");
+  await expect(
+    page.getByRole("button", { name: "Reconnect to swap" }),
+  ).toBeDisabled();
+  await page.waitForTimeout(1400);
+  expect(requests).not.toContain("forumSwaps:quote");
+  expect(requests).not.toContain("forumSwaps:beginWalletRequest");
 });
 test("token page mounts the native SYMF swap beside the chart on desktop and below it on mobile", async ({
   page,
