@@ -7,6 +7,7 @@ import {
   parseTerminalMint,
   NATIVE_SOL_MINT,
   TERMINAL_WALLET_TTL_MS,
+  TERMINAL_RISK_TTL_MS,
   sumTerminalTokenAccounts,
   type TerminalRisk,
 } from "../lib/forum-terminal-data";
@@ -26,7 +27,10 @@ export async function readTerminalWallet(
     internal.forumTerminalData.claimWalletRead,
     { ...args, lease },
   );
-  if (!claim.fetch) return claim.state;
+  if (!claim.fetch)
+    return claim.state && claim.state.expiresAt > Date.now()
+      ? claim.state
+      : null;
   try {
     const balance = record(
       await commerceRpc(config.rpcUrl, "getBalance", [
@@ -114,7 +118,7 @@ export async function readTerminalWallet(
       lease,
       state: null,
     });
-    return claim.state;
+    return null;
   }
 }
 
@@ -130,7 +134,11 @@ export async function readTerminalRisk(
     internal.forumTerminalData.claimRiskRead,
     { ...args, lease },
   );
-  if (!claim.fetch) return claim.risk;
+  if (!claim.fetch)
+    return claim.risk &&
+      Date.now() - claim.risk.checkedAt <= TERMINAL_RISK_TTL_MS
+      ? claim.risk
+      : null;
   try {
     const result = record(
       await commerceRpc(config.rpcUrl, "getAccountInfo", [
@@ -151,6 +159,6 @@ export async function readTerminalRisk(
       lease,
       risk: null,
     });
-    return claim.risk;
+    return null;
   }
 }

@@ -451,6 +451,50 @@ describe("private watches and bounded read leases", () => {
       t.action(api.forumTerminal.getWalletReadState, { wallet: a.wallet }),
     ).rejects.toThrow("Sign in");
   });
+  test("a failed risk refresh never reports an expired cached proof as refreshed", async () => {
+    const t = setup(),
+      a = await actor(t, 33);
+    vi.stubEnv("FORUM_COMMERCE_RPC_URL", "https://api.mainnet-beta.solana.com");
+    vi.stubEnv("HELIUS_API_KEY", "test-terminal-key");
+    const old = {
+      mint: MINT,
+      checkedAt: NOW - 11 * 60_000,
+      mintAuthority: null,
+      freezeAuthority: null,
+      tokenProgram: TOKEN_2022_PROGRAM,
+      unsupportedExtensions: [],
+      status: "checked" as const,
+    };
+    await t.run((ctx) =>
+      ctx.db.insert("forumTerminalRisks", {
+        mint: MINT,
+        lease: "old",
+        leaseUntil: 0,
+        nextFetchAt: 0,
+        risk: old,
+      }),
+    );
+    const fetcher = vi.fn(
+      async () => new Response("unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    expect(
+      await a.client.action(api.forumTerminal.refreshRisk, {
+        wallet: a.wallet,
+        mint: MINT,
+      }),
+    ).toBeNull();
+    expect(await t.query(api.forumTerminal.getRisk, { mint: MINT })).toEqual(
+      old,
+    );
+    expect(
+      await a.client.action(api.forumTerminal.refreshRisk, {
+        wallet: a.wallet,
+        mint: MINT,
+      }),
+    ).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   test("partial alert edits still validate the combined upper/lower bounds", async () => {
     const t = setup(),
       a = await actor(t, 10);
