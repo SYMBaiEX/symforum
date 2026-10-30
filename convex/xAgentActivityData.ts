@@ -1,3 +1,4 @@
+import { breakingOperationEligible } from "./forumBreakingX";
 import { installationBinding, installationMatches } from "./installation";
 import { ALPHA_PUBLISHER_SLUG } from "../lib/forum-alpha-editorial";
 import { v } from "convex/values";
@@ -32,6 +33,7 @@ import {
 const limits = new RateLimiter(components.rateLimiter, {
   xAllActions: { kind: "fixed window", rate: 24, period: DAY },
   xAllSpacing: { kind: "token bucket", rate: 12, period: HOUR, capacity: 1 },
+  xBreakingSpacing: { kind: "token bucket", rate: 1, period: 30 * 60_000, capacity: 1 },
   xOriginals: { kind: "fixed window", rate: 6, period: DAY },
   xOriginalSpacing: {
     kind: "token bucket",
@@ -439,6 +441,7 @@ export const next = internalMutation({
           .lte("notBefore", Date.now()),
       )
       .take(12);
+    rows.sort((a, b) => Number(!!b.alphaDeliveryId) - Number(!!a.alphaDeliveryId));
     for (const op of rows) {
       const permitted =
         op.kind === "original"
@@ -581,11 +584,16 @@ export const claimSend = internalMutation({
       });
       return null;
     }
+    if (!(await breakingOperationEligible(ctx, op, c.account))) {
+      await ctx.db.patch("xAgentOperations", op._id, { status: "held",
+        issue: "Breaking news source, destination or approval changed.", updatedAt: Date.now() });
+      return null;
+    }
     const names = [
       "xAllSpacing",
       "xAllActions",
       op.kind === "original"
-        ? "xOriginalSpacing"
+        ? (op.alphaDeliveryId ? "xBreakingSpacing" : "xOriginalSpacing")
         : op.kind === "repost"
           ? "xRepostSpacingV2"
           : "xCommentSpacingV2",
@@ -594,6 +602,7 @@ export const claimSend = internalMutation({
         : op.kind === "repost"
           ? "xRepostsV2"
           : "xCommentsV2",
+      ...(op.kind === "original" && !op.alphaDeliveryId ? ["xBreakingSpacing" as const] : []),
     ] as const;
     for (const name of names) {
       const available = await limits.check(ctx, name, { key: c.account._id });
@@ -630,6 +639,10 @@ export const claimSend = internalMutation({
     }
     for (const name of names)
       await limits.limit(ctx, name, { key: c.account._id, throws: true });
+    if (op.alphaDeliveryId)
+      await ctx.db.patch("forumAlphaDeliveries", op.alphaDeliveryId, {
+        xStatus: "sending", updatedAt: Date.now(),
+      });
     if (d)
       await ctx.db.patch("xAgentDrafts", d._id, {
         status: "publishing",
@@ -685,6 +698,14 @@ export const finishSend = internalMutation({
       issue: args.issue,
       updatedAt: Date.now(),
     });
+    if (op.alphaDeliveryId)
+      await ctx.db.patch("forumAlphaDeliveries", op.alphaDeliveryId, {
+        xStatus: args.confirmed && args.resultId ? "sent" : "held",
+        xPostId: args.confirmed ? args.resultId : undefined,
+        xSentAt: args.confirmed && args.resultId ? Date.now() : undefined,
+        issue: args.confirmed && args.resultId ? undefined : "x_execution_unconfirmed",
+        updatedAt: Date.now(),
+      });
     if (args.confirmed && op.kind === "original")
       await ctx.db.patch("xAgentActivity", r._id, {
         nextOriginalAt: Date.now() + X_ORIGINAL_INTERVAL_MS,

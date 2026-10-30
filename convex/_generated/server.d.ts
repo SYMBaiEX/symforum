@@ -64,6 +64,7 @@ type Env = {
   readonly FORUM_ALPHA_DISTRIBUTION_ENABLED: string | undefined;
   readonly FORUM_ALPHA_EDITORIAL_ENABLED: string | undefined;
   readonly FORUM_ALPHA_LEAD_MINUTES: string | undefined;
+  readonly FORUM_BREAKING_NEWS_ENABLED: string | undefined;
   readonly FORUM_COMMERCE_RPC_URL: string | undefined;
   readonly FORUM_COMMERCE_TREASURY: string | undefined;
   readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;

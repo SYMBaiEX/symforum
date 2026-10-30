@@ -27,10 +27,11 @@ export function ForumAlphaPublisher() {
         Forum Alpha · @{installation.x.accounts.symforum || "publisher"}
       </h2>
       <p className="text-sm text-muted-foreground">
-        Fresh reviewed Forum discoveries go to the dedicated Telegram topic
-        first. Selected highlights can reach @{installation.x.accounts.symforum || "publisher"} after {data.leadMinutes}{" "}
-        minutes, at most six per day and two hours apart. NyX keeps her own
-        feed. This does not change your Typefully queue or manual posts.
+        {data.breakingNewsEnabled
+          ? `The news desk checks sources every five minutes and admits fresh coverage hourly, or every 30 minutes for urgent updates. Verified breaking alerts reach @${installation.x.accounts.nyx || "NyX"} as soon as Telegram confirms delivery, within her shared six-originals-per-day limit. Other selected highlights reach @${installation.x.accounts.symforum || "publisher"} after ${data.leadMinutes} minutes. Routine stories stay on the Forum and Telegram.`
+          : `Fresh reviewed Forum discoveries go to Telegram first. Selected highlights reach @${installation.x.accounts.symforum || "publisher"} after ${data.leadMinutes} minutes, at most six per day and two hours apart.`}{" "}
+        Your Typefully queue and manual posts stay separate. Pause NyX’s
+        automatic originals in her account controls to pause breaking alerts.
       </p>
       <p className="text-sm">
         {data.enabled
@@ -71,13 +72,15 @@ export function ForumAlphaPublisher() {
               void disconnect({ agentSlug: "symforum" })
                 .then(
                   () =>
-                    setNotice("X coverage paused. Telegram remains separate."),
+                    setNotice(
+                      "Publisher highlights paused. NyX and Telegram have separate controls.",
+                    ),
                   () => setNotice("Could not confirm pause."),
                 )
                 .finally(() => setBusy(false));
             }}
           >
-            Pause X coverage
+            Pause @{installation.x.accounts.symforum || "publisher"} highlights
           </Button>
         )}
       </div>

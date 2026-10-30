@@ -1,4 +1,5 @@
 "use node";
+import { NEWS_MAX_AGE_MS, newsFeedTtl, newsPriority } from "../lib/forum-breaking-news";
 import { FORUM_SITE_URL } from "../lib/site-urls";
 
 
@@ -13,6 +14,7 @@ import {
   alphaPublisherUrl,
   alphaCandidateBoards,
   alphaPagePublishedAt,
+  alphaOriginalPublicationTime,
   type ResearchFeed,
 } from "../lib/forum-alpha-editorial";
 import { internal } from "./_generated/api";
@@ -399,6 +401,7 @@ export type ForumResearchRunResult =
 
 export type ForumResearchAgentConfig = {
   researchPool?: "solana-alpha";
+  alphaSourceKey?: string;
   dailySlots: number;
   name: string;
   promptVersion: string;
@@ -506,12 +509,14 @@ export async function runForumResearchSlot(
     );
     const sourceSelectionNow = Date.now();
     const recentCandidates = candidates.filter((candidate) =>
+      (!config.alphaSourceKey || (candidate.sourceKey === config.alphaSourceKey &&
+        newsPriority(candidate, sourceSelectionNow) !== null)) && (
       config.researchPool === "solana-alpha"
         ? alphaCandidateBoards(candidate, sourceSelectionNow).includes(
             config.forcedCategorySlug as
               "crypto" | "crypto-pumpfun" | "crypto-bags",
           )
-        : isRecentEnough(candidate.publishedAt, sourceSelectionNow),
+        : isRecentEnough(candidate.publishedAt, sourceSelectionNow)),
     );
     // Exclude recently used and reserved sources before paid model work. The
     // query checks bounded key batches and stops after finding the existing
@@ -562,14 +567,17 @@ export async function runForumResearchSlot(
               {
                 ...snapshot,
                 publishedAt:
-                  snapshot.originalPublishedAt ?? snapshot.publishedAt,
+                  alphaOriginalPublicationTime(snapshot),
               },
               Date.now(),
             ).includes(
               config.forcedCategorySlug as
                 "crypto" | "crypto-pumpfun" | "crypto-bags",
             ),
-          )
+          ).filter(snapshot => !config.alphaSourceKey ||
+            (snapshot.sourceKey === config.alphaSourceKey && newsPriority({
+              ...snapshot, publishedAt: alphaOriginalPublicationTime(snapshot),
+            }, Date.now()) !== null))
         : fetchedSourceSnapshots;
     if (verifiedSourceSnapshots.length === 0) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
@@ -1234,14 +1242,14 @@ export async function runForumResearchSlot(
       config.researchPool === "solana-alpha"
         ? Math.min(
             ...snapshots.map(
-              (s) => s.originalPublishedAt ?? s.publishedAt ?? 0,
+              (s) => alphaOriginalPublicationTime(s) ?? 0,
             ),
           )
         : undefined;
     if (
       config.researchPool === "solana-alpha" &&
       (!alphaSourcePublishedAt ||
-        Date.now() - alphaSourcePublishedAt > 24 * 60 * 60_000)
+        Date.now() - alphaSourcePublishedAt > (config.alphaSourceKey ? NEWS_MAX_AGE_MS : 24 * 60 * 60_000))
     )
       throw new Error("Alpha source expired before publication");
     const publicationArgs = {
@@ -1418,7 +1426,9 @@ export async function collectResearchCandidates(
           // Refetch malformed or stale cache payloads.
         }
       }
-      let backoffMs = ALPHA_DISCOVERY_TTL_MS;
+      const alphaTtl = process.env.FORUM_BREAKING_NEWS_ENABLED === "true"
+        ? newsFeedTtl(feed.url) : ALPHA_DISCOVERY_TTL_MS;
+      let backoffMs = Math.max(ALPHA_DISCOVERY_TTL_MS, alphaTtl);
       if (
         pool &&
         !(await ctx.runMutation(
@@ -1470,7 +1480,7 @@ export async function collectResearchCandidates(
             payloadJson: JSON.stringify(candidates),
             fetchedAt: now,
             expiresAt:
-              now + (pool ? ALPHA_DISCOVERY_TTL_MS : RESEARCH_CACHE_TTL_MS),
+              now + (pool ? alphaTtl : RESEARCH_CACHE_TTL_MS),
           },
         };
       } catch {
@@ -1642,7 +1652,7 @@ export function parseFeedXml(
       1_100,
     );
     const publishedAt = parseTimestamp(
-      textValue(row.pubDate ?? row.published ?? row.updated ?? row.date),
+      textValue(row.pubDate ?? row.published ?? (source.publisherUrls ? row.date : row.updated ?? row.date)),
     );
     const imageUrl = feedItemImageUrl(row, url);
     const sourceKey = hashKey(canonicalUrl(url));
@@ -3507,6 +3517,12 @@ export const refreshAlphaDiscovery = internalAction({
     if (process.env.FORUM_ALPHA_EDITORIAL_ENABLED !== "true")
       return { enabled: false, count: 0, newestAt: null };
     const candidates = await collectResearchCandidates(ctx, "solana-alpha");
+    if (process.env.FORUM_BREAKING_NEWS_ENABLED === "true")
+      await ctx.runMutation(internal.forumBreakingNews.admit, {
+        candidates: candidates.filter(c => c.publishedAt !== undefined).slice(0, 60)
+          .map(c => ({ sourceKey: c.sourceKey, title: c.title, summary: c.summary,
+            url: c.url, publishedAt: c.publishedAt! })),
+      });
     return {
       enabled: true,
       count: candidates.length,

@@ -96,6 +96,8 @@ import type * as forumAgentWorkflow from "../forumAgentWorkflow.js";
 import type * as forumAlphaDelivery from "../forumAlphaDelivery.js";
 import type * as forumAlphaDistribution from "../forumAlphaDistribution.js";
 import type * as forumAlphaSchema from "../forumAlphaSchema.js";
+import type * as forumBreakingNews from "../forumBreakingNews.js";
+import type * as forumBreakingX from "../forumBreakingX.js";
 import type * as forumChat from "../forumChat.js";
 import type * as forumCommerce from "../forumCommerce.js";
 import type * as forumCommerceAccess from "../forumCommerceAccess.js";
@@ -306,6 +308,8 @@ declare const fullApi: ApiFromModules<{
   forumAlphaDelivery: typeof forumAlphaDelivery;
   forumAlphaDistribution: typeof forumAlphaDistribution;
   forumAlphaSchema: typeof forumAlphaSchema;
+  forumBreakingNews: typeof forumBreakingNews;
+  forumBreakingX: typeof forumBreakingX;
   forumChat: typeof forumChat;
   forumCommerce: typeof forumCommerce;
   forumCommerceAccess: typeof forumCommerceAccess;

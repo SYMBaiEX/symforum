@@ -1,4 +1,14 @@
-import { installation, installationBinding, installationMatches } from "./installation";
+import {
+  NEWS_MAX_AGE_MS,
+  newsPriority,
+  newsInterval,
+  newsRank,
+} from "../lib/forum-breaking-news";
+import {
+  installation,
+  installationBinding,
+  installationMatches,
+} from "./installation";
 import { v } from "convex/values";
 import { RateLimiter, DAY, HOUR } from "@convex-dev/rate-limiter";
 import { components, internal } from "./_generated/api";
@@ -71,7 +81,14 @@ async function source(ctx: QueryCtx, row: Doc<"forumAlphaDeliveries">) {
     t.body === row.body &&
     s.url === row.url &&
     ALPHA_BOARDS.some((b) => b === s.category) &&
-    Date.now() - row.sourcePublishedAt <= ALPHA_MAX_AGE_MS
+    Date.now() - row.sourcePublishedAt <=
+      (row.newsPriority === "urgent"
+        ? HOUR
+        : row.newsPriority === "priority"
+          ? 3 * HOUR
+          : row.newsPriority
+            ? NEWS_MAX_AGE_MS
+            : ALPHA_MAX_AGE_MS)
     ? s
     : null;
 }
@@ -130,21 +147,72 @@ export async function queueAlphaPublication(
   )
     return;
   const now = Date.now();
+  const isNews = args.promptVersion?.includes(":breaking-v1") === true;
+  const projects = isNews
+    ? await ctx.db
+        .query("forumAlphaProjects")
+        .withIndex("by_updatedAt", (q) => q.gte("updatedAt", now - 30 * DAY))
+        .order("desc")
+        .take(80)
+    : [];
+  const primaryHosts = new Set(projects.map((p) => p.host));
+  const classifications = isNews
+    ? args.sourceUrls
+        .slice(0, 12)
+        .map((url) => {
+          let verifiedPrimary = false;
+          try {
+            verifiedPrimary = primaryHosts.has(
+              new URL(url).hostname.toLowerCase(),
+            );
+          } catch {
+            /* policy rejects malformed URLs */
+          }
+          return newsPriority(
+            {
+              title: t.title,
+              summary: t.body,
+              url,
+              publishedAt: at,
+              verifiedPrimary,
+            },
+            now,
+          );
+        })
+        .filter((p) => p !== null)
+        .sort((a, b) => newsRank(b) - newsRank(a))
+    : [];
+  const priority = isNews ? (classifications[0] ?? null) : undefined;
+  if (isNews && priority === null) return;
+  const eligibleX =
+    !isNews || (priority !== "routine" && (args.qualityScore ?? 0) >= 90);
   await ctx.db.insert("forumAlphaDeliveries", {
-      installationBinding,
+    installationBinding,
     threadId: t._id,
     title: t.title,
     body: t.body,
     url: s.url,
     sourceUrls: args.sourceUrls.slice(0, 12),
     sourcePublishedAt: at,
+    newsPriority: priority ?? undefined,
     topicId: topic()!,
     telegramStatus: "queued",
-    xStatus: "queued",
+    xStatus: eligibleX ? "queued" : "skipped",
+    issue: eligibleX ? undefined : "forum_telegram_only",
     createdAt: now,
     updatedAt: now,
     notBefore: now + ALPHA_DELIVERY_TTL_MS,
-    expiresAt: now + ALPHA_DELIVERY_TTL_MS,
+    expiresAt: isNews
+      ? Math.min(
+          now + ALPHA_DELIVERY_TTL_MS,
+          at +
+            (priority === "urgent"
+              ? HOUR
+              : priority === "priority"
+                ? 3 * HOUR
+                : NEWS_MAX_AGE_MS),
+        )
+      : now + ALPHA_DELIVERY_TTL_MS,
   });
 }
 export const due = internalQuery({
@@ -163,20 +231,88 @@ export const due = internalQuery({
         q.eq("telegramStatus", "queued"),
       )
       .order("asc")
-      .take(1);
+      .take(24);
     const x = await ctx.db
       .query("forumAlphaDeliveries")
       .withIndex("by_xStatus_and_notBefore", (q) =>
         q.eq("xStatus", "queued").lte("notBefore", Date.now()),
       )
-      .take(1);
+      .take(24);
+    const select = (rows: Doc<"forumAlphaDeliveries">[]) =>
+      rows
+        .sort(
+          (a, b) =>
+            newsRank(b.newsPriority ?? "routine") -
+              newsRank(a.newsPriority ?? "routine") ||
+            a.createdAt - b.createdAt,
+        )
+        .slice(0, 1);
     return [
-      ...tg.map((r) => ({ id: r._id, destination: "telegram" as const })),
-      ...x.map((r) => ({ id: r._id, destination: "x" as const })),
+      ...select(tg).map((r) => ({
+        id: r._id,
+        destination: "telegram" as const,
+      })),
+      ...select(x).map((r) => ({ id: r._id, destination: "x" as const })),
     ];
   },
 });
 const key = { id: v.id("forumAlphaDeliveries") };
+function socialConfig(name: "alphaDay" | "alphaReadDay" | "alphaSpacing") {
+  if (env.FORUM_BREAKING_NEWS_ENABLED !== "true") return {};
+  return {
+    config:
+      name === "alphaSpacing"
+        ? {
+            kind: "token bucket" as const,
+            rate: 1,
+            period: 30 * 60_000,
+            capacity: 1,
+          }
+        : {
+            kind: "fixed window" as const,
+            rate: name === "alphaDay" ? 24 : 48,
+            period: DAY,
+          },
+  };
+}
+async function spaced(
+  ctx: MutationCtx,
+  row: Doc<"forumAlphaDeliveries">,
+  destination: "telegram" | "x",
+) {
+  const last =
+    destination === "telegram"
+      ? await ctx.db
+          .query("forumAlphaDeliveries")
+          .withIndex("by_telegramSentAt")
+          .order("desc")
+          .first()
+      : await ctx.db
+          .query("forumAlphaDeliveries")
+          .withIndex("by_xSentAt")
+          .order("desc")
+          .first();
+  const at = destination === "telegram" ? last?.telegramSentAt : last?.xSentAt;
+  const gap = row.newsPriority ? newsInterval(row.newsPriority) : 2 * HOUR;
+  if (at && Date.now() - at < gap) return false;
+  for (const name of ["alphaSpacing", "alphaDay"] as const)
+    if (
+      !(
+        await limits.check(ctx, name, {
+          key: destination,
+          ...socialConfig(name),
+        })
+      ).ok
+    )
+      return false;
+  for (const name of ["alphaSpacing", "alphaDay"] as const)
+    await limits.limit(ctx, name, {
+      key: destination,
+      ...socialConfig(name),
+      throws: true,
+    });
+  return true;
+}
 export const claimTelegram = internalMutation({
   args: key,
   returns: v.union(
@@ -200,10 +336,7 @@ export const claimTelegram = internalMutation({
       });
       return null;
     }
-    if (!(await limits.limit(ctx, "alphaSpacing", { key: "telegram" })).ok)
-      return null;
-    if (!(await limits.limit(ctx, "alphaDay", { key: "telegram" })).ok)
-      return null;
+    if (!(await spaced(ctx, r, "telegram"))) return null;
     await ctx.db.patch("forumAlphaDeliveries", id, {
       telegramStatus: "sending",
       updatedAt: Date.now(),
@@ -225,13 +358,20 @@ export const finishTelegram = internalMutation({
     const now = Date.now();
     await ctx.db.patch("forumAlphaDeliveries", id, {
       telegramStatus: sent ? "sent" : "held",
-      xStatus: sent ? "queued" : "held",
+      xStatus: sent ? (r.xStatus === "skipped" ? "skipped" : "queued") : "held",
       telegramMessageId: sent ? messageId : undefined,
       telegramSentAt: sent ? now : undefined,
       notBefore: sent
-        ? now + alphaLeadMs(env.FORUM_ALPHA_LEAD_MINUTES)
+        ? now +
+          (r.newsPriority === "urgent"
+            ? 0
+            : alphaLeadMs(env.FORUM_ALPHA_LEAD_MINUTES))
         : r.notBefore,
-      issue: sent ? undefined : "telegram_delivery_unconfirmed",
+      issue: sent
+        ? r.xStatus === "skipped"
+          ? r.issue
+          : undefined
+        : "telegram_delivery_unconfirmed",
       updatedAt: now,
     });
     return null;
@@ -241,7 +381,7 @@ export const claimX = internalMutation({
   args: key,
   returns: v.union(
     v.null(),
-    v.object({ account: schema.doc("xAgentAccounts") }),
+    v.object({ account: schema.doc("xAgentAccounts"), intervalMs: v.number() }),
   ),
   handler: async (ctx, { id }) => {
     const r = await ctx.db.get("forumAlphaDeliveries", id);
@@ -250,6 +390,7 @@ export const claimX = internalMutation({
     if (
       !r ||
       r.xStatus !== "queued" ||
+      r.newsPriority === "urgent" ||
       r.telegramStatus !== "sent" ||
       !r.telegramSentAt ||
       !r.telegramMessageId ||
@@ -304,7 +445,12 @@ export const claimX = internalMutation({
     }
     if (
       !(await limits.limit(ctx, "alphaRead", { key: "x" })).ok ||
-      !(await limits.limit(ctx, "alphaReadDay", { key: "x" })).ok
+      !(
+        await limits.limit(ctx, "alphaReadDay", {
+          key: "x",
+          ...socialConfig("alphaReadDay"),
+        })
+      ).ok
     )
       return null;
     await ctx.db.patch("forumAlphaDeliveries", id, {
@@ -314,7 +460,10 @@ export const claimX = internalMutation({
       accountEpoch: a.epoch,
       updatedAt: Date.now(),
     });
-    return { account: a };
+    return {
+      account: a,
+      intervalMs: r.newsPriority ? newsInterval(r.newsPriority) : 2 * HOUR,
+    };
   },
 });
 export const refreshBrand = internalMutation({
@@ -385,11 +534,7 @@ export const authorizeXSend = internalMutation({
       !(await source(ctx, r))
     )
       return null;
-    if (
-      !(await limits.limit(ctx, "alphaSpacing", { key: "x" })).ok ||
-      !(await limits.limit(ctx, "alphaDay", { key: "x" })).ok
-    )
-      return null;
+    if (!(await spaced(ctx, r, "x"))) return null;
     await ctx.db.patch("forumAlphaDeliveries", id, {
       xStatus: "sending",
       updatedAt: Date.now(),
@@ -406,6 +551,7 @@ export const finishX = internalMutation({
     await ctx.db.patch("forumAlphaDeliveries", id, {
       xStatus: postId ? "sent" : "held",
       xPostId: postId,
+      xSentAt: postId ? Date.now() : undefined,
       issue: postId ? undefined : "x_execution_unconfirmed",
       updatedAt: Date.now(),
     });
@@ -429,7 +575,11 @@ export const expire = internalMutation({
         .query("forumAlphaDeliveries")
         .withIndex("by_xStatus_and_notBefore", (q) => q.eq("xStatus", status))
         .take(12);
-      for (const r of rows)
+      for (const r of rows) {
+        if (r.xOperationId) {
+          const op = await ctx.db.get("xAgentOperations", r.xOperationId);
+          if (op?.status === "queued" && op.expiresAt > Date.now()) continue;
+        }
         if (r.updatedAt < Date.now() - 5 * 60_000) {
           await ctx.db.patch("forumAlphaDeliveries", r._id, {
             xStatus: "held",
@@ -448,6 +598,7 @@ export const expire = internalMutation({
               });
           }
         }
+      }
     }
     const tg = await ctx.db
       .query("forumAlphaDeliveries")
@@ -470,6 +621,7 @@ export const dashboard = query({
   args: {},
   returns: v.object({
     enabled: v.boolean(),
+    breakingNewsEnabled: v.boolean(),
     topicId: v.union(v.number(), v.null()),
     leadMinutes: v.number(),
     brandConnected: v.boolean(),
@@ -489,6 +641,7 @@ export const dashboard = query({
     if (viewer.isAgent) throw Error("Human owner required");
     return {
       enabled: enabled(),
+      breakingNewsEnabled: env.FORUM_BREAKING_NEWS_ENABLED === "true",
       topicId: topic(),
       leadMinutes: alphaLeadMs(env.FORUM_ALPHA_LEAD_MINUTES) / 60_000,
       brandConnected: !!(await brand(ctx)),

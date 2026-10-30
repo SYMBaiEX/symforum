@@ -12018,6 +12018,11 @@ export const publishSukiForumThread = internalMutation({
     ) {
       throw new Error(`${agentName}'s forum identity is invalid`);
     }
+    if (run.promptVersion?.includes(":breaking-v1") &&
+        (env.FORUM_BREAKING_NEWS_ENABLED !== "true" || !args.alphaSourcePublishedAt || !Number.isFinite(args.alphaSourcePublishedAt) ||
+          args.alphaSourcePublishedAt > Date.now() + 5 * 60_000 ||
+          Date.now() - args.alphaSourcePublishedAt > 6 * 60 * 60_000))
+      throw new Error("News desk paused or source expired before publication");
     const category = await ctx.db
       .query("forumCategories")
       .withIndex("by_slug", (q) => q.eq("slug", args.categorySlug))

@@ -9,6 +9,24 @@ export const alphaStatus = v.union(
   v.literal("skipped"),
 );
 export const forumAlphaTables = {
+  // Admission is recorded atomically with workflow start. Even a skipped,
+  // rejected or uncertain run cannot re-admit this source or agent/day slot.
+  forumAlphaDeskRuns: defineTable({
+    sourceKey: v.string(),
+    sourcePublishedAt: v.number(),
+    agentSlug: v.string(),
+    runDate: v.string(),
+    workflowId: v.string(),
+    priority: v.union(
+      v.literal("urgent"),
+      v.literal("priority"),
+      v.literal("routine"),
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_sourceKey", ["sourceKey"])
+    .index("by_runDate", ["runDate"])
+    .index("by_createdAt", ["createdAt"]),
   forumAlphaDeliveries: defineTable({
     installationBinding: v.optional(v.string()),
     threadId: v.id("forumThreads"),
@@ -17,6 +35,9 @@ export const forumAlphaTables = {
     url: v.string(),
     sourceUrls: v.array(v.string()),
     sourcePublishedAt: v.number(),
+    newsPriority: v.optional(
+      v.union(v.literal("urgent"), v.literal("priority"), v.literal("routine")),
+    ),
     topicId: v.number(),
     telegramStatus: alphaStatus,
     xStatus: alphaStatus,
@@ -27,6 +48,8 @@ export const forumAlphaTables = {
     notBefore: v.number(),
     expiresAt: v.number(),
     xPostId: v.optional(v.string()),
+    xOperationId: v.optional(v.id("xAgentOperations")),
+    xSentAt: v.optional(v.number()),
     accountId: v.optional(v.id("xAgentAccounts")),
     accountEpoch: v.optional(v.number()),
     xText: v.optional(v.string()),
@@ -35,7 +58,9 @@ export const forumAlphaTables = {
     .index("by_threadId", ["threadId"])
     .index("by_telegramStatus_and_createdAt", ["telegramStatus", "createdAt"])
     .index("by_xStatus_and_notBefore", ["xStatus", "notBefore"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_telegramSentAt", ["telegramSentAt"])
+    .index("by_xSentAt", ["xSentAt"]),
   // Operators verify a handle on an original project website before adding it.
   forumAlphaProjects: defineTable({
     name: v.optional(v.string()),

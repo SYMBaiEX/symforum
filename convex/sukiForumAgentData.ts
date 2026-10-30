@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { RateLimiter, MINUTE } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
+import { newsFeedTtl } from "../lib/forum-breaking-news";
 import { ALPHA_RESEARCH_FEEDS } from "../lib/forum-alpha-editorial";
 import { forumDailyPublicationLimit } from "../lib/forum-agent-cadence";
 import { env, internalMutation, internalQuery } from "./_generated/server";
@@ -28,7 +29,12 @@ export const claimAlphaDiscoveryRead = internalMutation({
     if (!ALPHA_RESEARCH_FEEDS.some((feed) => feed.url === feedUrl))
       throw new Error("Unknown alpha discovery feed");
     return (
-      await alphaDiscoveryLimiter.limit(ctx, "alphaDiscovery", { key: feedUrl })
+      await alphaDiscoveryLimiter.limit(ctx, "alphaDiscovery", {
+        key: feedUrl,
+        ...(env.FORUM_BREAKING_NEWS_ENABLED === "true" ? { config: {
+          kind: "token bucket" as const, rate: 1, period: newsFeedTtl(feedUrl), capacity: 1,
+        } } : {}),
+      })
     ).ok;
   },
 });

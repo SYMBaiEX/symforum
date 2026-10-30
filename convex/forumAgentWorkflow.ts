@@ -5,6 +5,7 @@ import {
   adaptivePublicationSlot,
   forumDailyPublicationLimit,
 } from "../lib/forum-agent-cadence";
+import { alphaDeskForAgent } from "../lib/forum-alpha-editorial";
 import { components, internal } from "./_generated/api";
 import { env, internalMutation, type MutationCtx } from "./_generated/server";
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
@@ -91,6 +92,14 @@ export const publishForumSlot = workflow
       agentSlug: v.string(),
       slot: v.number(),
       runDate: v.string(),
+      alphaSourceKey: v.optional(v.string()),
+      alphaBoard: v.optional(
+        v.union(
+          v.literal("crypto"),
+          v.literal("crypto-pumpfun"),
+          v.literal("crypto-bags"),
+        ),
+      ),
     },
   })
   .handler(async (step, args): Promise<PublicationResult> => {
@@ -126,7 +135,12 @@ export const publishForumSlot = workflow
     }
     return await step.runAction(
       internal.rosterForumAgent.runDailySlot,
-      { ...runArgs, agentSlug: args.agentSlug },
+      {
+        ...runArgs,
+        agentSlug: args.agentSlug,
+        alphaSourceKey: args.alphaSourceKey,
+        alphaBoard: args.alphaBoard,
+      },
       options,
     );
   });
@@ -137,6 +151,14 @@ export const queuePublication = internalMutation({
     slot: v.number(),
     runDate: v.optional(v.string()),
   },
+  returns: v.union(
+    v.object({
+      queued: v.literal(false),
+      reason: v.optional(v.string()),
+      retryAfter: v.optional(v.number()),
+    }),
+    v.object({ queued: v.literal(true), workflowId: v.string() }),
+  ),
   handler: async (
     ctx,
     args,
@@ -144,6 +166,12 @@ export const queuePublication = internalMutation({
     | { queued: false; reason?: string; retryAfter?: number }
     | { queued: true; workflowId: string }
   > => {
+    if (
+      env.FORUM_BREAKING_NEWS_ENABLED === "true" &&
+      env.FORUM_ALPHA_EDITORIAL_ENABLED === "true" &&
+      alphaDeskForAgent(args.agentSlug)
+    )
+      return { queued: false as const, reason: "managed-by-breaking-desk" };
     const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
     const preflight = await publicationPreflight(ctx, {
       agentSlug: args.agentSlug,
@@ -174,9 +202,34 @@ export const queuePublication = internalMutation({
   },
 });
 
-async function publicationPreflight(
+/** Called inside the desk admission mutation, so intent and workflow are atomic. */
+export async function startBreakingPublication(
   ctx: MutationCtx,
-  args: { agentSlug: string; runDate: string; slot: number },
+  args: {
+    agentSlug: string;
+    runDate: string;
+    slot: number;
+    alphaSourceKey: string;
+    alphaBoard: "crypto" | "crypto-pumpfun" | "crypto-bags";
+  },
+): Promise<string> {
+  return await workflow.start(
+    ctx,
+    internal.forumAgentWorkflow.publishForumSlot,
+    args,
+    { startAsync: true },
+  );
+}
+
+export async function publicationPreflight(
+  ctx: MutationCtx,
+  args: {
+    agentSlug: string;
+    runDate: string;
+    slot: number;
+    alphaSourceKey?: string;
+  },
+  sharedChecksPassed = false,
 ) {
   const now = Date.now();
   const agent = await ctx.db
@@ -193,14 +246,12 @@ async function publicationPreflight(
   const dailyLimit = forumDailyPublicationLimit(
     env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
   );
-  const canary = await ctx.db
-    .query("aiOperationalStates")
-    .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
-    .unique();
-  const canaryBlockReason = structuredCanaryBlockReason(canary, now);
-  if (canaryBlockReason !== null)
-    return { ok: false as const, reason: canaryBlockReason };
+  if (!sharedChecksPassed) {
+    const shared = await publicationSharedPreflight(ctx, args.runDate);
+    if (!shared.ok) return shared;
+  }
   if (
+    !args.alphaSourceKey &&
     !adaptivePublicationSlot({
       agentSlug: args.agentSlug,
       runDate: args.runDate,
@@ -227,7 +278,10 @@ async function publicationPreflight(
         .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
         .unique(),
   );
-  if (existing?.promptVersion?.includes(":alpha-v1:")) {
+  if (
+    (args.alphaSourceKey && existing) ||
+    existing?.promptVersion?.includes(":alpha-v1:")
+  ) {
     return { ok: false as const, reason: "alpha-already-attempted" };
   }
   if (existing?.status === "published") {
@@ -248,9 +302,28 @@ async function publicationPreflight(
     return { ok: false as const, reason: "daily-target" };
   }
 
+  return { ok: true as const };
+}
+
+/** Read the shared circuit once for a multi-agent desk admission. */
+export async function publicationSharedPreflight(
+  ctx: MutationCtx,
+  runDate: string,
+) {
+  const now = Date.now();
+  const dailyLimit = forumDailyPublicationLimit(
+    env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
+  );
+  const canary = await ctx.db
+    .query("aiOperationalStates")
+    .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
+    .unique();
+  const canaryBlockReason = structuredCanaryBlockReason(canary, now);
+  if (canaryBlockReason !== null)
+    return { ok: false as const, reason: canaryBlockReason };
   const globalRuns = await ctx.db
     .query("forumAgentRuns")
-    .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
+    .withIndex("by_runDate", (q) => q.eq("runDate", runDate))
     .take(dailyLimit + MAX_FAILED_RUNS_PER_DAY + 1);
   if (
     globalRuns.filter(
@@ -268,7 +341,7 @@ async function publicationPreflight(
   return { ok: true as const };
 }
 
-function forumDateForTimestamp(timestamp: number) {
+export function forumDateForTimestamp(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
     year: "numeric",
