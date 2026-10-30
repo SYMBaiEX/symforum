@@ -56,9 +56,10 @@ export function useQuery(
     return {
       swapsEnabled: !location.search.includes("disabled"),
       signatureFirstEnabled: location.search.includes("signaturefirst"),
+      managedEnabled: location.search.includes("managed"),
       promotionsEnabled: true,
       treasury: "11111111111111111111111111111111",
-      platformFeeBps: 25,
+      platformFeeBps: location.search.includes("managed") ? 50 : 25,
       promotionAmountRaw: "10000000000",
       symfMint: SYMF,
     };

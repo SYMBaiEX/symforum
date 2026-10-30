@@ -3,9 +3,11 @@
 import { ConvexError, v } from "convex/values";
 import { internalAction, env } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getManagedOrder } from "../lib/jupiter-managed";
 import { commerceConfig, COMMERCE_MINT } from "../lib/forum-commerce";
 import {
   buildSwapTransaction,
+  prepareManagedSwap,
   buildPromotionTransaction,
   type PromotionPaymentIntent,
 } from "../lib/swap-transactions";
@@ -18,6 +20,7 @@ import {
 import {
   swapPreparationIssue,
   SWAP_PREPARATION_MESSAGES,
+  SwapRpcError,
 } from "../lib/swap-preparation-errors";
 
 const prepared = v.object({
@@ -46,10 +49,15 @@ export const buildSwap = internalAction({
       wallet: quote.request.wallet,
     });
     try {
-      return await buildSwapTransaction(quote, {
+      return await (
+        quote.execution === "jupiter-managed"
+          ? prepareManagedSwap
+          : buildSwapTransaction
+      )(quote, {
         rpcUrl: config.rpcUrl,
         treasury,
         jupiterApiKey: config.jupiterApiKey,
+        referralAccount: config.referralAccount,
       });
     } catch (error) {
       throw new ConvexError(
@@ -86,7 +94,11 @@ export const buildPromotion = internalAction({
 });
 /** No signing/broadcast capability. Only metadata leaves this operator-only boundary. */
 export const unsignedDiagnostic = internalAction({
-  args: { wallet: v.string() },
+  args: {
+    wallet: v.string(),
+    managed: v.optional(v.literal(true)),
+    verification: v.optional(v.literal("fee-lookup-v2")),
+  },
   returns: v.object({
     ok: v.boolean(),
     code: v.string(),
@@ -94,10 +106,11 @@ export const unsignedDiagnostic = internalAction({
     simulations: v.number(),
     kitCode: v.union(v.number(), v.null()),
     source: v.union(v.string(), v.null()),
+    rpcCode: v.optional(v.union(v.number(), v.null())),
   }),
   handler: async (
     ctx,
-    { wallet },
+    { wallet, managed, verification },
   ): Promise<{
     ok: boolean;
     code: string;
@@ -105,14 +118,15 @@ export const unsignedDiagnostic = internalAction({
     simulations: number;
     kitCode: number | null;
     source: string | null;
+    rpcCode?: number | null;
   }> => {
     let stage = "admission",
       simulations = 0;
     if (
-      !(await ctx.runMutation(
-        internal.forumSwaps.reserveUnsignedDiagnostic,
-        {},
-      ))
+      !(await ctx.runMutation(internal.forumSwaps.reserveUnsignedDiagnostic, {
+        ...(managed ? { managed } : {}),
+        ...(verification ? { verification } : {}),
+      }))
     )
       return {
         ok: false,
@@ -129,6 +143,7 @@ export const unsignedDiagnostic = internalAction({
       rpcUrl: config.rpcUrl,
       treasury: config.treasury,
       jupiterApiKey: config.jupiterApiKey,
+      referralAccount: config.referralAccount,
     };
     const fetcher: typeof fetch = async (input, init) => {
       const method =
@@ -146,10 +161,12 @@ export const unsignedDiagnostic = internalAction({
         outputMint: COMMERCE_MINT,
         amountRaw: "1000000",
         slippageBps: 50,
-        platformFeeBps: config.platformFeeBps,
-        supportsV1: true,
+        platformFeeBps: managed ? 50 : config.platformFeeBps,
+        supportsV1: managed ? false : true,
       };
-      const result = await collectSwapQuotes(request, routerConfig, fetcher);
+      const result = managed
+        ? { quotes: [await getManagedOrder(request, routerConfig, fetcher)] }
+        : await collectSwapQuotes(request, routerConfig, fetcher);
       const quote = result.quotes.find((q) => q.provider === "jupiter");
       if (!quote)
         return {
@@ -160,7 +177,11 @@ export const unsignedDiagnostic = internalAction({
           kitCode: null,
           source: null,
         };
-      await buildSwapTransaction(quote, routerConfig, fetcher);
+      await (managed ? prepareManagedSwap : buildSwapTransaction)(
+        quote,
+        routerConfig,
+        fetcher,
+      );
       return {
         ok: true,
         code: "simulated",
@@ -192,6 +213,7 @@ export const unsignedDiagnostic = internalAction({
         simulations,
         kitCode,
         source,
+        rpcCode: error instanceof SwapRpcError ? error.rpcCode : null,
       };
     }
   },

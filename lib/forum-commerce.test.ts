@@ -142,7 +142,7 @@ describe("holder waiver and opt-in commerce config", () => {
     expect(commerceConfig({})).toMatchObject({
       swapsEnabled: false,
       promotionsEnabled: false,
-      platformFeeBps: 25,
+      platformFeeBps: 50,
       promotionBurnBps: 5000,
     });
     const base = {

@@ -64,6 +64,11 @@ getWallets().register({
           body: JSON.stringify({ bytes: Array.from(input.transaction) }),
         });
         const result = await response.json();
+        if (location.search.includes("hideaftersign"))
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "hidden",
+          });
         return [
           {
             signedTransaction: Uint8Array.from(

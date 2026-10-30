@@ -8,6 +8,7 @@ import {
   compileTransaction,
   getBase64EncodedWireTransaction,
   getBase64Encoder,
+  getTransactionDecoder,
 } from "@solana/kit";
 import { createHash } from "node:crypto";
 import { runInNewContext } from "node:vm";
@@ -66,11 +67,9 @@ test("sign-only requests exactly the simulated transaction and never broadcasts 
   const f = await signedSwapFixture(1);
   const account = { address: f.wallet, chains: ["solana:mainnet"] };
   const sign = vi.fn(async () => [
-    {
-      signedTransaction: Uint8Array.from(
-        getBase64Encoder().encode(f.signedTransactionBase64),
-      ),
-    },
+    getTransactionDecoder().decode(
+      getBase64Encoder().encode(f.signedTransactionBase64),
+    ),
   ]);
   const send = vi.fn();
   boundary.getAccount.mockReturnValue(account);
@@ -82,7 +81,11 @@ test("sign-only requests exactly the simulated transaction and never broadcasts 
   const client = {
     wallet: {
       getState: () => ({
-        connected: { account, supportedTransactionVersions: new Set([0]) },
+        connected: {
+          account,
+          signer: { address: f.wallet, modifyAndSignTransactions: sign },
+          supportedTransactionVersions: new Set([0]),
+        },
       }),
     },
   } as unknown as CommerceWalletClient;
@@ -92,16 +95,11 @@ test("sign-only requests exactly the simulated transaction and never broadcasts 
     signedTransactionBase64: f.signedTransactionBase64,
   });
   expect(sign).toHaveBeenCalledTimes(1);
-  expect(sign).toHaveBeenCalledWith(
-    expect.objectContaining({
-      account,
-      chain: "solana:mainnet",
-      transaction: Uint8Array.from(
-        getBase64Encoder().encode(f.prepared.transactionBase64),
-      ),
-      options: { preflightCommitment: "confirmed", minContextSlot: 200 },
-    }),
-  );
+  expect(sign).toHaveBeenCalledWith([
+    getTransactionDecoder().decode(
+      getBase64Encoder().encode(f.prepared.transactionBase64),
+    ),
+  ]);
   expect(send).not.toHaveBeenCalled();
   sign.mockRejectedValueOnce({
     code: -32603,

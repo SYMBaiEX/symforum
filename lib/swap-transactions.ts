@@ -34,6 +34,13 @@ import {
   getCloseAccountInstruction,
 } from "@solana-program/token";
 import { getBurnCheckedInstruction } from "@solana-program/token-2022";
+import { SwapRpcError } from "./swap-preparation-errors";
+import {
+  normalizeManagedOrder,
+  JUPITER_REFERRAL_PROGRAM,
+  JUPITER_REFERRAL_PROJECT,
+  type ManagedConfig,
+} from "./jupiter-managed";
 import {
   SOL_MINT,
   rawAmount,
@@ -258,11 +265,13 @@ export function validateSwapInstruction(
   quote: SwapRouteQuote,
   source: string,
   destination: string,
+  managedFee?: { bps: number; account: string },
 ) {
   const d = bytes(ix);
   const view = dataView(ix);
   const r = quote.request;
   let user: number, src: number, dst: number, amountOffset: number;
+  let feeAccountIndex: number | null = null;
   let inputMintIndex: number | null = null,
     outputMintIndex: number | null = null;
   if (quote.provider === "jupiter") {
@@ -277,6 +286,7 @@ export function validateSwapInstruction(
       [user, src, dst, amountOffset] = shared ? [1, 2, 5, 9] : [0, 1, 2, 8];
       inputMintIndex = shared ? 6 : 3;
       outputMintIndex = shared ? 7 : 4;
+      feeAccountIndex = shared ? 11 : 10;
       requireCondition(d.length >= amountOffset + 26);
       quotedOut = view.getBigUint64(amountOffset + 8, true);
       slip = view.getUint16(amountOffset + 16, true);
@@ -287,7 +297,10 @@ export function validateSwapInstruction(
       );
       if (!shared)
         requireCondition(
-          !at(ix, 7) || at(ix, 7) === JUPITER || at(ix, 7) === destination,
+          !at(ix, 7) ||
+            at(ix, 7) === JUPITER ||
+            at(ix, 7) === destination ||
+            (managedFee && r.outputMint === SOL_MINT && at(ix, 7) === r.wallet),
         );
     } else if (
       disc === "193,32,155,51,65,214,156,129" ||
@@ -299,6 +312,7 @@ export function validateSwapInstruction(
         : [1, 2, 3, d.length - 19];
       inputMintIndex = shared ? 7 : null;
       outputMintIndex = shared ? 8 : 5;
+      feeAccountIndex = shared ? 9 : 6;
       quotedOut = view.getBigUint64(amountOffset + 8, true);
       slip = view.getUint16(amountOffset + 16, true);
       protocolFee = d[amountOffset + 18];
@@ -310,10 +324,12 @@ export function validateSwapInstruction(
     requireCondition(
       quotedOut === BigInt(quote.outputAmountRaw) &&
         slip === r.slippageBps &&
-        protocolFee === 0 &&
+        protocolFee === (managedFee?.bps ?? 0) &&
         (quotedOut * BigInt(10_000 - slip)) / 10_000n >=
           BigInt(quote.minimumOutputAmountRaw),
     );
+    if (managedFee)
+      requireCondition(at(ix, feeAccountIndex!) === managedFee.account);
   } else {
     requireCondition(
       ix.programAddress === RAYDIUM && d.length >= 17 && d[0] === 0,
@@ -337,6 +353,244 @@ export function validateSwapInstruction(
     requireCondition(at(ix, inputMintIndex) === r.inputMint);
   if (outputMintIndex !== null)
     requireCondition(at(ix, outputMintIndex) === r.outputMint);
+}
+
+/** Keep Jupiter's assembled bytes and lifetime unchanged. Independently verify
+ * the route/setup/fee recipient and simulate the exact unsigned transaction.
+ * No local rebuilding, priority-fee editing, signing, or broadcast. */
+export async function prepareManagedSwap(
+  saved: SwapRouteQuote,
+  config: SwapRouterConfig & ManagedConfig,
+  fetcher: typeof fetch = fetch,
+): Promise<PreparedSwap> {
+  requireCondition(
+    saved.execution === "jupiter-managed" && saved.expiresAt > Date.now(),
+  );
+  // Revalidate stored provider JSON as well as the original normalized binding.
+  const quote = normalizeManagedOrder(
+    saved.opaque,
+    saved.request,
+    config,
+    saved.createdAt,
+  );
+  requireCondition(
+    quote.outputAmountRaw === saved.outputAmountRaw &&
+      quote.minimumOutputAmountRaw === saved.minimumOutputAmountRaw &&
+      quote.fees?.totalFeeBps === saved.fees?.totalFeeBps &&
+      quote.fees?.feeMint === saved.fees?.feeMint,
+  );
+  const order = saved.opaque,
+    wallet = saved.request.wallet;
+  const transactionBase64 = String(order.transaction);
+  const tx = getTransactionDecoder().decode(
+    getBase64Encoder().encode(transactionBase64),
+  );
+  const compiled = getCompiledTransactionMessageDecoder().decode(
+    tx.messageBytes,
+  );
+  requireCondition(
+    compiled.version === order.transactionVersion &&
+      (compiled.version === 0 || compiled.version === 1) &&
+      Object.keys(tx.signatures).length === 1 &&
+      tx.signatures[address(wallet)] === null &&
+      compiled.staticAccounts[0] === wallet &&
+      getBase64EncodedWireTransaction(tx) === transactionBase64,
+  );
+  const lastValidBlockHeight = Number(order.lastValidBlockHeight);
+  const tables =
+    compiled.version === 0
+      ? await lookupTables(
+          config.rpcUrl,
+          (compiled.addressTableLookups ?? []).map((t) => t.lookupTableAddress),
+          fetcher,
+        )
+      : {};
+  const message = decompileTransactionMessage(compiled, {
+    addressesByLookupTableAddress: tables,
+    lastValidBlockHeight: BigInt(lastValidBlockHeight),
+  });
+  noOtherSigners(message.instructions, wallet);
+  const [input, output] = await Promise.all([
+    verifiedMint(config.rpcUrl, saved.request.inputMint, fetcher),
+    verifiedMint(config.rpcUrl, saved.request.outputMint, fetcher),
+  ]);
+  const source = await associatedAccount(wallet, input),
+    destination = await associatedAccount(wallet, output);
+  const routes = message.instructions.filter(
+    (ix) => ix.programAddress === JUPITER,
+  );
+  requireCondition(routes.length === 1);
+  const route = routes[0],
+    disc = Array.from(bytes(route).slice(0, 8)).join(",");
+  const feeIndex = (
+    {
+      "187,100,250,204,49,196,175,20": 10,
+      "209,152,83,147,124,254,216,233": 11,
+      "229,23,203,151,122,227,173,42": 6,
+      "193,32,155,51,65,214,156,129": 9,
+    } as Record<string, number>
+  )[disc];
+  requireCondition(feeIndex !== undefined && quote.fees);
+  const feeAccount = at(route, feeIndex);
+  const feeBps = quote.fees.totalFeeBps;
+  requireCondition(feeAccount);
+  if (feeBps) {
+    const response = await swapRpc<{ value: unknown[] }>(
+      config.rpcUrl,
+      "getMultipleAccounts",
+      [
+        [
+          feeAccount,
+          ...(saved.request.platformFeeBps ? [config.referralAccount!] : []),
+        ],
+        { encoding: "base64", commitment: "confirmed" },
+      ],
+      fetcher,
+    );
+    const feeInfo = record(response.value[0]);
+    requireCondition(
+      [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].includes(String(feeInfo.owner)) &&
+        Array.isArray(feeInfo.data),
+    );
+    const token = getBase64Encoder().encode(String(feeInfo.data[0]));
+    requireCondition(token.length >= 165 && token[108] === 1);
+    const mint = getAddressDecoder().decode(token.slice(0, 32)),
+      owner = getAddressDecoder().decode(token.slice(32, 64));
+    requireCondition(mint === quote.fees.feeMint);
+    if (saved.request.platformFeeBps) {
+      const referral = record(response.value[1]);
+      requireCondition(
+        referral.owner === JUPITER_REFERRAL_PROGRAM &&
+          Array.isArray(referral.data),
+      );
+      const data = getBase64Encoder().encode(String(referral.data[0]));
+      const discBytes = new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode("account:ReferralAccount"),
+        ),
+      ).slice(0, 8);
+      requireCondition(
+        data.length >= 75 &&
+          discBytes.every((b, i) => data[i] === b) &&
+          getAddressDecoder().decode(data.slice(8, 40)) === config.treasury &&
+          getAddressDecoder().decode(data.slice(40, 72)) ===
+            JUPITER_REFERRAL_PROJECT &&
+          new DataView(Uint8Array.from(data).buffer).getUint16(72, true) ===
+            8000 &&
+          owner === config.referralAccount,
+      );
+      requireCondition(
+        feeAccount ===
+          (await associatedAccount(config.referralAccount!, {
+            mint,
+            tokenProgram: String(feeInfo.owner),
+            decimals: 0,
+          })),
+      );
+    } else requireCondition(owner === JUPITER_REFERRAL_PROJECT);
+  }
+  validateSwapInstruction(route, quote, source, destination, {
+    bps: feeBps,
+    account: feeAccount,
+  });
+  const setup = [],
+    compute = new Set<number>();
+  for (const ix of message.instructions) {
+    if (ix === route) continue;
+    if (ix.programAddress !== COMPUTE) {
+      setup.push(ix);
+      continue;
+    }
+    const d = bytes(ix),
+      v = dataView(ix);
+    requireCondition(compiled.version === 0 && !compute.has(d[0]));
+    compute.add(d[0]);
+    requireCondition(
+      (d[0] === 2 &&
+        d.length === 5 &&
+        v.getUint32(1, true) > 0 &&
+        v.getUint32(1, true) <= MAX_UNITS) ||
+        (d[0] === 3 &&
+          d.length === 9 &&
+          v.getBigUint64(1, true) <= MAX_COMPUTE_PRICE) ||
+        (d[0] === 4 &&
+          d.length === 5 &&
+          v.getUint32(1, true) > 0 &&
+          v.getUint32(1, true) <= 64 * 1024 * 1024),
+    );
+  }
+  validateSetupSequence(
+    setup,
+    wallet,
+    input,
+    output,
+    source,
+    destination,
+    BigInt(saved.request.amountRaw),
+  );
+  const simulation = await swapRpc<{
+    context: { slot: number };
+    value: { err: unknown; unitsConsumed?: number };
+  }>(
+    config.rpcUrl,
+    "simulateTransaction",
+    [
+      transactionBase64,
+      { encoding: "base64", commitment: "confirmed", sigVerify: false },
+    ],
+    fetcher,
+  );
+  requireCondition(
+    simulation.value.err === null &&
+      Number.isSafeInteger(simulation.context.slot) &&
+      simulation.context.slot > 0 &&
+      Number.isSafeInteger(simulation.value.unitsConsumed) &&
+      Number(simulation.value.unitsConsumed) > 0 &&
+      Number(simulation.value.unitsConsumed) <= MAX_UNITS,
+    "Simulation failed. Nothing was signed or sent.",
+  );
+  const feeArgs = [
+    getBase64Decoder().decode(tx.messageBytes),
+    { commitment: "confirmed", minContextSlot: simulation.context.slot },
+  ];
+  let fee: { value: number | null };
+  try {
+    fee = await swapRpc(config.rpcUrl, "getFeeForMessage", feeArgs, fetcher);
+  } catch (error) {
+    // A single read-only retry for an unavailable/lagging RPC replica; keep
+    // the same exact message and minimum slot. Never retry signing/execute.
+    if (
+      !(error instanceof SwapRpcError) ||
+      error.code !== "rpc_unavailable" ||
+      (error.rpcCode !== null && ![-32016, -32005].includes(error.rpcCode))
+    )
+      throw error;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    fee = await swapRpc(config.rpcUrl, "getFeeForMessage", feeArgs, fetcher);
+  }
+  requireCondition(
+    Number.isSafeInteger(fee.value) &&
+      Number(fee.value) >= 0 &&
+      Number(fee.value) <=
+        Number(order.signatureFeeLamports) +
+          Number(order.prioritizationFeeLamports) &&
+      Number(fee.value) <= Number(MAX_NETWORK_FEE),
+  );
+  requireCondition(saved.expiresAt > Date.now());
+  const hash = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", Uint8Array.from(tx.messageBytes)),
+  );
+  return {
+    transactionBase64,
+    transactionVersion: compiled.version,
+    lastValidBlockHeight,
+    simulationSlot: simulation.context.slot,
+    estimatedNetworkFeeLamports: String(fee.value),
+    messageHash: Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join(
+      "",
+    ),
+  };
 }
 async function feeInstructions(
   quote: SwapRouteQuote,

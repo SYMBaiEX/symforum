@@ -113,17 +113,17 @@ export function StandaloneSwap({ enabled }: { enabled: boolean }) {
           <section className="commerce-guide">
             <h2>One review. Your wallet.</h2>
             <p>
-              Our router compares quotes from Jupiter and Raydium. It selects
-              the highest quoted token output among the sources that respond,
-              not a guarantee of the best possible execution across every
-              market.
+              Jupiter finds a route across supported Solana pools and manages
+              transaction delivery. We independently verify and simulate the
+              transaction before your wallet signs. Execution is not guaranteed.
             </p>
             <h3>Hold SYMF, skip the platform fee</h3>
             <p>
               Wallets holding strictly more than $1 of verified SYMF pay no
-              platform swap fee. Other wallets pay 0.25%, included in the amount
-              entered. Pool fees, Solana network costs and any new token-account
-              rent still apply.
+              SYMBaiEX swap fee. The managed route’s regular integrator fee is
+              0.50%, including Jupiter’s 20% share of that fee. When our fee is
+              waived, Jupiter’s own quoted fee can still apply. Fees are shown
+              before approval; pool fees, network costs and account rent remain.
             </p>
             <h3>Know the mint</h3>
             <p>
@@ -287,6 +287,12 @@ function LiveSwap({
   ].filter((t, i, a) => a.findIndex((x) => x.mint === t.mint) === i);
   const input = all.find((t) => t.mint === inputMint),
     output = all.find((t) => t.mint === outputMint);
+  const feeLabel = (q: Quote) =>
+    q.fees
+      ? `${q.platformFeeBps ? `${q.platformFeeBps / 100}% integrator fee (Jupiter share included)` : `SYMBaiEX waived · Jupiter ${q.fees.jupiterFeeBps / 100}%`} · collected in ${all.find((t) => t.mint === q.fees?.feeMint)?.symbol ?? short(q.fees.feeMint)}`
+      : q.platformFeeBps === 0
+        ? "Waived"
+        : `${formatTokenAmount(q.platformFeeRaw, input?.decimals ?? 9)} ${input?.symbol ?? ""} (${q.platformFeeBps / 100}%)`;
   let rawAmount = "";
   try {
     if (input) rawAmount = parseTokenAmount(amount, input.decimals);
@@ -419,7 +425,9 @@ function LiveSwap({
         if (
           _signal.aborted ||
           ready.revision !== revision.current ||
-          !walletHandoffAllowed(selected.expiresAt)
+          selected.expiresAt <= Date.now() ||
+          client.wallet.getState().connected?.account.address !==
+            prepared.wallet
         )
           throw Error("Signing interrupted before submission");
         stage = "registration";
@@ -442,9 +450,22 @@ function LiveSwap({
           reason instanceof CommerceWalletRequestError ? reason.code : null;
         console.warn(
           "Swap signature-first step did not complete",
-          JSON.stringify({ stage, code }),
+          JSON.stringify({
+            stage,
+            code,
+            walletPhase:
+              reason instanceof CommerceWalletRequestError
+                ? reason.phase
+                : null,
+            responseIssue:
+              reason instanceof CommerceWalletRequestError
+                ? reason.responseIssue
+                : null,
+          }),
         );
-        setWalletDiagnostic(`Stage: ${stage}; code: ${code ?? "none"}.`);
+        setWalletDiagnostic(
+          `Stage: ${stage}; code: ${code ?? "none"}${reason instanceof CommerceWalletRequestError ? `; wallet phase: ${reason.phase}; issue: ${reason.responseIssue ?? "none"}` : ""}.`,
+        );
         const cancelled = await cancelUnsubmitted({
           quoteId: selected.quoteId,
         }).catch(() => false);
@@ -790,11 +811,7 @@ function LiveSwap({
             </div>
             <div>
               <dt>Platform fee · included</dt>
-              <dd>
-                {best.platformFeeBps === 0
-                  ? "Waived"
-                  : `${formatTokenAmount(best.platformFeeRaw, input.decimals)} ${input.symbol} (${best.platformFeeBps / 100}%)`}
-              </dd>
+              <dd>{feeLabel(best)}</dd>
             </div>
             <div>
               <dt>Price impact</dt>
@@ -803,8 +820,9 @@ function LiveSwap({
           </dl>
           <div className="commerce-inline">
             <span>
-              {best.provider === "jupiter" ? "Jupiter" : "Raydium"} · highest
-              quoted output
+              {best.execution === "jupiter-managed"
+                ? "Jupiter managed · verified Metis route"
+                : `${best.provider === "jupiter" ? "Jupiter" : "Raydium"} · highest quoted output`}
             </span>
             <span>
               Quote valid{" "}
@@ -1041,13 +1059,7 @@ function LiveSwap({
             </div>
             <div>
               <dt>Platform fee (included)</dt>
-              <dd>
-                {formatTokenAmount(
-                  selected.platformFeeRaw,
-                  input?.decimals ?? 9,
-                )}{" "}
-                {input?.symbol}
-              </dd>
+              <dd>{feeLabel(selected)}</dd>
             </div>
             <div>
               <dt>Price impact</dt>

@@ -76,6 +76,7 @@ type Env = {
   readonly FORUM_SITE_URL: string | undefined;
   readonly FORUM_SWAPS_ENABLED: string | undefined;
   readonly FORUM_SWAP_AUTORECOVERY_ENABLED: string | undefined;
+  readonly FORUM_SWAP_MANAGED_ENABLED: string | undefined;
   readonly FORUM_SWAP_RECONCILIATION_TARGET: string | undefined;
   readonly FORUM_SWAP_SIGNATURE_FIRST_ENABLED: string | undefined;
   readonly GH_TOKEN: string | undefined;
@@ -83,6 +84,7 @@ type Env = {
   readonly IDENTITY_SITE_URL: string | undefined;
   readonly INSTALLATION_LEGACY_BINDING: string | undefined;
   readonly JUPITER_API_KEY: string | undefined;
+  readonly JUPITER_REFERRAL_ACCOUNT: string | undefined;
   readonly JWKS: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
