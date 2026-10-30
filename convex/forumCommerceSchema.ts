@@ -9,6 +9,38 @@ export const promotionStatus = v.union(
   v.literal("expired"),
 );
 export const forumCommerceTables = {
+  // High-churn checking/leases stay separate from the immutable payment binding.
+  forumSwapRecoveries: defineTable({
+    quoteId: v.id("forumSwapQuotes"),
+    state: v.union(
+      v.literal("scheduled"),
+      v.literal("checking"),
+      v.literal("review"),
+      v.literal("resolved"),
+    ),
+    reason: v.union(
+      v.literal("waiting_expiry"),
+      v.literal("checking_receipt"),
+      v.literal("evidence_inconclusive"),
+      v.literal("budget_unavailable"),
+      v.literal("record_changed"),
+      v.literal("resolved"),
+    ),
+    attempts: v.number(),
+    nextCheckAt: v.number(),
+    leaseUntil: v.number(),
+    lease: v.string(),
+    lastCheckedAt: v.optional(v.number()),
+    outcome: v.optional(
+      v.union(
+        v.literal("confirmed"),
+        v.literal("chain_failed"),
+        v.literal("not_landed"),
+      ),
+    ),
+    receiptHash: v.optional(v.string()),
+    previousQuoteHash: v.optional(v.string()),
+  }).index("by_quoteId", ["quoteId"]),
   forumSwapRequests: defineTable({
     wallet: v.string(),
     authUserId: v.string(),

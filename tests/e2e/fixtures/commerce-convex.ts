@@ -1,6 +1,21 @@
 // Isolated fake boundary. No production data, session or network transport.
 import { getFunctionName } from "convex/server";
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+let recoveryResolved = false,
+  recoveryRevision = 0;
+const recoveryListeners = new Set<() => void>();
+window.addEventListener("commerce:resolve-recovery", () => {
+  recoveryResolved = true;
+  recoveryRevision++;
+  recoveryListeners.forEach((listener) => listener());
+});
+const subscribeRecovery = (listener: () => void) => {
+  recoveryListeners.add(listener);
+  return () => {
+    recoveryListeners.delete(listener);
+  };
+};
+const getRecoveryRevision = () => recoveryRevision;
 const SOL = "So11111111111111111111111111111111111111112",
   USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   SYMF = "5UJkWhgLxiZZoCbcN4NfqacmrtAPKNxwa17Puv4zpump";
@@ -14,6 +29,11 @@ export function useQuery(
   ref: Parameters<typeof getFunctionName>[0],
   args: unknown,
 ) {
+  useSyncExternalStore(
+    subscribeRecovery,
+    getRecoveryRevision,
+    getRecoveryRevision,
+  );
   if (args === "skip") return undefined;
   const name = getFunctionName(ref);
   if (name === "forumCommerce:getWalletSession")
@@ -58,13 +78,25 @@ export function useQuery(
           {
             quoteId: "held-fixture",
             wallet: "6fHaP66Vzs9hkgTA9uBSuWBHkaAGgbRvYc4JxkK2RMBY",
-            status: "held",
+            status: recoveryResolved ? "failed" : "held",
             signature: null,
             inputMint: SOL,
             outputMint: USDC,
             amountRaw: "1000000",
             createdAt: 0,
-            issue: "wallet_outcome_unknown",
+            issue: recoveryResolved
+              ? "reconciled_expired_not_landed"
+              : "wallet_outcome_unknown",
+            ...(location.search.includes("auto")
+              ? {
+                  recovery: {
+                    state: recoveryResolved ? "resolved" : "scheduled",
+                    reason: recoveryResolved ? "resolved" : "waiting_expiry",
+                    attempts: recoveryResolved ? 1 : 0,
+                    nextCheckAt: recoveryResolved ? 0 : Date.now() + 900000,
+                  },
+                }
+              : {}),
           },
         ]
       : [];

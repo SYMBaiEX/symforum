@@ -3,7 +3,7 @@
 ## Operating contract
 
 - One browser-owned Solana Kit wallet client is shared by sign-in, account linking and commerce across the five first-party apps. Better Auth remains the session authority; a connected browser address alone never authorizes commerce. A uniquely exposed, already-authorized wallet is restored only when it matches the current user's server-linked account. Explicit disconnects and ambiguous multiple accounts require explicit selection.
-- Valid amount/pair changes request one debounced quote after one second while the page is visible. The receive field displays the fresh highest-output quote. There is no Compare or Refresh button: Review swap automatically revalidates an expired quote before simulation. Review and simulation remain a separate click, followed by explicit wallet approval. Changes to account, wallet, amount or pair invalidate in-flight/stale previews. Expiry does not start background polling.
+- Valid amount/pair changes request one debounced quote after one second while the page is visible. The receive field displays the fresh highest-output quote. One Buy/Swap click refreshes an expired quote, validates and simulates, then opens one explicit wallet approval. There is no Compare button or second application approval. Changes to account, wallet, amount or pair invalidate in-flight/stale previews. Expiry does not start background quote polling.
 - The official SYMF token page embeds this same wallet-bound native swap next to its chart on desktop, stacking below it at narrower widths. The embedded agent app continues to exclude transaction controls.
 - Traffic protection uses the existing Convex rate-limiter component: quote admission at most once per 1.2 seconds, with a separate shared Jupiter gate for quote and token-directory cache misses (1.2 seconds with a key; 2.4 seconds keyless). Requests beyond capacity fail closed with a busy message; there is no unbounded queue or automatic retry storm. The existing 1,000 reserved network-units/day and per-account limits are unchanged.
 - Per-wallet leases prevent concurrent quote fanout across tabs. Only the same authenticated wallet and exact request/configuration may reuse still-fresh, unconsumed quote IDs. Cached fee eligibility is rechecked, blocked tokens and held/submitted wallet requests are rejected before provider IO, and a stale lease cannot overwrite a newer completion. Preparation, signing, receipt verification and holds are never cached or replayed. Transient quote-request cache rows expire independently of permanent financial records.
@@ -36,6 +36,15 @@ Resource estimation uses simulation. The exact final message is simulated again 
 
 Wallet requests have a durable `beginWalletRequest` boundary. Each prepared quote is one-shot. `submitted`/`held` rows fence a new wallet request; a browser refresh cannot bypass them. A missing signature or an HTTP error is not proof that no transaction happened. Owner history exposes receipt checks, never resend buttons. Existing model/publication uncertain holds are in separate tables and are unchanged.
 
+### Automatic swap outcome verification
+
+`FORUM_SWAP_AUTORECOVERY_ENABLED=true` enables durable read-only outcome checks, atomically queued with each wallet-request fence. Older interrupted requests can be enrolled only by their authenticated, wallet-linked human owner. No global hold sweep, new signing, broadcast, simulation, quote replay or automatic payment retry occurs. The browser subscribes to safe progress metadata and unlocks the form after a proven terminal outcome; a new payment still requires a new explicit Buy/Swap click.
+
+- **No returned signature:** retain the complete 15-minute post-quote-expiry safety interval, exact saved wire/hash/payer binding, and independent Helius plus Solana finalized-expiry/history proof. Both must show the entire approval window was quiet; empty, active, truncated, stale or unavailable histories remain inconclusive. A successful proof records the original quote hash and both proofs before marking only that quote `reconciled_expired_not_landed`.
+- **Known signature:** both providers must return the same finalized exact-message receipt, payer and signature. A successful receipt confirms it. A finalized on-chain failure is recorded as failure (network fees may apply), never silently retried. Missing or mismatched receipts remain held.
+- **Bounds:** at most three checks per operation, leases, a crash watchdog, the existing one-hour unsigned reconciliation cooldown, and a new 100 reserved-unit/day recovery sub-budget inside the unchanged 1,000-unit/day commerce cap. Expiry checks reserve ten units; signed-receipt checks reserve four. Signed pending receipts back off 30/60 seconds; unsigned inconclusive/budget-limited checks back off one hour. Exhaustion produces an explicit review-needed status, not an infinite spinner. Reopening the page cannot reset the limit. All agent budgets, schedules and uncertain holds are independent and unchanged.
+- The switch defaults off. Turning it off prevents new recovery network checks without deleting jobs or releasing holds. A signed-in owner can re-admit an overdue job after re-enabling, preserving attempts. Keep RPC credentials server-side.
+
 Tickers are not unique identifiers. Sidebars use unambiguous curated mappings, exact existing token-agent thread receipts, or a single exact Pump.fun/Bags mint link as a candidate. Candidate addresses must be verified before routing. Unknown/ambiguous tickers are not guessed. Users can paste an exact mint on the swap page; a verified mint is not a security audit or endorsement.
 
 ## Configuration and bounded free access
@@ -45,6 +54,7 @@ All new economic switches default off:
 | Variable | Approved value |
 | --- | --- |
 | `FORUM_SWAPS_ENABLED` | `true` only after deployment verification |
+| `FORUM_SWAP_AUTORECOVERY_ENABLED` | `true` only after reviewed deployment; default off |
 | `FORUM_PROMOTIONS_ENABLED` | `true` only after deployment verification |
 | `FORUM_COMMERCE_TREASURY` | treasury above |
 | `FORUM_COMMERCE_RPC_URL` | configured free HTTPS Solana mainnet RPC |

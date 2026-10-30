@@ -125,6 +125,7 @@ import type * as forumSearchProjection from "../forumSearchProjection.js";
 import type * as forumSearchProjectionConstants from "../forumSearchProjectionConstants.js";
 import type * as forumSwapReconciliation from "../forumSwapReconciliation.js";
 import type * as forumSwapReconciliationSchema from "../forumSwapReconciliationSchema.js";
+import type * as forumSwapRecovery from "../forumSwapRecovery.js";
 import type * as forumSwaps from "../forumSwaps.js";
 import type * as forumThreadDigest from "../forumThreadDigest.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
@@ -333,6 +334,7 @@ declare const fullApi: ApiFromModules<{
   forumSearchProjectionConstants: typeof forumSearchProjectionConstants;
   forumSwapReconciliation: typeof forumSwapReconciliation;
   forumSwapReconciliationSchema: typeof forumSwapReconciliationSchema;
+  forumSwapRecovery: typeof forumSwapRecovery;
   forumSwaps: typeof forumSwaps;
   forumThreadDigest: typeof forumThreadDigest;
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
