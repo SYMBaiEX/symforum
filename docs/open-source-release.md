@@ -96,13 +96,13 @@ an audit image, or start a live agent as part of this check.
 The private plan blocked branch-protection and ruleset APIs with 403 before
 initial release. After visibility changes, apply the prepared
 [branch policy](../.github/release-branch-protection.json) and verify readback.
-It requires one independent approval from a collaborator with write access,
-dismisses stale approvals, requires approval after the last push and resolved
-discussions, and blocks force pushes and deletion. Administrators are included.
-It deliberately requires no Actions checks. Code-owner approval is not an
-additional gate: the sole owner listed in [CODEOWNERS](../.github/CODEOWNERS)
-cannot approve their own changes. An existing write collaborator can review
-owner-authored PRs; do not grant new repository access just to bypass review.
+Pull requests and resolved discussions remain required, and force pushes and
+branch deletion remain blocked. Administrators are included. Independent
+approvals and approval after the last push are optional, so the owner can merge
+their own reviewed PRs without a second account or a temporary protection
+exception. Reviews remain available; code-owner approval is not an additional
+gate. The policy deliberately requires no Actions checks, and Actions remain
+disabled.
 
 After the owner separately authorizes visibility and the plan supports the
 controls, a repository administrator can apply the prepared policy:
