@@ -52,8 +52,12 @@ export const tokenAlphaTables = {
     expiresAt: v.number(),
     // Strictly bounded to five verified candidates by the committing mutation.
     snapshots: v.optional(v.array(tokenSnapshotValidator)),
+    payloadExpiresAt: v.optional(v.number()),
+    sourceCount: v.optional(v.number()),
     reason: v.optional(v.string()),
-  }).index("by_runKey", ["runKey"]),
+  })
+    .index("by_runKey", ["runKey"])
+    .index("by_status_and_payloadExpiresAt", ["status", "payloadExpiresAt"]),
   tokenAlphaControl: defineTable({
     key: v.literal("pilot"),
     enabled: v.boolean(),
