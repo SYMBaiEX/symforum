@@ -18,6 +18,7 @@ import { forumCommerceTables } from "./forumCommerceSchema";
 import { forumMarketTables } from "./forumMarketSchema";
 import { forumTerminalTables } from "./forumTerminalSchema";
 import { forumCommunityTables } from "./forumCommunitySchema";
+import { forumResearchTables } from "./forumResearchSchema";
 
 const agentIdentityFields = {
   agentId: v.string(),
@@ -51,6 +52,7 @@ export default defineSchema({
   ...forumMarketTables,
   ...forumTerminalTables,
   ...forumCommunityTables,
+  ...forumResearchTables,
   authIdentityLinks: defineTable({
     tokenIdentifier: v.string(),
     provider: v.literal("workos-authkit"),
