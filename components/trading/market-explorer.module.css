@@ -1,0 +1,334 @@
+.explorer {
+  display: grid;
+  min-width: 0;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+.toolbar select {
+  min-width: 0;
+  min-height: 44px;
+  max-width: 190px;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 7px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font: inherit;
+}
+.search {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 360px;
+}
+.search > svg {
+  position: absolute;
+  top: 14px;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+.toolbar .search input {
+  min-height: 44px;
+  padding-inline-start: 40px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.pinned {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 4px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.pinned button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: hsl(var(--foreground));
+}
+.pinned button > span:first-child {
+  width: 24px;
+  height: 24px;
+}
+.pinned button[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.065);
+}
+.pinned button > span:not(:first-child) {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+}
+.pinned small {
+  font-size: 11px;
+}
+.scroll {
+  position: relative;
+  min-width: 0;
+  overflow: auto;
+  max-height: 600px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.scroll table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.scroll th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  text-align: right;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.scroll th button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 4px;
+  color: inherit;
+  white-space: nowrap;
+}
+.scroll th button svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+.scroll th[aria-sort] {
+  color: hsl(var(--foreground));
+}
+.scroll th[aria-sort] svg {
+  color: hsl(var(--primary));
+}
+.scroll td {
+  height: 56px;
+  padding: 4px 12px;
+  border-bottom: 1px solid hsl(var(--border) / 0.65);
+  background: hsl(var(--card));
+  vertical-align: middle;
+}
+.scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+.scroll tr[data-selected="true"] td {
+  background: color-mix(in srgb, hsl(var(--primary)) 5%, hsl(var(--card)));
+}
+.scroll tbody tr:hover td {
+  background: color-mix(in srgb, hsl(var(--foreground)) 3%, hsl(var(--card)));
+}
+.scroll .tokenColumn {
+  position: sticky;
+  z-index: 1;
+  left: 0;
+  min-width: 208px;
+  max-width: 240px;
+  text-align: left;
+  box-shadow: 1px 0 0 hsl(var(--border) / 0.5);
+}
+.scroll th.tokenColumn {
+  z-index: 3;
+}
+.tokenButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 4px;
+  text-align: left;
+}
+.tokenButton > span:first-child {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+}
+.tokenButton > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.tokenButton strong {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tokenButton small {
+  display: block;
+  max-width: 104px;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.tokenButton code {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+}
+.number {
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.number[data-direction="positive"] {
+  color: hsl(var(--accent));
+}
+.number[data-direction="negative"] {
+  color: hsl(var(--destructive));
+}
+.number[data-unavailable="true"] {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 11px;
+}
+.observation {
+  min-width: 190px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.observation > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.observation time {
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+.observation a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  margin-left: 10px;
+  color: hsl(var(--muted-foreground));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.observation a svg {
+  width: 12px;
+  height: 12px;
+}
+.stale {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-geist-sans), sans-serif;
+}
+.stale::before {
+  content: "· ";
+}
+.unavailable {
+  color: hsl(var(--muted-foreground));
+}
+.scroll .empty {
+  height: 184px;
+  padding: 24px 16px;
+  text-align: left;
+  color: hsl(var(--muted-foreground));
+}
+.empty p {
+  margin: 0 0 6px;
+  color: hsl(var(--foreground));
+  font-size: 13px;
+}
+.empty span {
+  display: block;
+  max-width: min(60ch, calc(100vw - 64px));
+  font-size: 12px;
+}
+.coverage {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.6;
+}
+.explorer :is(button, input, select, a):focus-visible,
+.scroll:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+@media (max-width: 600px) {
+  .toolbar {
+    gap: 8px;
+    padding: 12px;
+  }
+  .search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .toolbar label {
+    flex: 1 1 140px;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .toolbar select {
+    width: 100%;
+    max-width: none;
+  }
+  .pinned {
+    padding-inline: 12px;
+  }
+  .pinned small {
+    display: none;
+  }
+  .scroll .tokenColumn {
+    min-width: 172px;
+    max-width: 180px;
+  }
+  .tokenButton {
+    gap: 8px;
+  }
+  .tokenButton small {
+    max-width: 65px;
+  }
+  .observation a {
+    min-height: 44px;
+  }
+}
