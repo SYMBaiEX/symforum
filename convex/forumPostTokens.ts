@@ -19,6 +19,7 @@ import {
   TOKEN_2022_PROGRAM,
 } from "../lib/forum-commerce";
 import { commerceMint } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceToken } from "./forumCommerceSchema";
 
@@ -135,7 +136,7 @@ export const claim = internalMutation({
       (await postTokenCandidate(ctx, row.threadId)) !== args.mint
     )
       return false;
-    // A bounded portion of the existing shared 1,000/day network allowance.
+    // A bounded portion of the shared, provider-metered network allowance.
     if (
       !(
         await commerceLimiter.limit(ctx, "commercePostMintDaily", {
@@ -204,7 +205,11 @@ export const verify = internalAction({
     try {
       const url = commerceConfig(env).rpcUrl;
       if (!url) throw Error("RPC unavailable");
-      const value = await commerceMint(url, args.mint);
+      const value = await commerceMint(
+        url,
+        args.mint,
+        providerFetch(ctx, { rpcUrls: [url] }),
+      );
       token = {
         mint: args.mint,
         decimals: value.decimals,

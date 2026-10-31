@@ -112,8 +112,9 @@ UTC reset. No existing counter is reset, credited, migrated or refunded.
 | Markets batches              | 144/day                                                           | Existing ten-minute minimum spacing and thirty-mint batch stay unchanged    |
 | Helius credits               | 10,000/day and 300,000 rolling 32 days                            | Both weighted limits must pass; all known users of the configured account   |
 | Helius request window        | 5 per strict rolling second                                       | Not five per caller or five at each fixed-second boundary                   |
+| Helius submission sub-window | 1 per strict rolling second                                       | Additional method-specific ceiling; no new submission authority             |
 | Jupiter main/keyless windows | 50/25 per rolling minute                                          | Preserve conservative existing pacing across the shared organisation/egress |
-| DEX Screener window          | 60 per strict rolling minute                                      | Known Convex pair/token/batch callers; broadcast allocation below            |
+| DEX Screener window          | 60 per strict rolling minute                                      | Known Convex pair/token/batch callers; broadcast allocation below           |
 | GeckoTerminal window         | 8 per strict rolling minute                                       | All known pool, candle and trade callers together                           |
 | Tracker                      | 70/day; 12 candles/day; 10 enrichments/day; 2,300 rolling 32 days | Unchanged shared provider allowance, including scheduled rankings           |
 
@@ -130,9 +131,10 @@ Credit accounting uses thirty-three rotating UTC day buckets with a thirty-three
 component period, conservatively covering the intended thirty-two-day period.
 This overcoverage can deny requests sooner and yield lower sustained throughput
 than the nominal limits. A strict rolling **ceiling** does not mean exact sliding
-window utilization. Thirty-nine rotating component keys bound the new ledger's
-storage. Each Helius admission reads two burst and thirty-three credit counters;
-this is bounded work, not a production latency or cost benchmark.
+window utilization. Forty-one rotating component keys bound the new ledger's
+storage. Each Helius read admission checks two burst and thirty-three credit
+counters; submissions also check two method-specific counters. This is bounded
+work, not a production latency or cost benchmark.
 
 Only Helius burst denial may wait before I/O: at most two additional admission
 checks, with a total scheduled-wait allowance of 2.5 seconds. This permits existing
@@ -163,7 +165,9 @@ additional API key or account rotation is authorized.
 ## Source-checked provider limits (2026-10-31)
 
 - Helius Free advertises one million monthly credits and ten RPC requests per
-  second. Standard RPC, including `getTokenAccountsByOwner`, `getTransaction`
+  second, with a separate one-per-second `sendTransaction` limit. The application
+  enforces that method-specific ceiling in addition to its overall RPC gate.
+  Standard RPC, including `getTokenAccountsByOwner`, `getTransaction`
   and `getSignaturesForAddress`, costs one credit. Separately priced products
   include `getProgramAccounts` and DAS at ten, enhanced REST transaction parsing
   at one hundred, and Wallet API at one hundred. These unused endpoints are not
