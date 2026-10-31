@@ -318,3 +318,129 @@ operations, job/hold records and infrastructure binding metadata out of it.
   project/member/work links; TRADE-012/013/014 selected-token copy/trust/glossary;
   FORUM-038/039/040 stable gallery identity/focus/announcements. None is dispatched
   or claimed complete here. Finish this release before starting those groups.
+
+## Batch 5 released — 10:10 UTC
+
+- PR #260 merged at `9217d1e4aeecb6b3a082626ca480bd36757feb53`; its complete
+  tree matches qualified `ffdf39d2`. The automatic production release and all five
+  original website domains were verified on that exact commit.
+- Bounded signed-out public checks showed twelve Feed articles and the expected
+  private receipt sign-in gate with its exact local return URL. Desktop and phone
+  had no document overflow; no client errors or blocked provider attempts occurred.
+  One bounded deployment server-error sample was empty, and the browser closed.
+- A repeated Community phone header/breadcrumb strip persists even in viewport-
+  only captures. It is not established as a full-page-only screenshot artifact.
+  Existing evidence is retained for read-only local reproduction and source
+  diagnosis; visual polish is not claimed complete. Feed phone rendering was normal.
+- Protected/terminal flows remain isolated-test evidence, not live wallet,
+  settlement, private editing or facilitator-readiness certification. No backend,
+  worker, provider/model, payment, configuration, replay or hold action occurred.
+- Thirty-four inventory items are now source-deployed. Next frontend work may
+  proceed under explicit independent ownership while the visual issue is diagnosed.
+
+## Batch 6 dispatch — 10:13 UTC
+
+- COMMUNITY-014/015/027: `/private/tmp/symforum-overnight-community-identity-links`,
+  branch `sym/overnight-community-identity-links`, based on released `9217d1e4`.
+  Owns project/member/work public identity controls and scoped community styles,
+  with isolated tests. No payment/submission handlers or query changes.
+- TRADE-012/013/014: `/private/tmp/symforum-overnight-token-context`, branch
+  `sym/overnight-token-context`, same base. Owns selected-token copy feedback,
+  project-link trust context and a glossary inside existing disclosures. Existing
+  laptop CTA budgets, values, sources and mounted controllers must remain intact.
+- FORUM-038/039/040: `/private/tmp/symforum-overnight-gallery-lifecycle`, branch
+  `sym/overnight-gallery-lifecycle`, same base. Owns stable attachment selection,
+  visible connected focus recovery and concise deliberate-navigation announcements.
+  Preserve existing image continuity and reduced-motion behavior, not new decoration.
+- Exact literal ownership is recorded in the backlog. Nine tasks are in progress;
+  none is counted as implemented/tested/deployed. Workers run focused checks and
+  commit locally only; parent combined review, final gates and release remain.
+- A fourth agent has read-only local diagnosis of the repeated Community phone
+  strip, using existing captures and isolated real-layout fixtures with all real
+  transport blocked. No production revisit, source fix or new completion is
+  authorized by that diagnosis assignment. Await evidence before assigning a fix.
+- Current primary remains `sym/overnight-web3-wave-five`, HEAD `ffdf39d2`, whose
+  runtime matches released main. Known-owned local changes are this release log
+  and the backlog deployment/dispatch states; preserve them for the next PR.
+- Counts: 34 source-deployed, nine in progress, 179 queued, two blocked and sixteen
+  needing confirmation. Finish these actual assignments; do not duplicate them.
+
+## Mobile capture diagnosis — 10:17 UTC
+
+- Read-only local diagnosis found no source reproduction: the real forum shell,
+  layout and Community hub render one header, no iframe and the expected mobile
+  bottom navigation with all actual network/actions blocked. Viewport, full-page
+  followed by viewport, and scrolled captures remained normal.
+- The existing production capture's bottom 87px exactly repeats its top 87px,
+  beginning at y757. This is stronger than visual similarity but does not prove
+  the capture transport/compositor is the cause. No source fix is justified yet.
+- Preserve this as an unresolved capture-versus-live-rendering distinction. At
+  the next already-authorized bounded public acceptance, record innerHeight,
+  visualViewport dimensions, device scale and screenshot provenance alongside
+  DOM/header/bottom-navigation counts; do not add production visits just for this.
+  No new task is invented or counted complete by the diagnosis.
+
+## Batch 6 frozen-candidate handoff — 10:24 UTC
+
+- Token context: `b06a169a169e9b866d3a31685feed0e5cae2a159` in
+  `/private/tmp/symforum-overnight-token-context`. Twenty-two focused browser
+  checks, including unchanged laptop CTA limits, and 24 relevant units pass.
+  Independent review was clean and reran all ten new browser cases successfully.
+  Clipboard feedback is fenced; an already-requested clipboard write cannot be
+  cancelled. Metrics, sources, queries, chart and order controllers are unchanged.
+- Gallery: use `2b6b52269ff678e719e1bba2380da5a185760ee2` followed by
+  `f9ca6b66661d3d0ea8f527a7e2395faed58c5206` in
+  `/private/tmp/symforum-overnight-gallery-lifecycle`. Both are required. Initial
+  default-surface testing missed a real forum dialog specificity issue; the final
+  actual-forum-context run initially had eight passes/two failures before the
+  gallery-only min44 close-target correction. Ten real Radix/browser and eight
+  relevant unit checks now pass; source review of both commits was clean. No
+  shared CSS change, new transport or motion dependency. Real assistive-technology
+  behavior is not certified by the fixtures.
+- Community identity: `e2286568c7a04ddda394bc4fc77ea201f6eb1c25` in
+  `/private/tmp/symforum-overnight-community-identity-links`. Thirty-six focused
+  browser and 59 relevant unit checks pass, plus types/lint. Claims expose only
+  actual usernames or a plain fallback; member and exact-mint links use existing
+  helpers. Query, payment and submission logic is unchanged. Independent review
+  is active; inspect its result before integrating or qualifying.
+- All three worktrees are clean. Nine tasks are implemented, not parent-tested,
+  merged or deployed. No next PR is open. Root must integrate exact candidate
+  chains on fresh main, inspect combined source and run every final parent gate.
+  Do not repeat implementation or substitute worker counts for integrated checks.
+- Primary still has only the two known-owned planning-file updates. Preserve them.
+  Inventory: 34 source-deployed, nine implemented, 179 queued, two blocked and
+  sixteen needing confirmation. Keep the original 15:45 UTC deadline.
+
+## Final review update — 10:24 UTC
+
+- Community identity candidate `e2286568` now has a clean independent source
+  review and an independent rerun of all fourteen new browser cases. Public
+  handle authority, exact-mint identity, denied-copy fallback, native handoff,
+  unchanged subscriptions and untouched financial handlers were verified.
+- All three frozen batch 6 candidates now have clean independent reviews.
+  They remain implemented only: no parent combined qualification or next release
+  has occurred. Complete that integration before assigning another source batch.
+
+## Batch 6 combined qualification — 10:44 UTC
+
+- Integrated public community identities, token clipboard/context and both gallery
+  commits on released main. Independent combined review was clean; existing
+  values, sources, auth, queries, financial handlers and controllers are unchanged.
+- The initial parent browser run had 441 passes and three failures: broad metric
+  selectors now matched both actual value cells and new glossary definitions.
+  Three selectors now use the preexisting data-unavailable marker, which exists
+  for both available and unavailable metric values. All expected numbers, strict
+  target semantics, chart identity/count and layout assertions are unchanged.
+  Independent review of this test-only correction was clean; focused cases pass.
+- Final parent full rerun at runtime `f1f707ff` plus test correction `6cedba40`:
+  4,352 unit/backend tests, 444 isolated browser cases, both type checks, all five
+  builds, generated/native parity, unsuppressed dependency audits and security
+  controls pass. Lint retains three existing warnings and zero errors.
+- Gallery tests include the actual forum portal theme, stable ID/removal/focus
+  cases and reduced motion. Existing laptop swap CTA limits remain unchanged.
+  Real assistive technology and protected live payment behavior remain unclaimed.
+- Nine inventory items are tested, not yet merged/deployed. Thirty-four remain
+  source-deployed at this entry. No new frontend source group is dispatched yet.
+- Next read-only triage suggests existing-data-only market sample usability,
+  loaded alert filters/history, and candle-reading copy/timestamps. Respect their
+  recorded dependencies and exact ownership only after this release is verified.
