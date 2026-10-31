@@ -712,6 +712,19 @@ for (const viewport of [
     await expect(
       order.getByText("Minimum received", { exact: true }),
     ).toBeVisible();
+    const receive = order.getByRole("status", {
+      name: "You receive",
+      exact: true,
+    });
+    await expect(receive).toHaveText("123.456789");
+    const receiveWidth = await receive.evaluate((node) => ({
+      content: node.scrollWidth,
+      available: node.clientWidth,
+    }));
+    expect(
+      receiveWidth.content,
+      "The normal quote estimate must be fully readable, not ellipsized",
+    ).toBeLessThanOrEqual(receiveWidth.available);
     await expect(
       order.getByText("Jupiter managed · verified Metis route", {
         exact: true,
@@ -732,22 +745,18 @@ for (const viewport of [
     const rail = await order.boundingBox();
     const cta = await primary.boundingBox();
     expect(cta!.y).toBeGreaterThanOrEqual(rail!.y);
-    if (viewport.height >= 768) {
-      // Normal laptop quotes keep the primary action above the fold.
-      expect(cta!.y + cta!.height).toBeLessThanOrEqual(rail!.y + rail!.height);
-    } else {
-      // A shorter laptop uses a small, bounded rail scroll, never document scroll.
-      const needed = Math.max(0, cta!.y + cta!.height - rail!.y - rail!.height);
-      expect(needed).toBeLessThanOrEqual(80);
-      await order.evaluate(
-        (node, distance) =>
-          node.scrollBy({ top: distance, behavior: "instant" }),
-        needed,
-      );
-      expect(
-        await order.evaluate((node) => node.scrollTop),
-      ).toBeLessThanOrEqual(80);
-    }
+    // Preserve the full normal estimate and fee context. A small rail scroll
+    // is preferable to clipping transaction information to force first-fold fit.
+    const scrollBudget = viewport.height >= 768 ? 24 : 80;
+    const needed = Math.max(0, cta!.y + cta!.height - rail!.y - rail!.height);
+    expect(needed).toBeLessThanOrEqual(scrollBudget);
+    await order.evaluate(
+      (node, distance) => node.scrollBy({ top: distance, behavior: "instant" }),
+      needed,
+    );
+    expect(await order.evaluate((node) => node.scrollTop)).toBeLessThanOrEqual(
+      scrollBudget,
+    );
     await expectUnobscured(primary);
     await page.screenshot({
       path: `tmp/forum-render-tests/fixture-quote-${viewport.width}x${viewport.height}.png`,
