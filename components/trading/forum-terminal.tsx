@@ -224,6 +224,7 @@ function TerminalWorkspace({
           role="tablist"
           aria-label="Terminal views"
           className={styles.viewTabs}
+          data-terminal-header-tabs
         >
           <button
             ref={chartTab}

@@ -318,6 +318,7 @@
 .forum-app-shell:has([data-terminal-viewport]) .forum-bottom-nav { display: none; }
 /* Keep this root-container query global: native CSS-module transforms rename query identifiers. */
 @container terminal-viewport (max-width: 840px) {
+ .forum-app-shell [data-terminal-header-tabs] { display: none; }
  .forum-app-shell [data-terminal-layout] { grid-template-columns: minmax(0,1fr); }
  .forum-app-shell [data-terminal-order] { display: none; border-left: 0; }
  .forum-app-shell [data-terminal-layout][data-pane=trade] [data-terminal-order] { display: block; }
