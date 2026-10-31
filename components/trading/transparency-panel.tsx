@@ -56,7 +56,7 @@ export function TransparencyPanel() {
               href={`https://solscan.io/account/${encodeURIComponent(data.treasury)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-flex min-h-9 items-center gap-2 text-xs underline underline-offset-4"
+              className="mt-2 inline-flex min-h-11 items-center gap-2 text-xs underline underline-offset-4"
             >
               Public treasury {shortMint(data.treasury)}
               <ArrowUpRight className="size-3" aria-hidden="true" />
@@ -67,9 +67,14 @@ export function TransparencyPanel() {
             supposed dead wallet. Promotion payments remain separate from
             organic discussion.
           </p>
+          <p className={`${styles.muted} mt-3`}>
+            Showing {Math.min(data.receipts.length, 10)} verified receipt{" "}
+            {data.receipts.length === 1 ? "record" : "records"} (up to 10). This
+            display window is separate from the returned totals above.
+          </p>
           {!data.receipts.length ? (
             <p className={`${styles.muted} mt-3`}>
-              No confirmed promotion receipts are indexed yet.
+              No verified receipt rows are shown in this window.
             </p>
           ) : (
             <ul
@@ -89,7 +94,7 @@ export function TransparencyPanel() {
                   </span>
                   <a
                     href={`https://solscan.io/tx/${encodeURIComponent(receipt.signature)}`}
-                    className="inline-flex min-h-9 items-center gap-1 text-xs underline underline-offset-4"
+                    className="inline-flex min-h-11 items-center gap-1 text-xs underline underline-offset-4"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
