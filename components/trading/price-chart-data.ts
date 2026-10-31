@@ -1,5 +1,124 @@
 import { z } from "zod";
 import type { SymfChartData, SymfChartInterval } from "@/lib/symf-market-data";
+import {
+  CHART_CACHE_FRESH_MS,
+  CHART_CACHE_RETENTION_MS,
+  marketProviderRetryAt,
+  type MarketCacheView,
+} from "@/lib/chart-cache-policy";
+
+export type ChartCacheState = MarketCacheView["state"];
+export type CheckedChartData = SymfChartData & {
+  stale?: boolean;
+  priceUsd?: ChartMarketData["priceUsd"];
+  stats?: ChartMarketData["stats"];
+};
+
+/** Display retention is independent of whether another network attempt is due. */
+export function retainedChartData(
+  data: CheckedChartData,
+  now: number,
+  forceStale = false,
+): CheckedChartData | null {
+  if (
+    !Number.isFinite(now) ||
+    !Number.isFinite(data.checkedAt) ||
+    data.checkedAt <= 0 ||
+    data.checkedAt > now + 60_000 ||
+    now - data.checkedAt >= CHART_CACHE_RETENTION_MS
+  )
+    return null;
+  return {
+    ...data,
+    stale: Boolean(
+      data.stale || forceStale || now - data.checkedAt >= CHART_CACHE_FRESH_MS,
+    ),
+  };
+}
+
+export function chartResponsePolicy(
+  value: unknown,
+  response: { ok: boolean; status: number; headers: Pick<Headers, "get"> },
+  now: number,
+): { state: ChartCacheState; nextRetryAt: number | null } {
+  const body =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const known = [
+    "ready",
+    "loading",
+    "deferred",
+    "unavailable",
+    "budget",
+    "unsupported",
+  ] as const;
+  const state =
+    known.find((candidate) => candidate === body.state) ??
+    known.find(
+      (candidate) => candidate === response.headers.get("X-Market-State"),
+    ) ??
+    (response.ok
+      ? "ready"
+      : response.status === 429
+        ? "budget"
+        : response.status === 400 || response.status === 404
+          ? "unsupported"
+          : "unavailable");
+  if (state === "unsupported") return { state, nextRetryAt: null };
+  const cache =
+    body.cache && typeof body.cache === "object"
+      ? (body.cache as Record<string, unknown>)
+      : {};
+  const headerAt = marketProviderRetryAt(
+    response.headers.get("Retry-After"),
+    now,
+  );
+  const deadlines = [cache.nextRetryAt, headerAt].filter(
+    (candidate): candidate is number =>
+      typeof candidate === "number" &&
+      Number.isFinite(candidate) &&
+      candidate > now,
+  );
+  // Bound browser timers, never infer a new provider path from an error response.
+  const legacyFreshUntil =
+    response.ok &&
+    state === "ready" &&
+    typeof body.checkedAt === "number" &&
+    Number.isFinite(body.checkedAt) &&
+    body.checkedAt <= now + 60_000 &&
+    body.checkedAt + CHART_CACHE_FRESH_MS > now
+      ? body.checkedAt + CHART_CACHE_FRESH_MS
+      : now + 60_000;
+  const nextRetryAt = deadlines.length
+    ? Math.max(...deadlines)
+    : legacyFreshUntil;
+  return {
+    state,
+    nextRetryAt: Math.min(now + 86_400_000, Math.max(now + 1000, nextRetryAt)),
+  };
+}
+
+export function chartStateMessage(
+  state: ChartCacheState | null,
+  retained: boolean,
+  offline = false,
+) {
+  const message = offline
+    ? "Offline; chart refresh is paused."
+    : state === "budget"
+      ? "Free-data allowance reached."
+      : state === "unsupported"
+        ? "No chart is supported for this indexed token."
+        : state === "deferred"
+          ? "Waiting for shared data window."
+          : state === "loading"
+            ? "Shared chart refresh is in progress."
+            : state === "unavailable"
+              ? "Chart source is temporarily unavailable."
+              : "Cached chart is stale.";
+  return retained ? `${message} Showing last checked data.` : message;
+}
 
 export type ChartMarketData = {
   mint: string;
@@ -52,11 +171,7 @@ export function readChartData(
   mint: string,
   interval: SymfChartInterval,
   now: number,
-): SymfChartData & {
-  stale?: boolean;
-  priceUsd?: ChartMarketData["priceUsd"];
-  stats?: ChartMarketData["stats"];
-} {
+): CheckedChartData {
   const parsed = chartShape.parse(value);
   if (
     parsed.mint !== mint ||
@@ -76,5 +191,7 @@ export function readChartData(
       throw new Error("chart_candle");
     previous = candle.time;
   }
-  return parsed;
+  const retained = retainedChartData(parsed, now);
+  if (!retained) throw new Error("chart_retention");
+  return retained;
 }
