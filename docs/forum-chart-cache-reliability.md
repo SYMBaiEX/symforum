@@ -51,3 +51,10 @@ rendering and visibility behavior; they do not perform swaps or agent calls.
 Production acceptance is bounded to ordinary public chart reads and read-only
 configuration/hold comparisons. It never fabricates a production outage, replays
 an uncertain call, signs a transaction or changes budgets.
+
+Release verification: 4,214 unit/backend tests, 167 isolated browser checks,
+application/Convex type checks, shared native UI parity and all five application
+builds passed. Lint has zero errors and the same three pre-existing warnings.
+The dependency audit still flags the two pre-existing moderate glob/minimatch
+advisories in unchanged transitive dependencies; no dependency version or lockfile
+is changed here, and the audit is not represented as passing.
