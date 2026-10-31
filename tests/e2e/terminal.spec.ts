@@ -930,6 +930,158 @@ test("failed alert acknowledgement retains the unread alert and exact-mint actio
   expect(errors).toEqual([]);
 });
 
+test("Markets refresh is visible demand only and pauses offline, backgrounded and unmounted", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const { errors } = await harness(page, "guest&marketrefresh");
+  const refreshCalls = async () =>
+    (await recordedOperations(page)).filter(
+      (name) => name === "action:forumTerminalRefresh:refresh",
+    ).length;
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  expect(await refreshCalls()).toBe(0);
+  await page.context().setOffline(true);
+  await openPane(page, "Markets");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Offline · refresh paused" }),
+  ).toBeVisible();
+  await page.clock.fastForward(660_000);
+  expect(await refreshCalls()).toBe(0);
+  await page.context().setOffline(false);
+  await expect.poll(refreshCalls).toBe(1);
+  await page
+    .getByRole("combobox", { name: "Platform", exact: true })
+    .selectOption("bags");
+  await page
+    .getByRole("combobox", { name: "Platform", exact: true })
+    .selectOption("all");
+  expect(await refreshCalls()).toBe(1);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __terminalFixtureMarketRefreshArgs: Record<string, unknown>[];
+          }
+        ).__terminalFixtureMarketRefreshArgs,
+    ),
+  ).toEqual([{}]);
+  await openPane(page, "Chart");
+  await page.clock.fastForward(660_000);
+  expect(await refreshCalls()).toBe(1);
+  await openPane(page, "Markets");
+  await expect.poll(refreshCalls).toBe(2);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.fastForward(660_000);
+  expect(await refreshCalls()).toBe(2);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(refreshCalls).toBe(3);
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("terminal-fixture:unmount")),
+  );
+  await page.clock.fastForward(660_000);
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  expect(await refreshCalls()).toBe(3);
+  expect(errors).toEqual([]);
+});
+
+for (const width of [320, 1440]) {
+  test(`refreshed Markets fields keep holders and their original source age at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.clock.setFixedTime(Date.parse("2026-10-30T18:00:00.000Z"));
+    const { errors } = await harness(page, "guest&marketrefresh&oldsample");
+    await openPane(page, "Markets");
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("button", { name: /^View NOVA,/ }),
+    });
+    await expect(row.locator("td").nth(0)).not.toContainText("Stale");
+    await expect(row.locator("td").nth(1)).toHaveText("$0.0042");
+    await expect(row.locator("td").nth(3)).toHaveText("Unavailable");
+    await expect(row.locator("td").nth(7)).toHaveText("4561h ago · stale");
+    await expect(row.locator("td").nth(7)).toHaveAttribute(
+      "aria-label",
+      /Original scout sample:/,
+    );
+    await expect(
+      row.getByText("Market checked", { exact: true }),
+    ).toBeVisible();
+    await expect(row.getByText("Holder sample", { exact: true })).toBeVisible();
+    await expect(row.locator("time")).toHaveCount(2);
+    await expect(row.locator("time").last()).toHaveText("1h ago");
+    await expect(
+      row.getByRole("link", { name: "View NOVA source" }),
+    ).toHaveAttribute("href", "https://example.com/checked-market-pool");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const [scenario, message] of [
+  ["marketrefreshbudget", "Free-data allowance reached · retained rows"],
+  ["marketrefresherror", "Refresh unavailable · retained rows"],
+] as const) {
+  test(`Markets ${scenario} keeps retained rows and honest source timestamps`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(Date.parse("2026-10-30T18:00:00.000Z"));
+    const { errors } = await harness(page, `guest&${scenario}`);
+    await openPane(page, "Markets");
+    await expect(
+      page.getByRole("status").filter({ hasText: message }),
+    ).toBeVisible();
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("button", { name: /^View NOVA,/ }),
+    });
+    await expect(row.locator("td").nth(1)).toHaveText("$0.0007");
+    await expect(row.locator("time")).toHaveText("1h ago");
+    await expect(row.getByText("Market checked", { exact: true })).toHaveCount(
+      0,
+    );
+    expect(errors).toEqual([]);
+  });
+}
+
+test("a missing refreshed pool never inherits fresh prices or a fake holder timestamp", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(Date.parse("2026-10-30T18:00:00.000Z"));
+  const { errors } = await harness(page, "guest&marketrefreshmissing");
+  await openPane(page, "Markets");
+  const row = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: /^View NOVA,/ }),
+  });
+  await expect(row.locator("td").nth(1)).toHaveText("Unavailable");
+  await expect(row.locator("td").nth(7)).toHaveText("4561h ago · stale");
+  await expect(row.locator("time").last()).toHaveText("1h ago");
+  await expect(row.getByRole("link", { name: "View NOVA source" })).toHaveCount(
+    0,
+  );
+  expect(errors).toEqual([]);
+});
+
 test("native host does not initialize wallet or market transport", async ({
   page,
 }) => {
@@ -1118,7 +1270,9 @@ test("filtered market empty states reset only local view controls and remain in 
   await expect(platform).toHaveValue("all");
   expect(await sampleSymbols(page)).toHaveLength(4);
   await expect(page.getByRole("button", { name: /^View / })).toHaveCount(4);
-  expect(await recordedOperations(page)).toEqual([]);
+  expect(await recordedOperations(page)).toEqual([
+    "action:forumTerminalRefresh:refresh",
+  ]);
   expect(chartMints).toHaveLength(1);
   await expectViewportBounded(page);
   expect(errors).toEqual([]);
@@ -1143,7 +1297,9 @@ test("loading and truly empty market coverage do not suggest filters can fetch n
       page.getByRole("button", { name: /Clear search|Reset filters/ }),
     ).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^View / })).toHaveCount(0);
-    expect(await recordedOperations(page)).toEqual([]);
+    expect(await recordedOperations(page)).toEqual([
+      "action:forumTerminalRefresh:refresh",
+    ]);
     await expectViewportBounded(page);
     expect(errors).toEqual([]);
   }
@@ -1224,6 +1380,7 @@ test("market-cap filters never substitute diluted value or invent a platform ran
     .getByRole("combobox", { name: "Market cap", exact: true })
     .selectOption("unknown");
   expect(await sampleSymbols(page)).toEqual(["UNKNOWN"]);
+  await page.getByText("Coverage & sources", { exact: true }).click();
   await expect(
     page.getByText("Market cap is not FDV.", { exact: false }),
   ).toBeVisible();

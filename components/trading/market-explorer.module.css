@@ -380,7 +380,19 @@
   font-size: 12px;
   line-height: 1.6;
 }
-.explorer :is(button, input, select, a):focus-visible,
+.coverage p {
+  margin: 0;
+}
+.coverageDetails summary {
+  min-height: 24px;
+  align-content: center;
+  cursor: pointer;
+}
+.coverageDetails[open] {
+  max-height: 140px;
+  overflow-y: auto;
+}
+.explorer :is(button, input, select, a, summary):focus-visible,
 .scroll:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: -2px;
@@ -444,6 +456,9 @@
   }
 }
 @media (max-width: 767px), (pointer: coarse) {
+  .coverageDetails summary {
+    min-height: 44px;
+  }
   .sortControl select,
   .toolbar select,
   .toolbar .search input,

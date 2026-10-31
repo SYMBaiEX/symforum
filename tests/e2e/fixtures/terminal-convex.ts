@@ -30,12 +30,16 @@ const snapshot = () => revision;
 let watches: WatchToken[] = [];
 const acknowledgedAlerts = new Set<string>();
 let researchVerified = false;
+let refreshedMarketRows = false;
+let marketCheckedAt: number | null = null;
+const marketRefreshArguments: Record<string, unknown>[] = [];
 let signedOut = false;
 const queryNames: string[] = [];
 const operationCalls: string[] = [];
 Object.assign(window, {
   __terminalFixtureQueries: queryNames,
   __terminalFixtureCalls: operationCalls,
+  __terminalFixtureMarketRefreshArgs: marketRefreshArguments,
 });
 window.addEventListener("terminal-fixture:signout", () => {
   signedOut = true;
@@ -189,6 +193,25 @@ const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
 );
 const selectedMarketRows = () =>
   location.search.includes("currentcohort") ? currentCohort : marketRows;
+function displayedMarket(token: TerminalMarket): TerminalMarket {
+  if (!refreshedMarketRows || token.mint !== nova.mint) return token;
+  const unavailable = location.search.includes("marketrefreshmissing");
+  return {
+    ...token,
+    priceUsd: unavailable ? null : 0.0042,
+    marketCapUsd: null,
+    fdvUsd: unavailable ? null : 9_000_000,
+    liquidityUsd: unavailable ? null : 45_000,
+    volume1hUsd: unavailable ? null : 123_000,
+    volume24hUsd: unavailable ? null : 234_000,
+    priceChange1hPercent: unavailable ? null : -5,
+    marketData: {
+      state: unavailable ? "unavailable" : "available",
+      checkedAt: marketCheckedAt ?? now,
+      sourceUrl: unavailable ? null : "https://example.com/checked-market-pool",
+    },
+  };
+}
 export function useConvexAuth() {
   useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
@@ -269,7 +292,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumTerminal:listMarket") {
-    const rows = location.search.includes("empty") ? [] : selectedMarketRows();
+    const rows = (
+      location.search.includes("empty") ? [] : selectedMarketRows()
+    ).map(displayedMarket);
     result = location.search.includes("marketloading")
       ? undefined
       : {
@@ -288,7 +313,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         };
   } else if (name === "forumTerminal:getMarket")
     result =
-      selectedMarketRows().find((token) => token.mint === input.mint) ?? null;
+      selectedMarketRows()
+        .map(displayedMarket)
+        .find((token) => token.mint === input.mint) ?? null;
   else if (name === "forumTerminal:getRisk")
     result = location.search.includes("stalerisk")
       ? {
@@ -422,6 +449,27 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
   return useCallback(
     async (_args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> => {
       operationCalls.push(`action:${name}`);
+      if (name === "forumTerminalRefresh:refresh") {
+        marketRefreshArguments.push(_args as Record<string, unknown>);
+        if (location.search.includes("marketrefresherror"))
+          throw new Error("Invented shared refresh failure");
+        const state = location.search.includes("marketrefreshbudget")
+          ? "budget"
+          : location.search.includes("marketrefreshloading")
+            ? "loading"
+            : "ready";
+        if (state === "ready" && location.search.includes("marketrefresh")) {
+          refreshedMarketRows = true;
+          marketCheckedAt = Date.now();
+          revision++;
+          listeners.forEach((listener) => listener());
+        }
+        return {
+          state,
+          checkedAt: marketCheckedAt,
+          nextRefreshAt: Date.now() + 600_000,
+        } as FunctionReturnType<Ref>;
+      }
       if (location.search.includes("orderinput")) {
         if (name === "forumTerminal:getWalletReadState")
           return null as FunctionReturnType<Ref>;

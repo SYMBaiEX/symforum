@@ -101,3 +101,19 @@ export function marketObservation(timestamp: number, now: number) {
     stale: elapsed > 15 * 60_000,
   };
 }
+
+/** Refreshing a pool's market fields never refreshes the holder-count sample. */
+export function marketSources(market: TerminalMarket, now: number) {
+  return {
+    market: marketObservation(
+      market.marketData?.checkedAt ?? market.metricsAsOf,
+      now,
+    ),
+    holders: marketObservation(market.metricsAsOf, now),
+    sourceUrl: market.marketData
+      ? market.marketData.sourceUrl
+      : market.sourceUrl,
+    refreshed: market.marketData !== undefined,
+    unavailable: market.marketData?.state === "unavailable",
+  };
+}

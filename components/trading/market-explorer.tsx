@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useAction, useQuery } from "convex/react";
 import {
   ArrowDown,
   ArrowUp,
@@ -15,7 +15,11 @@ import {
   isMarketCapBand,
   type MarketCapBand,
 } from "@/lib/forum-market-cap";
-import type { TerminalMarket } from "@/lib/forum-terminal-model";
+import type {
+  TerminalMarket,
+  TerminalMarketRefreshResult,
+} from "@/lib/forum-terminal-model";
+import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { TokenLogo, symfChoice, type MarketChoice } from "./market-identity";
 import { terminalApi } from "./terminal-api";
 import {
@@ -27,7 +31,7 @@ import {
 } from "./terminal-format";
 import {
   formatMarketPercent,
-  marketObservation,
+  marketSources,
   rawMarketNumber,
   sortMarketRows,
   type MarketSortDirection,
@@ -44,6 +48,98 @@ const columns = [
   ["volume24h", "24h volume"],
   ["holders", "Holders"],
 ] as const;
+
+const MARKET_REFRESH_INTERVAL_MS = 10 * 60_000;
+
+/** Demand only: the server owns batch membership, lease and all quota checks. */
+function useVisibleMarketRefresh(root: RefObject<HTMLElement | null>) {
+  const { host } = useForumRuntime();
+  const refresh = useAction(terminalApi.refreshMarketSample);
+  const [result, setResult] = useState<TerminalMarketRefreshResult | null>(
+    null,
+  );
+  const [pending, setPending] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const nextAttemptAt = useRef(0);
+  useEffect(() => {
+    const element = root.current;
+    if (host !== "website" || !element) return;
+    let disposed = false;
+    let visible = false;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clearTimer = () => {
+      clearTimeout(timer);
+      timer = undefined;
+    };
+    const demand = () => {
+      clearTimer();
+      if (disposed) return;
+      setOffline(!navigator.onLine);
+      if (
+        !visible ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        !element.getClientRects().length ||
+        running
+      )
+        return;
+      const remaining = nextAttemptAt.current - Date.now();
+      if (remaining > 0) {
+        timer = setTimeout(demand, remaining);
+        return;
+      }
+      running = true;
+      setPending(true);
+      nextAttemptAt.current = Date.now() + MARKET_REFRESH_INTERVAL_MS;
+      void refresh({})
+        .then((value) => {
+          if (disposed) return;
+          if (
+            value.nextRefreshAt != null &&
+            Number.isFinite(value.nextRefreshAt)
+          )
+            nextAttemptAt.current = Math.max(
+              nextAttemptAt.current,
+              value.nextRefreshAt,
+            );
+          setResult(value);
+        })
+        .catch(() => {
+          if (!disposed)
+            setResult((previous) => ({
+              state: "unavailable",
+              checkedAt: previous?.checkedAt ?? null,
+              nextRefreshAt: nextAttemptAt.current,
+            }));
+        })
+        .finally(() => {
+          running = false;
+          if (!disposed) {
+            setPending(false);
+            demand();
+          }
+        });
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      demand();
+    });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", demand);
+    window.addEventListener("online", demand);
+    window.addEventListener("offline", demand);
+    return () => {
+      disposed = true;
+      clearTimer();
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", demand);
+      window.removeEventListener("online", demand);
+      window.removeEventListener("offline", demand);
+    };
+  }, [host, refresh, root]);
+  return { result, pending, offline };
+}
 
 export function MarketExplorer({
   selected,
@@ -63,6 +159,8 @@ export function MarketExplorer({
   }>({ key: "volume1h", direction: "desc" });
   const coverageId = useId();
   const scrollHintId = useId();
+  const root = useRef<HTMLElement>(null);
+  const refresh = useVisibleMarketRefresh(root);
   const searchInput = useRef<HTMLInputElement>(null);
   const data = useQuery(terminalApi.listMarket, {
     band,
@@ -92,7 +190,11 @@ export function MarketExplorer({
     }));
   }
   return (
-    <section className={styles.explorer} aria-label="Sampled token discovery">
+    <section
+      ref={root}
+      className={styles.explorer}
+      aria-label="Sampled token discovery"
+    >
       <div className={styles.toolbar}>
         <div className={styles.search}>
           <Search aria-hidden="true" />
@@ -282,12 +384,33 @@ export function MarketExplorer({
           </tbody>
         </table>
       </div>
-      <p id={coverageId} className={styles.coverage} role="status">
-        {data?.sampledAt
-          ? `Sample checked ${new Date(data.sampledAt).toLocaleString()}. ${data.stale ? "The retained sample is stale." : "Metrics are source samples, not executable quotes."}`
-          : "Scouts refresh on their existing schedules. Empty coverage is not a ranking."}{" "}
-        Market cap is not FDV. Sort applies only to this sample.
-      </p>
+      <div className={styles.coverage}>
+        <p role="status">
+          {refresh.offline
+            ? "Offline · refresh paused"
+            : refresh.pending
+              ? "Checking shared market cache"
+              : refresh.result?.state === "budget"
+                ? "Free-data allowance reached · retained rows"
+                : refresh.result?.state === "unavailable"
+                  ? "Refresh unavailable · retained rows"
+                  : refresh.result?.state === "loading"
+                    ? "Shared refresh in progress"
+                    : "Shared cache · up to 30 mints"}
+        </p>
+        <details className={styles.coverageDetails}>
+          <summary>Coverage &amp; sources</summary>
+          <p id={coverageId}>
+            {data?.sampledAt
+              ? `Sample checked ${new Date(data.sampledAt).toLocaleString()}. ${data.stale ? "The discovery sample is stale; refreshed market fields are dated separately." : "Metrics are source samples, not executable quotes."}`
+              : "Scouts refresh on their existing schedules. Empty coverage is not a ranking."}{" "}
+            Market fields refresh for up to 30 recent mints while Markets is
+            visible, within the shared free-data allowance. Holders retain their
+            original scout timestamp. Market cap is not FDV. Sort applies only
+            to this sample.
+          </p>
+        </details>
+      </div>
     </section>
   );
 }
@@ -305,8 +428,10 @@ function MarketDataRow({
   onSelect: (choice: MarketChoice) => void;
   now: number;
 }) {
-  const observed = marketObservation(market.metricsAsOf, now);
-  const source = safeExternalUrl(market.sourceUrl);
+  const sources = marketSources(market, now);
+  const observed = sources.market;
+  const stale = observed.stale || (!sources.refreshed && staleSample);
+  const source = sources.sourceUrl ? safeExternalUrl(sources.sourceUrl) : null;
   const change = market.priceChange1hPercent;
   return (
     <tr data-selected={selected}>
@@ -328,8 +453,10 @@ function MarketDataRow({
             </strong>
             <span className={styles.mintLine}>
               <code title={market.mint}>{shortMint(market.mint)}</code>
-              {(staleSample || observed.stale) && (
-                <span className={styles.stale}>Stale</span>
+              {(stale || sources.unavailable) && (
+                <span className={styles.stale}>
+                  {sources.unavailable ? "Unavailable" : "Stale"}
+                </span>
               )}
             </span>
           </span>
@@ -371,9 +498,20 @@ function MarketDataRow({
       <NumberCell
         value={market.holders}
         label={marketQuantity(market.holders)}
+        description={
+          sources.refreshed
+            ? `${marketQuantity(market.holders)} holders. Original scout sample: ${sources.holders.full}.`
+            : undefined
+        }
+        detail={
+          sources.refreshed
+            ? `${sources.holders.label}${sources.holders.stale ? " · stale" : ""}`
+            : undefined
+        }
       />
       <td className={styles.observation}>
         <div>
+          {sources.refreshed && <span>Market checked</span>}
           {observed.dateTime ? (
             <time
               dateTime={observed.dateTime}
@@ -385,8 +523,10 @@ function MarketDataRow({
           ) : (
             <span>{observed.label}</span>
           )}
-          {(staleSample || observed.stale) && (
-            <span className={styles.stale}>Stale</span>
+          {(stale || sources.unavailable) && (
+            <span className={styles.stale}>
+              {sources.unavailable ? "Unavailable" : "Stale"}
+            </span>
           )}
         </div>
         {source ? (
@@ -401,19 +541,49 @@ function MarketDataRow({
         ) : (
           <span className={styles.unavailable}>Source unavailable</span>
         )}
+        {sources.refreshed && (
+          <div>
+            <span>Holder sample</span>
+            {sources.holders.dateTime ? (
+              <time
+                dateTime={sources.holders.dateTime}
+                title={sources.holders.full}
+                aria-label={`Holder sample: ${sources.holders.full}`}
+              >
+                {sources.holders.label}
+              </time>
+            ) : (
+              <span>{sources.holders.label}</span>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );
 }
 
-function NumberCell({ value, label }: { value: number | null; label: string }) {
+function NumberCell({
+  value,
+  label,
+  description,
+  detail,
+}: {
+  value: number | null;
+  label: string;
+  description?: string;
+  detail?: string;
+}) {
   return (
     <td
       className={styles.number}
       title={value != null && value >= 0 ? rawMarketNumber(value) : undefined}
       data-unavailable={label === "Unavailable"}
+      aria-label={description}
     >
       {label}
+      {detail && (
+        <small className="block text-xs text-muted-foreground">{detail}</small>
+      )}
     </td>
   );
 }

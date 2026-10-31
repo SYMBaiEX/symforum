@@ -3,6 +3,7 @@ import type { TerminalMarket } from "@/lib/forum-terminal-model";
 import {
   formatMarketPercent,
   marketObservation,
+  marketSources,
   rawMarketNumber,
   sortMarketRows,
 } from "./market-explorer-model";
@@ -40,6 +41,43 @@ function market(
 }
 
 describe("sampled-market display contracts", () => {
+  it("dates refreshed market fields independently from the original holder sample", () => {
+    const now = 1_800_000_000_000;
+    const value = market("exact-mint", {
+      metricsAsOf: now - 3_600_000,
+      holders: 456,
+      marketData: {
+        state: "available",
+        checkedAt: now - 120_000,
+        sourceUrl: "https://example.com/checked-pool",
+      },
+    });
+    const sources = marketSources(value, now);
+    expect(sources.market).toMatchObject({ label: "2m ago", stale: false });
+    expect(sources.holders).toMatchObject({ label: "1h ago", stale: true });
+    expect(sources.sourceUrl).toBe("https://example.com/checked-pool");
+    expect(sources).toMatchObject({ refreshed: true, unavailable: false });
+    expect(value.metricsAsOf).toBe(now - 3_600_000);
+    expect(value.holders).toBe(456);
+  });
+
+  it("never turns a missing refresh source into a fresh scout-source claim", () => {
+    const now = 1_800_000_000_000;
+    const value = market("exact-mint", {
+      marketData: { state: "unavailable", checkedAt: now, sourceUrl: null },
+    });
+    expect(marketSources(value, now)).toMatchObject({
+      sourceUrl: null,
+      refreshed: true,
+      unavailable: true,
+    });
+    expect(marketSources(market("legacy-mint"), now)).toMatchObject({
+      sourceUrl: "https://example.com/source",
+      refreshed: false,
+      unavailable: false,
+    });
+  });
+
   it("keeps missing, negative and non-finite metrics after known values in either sort direction", () => {
     const columns = [
       ["price", "priceUsd"],
