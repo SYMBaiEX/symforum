@@ -1,4 +1,6 @@
 .page {
+  --terminal-gain-text: 174 54% 26%;
+  --terminal-loss-text: 0 70% 38%;
   --terminal-space: 12px;
   --terminal-panel-radius: 8px;
   --terminal-control-radius: 6px;
@@ -15,6 +17,28 @@
   color: hsl(var(--foreground));
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
+}
+/* Market text is not a decorative accent. Keep it readable on light cards,
+   and honor a first-party surface's explicit theme over the document theme. */
+:global(:is(html.dark, html[data-theme="dark"])) .page,
+:global(
+    :is(.forum-app, .forum-app-shell, [data-surface="forum"])[data-theme="dark"]
+  )
+  .page {
+  --terminal-gain-text: var(--accent);
+  --terminal-loss-text: 0 80% 72%;
+}
+:global(html[data-theme="light"]) .page,
+:global(
+    :is(
+      .forum-app,
+      .forum-app-shell,
+      [data-surface="forum"]
+    )[data-theme="light"]
+  )
+  .page {
+  --terminal-gain-text: 174 54% 26%;
+  --terminal-loss-text: 0 70% 38%;
 }
 .header {
   flex: 0 0 auto;
@@ -343,10 +367,10 @@
   font-size: 12px;
 }
 .topMetrics dd[data-change="up"] {
-  color: hsl(var(--accent));
+  color: hsl(var(--terminal-gain-text));
 }
 .topMetrics dd[data-change="down"] {
-  color: hsl(var(--destructive));
+  color: hsl(var(--terminal-loss-text));
 }
 .marketStatus {
   margin: 0;
