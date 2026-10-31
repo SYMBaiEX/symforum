@@ -1,7 +1,8 @@
 "use node";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { env, internalAction } from "./_generated/server";
+import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { providerFetch, ProviderAdmissionError } from "./forumProviderFetch";
 import type { Id } from "./_generated/dataModel";
 import {
   GECKO_BASE,
@@ -15,8 +16,8 @@ import {
   TELEGRAM_COMMUNITY_ID,
 } from "../lib/telegram-agent-policy";
 import { tradeFeedEnabled } from "./telegramTradeFeed";
-async function read(path: string): Promise<unknown> {
-  const response = await fetch(`${GECKO_BASE}${path}`, {
+async function read(ctx: ActionCtx, path: string): Promise<unknown> {
+  const response = await providerFetch(ctx)(`${GECKO_BASE}${path}`, {
     redirect: "error",
     signal: AbortSignal.timeout(12_000),
     headers: { Accept: "application/json;version=20230203" },
@@ -44,11 +45,14 @@ export const poll = internalAction({
     );
     if (since === null) return null;
     try {
-      const discovery = symfPools(await read(`/tokens/${SYMF_MINT}/pools`));
+      const discovery = symfPools(
+        await read(ctx, `/tokens/${SYMF_MINT}/pools`),
+      );
       if (!discovery.pools.length) throw Error("no_matching_pools");
       for (const pool of discovery.pools.slice(0, 6)) {
         const trades = poolBuys(
           await read(
+            ctx,
             `/pools/${pool}/trades?trade_volume_in_usd_greater_than=0`,
           ),
           pool,
@@ -66,17 +70,24 @@ export const poll = internalAction({
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       await ctx.runMutation(internal.telegramTradeFeed.health, {
-        ...(error instanceof Error &&
-        "retryAfterAt" in error &&
-        typeof error.retryAfterAt === "number"
-          ? { retryAfterAt: error.retryAfterAt }
-          : {}),
+        ...(error instanceof ProviderAdmissionError &&
+        error.retryAt !== null &&
+        Number.isSafeInteger(error.retryAt) &&
+        error.retryAt > Date.now()
+          ? { retryAfterAt: error.retryAt }
+          : error instanceof Error &&
+              "retryAfterAt" in error &&
+              typeof error.retryAfterAt === "number"
+            ? { retryAfterAt: error.retryAfterAt }
+            : {}),
         reason:
-          /^(provider_http_[0-9]{3}|invalid_[a-z_]+|no_matching_pools)$/.test(
-            code,
-          )
-            ? code
-            : "provider_poll_unconfirmed",
+          error instanceof ProviderAdmissionError
+            ? "provider_admission_denied"
+            : /^(provider_http_[0-9]{3}|invalid_[a-z_]+|no_matching_pools)$/.test(
+                  code,
+                )
+              ? code
+              : "provider_poll_unconfirmed",
       });
     }
     const batch: { batchId: Id<"telegramTradeBatches">; text: string } | null =

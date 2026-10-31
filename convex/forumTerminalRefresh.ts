@@ -20,7 +20,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { commerceLimiter } from "./forumCommerce";
-import { marketReadLimiter } from "./forumMarketData";
+import { marketReadLimiter, marketProviderFetch } from "./forumMarketData";
 import { refreshedMarketValidator } from "./forumMarketSchema";
 
 const LEASE_MS = 25_000;
@@ -325,6 +325,7 @@ export const refresh = action({
       const data = await readPublicMarket(
         marketRefreshUrl(admission.mints),
         1_000_000,
+        marketProviderFetch(ctx),
       );
       fetchedAt = Date.now();
       quotes = parseMarketRefresh(data, admission.mints, fetchedAt);
