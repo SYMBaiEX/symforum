@@ -152,6 +152,91 @@ test.each([
   },
 );
 
+test("local admission exhaustion identifies the platform allowance without blaming a provider", async () => {
+  const cache: MarketCacheView["cache"] = {
+    ...view().cache,
+    nextRetryAt: now + 7_200_000,
+    failureStage: "admission",
+    failureCode: "budget",
+    failureProvider: null,
+  };
+  action.mockResolvedValue(view({ state: "budget", payload: null, cache }));
+  const response = await terminalMarketResponse(
+    SYMF_TOKEN.mint,
+    "chart",
+    request(),
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("retry-after")).toBe("7200");
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  const body = await response.json();
+  expect(body).toEqual({
+    error:
+      "Platform market-data allowance reached. Cached forum coverage remains available.",
+    state: "budget",
+    cache,
+  });
+  expect(body.error).not.toMatch(/free-tier|helius|jupiter/i);
+  expect(action).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
+    mint: SYMF_TOKEN.mint,
+    kind: "chart",
+    interval: "15m",
+    pinnedSymf: true,
+  });
+});
+
+test("a local candle budget does not promise a daily reset or imply a provider rejection", async () => {
+  const cache: MarketCacheView["cache"] = {
+    ...view().cache,
+    nextRetryAt: now + 86_400_000,
+    failureStage: "candles",
+    failureCode: "budget",
+    failureProvider: "solana-tracker",
+  };
+  action.mockResolvedValue(view({ state: "budget", payload: null, cache }));
+  const response = await terminalMarketResponse(
+    SYMF_TOKEN.mint,
+    "chart",
+    request(),
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("retry-after")).toBe("86400");
+  const body = await response.json();
+  expect(body).toEqual({
+    error:
+      "Platform market-data allowance reached. Cached forum coverage remains available.",
+    state: "budget",
+    cache,
+  });
+  expect(body.error).not.toMatch(/daily|free-tier|helius|jupiter/i);
+  expect(action).toHaveBeenCalledTimes(1);
+});
+
+test("a recorded provider 429 stays distinct from the platform admission cap", async () => {
+  const cache: MarketCacheView["cache"] = {
+    ...view().cache,
+    nextRetryAt: now + 900_000,
+    failureStage: "candles",
+    failureCode: "http-429",
+    failureProvider: "geckoterminal",
+  };
+  action.mockResolvedValue(view({ state: "unavailable", payload: null, cache }));
+  const response = await terminalMarketResponse(
+    SYMF_TOKEN.mint,
+    "chart",
+    request(),
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get("retry-after")).toBe("900");
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({
+    error: "No current chart is available for this indexed token.",
+    state: "unavailable",
+    cache,
+  });
+  expect(action).toHaveBeenCalledTimes(1);
+});
+
 test("unexpected failures expose only fixed diagnostics, not provider contents or errors", async () => {
   action.mockRejectedValue(new Error("secret-provider-body-and-url"));
   const response = await terminalMarketResponse(
