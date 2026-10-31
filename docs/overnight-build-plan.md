@@ -60,12 +60,12 @@ do not make conflicting changes to one shared source file safe to merge blindly.
 
 ## First selected batch
 
-| Lane      | Work                                                                         | Owner scope                                                       | Status                            |
-| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------- |
-| Community | Safely edit private submissions and recover explicitly from concurrent edits | Community hub and isolated submission regressions                 | Tested; release pending           |
-| Forum     | Protect settings drafts, retain confirmed uploads, honor reduced motion      | Control panel, composer, reply focus and isolated regressions     | Tested; release pending           |
-| Trading   | Precise staged alert controls, omission-safe updates and token-logo recovery | Watchlist and token identity components with isolated regressions | Tested; release pending           |
-| Parent    | Validate backlog, integrate, review and qualify the exact release candidate  | Planning artifacts, shared/generated integration                  | Full checks passed; merge pending |
+| Lane      | Work                                                                         | Owner scope                                                       | Status                           |
+| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------- |
+| Community | Safely edit private submissions and recover explicitly from concurrent edits | Community hub and isolated submission regressions                 | Deployed in PR #255              |
+| Forum     | Protect settings drafts, retain confirmed uploads, honor reduced motion      | Control panel, composer, reply focus and isolated regressions     | Deployed in PR #255              |
+| Trading   | Precise staged alert controls, omission-safe updates and token-logo recovery | Watchlist and token identity components with isolated regressions | Deployed in PR #255              |
+| Parent    | Validate backlog, integrate, review and qualify the exact release candidate  | Planning artifacts, shared/generated integration                  | PRs #254–256 merged and verified |
 
 Follow-on candidates include shareable utility-section navigation, clearer
 sampled-market provenance, project-directory search over already loaded data,

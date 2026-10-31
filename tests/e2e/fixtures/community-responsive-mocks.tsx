@@ -25,6 +25,9 @@ export const fixturePayment = {
 export function useConvexAuth() {
   return { isAuthenticated: true, isLoading: false };
 }
+export function useSearchParams() {
+  return new URLSearchParams(window.location.search);
+}
 export function useQuery(reference: FunctionReference<"query">, args: unknown) {
   if (args === "skip") return undefined;
   const name = getFunctionName(reference);
