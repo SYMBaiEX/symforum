@@ -373,19 +373,28 @@ export const listBounties = query({
   returns: v.array(workView),
   handler: async (ctx, { mint, status }) => {
     checkedMint(mint);
-    const rows = mint
-      ? await ctx.db
-          .query("forumCommunityWork")
-          .withIndex("by_mint_and_updatedAt", (q) => q.eq("mint", mint))
-          .order("desc")
-          .take(32)
-      : await ctx.db
-          .query("forumCommunityWork")
-          .withIndex("by_status_and_updatedAt", (q) =>
-            q.eq("status", status ?? "open"),
-          )
-          .order("desc")
-          .take(32);
+    const rows =
+      mint && status
+        ? await ctx.db
+            .query("forumCommunityWork")
+            .withIndex("by_mint_and_status_and_updatedAt", (q) =>
+              q.eq("mint", mint).eq("status", status),
+            )
+            .order("desc")
+            .take(32)
+        : mint
+          ? await ctx.db
+              .query("forumCommunityWork")
+              .withIndex("by_mint_and_updatedAt", (q) => q.eq("mint", mint))
+              .order("desc")
+              .take(32)
+          : await ctx.db
+              .query("forumCommunityWork")
+              .withIndex("by_status_and_updatedAt", (q) =>
+                q.eq("status", status ?? "open"),
+              )
+              .order("desc")
+              .take(32);
     return await Promise.all(
       rows
         .filter((row) => !status || row.status === status)
