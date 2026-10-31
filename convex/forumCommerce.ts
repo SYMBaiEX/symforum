@@ -1,3 +1,4 @@
+import { postTokenCandidate } from "./forumPostTokens";
 import { SYMF_TOKEN } from "../lib/symf-token";
 
 import { FORUM_SITE_URL } from "../lib/site-urls";
@@ -20,10 +21,23 @@ import {
   COMMERCE_MINT,
   BENEFIT_TTL_MS,
   isSolanaAddress,
-  linkedMintCandidate,
+  postHasMintReference,
 } from "../lib/forum-commerce";
 
 export const commerceLimiter = new RateLimiter(components.rateLimiter, {
+  commercePostMintSpacing: {
+    kind: "token bucket",
+    rate: 1,
+    period: 1500,
+    capacity: 1,
+    maxReserved: 200,
+  },
+  commercePostMintDaily: {
+    kind: "fixed window",
+    rate: 100,
+    period: 86_400_000,
+    start: 0,
+  },
   // Recovery shares the existing 1,000/day cap, with a tighter sub-budget.
   commerceRecoveryDaily: {
     kind: "fixed window",
@@ -105,6 +119,8 @@ const tokenValidator = v.object({
 export const getConfig = query({
   args: {},
   returns: v.object({
+    automaticPostTokens: v.boolean(),
+    promotionCalendar: v.boolean(),
     signatureFirstEnabled: v.boolean(),
     managedEnabled: v.boolean(),
     swapsEnabled: v.boolean(),
@@ -123,6 +139,8 @@ export const getConfig = query({
   handler: async () => {
     const c = commerceConfig(env);
     return {
+      automaticPostTokens: true,
+      promotionCalendar: true,
       signatureFirstEnabled: env.FORUM_SWAP_SIGNATURE_FIRST_ENABLED === "true",
       managedEnabled: c.managedEnabled,
       swapsEnabled: c.swapsEnabled,
@@ -375,19 +393,7 @@ async function mappedMint(
 export const getThreadMint = query({
   args: { threadId: v.id("forumThreads") },
   returns: v.union(v.string(), v.null()),
-  handler: async (ctx, { threadId }) => {
-    const mapped = await mappedMint(ctx, threadId);
-    if (mapped) return mapped.mint;
-    const thread = await publicCommerceThread(ctx, threadId);
-    if (!thread) return null;
-    const candidate = linkedMintCandidate(`${thread.title}\n${thread.body}`);
-    if (!candidate) return null;
-    const blocked = await ctx.db
-      .query("forumTradeTokens")
-      .withIndex("by_mint", (q) => q.eq("mint", candidate))
-      .unique();
-    return blocked?.status === "blocked" ? null : candidate;
-  },
+  handler: async (ctx, { threadId }) => postTokenCandidate(ctx, threadId),
 });
 export const cachedMint = internalQuery({
   args: { mint: v.string(), now: v.number() },
@@ -575,6 +581,46 @@ export const resolveThreadTokens = query({
       ].slice(0, 8);
     const result: typeof builtinTokens = [];
     const mapped = await mappedMint(ctx, threadId);
+    const primary = await postTokenCandidate(ctx, threadId);
+    if (primary) {
+      const [check, curated, cached] = await Promise.all([
+        ctx.db
+          .query("forumPostTokenChecks")
+          .withIndex("by_mint", (q) => q.eq("mint", primary))
+          .unique(),
+        ctx.db
+          .query("forumTradeTokens")
+          .withIndex("by_mint", (q) => q.eq("mint", primary))
+          .unique(),
+        ctx.db
+          .query("forumVerifiedMints")
+          .withIndex("by_mint", (q) => q.eq("mint", primary))
+          .unique(),
+      ]);
+      const verified =
+        curated?.status === "active"
+          ? curated
+          : check?.status === "verified"
+            ? check.token
+            : cached;
+      if (!verified) return [];
+      return [
+        {
+          mint: primary,
+          decimals: verified.decimals,
+          tokenProgram: verified.tokenProgram,
+          symbol:
+            mapped?.mint === primary
+              ? (mapped.latestSnapshot?.symbol ?? verified.symbol)
+              : verified.symbol,
+          name:
+            mapped?.mint === primary
+              ? (mapped.latestSnapshot?.name ?? verified.name)
+              : verified.name,
+        },
+      ];
+    }
+    if (!primary && postHasMintReference(text)) return [];
     if (mapped) {
       const verified = await ctx.db
         .query("forumVerifiedMints")

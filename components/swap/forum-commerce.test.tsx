@@ -67,6 +67,7 @@ vi.mock("convex/react", () => ({
     switch (operation(reference)) {
       case "forumCommerce:resolveThreadTokens": return harness.tokens;
       case "forumCommerce:getThreadMint": return null;
+      case "forumPostTokens:status": return null;
       case "forumCommerce:getConfig": return { promotionsEnabled: true, promotionAmountRaw: "10000000000" };
       case "forumPromotions:getPromotion": return harness.active;
       case "forumPromotions:listMine": return harness.mine;
@@ -127,6 +128,7 @@ vi.mock("@/components/forum/forum-link", () => ({
   ForumLink: ({ children, ...props }: ComponentProps<"a">) => <a {...props}>{children}</a>,
 }));
 
+vi.mock("./promotion-calendar", () => ({ PromotionCalendar: () => <div>Promotion calendar</div> }));
 import { ForumCommerceFrame } from "./forum-commerce";
 
 const threadId = "thread-one" as Id<"forumThreads">;
@@ -175,11 +177,11 @@ function assertNoNewPayment() {
 }
 function seedLocalIntent() {
   render();
-  // ThreadCommerce owns the first three states; LivePromotion owns the rest.
-  harness.states[3] = receipt();
-  harness.states[4] = { estimatedNetworkFeeLamports: "5000" };
-  harness.states[5] = true;
-  harness.states[8] = "known-receipt-signature";
+  // ThreadCommerce owns the first state; LivePromotion owns the rest.
+  harness.states[1] = receipt();
+  harness.states[2] = { estimatedNetworkFeeLamports: "5000" };
+  harness.states[3] = true;
+  harness.states[6] = "known-receipt-signature";
   return render();
 }
 
@@ -197,7 +199,7 @@ beforeEach(() => {
 test("active boards retain the normal promotion invitation without dispatching on mount", () => {
   const html = render();
   expect(html).toContain("Promote this post");
-  expect(html).toContain("Check next available slot");
+  expect(html).toContain("Promotion calendar");
   expect(html).toContain("Promotion wallet connection");
   expect(html).toContain("to sponsor a post");
   expect(harness.actions.every((action) => action.dispatch.mock.calls.length === 0)).toBe(true);
@@ -213,7 +215,7 @@ test.each([false, true])("an archived reader sees no promotion invitation while 
   expect(html).toContain("Author tip retained");
   expect(html).not.toContain('id="promote-post"');
   expect(html).not.toContain("Promotion wallet connection");
-  expect(html).not.toContain("Check next available slot");
+  expect(html).not.toContain("Promotion calendar");
   expect(harness.actions.every((action) => action.dispatch.mock.calls.length === 0)).toBe(true);
   assertNoNewPayment();
 });
@@ -227,7 +229,7 @@ test("archived owners retain held receipt history and checks, not prices or paym
   expect(html).toContain("Your promotion receipts for this post");
   expect(html).toContain("held");
   expect(html).toContain("Check receipt");
-  for (const text of ["Promote this post", "Check next available slot", "commerce-promotion-price", "Prepare and simulate", "Pay and burn in wallet", "Promotion wallet connection", "to sponsor a post", "50% is burned"])
+  for (const text of ["Promote this post", "Promotion calendar", "commerce-promotion-price", "Prepare and simulate", "Pay and burn in wallet", "Promotion wallet connection", "to sponsor a post", "50% is burned"])
     expect(html).not.toContain(text);
   expect(harness.submit).not.toHaveBeenCalled();
   harness.submit.mockResolvedValueOnce(row);
@@ -242,7 +244,7 @@ test("archived owners retain held receipt history and checks, not prices or paym
 test("archiving preserves local intent, sent state and signature recovery without a pay action", () => {
   harness.authenticated = true;
   seedLocalIntent();
-  harness.states[9] = true;
+  harness.states[7] = true;
   const html = render(true);
   expect(html).toContain("Existing promotion status");
   expect(html).toContain("held");
@@ -250,12 +252,12 @@ test("archiving preserves local intent, sent state and signature recovery withou
   expect(html).toContain("Check receipt without resending");
   expect(html).not.toContain("Pay and burn in wallet");
   expect(html).not.toContain("Prepare and simulate");
-  expect(harness.states[3]).toMatchObject({
+  expect(harness.states[1]).toMatchObject({
     intentId: "intent-one",
     status: "held",
     signature: "known-receipt-signature",
   });
-  expect(harness.states[9]).toBe(true);
+  expect(harness.states[7]).toBe(true);
   assertNoNewPayment();
 });
 
@@ -265,8 +267,8 @@ test("callbacks from the active render cannot quote, prepare or pay after the bo
   seedLocalIntent();
   const stale = harness.actions.slice();
   render(true);
-  // Action zero resolves a mentioned mint; actions1–3 are promotion-only.
-  for (const action of stale.slice(1, 4))
+  // Actions zero to two are the promotion quote, preparation and payment.
+  for (const action of stale.slice(0, 3))
     await action.callback(new AbortController().signal);
   assertNoNewPayment();
   expect(harness.submit).not.toHaveBeenCalled();
@@ -278,7 +280,7 @@ test("archiving during authorization prevents the wallet request and retains the
   seedLocalIntent();
   let finish!: () => void;
   harness.begin.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
-  const pending = harness.actions[3].callback(new AbortController().signal);
+  const pending = harness.actions[2].callback(new AbortController().signal);
   expect(harness.begin).toHaveBeenCalledTimes(1);
   render(true);
   finish();
@@ -289,5 +291,5 @@ test("archiving during authorization prevents the wallet request and retains the
   expect(harness.hold).not.toHaveBeenCalled();
   expect(html).toContain("Existing promotion status");
   expect(html).toContain("Check receipt without resending");
-  expect(harness.states[9]).toBe(true);
+  expect(harness.states[7]).toBe(true);
 });

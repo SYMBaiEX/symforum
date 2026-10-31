@@ -11,7 +11,35 @@ export const promotionStatus = v.union(
   v.literal("scheduled"),
   v.literal("expired"),
 );
+export const promotionSlot = v.object({
+  lane: v.number(),
+  startsAt: v.number(),
+  endsAt: v.number(),
+});
+export const commerceToken = v.object({
+  mint: v.string(),
+  symbol: v.string(),
+  name: v.string(),
+  decimals: v.number(),
+  tokenProgram: v.string(),
+});
 export const forumCommerceTables = {
+  // Shared public-post identity checks. No wallet, payment or curation authority.
+  forumPostTokenChecks: defineTable({
+    mint: v.string(),
+    threadId: v.id("forumThreads"),
+    generation: v.number(),
+    status: v.union(
+      v.literal("checking"),
+      v.literal("verified"),
+      v.literal("unavailable"),
+    ),
+    checkedAt: v.number(),
+    expiresAt: v.number(),
+    leaseUntil: v.number(),
+    started: v.boolean(),
+    token: v.optional(commerceToken),
+  }).index("by_mint", ["mint"]),
   forumSwapReconciliationAttempts: defineTable({
     authorization: v.string(),
     quoteId: v.id("forumSwapQuotes"),
@@ -147,6 +175,7 @@ export const forumCommerceTables = {
     burnAmountRaw: v.string(),
     reference: v.string(),
     lane: v.number(),
+    slots: v.optional(v.array(promotionSlot)),
     startsAt: v.number(),
     endsAt: v.number(),
     createdAt: v.number(),
@@ -164,7 +193,11 @@ export const forumCommerceTables = {
     .index("by_authUserId_and_createdAt", ["authUserId", "createdAt"])
     .index("by_authUserId_and_status", ["authUserId", "status"])
     .index("by_categoryId_and_endsAt", ["categoryId", "endsAt"])
-    .index("by_categoryId_and_status_and_endsAt", ["categoryId", "status", "endsAt"])
+    .index("by_categoryId_and_status_and_endsAt", [
+      "categoryId",
+      "status",
+      "endsAt",
+    ])
     .index("by_threadId_and_createdAt", ["threadId", "createdAt"]),
   forumSwapQuotes: defineTable({
     execution: v.optional(v.literal("jupiter-managed")),

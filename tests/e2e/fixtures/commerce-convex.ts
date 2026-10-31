@@ -54,6 +54,8 @@ export function useQuery(
     };
   if (name === "forumCommerce:getConfig")
     return {
+      automaticPostTokens: true,
+      promotionCalendar: true,
       swapsEnabled: !location.search.includes("disabled"),
       signatureFirstEnabled: location.search.includes("signaturefirst"),
       managedEnabled: location.search.includes("managed"),
@@ -80,8 +82,45 @@ export function useQuery(
         tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
       },
     ];
-  if (name === "forumCommerce:resolveThreadTokens") return [];
-  if (name === "forumCommerce:getThreadMint") return null;
+  if (name === "forumCommerce:resolveThreadTokens")
+    return location.search.includes("postverified")
+      ? [
+          {
+            mint: USDC,
+            symbol: "USDC",
+            name: "USD Coin",
+            decimals: 6,
+            tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          },
+        ]
+      : [];
+  if (name === "forumCommerce:getThreadMint")
+    return location.search.includes("postchecking") ||
+      location.search.includes("postverified")
+      ? USDC
+      : null;
+  if (name === "forumPostTokens:status")
+    return location.search.includes("postchecking")
+      ? { mint: USDC, status: "checking" }
+      : location.search.includes("postverified")
+        ? { mint: USDC, status: "verified" }
+        : null;
+  if (name === "forumPromotions:calendar") {
+    const hour = 3_600_000;
+    const first = Math.ceil((Date.now() + 660_000) / hour) * hour;
+    return {
+      categoryId: "board-fixture",
+      generatedAt: Date.now(),
+      amountRaw: "10000000000",
+      decimals: 6,
+      durationMs: 86400000,
+      slots: Array.from({ length: 7 * 24 - 1 }, (_, i) => ({
+        startsAt: first + i * hour,
+        endsAt: first + i * hour + 86400000,
+        remaining: i === 3 ? 0 : 5,
+      })),
+    };
+  }
   if (name === "forumPromotions:listPromoted") return [];
   if (name === "forumSwaps:listMine" && signedReceipt)
     return [

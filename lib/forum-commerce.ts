@@ -54,6 +54,30 @@ export function linkedMintCandidate(text: string): string | null {
   }
   return candidates.size === 1 ? [...candidates][0] : null;
 }
+export function postHasMintReference(text: string): boolean {
+  return /https:\/\/(?:www\.)?(?:pump\.fun\/coin\/|bags\.fm\/)|\b(?:mint(?: address)?|contract(?: address)?|ca)\s*:/i.test(
+    text,
+  );
+}
+/** Exact post identity only: recognized project links or an explicitly labeled
+ * Solana mint. Tickers, arbitrary wallet addresses and competing mints cannot
+ * choose a trading asset. */
+export function postMintCandidate(text: string): string | null {
+  if (text.length > 100_000) return null;
+  const candidates = new Set<string>();
+  const links = text.match(/https?:\/\/[^\s<>()[\]"']+/g) ?? [];
+  if (links.length > 100) return null;
+  for (const link of links) {
+    const mint = linkedMintCandidate(link);
+    if (mint) candidates.add(mint);
+  }
+  for (const match of text.matchAll(
+    /\b(?:mint(?: address)?|contract(?: address)?|ca)\s*:\s*(?:\[\/?b\]\s*)*([1-9A-HJ-NP-Za-km-z]{32,44})(?![1-9A-HJ-NP-Za-km-z])/gi,
+  )) {
+    if (isSolanaAddress(match[1])) candidates.add(match[1]);
+  }
+  return candidates.size === 1 ? [...candidates][0] : null;
+}
 export function unsignedRaw(value: string) {
   if (
     !/^(0|[1-9][0-9]{0,19})$/.test(value) ||

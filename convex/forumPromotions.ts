@@ -7,6 +7,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -24,7 +25,15 @@ import {
   commerceConfig,
   publicReference,
   verifyPromotionReceipt,
+  unsignedRaw,
 } from "../lib/forum-commerce";
+import {
+  selectedPromotionSlots,
+  promotionCalendarSlots,
+  overlapsPromotion,
+} from "../lib/promotion-calendar";
+import { SYMF_TOKEN } from "../lib/symf-token";
+import { promotionSlot } from "./forumCommerceSchema";
 import { promotionStatus } from "./forumCommerceSchema";
 import type { PreparedSwap } from "../lib/swap-router";
 import { recordTerminalPromotionReceipt } from "./forumTerminalTransparency";
@@ -46,6 +55,7 @@ const intentValidator = v.object({
   checkoutExpiresAt: v.number(),
   startsAt: v.number(),
   endsAt: v.number(),
+  slots: v.optional(v.array(promotionSlot)),
   status: promotionStatus,
   signature: v.union(v.string(), v.null()),
   issue: v.union(v.string(), v.null()),
@@ -68,6 +78,7 @@ function publicIntent(row: Doc<"forumPromotionIntents">) {
     checkoutExpiresAt: row.checkoutExpiresAt,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
+    ...(row.slots ? { slots: row.slots } : {}),
     status: row.status,
     signature: row.signature ?? null,
     issue: row.issue ?? null,
@@ -75,7 +86,7 @@ function publicIntent(row: Doc<"forumPromotionIntents">) {
   };
 }
 async function inventory(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   categoryId: Id<"forumCategories">,
   now: number,
   omit?: Id<"forumPromotionIntents">,
@@ -97,18 +108,44 @@ async function inventory(
         (r.status === "scheduled" ||
           (r.status !== "expired" && r.checkoutExpiresAt > now)),
     )
-    .map((r) => ({
-      ...r,
-      endsAt: r.status === "scheduled" ? r.endsAt : r.endsAt + CHECKOUT_TTL_MS,
-    }));
+    .flatMap((r) =>
+      r.slots
+        ? r.slots.map((slot) => ({ ...r, ...slot }))
+        : [
+            {
+              ...r,
+              endsAt:
+                r.status === "scheduled"
+                  ? r.endsAt
+                  : r.endsAt + CHECKOUT_TTL_MS,
+            },
+          ],
+    );
 }
 export const quotePromotion = action({
-  args: { wallet: v.string(), threadId: v.id("forumThreads") },
+  args: {
+    wallet: v.string(),
+    threadId: v.id("forumThreads"),
+    selectedStartsAt: v.optional(v.array(v.number())),
+    expectedCategoryId: v.optional(v.id("forumCategories")),
+  },
   returns: intentValidator,
   handler: async (ctx, args): Promise<ReturnType<typeof publicIntent>> => {
     const config = commerceConfig(env);
     if (!config.promotionsEnabled || !config.rpcUrl)
       throw new ConvexError("Paid promotions are not enabled.");
+    const count = args.selectedStartsAt
+      ? selectedPromotionSlots(
+          Date.now(),
+          args.selectedStartsAt,
+          config.promotionDurationMs,
+          [],
+          CHECKOUT_TTL_MS,
+        ).length
+      : 1;
+    const amount = unsignedRaw(
+      String(BigInt(config.promotionAmountRaw) * BigInt(count)),
+    );
     await ctx.runMutation(internal.forumCommerce.reserveNetwork, {
       wallet: args.wallet,
       cost: 2,
@@ -123,7 +160,7 @@ export const quotePromotion = action({
           decimals: mint.decimals,
           tokenProgram: mint.tokenProgram,
         },
-        BigInt(config.promotionAmountRaw),
+        amount,
       );
     } catch {
       throw new ConvexError(
@@ -148,6 +185,8 @@ export const reserve = internalMutation({
     tokenProgram: v.string(),
     decimals: v.number(),
     reference: v.string(),
+    selectedStartsAt: v.optional(v.array(v.number())),
+    expectedCategoryId: v.optional(v.id("forumCategories")),
   },
   returns: intentValidator,
   handler: async (ctx, args) => {
@@ -164,6 +203,13 @@ export const reserve = internalMutation({
     const thread = await promotableCommerceThread(ctx, args.threadId);
     if (!thread)
       throw new ConvexError("Only active public board posts can be promoted.");
+    if (
+      args.expectedCategoryId &&
+      args.expectedCategoryId !== thread.categoryId
+    )
+      throw new ConvexError(
+        "This post moved to another board. Refresh its calendar before booking.",
+      );
     const prior = await ctx.db
       .query("forumPromotionIntents")
       .withIndex("by_threadId_and_createdAt", (q) =>
@@ -173,10 +219,33 @@ export const reserve = internalMutation({
       .take(64);
     if (prior.length === 64)
       throw new ConvexError("This post's promotion history requires review.");
+    const rows = await inventory(ctx, thread.categoryId, now);
+    const slots = args.selectedStartsAt
+      ? selectedPromotionSlots(
+          now,
+          args.selectedStartsAt,
+          config.promotionDurationMs,
+          rows,
+          CHECKOUT_TTL_MS,
+        )
+      : undefined;
+    if (
+      slots &&
+      rows.some(
+        (r) =>
+          r.threadId === thread._id &&
+          slots.some((slot) => overlapsPromotion(r, slot)),
+      )
+    )
+      throw new ConvexError(
+        "This post already has a placement at a selected time.",
+      );
     const duplicate = prior.find(
       (r) =>
-        (r.status === "scheduled" && r.endsAt > now) ||
-        (r.status !== "expired" && r.checkoutExpiresAt > now),
+        (!slots && r.status === "scheduled" && r.endsAt > now) ||
+        (r.status !== "expired" &&
+          r.status !== "scheduled" &&
+          r.checkoutExpiresAt > now),
     );
     if (duplicate)
       throw new ConvexError(
@@ -197,14 +266,18 @@ export const reserve = internalMutation({
       .withIndex("by_reference", (q) => q.eq("reference", args.reference))
       .unique();
     if (existing) throw new ConvexError("Duplicate payment reference.");
-    const amount = BigInt(config.promotionAmountRaw),
+    const amount = unsignedRaw(
+        String(BigInt(config.promotionAmountRaw) * BigInt(slots?.length ?? 1)),
+      ),
       burn = amount / 2n;
     if (burn <= 0n) throw new ConvexError("Invalid promotion price.");
-    const slot = allocatePromotionLane(
-      now,
-      config.promotionDurationMs,
-      await inventory(ctx, thread.categoryId, now),
-    );
+    const slot = slots
+      ? {
+          lane: slots[0].lane,
+          startsAt: slots[0].startsAt,
+          endsAt: slots[slots.length - 1].endsAt,
+        }
+      : allocatePromotionLane(now, config.promotionDurationMs, rows);
     const id = await ctx.db.insert("forumPromotionIntents", {
       authUserId: actor.authUserId,
       userId: actor.userId,
@@ -221,6 +294,7 @@ export const reserve = internalMutation({
       burnAmountRaw: String(burn),
       reference: args.reference,
       ...slot,
+      ...(slots ? { slots } : {}),
       createdAt: now,
       checkoutExpiresAt: now + CHECKOUT_TTL_MS,
       status: "checkout",
@@ -306,8 +380,11 @@ export const consumePreparation = internalMutation({
       throw new ConvexError(
         "Checkout expired or preparation already requested. Do not submit another payment.",
       );
-    if (!(await promotableCommerceThread(ctx, row.threadId)))
-      throw new ConvexError("This post is no longer eligible.");
+    const currentThread = await promotableCommerceThread(ctx, row.threadId);
+    if (!currentThread || currentThread.categoryId !== row.categoryId)
+      throw new ConvexError(
+        "This post is no longer eligible in the selected board.",
+      );
     await ctx.db.patch("forumPromotionIntents", row._id, {
       preparationStartedAt: Date.now(),
     });
@@ -332,6 +409,11 @@ export const savePreparation = internalMutation({
       config.treasury !== row.treasury
     )
       throw new ConvexError("Checkout is no longer ready.");
+    const currentThread = await promotableCommerceThread(ctx, row.threadId);
+    if (!currentThread || currentThread.categoryId !== row.categoryId)
+      throw new ConvexError(
+        "This post is no longer eligible in the selected board.",
+      );
     await ctx.db.patch("forumPromotionIntents", row._id, { messageHash });
     return null;
   },
@@ -428,10 +510,12 @@ export const beginWalletRequest = mutation({
         "Prepared payment not found or wallet request already started.",
       );
     const config = commerceConfig(env);
+    const currentThread = await promotableCommerceThread(ctx, row.threadId);
     if (
       !config.promotionsEnabled ||
       config.treasury !== row.treasury ||
-      !(await promotableCommerceThread(ctx, row.threadId))
+      !currentThread ||
+      currentThread.categoryId !== row.categoryId
     )
       throw new ConvexError(
         "Promotions paused or post no longer eligible. Nothing was sent.",
@@ -570,6 +654,38 @@ export const settleReceipt = internalMutation({
               (r) => r.threadId === row.threadId && r.status === "scheduled",
             ),
             floor = Math.max(now, ...sameThread.map((r) => r.endsAt));
+          if (row.slots) {
+            const duration = row.slots[0].endsAt - row.slots[0].startsAt;
+            if (
+              rows.some(
+                (r) =>
+                  r.threadId === row.threadId &&
+                  row.slots!.some((slot) => overlapsPromotion(r, slot)),
+              )
+            )
+              throw Error(
+                "Selected placement overlaps another booking for this post",
+              );
+            const exact = selectedPromotionSlots(
+              now,
+              row.slots.map((s) => s.startsAt),
+              duration,
+              rows,
+            );
+            await ctx.db.patch("forumPromotionIntents", row._id, {
+              slots: exact,
+              lane: exact[0].lane,
+              startsAt: exact[0].startsAt,
+              endsAt: exact[exact.length - 1].endsAt,
+              status: "scheduled",
+              issue: undefined,
+              verifiedAt: now,
+              blockTime: args.blockTime ?? undefined,
+            });
+            const current = await ctx.db.get("forumPromotionIntents", row._id);
+            if (!current) throw Error("Promotion missing");
+            return publicIntent(current);
+          }
           const duration = row.endsAt - row.startsAt;
           // The checkout's calendar reservation includes one checkout-window of
           // slack. A prompt payer receives the full paid duration, not a duration
@@ -677,7 +793,12 @@ export const listPromoted = query({
       )
       .take(128);
     const active = rows
-        .filter((r) => r.status === "scheduled" && r.startsAt <= now)
+        .filter((r) => r.status === "scheduled")
+        .flatMap((r) =>
+          (r.slots ?? [r])
+            .filter((slot) => slot.startsAt <= now && slot.endsAt > now)
+            .map((slot) => ({ ...r, ...slot })),
+        )
         .sort((a, b) => a.lane - b.lane),
       result: {
         intentId: Id<"forumPromotionIntents">;
@@ -709,5 +830,60 @@ export const listPromoted = query({
       if (result.length === 5) break;
     }
     return result;
+  },
+});
+
+/** Reading the calendar neither requires a wallet nor reserves paid inventory. */
+export const calendar = query({
+  args: { threadId: v.id("forumThreads"), minute: v.number() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      categoryId: v.id("forumCategories"),
+      generatedAt: v.number(),
+      durationMs: v.number(),
+      amountRaw: v.string(),
+      decimals: v.number(),
+      slots: v.array(
+        v.object({
+          startsAt: v.number(),
+          endsAt: v.number(),
+          remaining: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const thread = await promotableCommerceThread(ctx, args.threadId),
+      config = commerceConfig(env);
+    if (
+      !thread ||
+      !config.promotionsEnabled ||
+      !Number.isSafeInteger(args.minute)
+    )
+      return null;
+    const now = Date.now(),
+      rows = await inventory(ctx, thread.categoryId, now);
+    const slots = promotionCalendarSlots(
+      now,
+      config.promotionDurationMs,
+      rows,
+      CHECKOUT_TTL_MS,
+    ).map((slot) => ({
+      ...slot,
+      remaining: rows.some(
+        (r) => r.threadId === thread._id && overlapsPromotion(r, slot),
+      )
+        ? 0
+        : slot.remaining,
+    }));
+    return {
+      categoryId: thread.categoryId,
+      generatedAt: now,
+      durationMs: config.promotionDurationMs,
+      amountRaw: config.promotionAmountRaw,
+      decimals: SYMF_TOKEN.decimals,
+      slots,
+    };
   },
 });

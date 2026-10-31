@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForumLink } from "@/components/forum/forum-link";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
+import { SYMF_TOKEN } from "@/lib/symf-token";
 import { formatTokenAmount } from "@/lib/swap-amounts";
 import {
   requestReviewedTransaction,
@@ -36,7 +37,8 @@ import {
   CommerceWalletButton,
   useCommerceWallet,
 } from "./commerce-wallet";
-import { TokenSwap, type TradeToken } from "./token-swap";
+import { PromotionCalendar } from "./promotion-calendar";
+import { TokenSwap } from "./token-swap";
 import { AuthorTip } from "@/components/community/community-hub";
 
 export function ForumCommerceFrame({
@@ -61,6 +63,7 @@ export function ForumCommerceFrame({
         >
           <CommerceBoundary>
             <ThreadCommerce
+              key={threadId}
               threadId={threadId as Id<"forumThreads">}
               readOnlyArchive={readOnlyArchive}
             />
@@ -82,29 +85,13 @@ function ThreadCommerce({
 }) {
   const tokens = useQuery(api.forumCommerce.resolveThreadTokens, { threadId });
   const mapped = useQuery(api.forumCommerce.getThreadMint, { threadId });
-  const [resolved, setResolved] = useState<TradeToken | null>(null),
-    [chosen, setChosen] = useState("");
-  const client = useCommerceWallet();
-  const [wallet, setWallet] = useState<string | null>(null);
-  useEffect(() => {
-    if (!client) return;
-    const sync = () =>
-      setWallet(client.wallet.getState().connected?.account.address ?? null);
-    sync();
-    return client.wallet.subscribe(sync);
-  }, [client]);
-  const resolveMint = useConvexAction(api.forumCommerce.resolveMint);
-  const resolve = useAction(async () => {
-    if (!mapped || !wallet) return;
-    try {
-      setResolved(await resolveMint({ wallet, mint: mapped }));
-    } catch {
-      /* The explicit verified-mint gate remains closed. */
-    }
-  });
-  const available = [...(tokens ?? []), ...(resolved ? [resolved] : [])].filter(
-    (t, i, a) => a.findIndex((x) => x.mint === t.mint) === i,
+  const capabilities = useQuery(api.forumCommerce.getConfig, {});
+  const verification = useQuery(
+    api.forumPostTokens.status,
+    capabilities?.automaticPostTokens ? { threadId } : "skip",
   );
+  const [chosen, setChosen] = useState("");
+  const available = tokens ?? [];
   const outputToken = available.find((t) => t.mint === chosen) ?? available[0];
   return (
     <>
@@ -137,20 +124,17 @@ function ThreadCommerce({
         <section className="commerce-panel">
           <h2>Token in this post</h2>
           <code className="commerce-mint">{mapped}</code>
-          <CommerceWalletButton />
-          <Button
-            variant="outline"
-            disabled={!wallet || resolve.isRunning}
-            onClick={() => resolve.dispatch()}
-          >
-            Verify token for swaps
-          </Button>
-          <p>
-            Sign in and link your wallet before verifying this post’s token.
+          <p role="status">
+            {verification?.status === "unavailable"
+              ? "This token could not be verified for swaps."
+              : "Checking this token automatically…"}
           </p>
         </section>
       )}
-      <PromotionCheckout threadId={threadId} readOnlyArchive={readOnlyArchive} />
+      <PromotionCheckout
+        threadId={threadId}
+        readOnlyArchive={readOnlyArchive}
+      />
     </>
   );
 }
@@ -217,13 +201,29 @@ function LivePromotion({
   const archiveGuard = useRef(readOnlyArchive);
   useLayoutEffect(() => {
     archiveGuard.current = readOnlyArchive;
+    return () => {
+      archiveGuard.current = true;
+    };
   }, [readOnlyArchive]);
+  const selectedPromotionStarts = useRef<{
+    starts: number[];
+    categoryId: Id<"forumCategories">;
+  } | null>(null);
   const checkout = useAction(async () => {
     if (archiveGuard.current) return;
     setError("");
     try {
-      if (!connected) return;
-      setIntent(await reserve({ wallet: connected.account.address, threadId }));
+      const selection = selectedPromotionStarts.current;
+      if (!connected || !selection?.starts.length) return;
+      const selectedStartsAt = [...selection.starts];
+      setIntent(
+        await reserve({
+          wallet: connected.account.address,
+          threadId,
+          selectedStartsAt,
+          expectedCategoryId: selection.categoryId,
+        }),
+      );
       setPrepared(null);
       setConsent(false);
     } catch {
@@ -327,14 +327,19 @@ function LivePromotion({
         <>
           <p>
             A clearly labeled placement in this board. At most five run at a
-            time; a full board queues the next 24-hour slot.
+            time. Pick your start times from the calendar.
           </p>
           <div className="commerce-promotion-price">
             <strong>
-              {formatTokenAmount(config?.promotionAmountRaw ?? "10000000000", 6)}{" "}
+              {formatTokenAmount(
+                config?.promotionAmountRaw ?? "10000000000",
+                SYMF_TOKEN.decimals,
+              )}{" "}
               SYMF
             </strong>
-            <span>24 hours</span>
+            <span>
+              {(config?.promotionDurationMs ?? 86_400_000) / 3_600_000} hours
+            </span>
           </div>
           <p>
             <Flame aria-hidden="true" />
@@ -353,19 +358,23 @@ function LivePromotion({
             </p>
           )}
           {!intent && (
-            <Button
-              className="w-full"
-              variant="outline"
+            <PromotionCalendar
+              key={threadId}
+              threadId={threadId}
+              enabled={config?.promotionCalendar === true}
               disabled={
-                !config?.promotionsEnabled ||
-                !isAuthenticated ||
-                !connected ||
-                busy
+                !config?.promotionsEnabled || !isAuthenticated || !connected
               }
-              onClick={() => checkout.dispatch()}
-            >
-              Check next available slot
-            </Button>
+              busy={busy}
+              onReserve={(starts, categoryId) => {
+                if (busy || archiveGuard.current) return;
+                selectedPromotionStarts.current = {
+                  starts: [...starts],
+                  categoryId,
+                };
+                checkout.dispatch();
+              }}
+            />
           )}
         </>
       )}
@@ -387,6 +396,12 @@ function LivePromotion({
             <div>
               <dt>Status</dt>
               <dd>{display.status}</dd>
+            </div>
+            <div>
+              <dt>Total payment</dt>
+              <dd>
+                {formatTokenAmount(display.amountRaw, display.decimals)} SYMF
+              </dd>
             </div>
             <div>
               <dt>
@@ -413,12 +428,26 @@ function LivePromotion({
               </dd>
             </div>
           </dl>
+          {display.slots && (
+            <div className="promotion-selected-review">
+              <h4>{display.slots.length} selected placements</h4>
+              <ul>
+                {display.slots.map((slot) => (
+                  <li key={slot.startsAt}>
+                    {date(slot.startsAt)} to {date(slot.endsAt)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <code className="commerce-mint">Treasury: {display.treasury}</code>
           <code className="commerce-mint">Mint: {display.mint}</code>
           <p>
-            The interval is confirmed after finalization. Checkout expires{" "}
-            {date(display.checkoutExpiresAt)}. Network fees and token-account
-            rent are additional.
+            {display.slots
+              ? "Your selected times are confirmed after finalization. Late payment does not silently move your dates."
+              : "The interval is confirmed after finalization."}{" "}
+            Checkout expires {date(display.checkoutExpiresAt)}. Network fees and
+            token-account rent are additional.
           </p>
           {!prepared && !sent && (
             <Button

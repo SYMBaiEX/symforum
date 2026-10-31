@@ -398,6 +398,8 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   )
     result = {
       swapsEnabled: fixtureFlags.has("orderquote"),
+      automaticPostTokens: true,
+      promotionCalendar: true,
       signatureFirstEnabled: true,
       managedEnabled: true,
       promotionsEnabled: false,
