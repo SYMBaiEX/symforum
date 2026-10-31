@@ -39,6 +39,7 @@ import {
 import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 import { lamportsToSol, solToLamports } from "@/lib/forum-community";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
+import { ForumLink } from "@/components/forum/forum-link";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
@@ -129,7 +130,7 @@ function CommunityContent({
   const sectionLabels = {
     projects: "Project hubs",
     work: "Bounties & research",
-    support: "Tips & holder profile",
+    support: "Tips & profile",
     receipts: "Your receipts",
   };
   function goToReceipts() {
@@ -159,7 +160,7 @@ function CommunityContent({
           [
             ["projects", "Project hubs"],
             ["work", "Bounties & research"],
-            ["support", "Tips & holder profile"],
+            ["support", "Tips & profile"],
             ["receipts", "Your receipts"],
           ] as const
         ).map(([id, label]) => (
@@ -182,7 +183,7 @@ function CommunityContent({
           <WorkBoard mint={mint} client={client} onPayment={setPayment} />
         )}
         {section === "support" && (
-          <Support client={client} onPayment={setPayment} />
+          <Support client={client} compact={compact} onPayment={setPayment} />
         )}
         {/* Do not eagerly load private receipts, but retain the existing
             subscription and known protection notice after their first use. */}
@@ -901,43 +902,72 @@ function RewardButton({
 }
 function Support({
   client,
+  compact,
   onPayment,
 }: {
   client: CommerceWalletClient | null;
+  compact: boolean;
   onPayment: (payment: Payment) => void;
 }) {
+  const profile = useRef<HTMLElement>(null);
   return (
-    <div className={styles.columns}>
-      <section className={styles.panel}>
-        <span className={styles.eyebrow}>Direct support</span>
-        <h2>Support a contributor</h2>
-        <p className={styles.muted}>
-          Tips are optional wallet-to-wallet SOL payments. Authors opt in to a
-          public receiving address. There is no platform tip fee; your wallet
-          displays the network fee.
-        </p>
-        {client ? (
-          <Tips client={client} onPayment={onPayment} />
-        ) : (
-          <p className={styles.empty}>Loading wallet…</p>
-        )}
-      </section>
-      <section className={styles.panel}>
-        {client ? (
-          <SupporterSettings client={client} />
-        ) : (
-          <p className={styles.empty}>Loading settings…</p>
-        )}
-      </section>
+    <div className={styles.support}>
+      {compact && (
+        <div className={styles.supportWallet}>
+          <span className={styles.eyebrow}>Your community wallet</span>
+          <CommerceWalletButton requiredFeature="solana:signTransaction" />
+        </div>
+      )}
+      <div className={styles.columns}>
+        <section className={styles.panel}>
+          <span className={styles.eyebrow}>Direct support</span>
+          <h2>Support a contributor</h2>
+          <p className={styles.muted}>
+            Tips are optional wallet-to-wallet SOL payments. Authors opt in to a
+            public receiving address. There is no platform tip fee; your wallet
+            displays the network fee.
+          </p>
+          {client ? (
+            <Tips
+              client={client}
+              onPayment={onPayment}
+              onShowProfile={() => {
+                profile.current?.scrollIntoView({ block: "nearest" });
+                profile.current?.focus({ preventScroll: true });
+              }}
+            />
+          ) : (
+            <p role="status" className={styles.localState}>
+              Loading wallet…
+            </p>
+          )}
+        </section>
+        <section
+          ref={profile}
+          className={styles.panel}
+          tabIndex={-1}
+          aria-label="Your contributor profile"
+        >
+          {client ? (
+            <SupporterSettings client={client} />
+          ) : (
+            <p role="status" className={styles.localState}>
+              Loading settings…
+            </p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
 function Tips({
   client,
   onPayment,
+  onShowProfile,
 }: {
   client: CommerceWalletClient;
   onPayment: (payment: Payment) => void;
+  onShowProfile: () => void;
 }) {
   const recipients = useQuery(api.forumCommunity.listTipRecipients, {}),
     identity = useCommerceIdentity(client, "solana:signTransaction"),
@@ -946,11 +976,50 @@ function Tips({
     [busy, setBusy] = useState(false);
   return (
     <>
-      <div className={styles.actions}>
-        <CommerceWalletButton requiredFeature="solana:signTransaction" />
-      </div>
+      {!busy &&
+        (recipients === undefined ? (
+          <p role="status" className={styles.localState}>
+            Loading contributors who accept tips…
+          </p>
+        ) : recipients.length === 0 ? (
+          <div className={styles.localState}>
+            <h3>No contributors accept tips yet</h3>
+            <p>
+              Authors choose whether to publish a receiving address. You can
+              manage your own receiving address in your contributor profile.
+            </p>
+            <button
+              type="button"
+              className={styles.link}
+              onClick={onShowProfile}
+            >
+              View contributor profile
+            </button>
+          </div>
+        ) : identity.isLoading ? (
+          <p role="status" className={styles.localState}>
+            Checking your community wallet…
+          </p>
+        ) : !identity.isAuthenticated ? (
+          <div className={styles.localState}>
+            <h3>Sign in to support a contributor</h3>
+            <p>
+              Use your community wallet to sign in and link the account that
+              will approve your tip.
+            </p>
+          </div>
+        ) : !identity.linked ? (
+          <p className={styles.localState}>
+            Select a wallet linked to your account in your community wallet
+            before preparing a tip.
+          </p>
+        ) : null)}
       <form
         className={`${styles.form} ${styles.details}`}
+        hidden={
+          !busy &&
+          (!recipients?.length || !identity.isAuthenticated || !identity.linked)
+        }
         onSubmit={(event) => {
           event.preventDefault();
           const wallet = identity.connected?.account.address;
@@ -989,9 +1058,6 @@ function Tips({
             ))}
           </select>
         </Field>
-        {recipients?.length === 0 && (
-          <p className={styles.muted}>No authors have enabled tips yet.</p>
-        )}
         <Field label="Tip amount (SOL)">
           <Input
             name="amount"
@@ -1006,12 +1072,12 @@ function Tips({
         >
           Review one-time tip
         </Button>
-        {message && (
-          <p role="alert" className={styles.status}>
-            {message}
-          </p>
-        )}
       </form>
+      {message && (
+        <p role="alert" className={`${styles.status} ${styles.details}`}>
+          {message}
+        </p>
+      )}
     </>
   );
 }
@@ -1044,8 +1110,24 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
     <>
       <span className={styles.eyebrow}>Your preferences</span>
       <h2>Your contributor profile</h2>
-      <CommerceWalletButton requiredFeature="solana:signTransaction" />
-      <div className={styles.details}>
+      {!busy && identity.isLoading ? (
+        <p role="status" className={styles.localState}>
+          Checking your community wallet…
+        </p>
+      ) : !busy && (!identity.isAuthenticated || !identity.linked) ? (
+        <div className={styles.localState}>
+          <p>
+            {identity.isAuthenticated
+              ? "Select a wallet linked to your account to manage public tips and your optional holder profile."
+              : "Sign in and link a community wallet to manage your receiving address and optional holder profile."}
+          </p>
+          <p>Receiving tips is opt-in. Your holder balance stays private.</p>
+        </div>
+      ) : null}
+      <div
+        className={styles.details}
+        hidden={!busy && (!identity.isAuthenticated || !identity.linked)}
+      >
         <h3>Receiving address</h3>
         <p className={styles.muted}>
           Enabling tips publishes your selected address. Disable it any time;
@@ -1078,7 +1160,10 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
           </Button>
         </div>
       </div>
-      <div className={styles.details}>
+      <div
+        className={styles.details}
+        hidden={!busy && (!identity.isAuthenticated || !identity.linked)}
+      >
         <h3>Optional SYMF holder profile</h3>
         <p className={styles.muted}>
           A non-zero finalized SYMF balance can enable a dated holder badge.
@@ -1144,7 +1229,7 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
   );
 }
 function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
-  const { isAuthenticated } = useConvexAuth(),
+  const { isAuthenticated, isLoading } = useConvexAuth(),
     rows = useQuery(
       api.forumCommunity.listPayments,
       isAuthenticated ? {} : "skip",
@@ -1174,13 +1259,34 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
         A missing or unavailable receipt never authorizes another payment. Check
         the saved attempt; do not pay again.
       </p>
-      <div className={`${styles.list} ${styles.details}`}>
-        {!isAuthenticated ? (
-          <p className={styles.empty}>Sign in to view your receipts.</p>
+      <div className={`${styles.list} ${styles.receiptList}`}>
+        {isLoading ? (
+          <p role="status" className={styles.localState}>
+            Loading private receipts…
+          </p>
+        ) : !isAuthenticated ? (
+          <div className={styles.localState}>
+            <h3>Sign in to view your receipts</h3>
+            <p>Your community payment history is private to your account.</p>
+            <ForumLink
+              href="/signin?redirectTo=/community"
+              className={styles.link}
+            >
+              Sign in
+            </ForumLink>
+          </div>
         ) : rows === undefined ? (
-          <p className={styles.empty}>Loading private receipts…</p>
+          <p role="status" className={styles.localState}>
+            Loading private receipts…
+          </p>
         ) : !rows.length ? (
-          <p className={styles.empty}>No tips or reward payments yet.</p>
+          <div className={styles.localState}>
+            <h3>No tips or reward payments yet</h3>
+            <p>
+              Community payments you create appear here. A wallet connection
+              does not create a payment.
+            </p>
+          </div>
         ) : (
           [...rows]
             .sort(

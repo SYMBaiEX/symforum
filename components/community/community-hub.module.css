@@ -1,8 +1,11 @@
 .hub {
   display: grid;
-  gap: 24px;
+  gap: 20px;
   min-width: 0;
   color: hsl(var(--foreground));
+}
+.hub [hidden] {
+  display: none;
 }
 .header {
   display: flex;
@@ -39,36 +42,38 @@
   gap: 8px;
 }
 .nav {
-  display: flex;
-  gap: 24px;
-  overflow-x: auto;
-  border-bottom: 1px solid hsl(var(--border));
-  scrollbar-width: thin;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.35);
 }
 .nav button {
-  position: relative;
-  flex-shrink: 0;
-  min-height: 48px;
-  padding: 8px 0 14px;
-  border: 0;
-  border-radius: 0;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: hsl(var(--muted-foreground));
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  text-align: center;
 }
-.nav button:hover,
-.nav button[aria-pressed="true"] {
-  background: transparent;
+.nav button:hover {
+  background: hsl(var(--background) / 0.65);
   color: hsl(var(--foreground));
 }
-.nav button[aria-pressed="true"]::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: hsl(var(--primary));
-  content: "";
+.nav button[aria-pressed="true"] {
+  border-color: hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
 }
 .nav button:focus-visible {
   outline: 2px solid hsl(var(--ring));
@@ -88,7 +93,7 @@
 }
 .panel {
   min-width: 0;
-  padding: 24px;
+  padding: 20px;
   border: 1px solid hsl(var(--border));
   border-radius: 10px;
   background: hsl(var(--card));
@@ -117,8 +122,8 @@
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 16px 24px;
-  padding-bottom: 24px;
+  gap: 12px 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .sectionHeading > div {
@@ -135,7 +140,7 @@
   border-radius: 9px;
 }
 .hub .nav button {
-  border-radius: 0;
+  border-radius: 8px;
 }
 .list {
   display: grid;
@@ -369,6 +374,46 @@
 .empty > button {
   margin-top: 4px;
 }
+.localState {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 16px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.65;
+}
+.localState h3 {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: 15px;
+  font-weight: 550;
+}
+.localState p {
+  max-width: 64ch;
+  margin: 0;
+}
+.receiptList {
+  margin-top: 8px;
+}
+.support {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.supportWallet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+}
+.support > .columns > .panel:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
 .link {
   display: inline-flex;
   align-items: center;
@@ -531,13 +576,15 @@
   outline-offset: 3px;
 }
 .compact {
-  gap: 16px;
+  gap: 12px;
 }
 .compact .panel {
-  padding: 20px;
+  padding: 12px;
+  border-radius: 8px;
 }
 .compact .empty {
-  min-height: 160px;
+  min-height: 0;
+  padding-block: 20px 8px;
 }
 .compact .columns {
   grid-template-columns: minmax(0, 1fr);
@@ -545,6 +592,33 @@
 .compact .sectionHeading,
 .compact .rowHeading {
   flex-wrap: wrap;
+}
+.compact .nav {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.compact .sectionHeading {
+  padding-bottom: 12px;
+}
+.compact .panel h2 {
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+.compact .details,
+.compact .actions {
+  margin-top: 12px;
+}
+.compact .item {
+  padding-block: 16px;
+}
+.compact .item:last-child {
+  padding-bottom: 0;
+}
+.compact .protectedReceipt:last-child {
+  padding-bottom: 16px;
+}
+.compact .columns,
+.compact .form {
+  gap: 12px;
 }
 @media (max-width: 760px) {
   .header {
@@ -559,15 +633,17 @@
     display: none;
   }
   .nav {
-    gap: 20px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .columns {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
-  .panel,
+  .panel {
+    padding: 16px;
+  }
   .compact .panel {
-    padding: 20px;
+    padding: 12px;
   }
   .sectionHeading {
     flex-wrap: wrap;
@@ -594,6 +670,11 @@
   .creationDialog {
     width: calc(100% - 24px);
     padding: 24px 20px;
+  }
+  .field input,
+  .field textarea,
+  .field select {
+    font-size: 16px;
   }
   .payment dl {
     grid-template-columns: minmax(0, 1fr);
