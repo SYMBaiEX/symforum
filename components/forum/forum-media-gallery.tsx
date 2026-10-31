@@ -145,7 +145,7 @@ export function ForumMediaGallery({
         }}
       >
         <DialogContent
-          className="forum-media-viewer"
+          className="forum-media-viewer [&>button:last-child]:min-h-11 [&>button:last-child]:min-w-11"
           onCloseAutoFocus={(event) => {
             const fallback = Array.from(
               gallery.current?.querySelectorAll<HTMLButtonElement>(
