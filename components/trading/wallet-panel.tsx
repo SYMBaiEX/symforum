@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { RefreshCw, ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { SYMF_TOKEN } from "@/lib/symf-token";
 import type { TerminalWalletReadState } from "@/lib/forum-terminal-model";
 import { terminalApi } from "./terminal-api";
-import { balanceLabel, shortMint } from "./terminal-format";
+import { shortMint } from "./terminal-format";
+import { walletAmountLabel, walletSolReadings } from "./wallet-readings-model";
 import { useTerminalAttention } from "./terminal-attention";
 import styles from "./forum-terminal.module.css";
 
@@ -23,6 +24,7 @@ export function WalletPanel({
   selectedMint: string;
   selectedSymbol: string;
 }) {
+  const balanceContextId = useId();
   const read = useAction(terminalApi.getWalletReadState);
   const [data, setData] = useState<TerminalWalletReadState | null>(null);
   const [busy, setBusy] = useState(true);
@@ -78,6 +80,7 @@ export function WalletPanel({
     }
   }
   const current = data?.wallet === wallet ? data : null;
+  const solReadings = current ? walletSolReadings(current) : null;
   return (
     <section className={styles.panel} aria-labelledby="terminal-wallet-title">
       <header className={styles.panelHead}>
@@ -103,10 +106,14 @@ export function WalletPanel({
           Linked wallet <code title={wallet}>{shortMint(wallet)}</code>
         </p>
         {current ? (
-          <ul className={styles.rows} aria-label="Wallet balances">
+          <ul
+            className={styles.rows}
+            aria-label="Wallet balances"
+            aria-describedby={balanceContextId}
+          >
             {current.balances.map((balance) => (
               <li key={balance.mint}>
-                <span>
+                <span className="min-w-0">
                   <strong>
                     {balance.mint === SOL
                       ? "SOL"
@@ -118,8 +125,8 @@ export function WalletPanel({
                   </strong>
                   <small title={balance.mint}>{shortMint(balance.mint)}</small>
                 </span>
-                <span className={styles.balance}>
-                  {balanceLabel(balance.rawAmount, balance.decimals)}
+                <span className={`${styles.balance} min-w-0`}>
+                  {walletAmountLabel(balance.rawAmount, balance.decimals)}
                 </span>
               </li>
             ))}
@@ -137,17 +144,37 @@ export function WalletPanel({
               : "Preparation checks balances again."}
           </p>
         )}
-        {current?.maxSolRaw != null && (
-          <p className={`${styles.muted} mt-3`}>
-            Estimated spendable SOL {balanceLabel(current.maxSolRaw, 9)} after a
-            verified reserve. The final route can require more rent or fees.
-          </p>
-        )}
-        {current && current.maxSolRaw == null && (
-          <p className={`${styles.muted} mt-3`}>
-            Keep SOL for network fees and token-account rent. Max is unavailable
-            until route-specific costs are verified.
-          </p>
+        {current && solReadings && (
+          <>
+            <p id={balanceContextId} className={`${styles.muted} mt-3`}>
+              Displayed balances are not spendable limits.
+              {solReadings.balance === "Unavailable" &&
+                " SOL balance unavailable; no zero balance is assumed."}
+            </p>
+            <details className={`${styles.muted} mt-3`}>
+              <summary className="focus-ring min-h-11 cursor-pointer content-center">
+                Balance &amp; spendable SOL
+              </summary>
+              {solReadings.estimate !== "Unavailable" ? (
+                <p className="break-words">
+                  Returned spendable estimate: {solReadings.estimate} SOL.
+                  Returned verified reserve: {solReadings.reserve} SOL.
+                </p>
+              ) : (
+                <p>
+                  Verified spendable estimate unavailable. Returned fields do
+                  not establish a reliable spendable limit. No Max amount is
+                  assumed.
+                </p>
+              )}
+              <p>
+                Keep SOL for network fees and token-account rent. The final
+                route can require more rent or fees. Preparation checks balances
+                and route-specific costs again; the displayed balance is not an
+                amount to spend in full.
+              </p>
+            </details>
+          </>
         )}
         {current &&
           !current.balances.some((entry) => entry.mint === selectedMint) && (

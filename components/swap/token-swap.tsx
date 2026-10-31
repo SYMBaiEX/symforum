@@ -42,6 +42,7 @@ import {
   useCommerceIdentity,
 } from "./commerce-wallet";
 import { TokenPicker } from "./token-picker";
+import { swapAmountHelp, swapAmountIssue } from "./swap-guidance";
 
 export type TradeToken = {
   mint: string;
@@ -178,6 +179,7 @@ function LiveSwap({
     [amount, setAmount] = useState(""),
     [slippage, setSlippage] = useState(50);
   const [format, setFormat] = useState<"auto" | "v0">("auto");
+  const [amountTouched, setAmountTouched] = useState(false);
   const supportsV1 =
     format === "auto" &&
     supportsCommerceTransaction(client, 1, config?.signatureFirstEnabled);
@@ -297,11 +299,14 @@ function LiveSwap({
       ? `${q.platformFeeBps / 100}% integrator fee (Jupiter share included) · collected in ${all.find((t) => t.mint === q.fees?.feeMint)?.symbol ?? short(q.fees.feeMint)}`
       : `${formatTokenAmount(q.platformFeeRaw, input?.decimals ?? 9)} ${input?.symbol ?? ""} (${q.platformFeeBps / 100}%)`;
   let rawAmount = "";
+  let amountIssue: string | null = null;
   try {
     if (input) rawAmount = parseTokenAmount(amount, input.decimals);
-  } catch {
+  } catch (reason) {
     /* Invalid amounts never reach the provider. */
+    amountIssue = swapAmountIssue(reason);
   }
+  const amountError = amountTouched && amount.length > 0 ? amountIssue : null;
   const inputKey = `${identityKey}:${inputMint}:${outputMint}:${rawAmount}:${slippage}:${supportsV1}:${format}`;
   const clear = () => {
     revision.current++;
@@ -697,6 +702,10 @@ function LiveSwap({
             placeholder="0.00"
             value={amount}
             disabled={locked}
+            aria-invalid={Boolean(amountError)}
+            aria-describedby={`${id}-amount-help${amountError ? ` ${id}-amount-error` : ""}`}
+            onFocus={() => setAmountTouched(false)}
+            onBlur={() => setAmountTouched(true)}
             onChange={(e) => {
               setAmount(normalizeTokenAmount(e.target.value));
               clear();
@@ -712,6 +721,11 @@ function LiveSwap({
           />
         </div>
         {input && <code title={input.mint}>{short(input.mint)}</code>}
+        {amountError && (
+          <p id={`${id}-amount-error`} className="commerce-error" role="alert">
+            {amountError}
+          </p>
+        )}
       </div>
       <button
         type="button"
@@ -753,6 +767,7 @@ function LiveSwap({
           id={`${id}-slip`}
           value={slippage}
           disabled={locked}
+          aria-describedby={`${id}-slippage-help`}
           onChange={(e) => {
             setSlippage(Number(e.target.value));
             clear();
@@ -765,6 +780,24 @@ function LiveSwap({
       </div>
       <details className="commerce-details">
         <summary>Wallet compatibility</summary>
+        <p id={`${id}-amount-help`} className="commerce-note">
+          {swapAmountHelp(input?.symbol, input?.decimals)}
+        </p>
+        <p id={`${id}-slippage-help`} className="commerce-note">
+          Slippage limits how much less you may receive than the quote. The
+          default is 0.5%; a higher limit permits a lower minimum received.
+          Changing this limit requires a fresh quote. Check the quoted minimum
+          before approval.
+        </p>
+        {best && (
+          <p id={`${id}-fee-help`}>
+            The platform fee shown in the estimate is included in the quote, not
+            an extra charge on top. Its collection token is shown when the route
+            provides it. Pool fees are reflected in the route quote. Network
+            fees and token-account rent are separate; their full cost is not
+            known here.
+          </p>
+        )}
         <div className="commerce-inline">
           <label htmlFor={`${id}-format`}>Transaction format</label>
           <select
@@ -801,7 +834,7 @@ function LiveSwap({
             </div>
             <div>
               <dt>Platform fee · included</dt>
-              <dd>{feeLabel(best)}</dd>
+              <dd aria-describedby={`${id}-fee-help`}>{feeLabel(best)}</dd>
             </div>
             <div>
               <dt>Price impact</dt>
@@ -1050,14 +1083,15 @@ function LiveSwap({
             </div>
             <div>
               <dt>Estimated network fee</dt>
-              <dd>
+              <dd aria-describedby={`${id}-network-help`}>
                 {formatTokenAmount(prepared.estimatedNetworkFeeLamports, 9)} SOL
               </dd>
             </div>
           </dl>
-          <p>
-            New token-account rent may also be required. Pool fees are included
-            in the route quote. Simulation is not a guarantee of execution.
+          <p id={`${id}-network-help`}>
+            The network fee is an estimate in SOL, not the platform fee. New
+            token-account rent may also be required. Pool fees are included in
+            the route quote. Simulation is not a guarantee of execution.
           </p>
         </details>
       )}
