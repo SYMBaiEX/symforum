@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import {
   ArrowDown,
@@ -62,6 +62,8 @@ export function MarketExplorer({
     direction: MarketSortDirection;
   }>({ key: "volume1h", direction: "desc" });
   const coverageId = useId();
+  const scrollHintId = useId();
+  const searchInput = useRef<HTMLInputElement>(null);
   const data = useQuery(terminalApi.listMarket, {
     band,
     ...(platform === "all" ? {} : { platform }),
@@ -73,6 +75,15 @@ export function MarketExplorer({
     sort.key,
     sort.direction,
   );
+  const filtered =
+    search.trim().length > 0 || band !== "all" || platform !== "all";
+  const empty = data === undefined || markets.length === 0;
+  function resetFilters() {
+    setSearch("");
+    setBand("all");
+    setPlatform("all");
+    searchInput.current?.focus();
+  }
   function changeSort(key: MarketSortKey) {
     setSort((current) => ({
       key,
@@ -86,6 +97,7 @@ export function MarketExplorer({
         <div className={styles.search}>
           <Search aria-hidden="true" />
           <Input
+            ref={searchInput}
             aria-label="Search sampled tokens"
             placeholder="Search name, ticker or mint"
             maxLength={64}
@@ -141,14 +153,84 @@ export function MarketExplorer({
         </button>
         <small>Quick access, not a market ranking</small>
       </div>
+      <div className={styles.context} role="group" aria-label="Sample context">
+        <p role="status">
+          <strong>
+            {data === undefined
+              ? "Loading sample"
+              : `${markets.length} ${markets.length === 1 ? "token" : "tokens"}`}
+          </strong>
+          <span>Sampled data</span>
+        </p>
+        <label className={styles.sortControl}>
+          <span>Sort</span>
+          <select
+            aria-label="Sort sampled tokens"
+            value={`${sort.key}:${sort.direction}`}
+            onChange={(event) => {
+              const [key, direction] = event.target.value.split(":");
+              const column = columns.find(([value]) => value === key);
+              if (column && (direction === "asc" || direction === "desc"))
+                setSort({ key: column[0], direction });
+            }}
+          >
+            {columns.flatMap(([key, label]) =>
+              (["desc", "asc"] as const).map((direction) => (
+                <option
+                  key={`${key}:${direction}`}
+                  value={`${key}:${direction}`}
+                >
+                  {label} · {direction === "desc" ? "descending" : "ascending"}
+                </option>
+              )),
+            )}
+          </select>
+        </label>
+      </div>
+      <p id={scrollHintId} className={styles.scrollHint}>
+        Scroll for more metrics
+      </p>
       <div
         className={styles.scroll}
         role="region"
         aria-label="Market data"
-        aria-describedby={coverageId}
+        aria-describedby={`${coverageId} ${scrollHintId}`}
         tabIndex={0}
       >
-        <table aria-label="Sampled markets">
+        <div className={styles.empty} hidden={!empty}>
+          <p role="status">
+            {data === undefined
+              ? "Loading the latest sampled tokens…"
+              : filtered
+                ? "No matching token in this sample."
+                : "No recent tokens match this sample."}
+          </p>
+          <span>
+            Discovery is limited to existing scout coverage. The swap selector
+            also supports exact-mint search.
+          </span>
+          {data !== undefined && filtered && (
+            <div className={styles.emptyActions}>
+              {search.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    searchInput.current?.focus();
+                  }}
+                >
+                  Clear search
+                </button>
+              )}
+              {(band !== "all" || platform !== "all") && (
+                <button type="button" onClick={resetFilters}>
+                  Reset filters
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <table aria-label="Sampled markets" hidden={empty}>
           <thead>
             <tr>
               <th scope="col" className={styles.tokenColumn}>
@@ -186,23 +268,7 @@ export function MarketExplorer({
             </tr>
           </thead>
           <tbody>
-            {data === undefined || !markets.length ? (
-              <tr>
-                <td colSpan={9} className={styles.empty}>
-                  <p role="status">
-                    {data === undefined
-                      ? "Loading the latest sampled tokens…"
-                      : search
-                        ? "No matching token in this sample."
-                        : "No recent tokens match this sample."}
-                  </p>
-                  <span>
-                    Discovery is limited to existing scout coverage. The swap
-                    selector also supports exact-mint search.
-                  </span>
-                </td>
-              </tr>
-            ) : (
+            {data !== undefined &&
               markets.map((market) => (
                 <MarketDataRow
                   key={market.mint}
@@ -212,8 +278,7 @@ export function MarketExplorer({
                   onSelect={onSelect}
                   now={now}
                 />
-              ))
-            )}
+              ))}
           </tbody>
         </table>
       </div>
@@ -261,7 +326,12 @@ function MarketDataRow({
               </span>
               <small title={market.name}>{market.name}</small>
             </strong>
-            <code title={market.mint}>{shortMint(market.mint)}</code>
+            <span className={styles.mintLine}>
+              <code title={market.mint}>{shortMint(market.mint)}</code>
+              {(staleSample || observed.stale) && (
+                <span className={styles.stale}>Stale</span>
+              )}
+            </span>
           </span>
         </button>
       </td>

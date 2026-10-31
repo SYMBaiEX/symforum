@@ -10,12 +10,17 @@ import {
 import { useAction, useConvexAuth } from "convex/react";
 import {
   ArrowUpRight,
+  BookOpen,
   ChartNoAxesCombined,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
+  Landmark,
   ListFilter,
   PanelsTopLeft,
   ReceiptText,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -44,6 +49,54 @@ import {
   useTerminalAttentionSnapshot,
 } from "./terminal-attention";
 import styles from "./forum-terminal.module.css";
+
+const toolGroups = [
+  {
+    label: "Account",
+    items: [
+      {
+        value: "wallet",
+        label: "Wallet & watches",
+        description: "Balances, token watches and alerts.",
+        icon: Wallet,
+      },
+      {
+        value: "receipts",
+        label: "Swap receipts",
+        description: "Original swap records and protected attempts.",
+        icon: ReceiptText,
+      },
+    ],
+  },
+  {
+    label: "Research & community",
+    items: [
+      {
+        value: "research",
+        label: "Research",
+        description: "Research access and its payment receipts.",
+        icon: BookOpen,
+      },
+      {
+        value: "community",
+        label: "Community",
+        description: "Project hubs, tips, bounties and community receipts.",
+        icon: Users,
+      },
+    ],
+  },
+  {
+    label: "Transparency",
+    items: [
+      {
+        value: "treasury",
+        label: "Treasury & burns",
+        description: "Recorded platform fees and token burns.",
+        icon: Landmark,
+      },
+    ],
+  },
+] as const;
 
 export type ForumTerminalProps = {
   enabled: boolean;
@@ -385,6 +438,17 @@ function TerminalWorkspace({
             aria-label="Terminal tools"
             hidden={!drawerOpen}
             data-expanded={expanded}
+            onKeyDown={(event) => {
+              if (
+                event.key !== "Escape" ||
+                event.defaultPrevented ||
+                (event.target instanceof Element &&
+                  event.target.closest('[role="dialog"]'))
+              )
+                return;
+              event.preventDefault();
+              closeTools();
+            }}
           >
             <div className={styles.toolsHeading}>
               <h2 id="terminal-tool-title" tabIndex={-1}>
@@ -403,11 +467,12 @@ function TerminalWorkspace({
               <div>
                 {tool && (
                   <button
+                    className={styles.allToolsButton}
                     type="button"
                     onClick={() => openTool(null)}
-                    aria-label="Choose a terminal tool"
                   >
-                    <PanelsTopLeft size={15} aria-hidden="true" />
+                    <ChevronLeft size={15} aria-hidden="true" />
+                    All tools
                   </button>
                 )}
                 <button
@@ -441,23 +506,34 @@ function TerminalWorkspace({
               aria-label="Active terminal tool"
             >
               <div className={styles.toolMenu} hidden={tool !== null}>
-                {(
-                  [
-                    ["wallet", "Wallet & watches"],
-                    ["receipts", "Swap receipts"],
-                    ["research", "Research"],
-                    ["community", "Community"],
-                    ["treasury", "Treasury & burns"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => openTool(value)}
-                  >
-                    {label}
-                    <ArrowUpRight size={15} aria-hidden="true" />
-                  </button>
+                {toolGroups.map((group) => (
+                  <section key={group.label} aria-label={group.label}>
+                    <h3>{group.label}</h3>
+                    <ul>
+                      {group.items.map(
+                        ({ value, label, description, icon: Icon }) => (
+                          <li key={value}>
+                            <button
+                              type="button"
+                              aria-label={label}
+                              onClick={() => openTool(value)}
+                            >
+                              <Icon
+                                className={styles.toolIcon}
+                                size={18}
+                                aria-hidden="true"
+                              />
+                              <span>
+                                <strong>{label}</strong>
+                                <small>{description}</small>
+                              </span>
+                              <ChevronRight size={16} aria-hidden="true" />
+                            </button>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </section>
                 ))}
               </div>
               <section
@@ -790,18 +866,27 @@ function AccountPanels({
       <section className={styles.panel}>
         <div className={styles.body}>
           <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Wallet className="size-4" aria-hidden="true" />
-            Your wallet, watchlist and alerts
+            {active === "receipts" ? (
+              <ReceiptText className="size-4" aria-hidden="true" />
+            ) : (
+              <Wallet className="size-4" aria-hidden="true" />
+            )}
+            {active === "receipts"
+              ? "Swap receipts"
+              : "Your wallet, watchlist and alerts"}
           </h2>
           <p className={`${styles.muted} mt-2`}>
-            Sign in to save token watches and view private operation receipts.
-            Public research and discussion remain free.
+            {active === "receipts"
+              ? "Sign in to view your original swap records and protected attempts. Only your account can access these receipts."
+              : "Sign in to save token watches and view private operation receipts. Public research and discussion remain free."}
           </p>
           <ForumLink
             className="mt-2 inline-flex min-h-10 items-center text-sm text-primary underline underline-offset-4"
             href="/signin?redirectTo=/trade"
           >
-            Sign in
+            {active === "receipts"
+              ? "Sign in to view swap receipts"
+              : "Sign in"}
           </ForumLink>
         </div>
       </section>
