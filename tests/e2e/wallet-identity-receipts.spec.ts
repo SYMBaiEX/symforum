@@ -255,6 +255,56 @@ test("receipt links have distinct exact-signature labels while protected/no-sign
   await expect(page.getByText("Confirmed", { exact: true })).toHaveCount(0);
   await check();
 });
+for (const invalidTime of ["nan", "out-of-range"])
+  test(`invalid receipt timestamp keeps the panel and protected status intact (${invalidTime})`, async ({
+    page,
+  }) => {
+    const check = await harness(page, `invalid-time=${invalidTime}`);
+    await expect(
+      page.getByRole("heading", { name: "Recent swap operations" }),
+    ).toBeVisible();
+    const firstRow = page.getByRole("row").nth(1);
+    await expect(
+      firstRow.getByText("Outcome protected", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      firstRow.getByRole("link", { name: /time unavailable.*signature/ }),
+    ).toHaveAttribute("href", `https://solscan.io/tx/${"1".repeat(88)}`);
+    await expect(firstRow.locator("time")).not.toHaveAttribute("datetime");
+    await expect(
+      page.getByText("No signature recorded", { exact: true }),
+    ).toHaveCount(2);
+    await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Not completed", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Confirmed", { exact: true })).toHaveCount(0);
+    await check();
+  });
+for (const timestamp of [0, -1, 8640000000000000, -8640000000000000])
+  test(`valid receipt timestamp preserves exact ISO (${timestamp})`, async ({
+    page,
+  }) => {
+    const check = await harness(page, `valid-time=${timestamp}`);
+    const firstRow = page.getByRole("row").nth(1);
+    const iso = new Date(timestamp).toISOString();
+    await expect(firstRow.locator("time")).toHaveAttribute("datetime", iso);
+    await expect(firstRow.getByRole("link")).toHaveAccessibleName(
+      `View SOL / SYMF swap from ${iso} on Solscan, signature ${"1".repeat(88)}`,
+    );
+    const originalDisplay = await page.evaluate(
+      (value) =>
+        new Date(value).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      timestamp,
+    );
+    await expect(firstRow.locator("time")).toHaveText(originalDisplay);
+    await check();
+  });
 for (const app of ["platform", "forum"])
   for (const width of [320, 390])
     test(`${app} ${width}px full address and receipt controls fit with readable type and 44px targets`, async ({

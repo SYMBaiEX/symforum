@@ -74,6 +74,11 @@ const history = [
     createdAt: 1793380000000,
   },
 ];
+const invalidTime = new URLSearchParams(location.search).get("invalid-time");
+if (invalidTime)
+  history[0].createdAt = invalidTime === "nan" ? Number.NaN : 8640000000000001;
+const validTime = new URLSearchParams(location.search).get("valid-time");
+if (validTime !== null) history[0].createdAt = Number(validTime);
 const reads: { name: string; args: unknown }[] = [];
 const operations: string[] = [];
 const copies: string[] = [];

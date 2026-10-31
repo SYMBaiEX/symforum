@@ -267,6 +267,11 @@ const statusLabels = {
   failed: "Not completed",
 } as const;
 
+function receiptIsoTime(createdAt: number) {
+  const date = new Date(createdAt);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
 export function SwapHistory() {
   const history = useQuery(api.forumSwaps.listMine, {});
   const protectedCount =
@@ -321,7 +326,7 @@ export function SwapHistory() {
               {history.map((entry) => (
                 <tr key={entry.quoteId}>
                   <td>
-                    <time dateTime={new Date(entry.createdAt).toISOString()}>
+                    <time dateTime={receiptIsoTime(entry.createdAt)}>
                       {new Date(entry.createdAt).toLocaleString([], {
                         month: "short",
                         day: "numeric",
@@ -355,7 +360,7 @@ export function SwapHistory() {
                         href={`https://solscan.io/tx/${encodeURIComponent(entry.signature)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`View ${entry.inputMint === SOL ? "SOL" : shortMint(entry.inputMint)} / ${entry.outputMint === SYMF_TOKEN.mint ? SYMF_TOKEN.symbol : entry.outputMint === SOL ? "SOL" : shortMint(entry.outputMint)} swap from ${new Date(entry.createdAt).toISOString()} on Solscan, signature ${entry.signature}`}
+                        aria-label={`View ${entry.inputMint === SOL ? "SOL" : shortMint(entry.inputMint)} / ${entry.outputMint === SYMF_TOKEN.mint ? SYMF_TOKEN.symbol : entry.outputMint === SOL ? "SOL" : shortMint(entry.outputMint)} swap from ${receiptIsoTime(entry.createdAt) ?? "time unavailable"} on Solscan, signature ${entry.signature}`}
                         className="inline-flex min-h-11 items-center gap-1"
                       >
                         Explorer
