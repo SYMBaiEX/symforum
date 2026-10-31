@@ -355,6 +355,12 @@ function ChartData({
     };
   }, [endpoint, mint, interval, demandRoot, host, showData, ageData]);
   const historyLabel = data ? chartHistoryLabel(data, data.checkedAt) : null;
+  const retryDate =
+    retryAt !== null && Number.isFinite(retryAt) ? new Date(retryAt) : null;
+  const retryIso =
+    retryDate && Number.isFinite(retryDate.getTime())
+      ? retryDate.toISOString()
+      : null;
   if (!data)
     return (
       <div
@@ -447,6 +453,27 @@ function ChartData({
         <summary className="focus-ring cursor-pointer">
           Read candle data
         </summary>
+        {(data.stale || offline) && (
+          <div
+            role="note"
+            aria-label="Chart retry eligibility"
+            className="space-y-2 px-3 py-3"
+          >
+            <p>{chartStateMessage(state, true, offline)}</p>
+            {retryIso ? (
+              <p>
+                Checks become eligible from{" "}
+                <time dateTime={retryIso}>
+                  {retryIso.replace("T", " ").replace("Z", " UTC")}
+                </time>
+                . Eligibility is not a refresh guarantee. Connection, visibility
+                and existing data limits still apply.
+              </p>
+            ) : (
+              <p>No retry eligibility time is available for this chart.</p>
+            )}
+          </div>
+        )}
         <CandleReadings
           candles={data.candles}
           compact={compact}
