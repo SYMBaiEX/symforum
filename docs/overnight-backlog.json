@@ -184,8 +184,15 @@
     "evidence": "components/trading/token-detail.tsx:66",
     "acceptance": "An accessible disclosure maps displayed price/cap/liquidity/volume/holders to their actual existing source and check time; chart freshness never refreshes holder age or missing metrics.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/token-metric-inspection.ts",
+      "components/trading/token-metric-inspection.test.ts",
+      "tests/e2e/token-metric-inspection.spec.ts",
+      "tests/e2e/fixtures/token-metric-inspection.tsx",
+      "tests/e2e/fixtures/token-metric-inspection-state.tsx"
+    ]
   },
   {
     "id": "TRADE-012",
@@ -253,8 +260,15 @@
     "evidence": "components/trading/token-detail.tsx:210",
     "acceptance": "An explicit details view shows the existing numeric values at useful precision with units and original timestamps, retains unavailable states, and never substitutes FDV for cap or recomputes a quote.",
     "dependsOn": ["TRADE-014"],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/token-metric-inspection.ts",
+      "components/trading/token-metric-inspection.test.ts",
+      "tests/e2e/token-metric-inspection.spec.ts",
+      "tests/e2e/fixtures/token-metric-inspection.tsx",
+      "tests/e2e/fixtures/token-metric-inspection-state.tsx"
+    ]
   },
   {
     "id": "TRADE-016",
@@ -360,8 +374,17 @@
     "evidence": "components/trading/price-chart.tsx:169",
     "acceptance": "Optional previous/next reading controls announce one loaded candle's UTC/OHLC/volume without fake ticks, chart-triggered trading, focus trapping or unbounded live announcements.",
     "dependsOn": ["TRADE-019"],
-    "status": "queued",
-    "paths": ["components/trading/price-chart.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/candle-readings.tsx",
+      "components/trading/candle-readings-model.ts",
+      "components/trading/candle-readings-model.test.ts",
+      "tests/e2e/candle-navigation.spec.ts",
+      "tests/e2e/fixtures/candle-navigation.tsx",
+      "tests/e2e/fixtures/candle-navigation-state.tsx",
+      "tests/e2e/candle-readings.spec.ts",
+      "tests/e2e/chart-reading-tools.spec.ts"
+    ]
   },
   {
     "id": "TRADE-024",
@@ -456,8 +479,17 @@
     "evidence": "components/trading/price-chart.tsx:451",
     "acceptance": "A local 20/50/all-loaded control slices only the existing bounded payload, announces actual row count, and does not change API limits, retention, interval or transport cadence.",
     "dependsOn": ["TRADE-019", "TRADE-024"],
-    "status": "queued",
-    "paths": ["components/trading/price-chart.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/candle-readings.tsx",
+      "components/trading/candle-readings-model.ts",
+      "components/trading/candle-readings-model.test.ts",
+      "tests/e2e/candle-navigation.spec.ts",
+      "tests/e2e/fixtures/candle-navigation.tsx",
+      "tests/e2e/fixtures/candle-navigation-state.tsx",
+      "tests/e2e/candle-readings.spec.ts",
+      "tests/e2e/chart-reading-tools.spec.ts"
+    ]
   },
   {
     "id": "TRADE-031",
@@ -585,7 +617,7 @@
     "evidence": "components/trading/wallet-panel.tsx:103",
     "acceptance": "An explicit action reveals/copies the full already-linked wallet address with accessible success/failure; it never connects, changes account, signs, or exposes the private panel to guests/native hosts.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/forum-terminal.module.css",
@@ -593,7 +625,8 @@
       "tests/e2e/fixtures/wallet-identity-receipts.tsx",
       "tests/e2e/fixtures/wallet-identity-receipts-state.tsx",
       "tests/e2e/wallet-readability.spec.ts"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "TRADE-040",
@@ -831,13 +864,14 @@
     "evidence": "components/swap/token-picker.tsx:103",
     "acceptance": "Deferred mock search responses resolve in reverse order and after modal close; stale results/errors cannot replace current search, reopen the dialog or select an unverified mint; existing debounce/caps remain.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/swap/token-picker.tsx",
       "tests/e2e/token-picker-identity.spec.ts",
       "tests/e2e/fixtures/token-picker-identity.tsx",
       "tests/e2e/fixtures/token-picker-identity-state.tsx"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "TRADE-056",
@@ -848,13 +882,14 @@
     "evidence": "components/swap/token-picker.tsx:125",
     "acceptance": "An exact-address match has a concise identity-only label and inspectable full mint; name matches remain untrusted metadata, verification still uses the existing exact mint, and no endorsement badge is invented.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/swap/token-picker.tsx",
       "tests/e2e/token-picker-identity.spec.ts",
       "tests/e2e/fixtures/token-picker-identity.tsx",
       "tests/e2e/fixtures/token-picker-identity-state.tsx"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "TRADE-057",
@@ -890,7 +925,7 @@
     "evidence": "components/trading/wallet-panel.tsx:262",
     "acceptance": "Each existing explorer link identifies the receipt's pair/time or signature for keyboard and screen-reader users; no-signature rows remain nonlinks and no verification/send action is added.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/forum-terminal.module.css",
@@ -898,7 +933,8 @@
       "tests/e2e/fixtures/wallet-identity-receipts.tsx",
       "tests/e2e/fixtures/wallet-identity-receipts-state.tsx",
       "tests/e2e/wallet-readability.spec.ts"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "TRADE-060",
@@ -960,14 +996,15 @@
     "evidence": "components/community/community-hub.tsx:222",
     "acceptance": "Enhancement: show selected exact mint above scoped projects/work; clear scope via an explicit URL change without presenting an empty scoped list as global absence.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-scope-guidance.spec.ts",
       "tests/e2e/fixtures/community-scope-guidance.tsx",
       "tests/e2e/fixtures/community-scope-guidance-state.tsx"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "COMMUNITY-005",
@@ -978,14 +1015,15 @@
     "evidence": "components/community/community-hub.tsx:150",
     "acceptance": "Enhancement: explain each existing utility with three short task-oriented links using section navigation; no claim that pledges are escrow.",
     "dependsOn": ["COMMUNITY-001"],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-scope-guidance.spec.ts",
       "tests/e2e/fixtures/community-scope-guidance.tsx",
       "tests/e2e/fixtures/community-scope-guidance-state.tsx"
-    ]
+    ],
+    "receipt": "PR #264 normally rebase-merged at 439206c03482639054f8348953e46f810b74e7d2; complete corrected qualified tree and all six authors verified. Exact release/all five original domains verified 2026-10-31 12:29 UTC. One bounded public Community scope/task-guide/handoff desktop/phone acceptance passed by 12:31 UTC; directory empty, so no populated coverage claim. Private wallet/picker/clipboard/financial behavior remains isolated-test evidence."
   },
   {
     "id": "COMMUNITY-006",
@@ -1649,8 +1687,15 @@
     "evidence": "components/trading/research-purchase.tsx:468",
     "acceptance": "Enhancement: show a clearly labelled illustrative JSON/schema preview and methodology before payment; no fabricated current metrics, provider fetches or model work.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/research-purchase.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/research-purchase.tsx",
+      "components/trading/research-export-preview.ts",
+      "components/trading/research-export-preview.test.ts",
+      "tests/e2e/research-preview-lifecycle.spec.ts",
+      "tests/e2e/fixtures/research-preview-lifecycle.tsx",
+      "tests/e2e/fixtures/research-preview-lifecycle-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-057",
@@ -1685,8 +1730,15 @@
     "evidence": "components/trading/research-purchase.tsx:492",
     "acceptance": "Regression: mocked quoted/expired/verifying/unknown/rejected/fulfilled states preserve explicit approval, exact mint binding, saved export and holds; never real signing, payment or automatic retry.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/research-purchase.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/research-purchase.tsx",
+      "components/trading/research-export-preview.ts",
+      "components/trading/research-export-preview.test.ts",
+      "tests/e2e/research-preview-lifecycle.spec.ts",
+      "tests/e2e/fixtures/research-preview-lifecycle.tsx",
+      "tests/e2e/fixtures/research-preview-lifecycle-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-060",

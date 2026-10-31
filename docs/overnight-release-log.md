@@ -811,3 +811,96 @@ operations, job/hold records and infrastructure binding metadata out of it.
 - Functional and geometry reviews are clean. Six inventory items are tested,
   not merged/deployed; fifty-seven remain source-deployed. Exact commit/secret
   scan, protected merge and automatic production/domain acceptance remain.
+
+## Batch 9 released — 12:31 UTC
+
+- PR #264 normally rebase-merged at `439206c03482639054f8348953e46f810b74e7d2`
+  at 12:26:16 UTC. Complete tree equals corrected qualified `053230b4`; all six
+  new main authors are exact. Protections retained; Actions stayed disabled.
+- Exact automatic production READY observed 12:28:58 UTC, all five original
+  domains exact 12:29:13. Public Community scope showed the exact supplied test
+  mint, three correct task-guide links and a full-directory link preserving the
+  selected section. Desktop/phone direct geometry and 44px controls passed.
+- One ordinary full-directory handoff succeeded without force/retry; mint and
+  scope notice disappeared, Projects remained active. The directory stayed empty,
+  so populated matching is not claimed. No observed client errors or blocked
+  provider attempts; the isolated browser closed. Bounded exact-release error
+  sample was zero of thirty, uncapped. Protected wallet/picker/clipboard and
+  financial behavior remain fixture-tested only, not live certification.
+- Sixty-three items are source-deployed. The seven historical unit-fixture
+  failures and isolated reproduction remain recorded alongside the corrected
+  full rerun. No runtime backend/worker, auth, fee, budget, schedule, data cap,
+  simulation/review/failure gate or uncertain hold was changed.
+
+## Batch 10 dispatch — 12:33 UTC
+
+- TRADE-011/015: `/private/tmp/symforum-overnight-token-metric-inspection`, branch
+  `sym/overnight-token-metric-inspection`, based on released `439206c0`. Own token
+  detail, optional pure inspection formatter/tests and new token-metric-inspection
+  spec/fixture/state. Explain each already-selected field's exact source/time and
+  unabridged stored value, preserving missing/zero/tiny values and cap versus FDV.
+  No duplicated truth selection, extra fetch or default trade-rail height.
+- TRADE-023/030: `/private/tmp/symforum-overnight-candle-navigation`, branch
+  `sym/overnight-candle-navigation`, same base. Own the extracted readings leaf,
+  existing model/unit tests and new candle-navigation fixtures/spec. Local
+  20/50/all-loaded slicing plus deliberate previous/next reading announcements
+  only; retain default latest twenty and exact displayed-row clipboard output.
+  No price-chart transport/controller edit. Two existing candle specs are owned
+  only for explicit added-tab-stop assertions; all original assertions remain.
+- COMMUNITY-056/059: `/private/tmp/symforum-overnight-research-preview`, branch
+  `sym/overnight-research-preview`, same base. Own research-purchase presentation,
+  optional pure illustrative preview/test and new research-preview-lifecycle
+  fixtures/spec. Static clearly illustrative schema and correct local export
+  methodology before payment; no fabricated live metrics or actual builder I/O.
+  `/research/methodology` covers editorial moderation, not this export; do not
+  mislabel it. Lifecycle tests must use actual protocol states and retain every
+  approval, exact-mint, expiry and uncertain-settlement gate without real payment.
+- Dependencies were rechecked deployed. All three worktrees have normal own
+  workspace links. No source writer overlaps; no new backend, financial handler,
+  API, provider, timer, persistence, budget or hosting change is authorized.
+- Paths are recorded before dispatch. Counts: sixty-three deployed, six in
+  progress, 153 queued, two blocked, sixteen needing confirmation. Parent remains
+  on released batch-9 branch with only these two known-owned planning files dirty.
+
+## Batch 10 integrated for qualification — 12:48 UTC
+
+- Fresh integration branch `sym/overnight-web3-wave-ten` starts at released
+  `439206c0`; the two known-owned planning updates were preserved. Frozen source
+  commits `a0ac39ef`, `428e36ed` and `bed081d2` are integrated without overlap.
+- Metric inspection preserves the original compact value selection/formatting,
+  fresh-null behavior, separate holder/one-hour times and unknown chart provider.
+  Independent review and eighteen isolated browser cases passed.
+- Candle navigation uses only the already-loaded immutable twenty/fifty/all
+  slices. Clipboard output equals displayed rows; source time is not bar time.
+  Independent seventeen browser and three model tests passed. Eleven added
+  tab-stop assertions retain every original reader assertion unchanged.
+- Research adds only a static schema disclosure and local methodology above
+  readiness controls. Existing financial handlers, effects, actions, query
+  arguments and account/expiry/hold gates are byte-identical. Worker thirty-three
+  browser and seven unit cases passed; independent review is pending.
+- The worker's initial expiry fixture used two minutes rather than the existing
+  five-minute intent TTL. Its corrected test uses that real constant and the
+  existing minute-rounded display tick; no payment handler was changed.
+- Six tasks are implemented, not qualified or released. Parent full integrated
+  tests, types, lint, native parity, audits, security controls and five builds
+  begin against this unchanged candidate. No backend/worker or financial action
+  is authorized; provider, wallet and payment operations stay fixture-denied.
+
+## Batch 10 retained provenance failure and correction — 12:53 UTC
+
+- Initial full units passed 4,367 of 4,369; two original token-detail provenance
+  assertions rejected a historical scout hyperlink after refreshed/unavailable
+  market overlays. The new inspection had added that link for the older holder
+  sample. All 620 browser cases, both types, five builds, parity, three audits
+  and security checks passed, but this candidate was NOT qualified.
+- Original tests remain completely unchanged. Follow-up `a8f041e` retains the
+  full validated holder source as labelled historical read-only text, separate
+  from current market links. Holder values, timestamps and stale status remain;
+  market/one-hour link behavior and every selection rule are unchanged.
+- Four original unit cases and eighteen inspection browser cases now pass,
+  including full historical attribution, unavailable overlays and very long
+  source references in both actual app styles. Both strict laptop swap-layout
+  cases also pass. Independent source review is clean; all four unchanged unit
+  guards and eighteen browser cases were independently rerun successfully.
+  Original failure logs are retained. Every full release gate restarts on the corrected unchanged
+  candidate with separate output files before any PR, merge or rollout claim.
