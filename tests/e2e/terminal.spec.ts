@@ -1861,7 +1861,7 @@ test("pending identity checks do not flash sign-in or expose editable payment fi
   ).toBe(false);
   expect(await recordedOperations(page)).toEqual([]);
   expect(result.errors).toEqual([]);
-  result = await harness(page, "community&tipsavailable&walletloading");
+  result = await harness(page, "community&tipsavailable&authloading");
   await page
     .getByRole("button", { name: "Tips & profile", exact: true })
     .click();
