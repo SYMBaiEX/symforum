@@ -138,6 +138,7 @@ async function openTool(
     await dock.getByRole("button", { name: "Tools", exact: true }).click();
     await page.getByRole("button", { name, exact: true }).first().click();
   }
+  await expect(page.locator("#terminal-tool-title")).toBeFocused();
 }
 
 async function expectViewportBounded(page: Page) {
@@ -796,6 +797,7 @@ test("mobile markets is an accessible view and trade remains one tap away", asyn
     name: "Trade selected token",
   });
   await expect(order).toBeVisible();
+  await expect(order).toBeFocused();
   expect((await order.boundingBox())?.y).toBeLessThan(844);
   await markets.focus();
   await page.keyboard.press("Enter");
