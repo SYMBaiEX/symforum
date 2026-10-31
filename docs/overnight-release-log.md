@@ -1104,3 +1104,18 @@ operations, job/hold records and infrastructure binding metadata out of it.
   provider, wallet, payment, public publishing or assistive-technology claim.
 - Counts: seventy-six deployed, six implemented, 140 queued, two blocked and
   sixteen needing confirmation. Full unchanged-candidate qualification follows.
+
+## Batch 12 initial full qualification — 14:03 UTC
+
+- First final candidate passed 4,404 unit/backend cases, both types, five app
+  builds, native parity, all three dependency audits and security controls;
+  lint retained three existing warnings and zero errors. Redacted scan clean.
+- Browser run passed 737 of 739. Two existing real-frame tests counted exactly
+  five buttons in the candle toolbar, which intentionally now contains five
+  intervals plus Chart tools. No layout failure was reached or inferred.
+- Root adds exact ownership of tests/e2e/terminal.spec.ts solely for this
+  additive toolbar contract: retain five exact named interval buttons, assert
+  one Chart tools button and six total, and retain the entire original bounds
+  loop over every button plus all other layout/controller assertions unchanged.
+  This is not a release qualification yet; retain failed logs and rerun all
+  final gates against the corrected frozen candidate after independent review.

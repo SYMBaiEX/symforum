@@ -2826,7 +2826,13 @@ for (const width of [1024, 1440])
     expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(
       chartBounds!.x + chartBounds!.width + 2,
     );
-    await expect(toolbar.getByRole("button")).toHaveCount(5);
+    await expect(
+      toolbar.getByRole("button", { name: /^(1m|5m|15m|1h|4h)$/ }),
+    ).toHaveCount(5);
+    await expect(
+      toolbar.getByRole("button", { name: "Chart tools", exact: true }),
+    ).toHaveCount(1);
+    await expect(toolbar.getByRole("button")).toHaveCount(6);
     for (const button of await toolbar.getByRole("button").all()) {
       const box = await button.boundingBox();
       expect(box!.x + box!.width).toBeLessThanOrEqual(
