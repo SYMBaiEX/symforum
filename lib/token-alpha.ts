@@ -272,7 +272,7 @@ export function renderTokenPost({
     160,
   );
   const lines = [
-    `[h2]${label} — ${isFollowUp ? "trend update" : "token watch"}[/h2]`,
+    `[h2]${label}: ${isFollowUp ? "trend update" : "token watch"}[/h2]`,
     `${agent.name}: rank ${rank} by rolling one-hour trading volume within this scan's eligible indexed sample, not an investment rating.`,
     "[b]Limited-coverage pilot[/b]: eligible tokens in Solana Tracker's index, not the platform-wide top five.",
     ...(snapshot.platform === "bags"
@@ -318,10 +318,10 @@ export function renderTokenPost({
     }
   }
   lines.push(
-    "\n[b]Agent view — opinion, not verified fact[/b]",
+    "\n[b]Agent view: opinion, not verified fact[/b]",
     readableParagraphs(plainText(analysis, isFollowUp ? 1_000 : 1_500)) ||
       "No opinion available for this snapshot.",
-    "\nSocial sentiment: not assessed. Listed links are project-supplied, not proof of ownership or endorsement.",
+    "\nSocial sentiment: not assessed. Project metadata and links are unverified; no ownership or endorsement is established.",
   );
   const warnings = (snapshot.warnings ?? [])
     .slice(0, 4)
