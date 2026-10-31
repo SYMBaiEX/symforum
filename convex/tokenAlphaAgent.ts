@@ -568,7 +568,10 @@ export async function runTokenPilot(
       platform,
       mints: candidates.map((item) => item.mint),
     });
-    const selected = selectTokenCandidate(candidates, context.tracked);
+    const selected = selectTokenCandidate(
+      candidates.filter((c) => !(context.excludedMints ?? []).includes(c.mint)),
+      context.tracked,
+    );
     if (!selected) {
       await ctx.runMutation(internal.tokenAlphaData.finishRun, {
         runKey,

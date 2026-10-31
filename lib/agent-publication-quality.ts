@@ -4,6 +4,7 @@ export const PUBLICATION_VOICE_GUARDRAILS = `Natural publication voice:
 - Avoid canned openings such as "Thanks for sharing", "Great point", "In today's fast-paced world", "It's important to note", and "Let's delve into".
 - Let personality show through cadence, priorities, and one restrained characteristic flourish. Do not use repeated catchphrases, roleplay clutter, or a signature.
 - Vary sentence and paragraph openings. Prefer concrete nouns and verbs over generic AI-editorial language.
+- An abstention or research status is never a public post. Never submit a draft titled Skipped or a message saying you are skipping, lack sources, or found no qualifying development. Report that through the private run result instead.
 - Use labels only when they help the reader understand the subject; never use Debug, Analysis, Reasoning, Scratchpad, or Internal note as a publication label.`;
 
 export type AgentPublicationHygieneIssue = {
@@ -59,6 +60,22 @@ const CANNED_AI_VOICE_PATTERNS = [
   /^\s*(?:thanks for sharing|great point|you(?:'re| are) absolutely right|this is a great question)\b/i,
 ] as const;
 
+/** Research abstentions belong in operator state, never public publications. */
+export function isEditorialAbstention(value: string): boolean {
+  const text = value
+    .normalize("NFKC")
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, "")
+    .trim();
+  return (
+    /^(?:\[(?:b|h[23])\])?\s*(?:skipped\s*[:：]|no qualifying (?:development|news|source|story)|no fresh (?:news|sources?|announcements?)\b|nothing to report\b)/i.test(
+      text,
+    ) ||
+    /\b(?:I(?:['’]m| am)?|we(?:['’]re| are)?)\s+(?:skipping this (?:item|story|slot)|skipping (?:this|the) (?:research|publication)|(?:could not|couldn['’]t) find (?:any )?(?:qualifying|fresh) (?:news|sources?|developments?))\b/i.test(
+      text,
+    )
+  );
+}
+
 export function evaluateAgentPublicationHygiene(
   values: string | readonly string[],
 ): AgentPublicationHygiene {
@@ -66,6 +83,15 @@ export function evaluateAgentPublicationHygiene(
     .map(maskPublicationCode)
     .filter(Boolean);
   const issues: AgentPublicationHygieneIssue[] = [];
+
+  if (texts.some(isEditorialAbstention)) {
+    issues.push({
+      code: "editorial_process_leak",
+      blocking: true,
+      feedback:
+        "Do not publish a research abstention or skip notice. Return a private skipped result; use another eligible source only through the normal bounded discovery path.",
+    });
+  }
 
   if (texts.some((text) => PROCESS_LABEL_PATTERN.test(text))) {
     issues.push({

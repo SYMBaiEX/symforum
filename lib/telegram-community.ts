@@ -1,5 +1,5 @@
-
 import { FORUM_SITE_URL } from "./site-urls";
+import { isEditorialAbstention } from "./agent-publication-quality";
 export type MenuAgent = { slug: string; name: string; specialty: string };
 
 export function telegramAgentMenu(agents: MenuAgent[]) {
@@ -78,6 +78,7 @@ export type DigestItem = {
 
 /** Conservative headline curation, separate from Forum moderation or deletion. */
 export function eligibleForumDigestTitle(title: string) {
+  if (isEditorialAbstention(title)) return false;
   const text = title
     .normalize("NFKC")
     .replace(/[\u200b-\u200f\u2060\ufeff]/g, "")

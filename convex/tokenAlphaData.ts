@@ -110,8 +110,15 @@ async function laneHasUnresolvedOperation(
   ctx: MutationCtx,
   platform: TokenPlatform,
 ) {
-  // A new hourly run key must never route around an earlier pending or unknown
-  // inference. This reads durable holds, not expiring call receipts.
+  const control = await ctx.db
+    .query("tokenAlphaControl")
+    .withIndex("by_key", (q) => q.eq("key", "pilot"))
+    .unique();
+  const fences = (control?.quarantinedInferences ?? [])
+    .filter((f) => f.platform === platform)
+    .slice(0, 2);
+  // Durable holds block new work unless the owner explicitly fenced this exact
+  // old unknown operation and its token. Pending and newly unknown work block.
   const holds = await Promise.all(
     (["pending", "unknown"] as const).map((status) =>
       ctx.db
@@ -122,11 +129,96 @@ async function laneHasUnresolvedOperation(
             .gte("operationKey", `${platform}:`)
             .lt("operationKey", `${platform};`),
         )
-        .take(1),
+        .take(4),
     ),
   );
-  return holds.some((rows) => rows.length > 0);
+  return holds.some(
+    (rows) =>
+      rows.length === 4 ||
+      rows.some(
+        (op) =>
+          op.status === "pending" ||
+          !fences.some(
+            (f) =>
+              f.operationKey === op.operationKey &&
+              f.jobId === op.jobId &&
+              f.inputHash === op.inputHash &&
+              op.updatedAt <= f.authorizedAt,
+          ),
+      ),
+  );
 }
+
+/** Requires explicit owner approval at invocation. Only future, unrelated
+ * ordinary slots resume; the old ledger, receipt and token stay fenced. */
+export const authorizeFreshResearch = internalMutation({
+  args: {
+    platform: tokenPlatformValidator,
+    operationKey: v.string(),
+    jobId: v.string(),
+  },
+  returns: v.object({ authorized: v.boolean(), excludedMint: v.string() }),
+  handler: async (ctx, args) => {
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    const op = await ctx.db
+      .query("elizaRuntimeOperations")
+      .withIndex("by_operationKey", (q) =>
+        q.eq("operationKey", args.operationKey),
+      )
+      .unique();
+    const run = await ctx.db
+      .query("tokenAlphaRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.operationKey))
+      .unique();
+    if (
+      !control ||
+      !op ||
+      op.status !== "unknown" ||
+      op.jobId !== args.jobId ||
+      !args.operationKey.startsWith(`${args.platform}:`) ||
+      Date.now() - op.updatedAt < DAY ||
+      !run ||
+      run.platform !== args.platform ||
+      !run.snapshot ||
+      !MINT_PATTERN.test(run.snapshot.mint)
+    )
+      throw Error(
+        "An old exact unknown operation and retained token snapshot are required",
+      );
+    const fences = control.quarantinedInferences ?? [];
+    const prior = fences.find((f) => f.platform === args.platform);
+    if (prior) {
+      if (
+        prior.operationKey !== op.operationKey ||
+        prior.jobId !== op.jobId ||
+        prior.inputHash !== op.inputHash
+      )
+        throw Error(
+          "This lane already used its one-time fresh-start authority",
+        );
+      return { authorized: true, excludedMint: prior.excludedMint };
+    }
+    if (fences.length >= 2) throw Error("Fresh-start authority is fully spent");
+    await ctx.db.patch("tokenAlphaControl", control._id, {
+      quarantinedInferences: [
+        ...fences,
+        {
+          platform: args.platform,
+          operationKey: op.operationKey,
+          jobId: op.jobId,
+          inputHash: op.inputHash,
+          excludedMint: run.snapshot.mint,
+          authorizedAt: Date.now(),
+        },
+      ],
+      updatedAt: Date.now(),
+    });
+    return { authorized: true, excludedMint: run.snapshot.mint };
+  },
+});
 
 async function availableUsername(
   ctx: MutationCtx,
@@ -408,6 +500,13 @@ export const claimRun = internalMutation({
       .unique();
     if (control?.enabled !== true || env.ELIZA_RUNTIME_MODE !== "live")
       return null;
+    if (
+      control.quarantinedInferences?.some(
+        (f) => f.platform === args.platform,
+      ) &&
+      (args.operatorRetryOf !== undefined || args.operatorFirstPost === true)
+    )
+      return null;
     const now = Date.now();
     const entry = TOKEN_ALPHA_AGENTS[args.platform];
     const agent = await ctx.db
@@ -661,6 +760,7 @@ export const getRun = internalQuery({
 export const getContext = internalQuery({
   args: { platform: tokenPlatformValidator, mints: v.array(v.string()) },
   returns: v.object({
+    excludedMints: v.optional(v.array(v.string())),
     tracked: v.array(
       v.object({
         mint: v.string(),
@@ -695,7 +795,18 @@ export const getContext = internalQuery({
       if (record.latestSnapshot?.platform === args.platform)
         metadata.push(record.latestSnapshot);
     }
-    return { tracked, metadata };
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    const excludedMints = (control?.quarantinedInferences ?? []).map(
+      (f) => f.excludedMint,
+    );
+    return {
+      tracked,
+      metadata,
+      ...(excludedMints.length ? { excludedMints } : {}),
+    };
   },
 });
 
@@ -730,6 +841,18 @@ export const saveSnapshot = internalMutation({
     const run = await activeClaim(ctx, args.runKey, args.claimToken);
     if (run.snapshot !== undefined)
       throw new Error("A token snapshot has already been selected");
+    const control = await ctx.db
+      .query("tokenAlphaControl")
+      .withIndex("by_key", (q) => q.eq("key", "pilot"))
+      .unique();
+    if (
+      control?.quarantinedInferences?.some(
+        (f) => f.excludedMint === args.snapshot.mint,
+      )
+    )
+      throw Error(
+        "An unresolved inference permanently fences this token from fresh-start research",
+      );
     if (
       run.platform !== args.snapshot.platform ||
       !MINT_PATTERN.test(args.snapshot.mint)

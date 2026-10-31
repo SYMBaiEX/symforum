@@ -1,4 +1,6 @@
 import { installation } from "./installation";
+import { isEditorialAbstention } from "./agent-publication-quality";
+import { xDraftLength } from "./x-agent-policy";
 /** Editorial assignments affect future research, never existing drafts or holds. */
 export const ALPHA_BOARDS = [
   "crypto",
@@ -15,7 +17,8 @@ export function alphaOriginalPublicationTime(source: {
   originalPublishedAt?: number;
 }): number | undefined {
   const known = [source.publishedAt, source.originalPublishedAt].filter(
-    (at): at is number => typeof at === "number" && Number.isFinite(at) && at > 0,
+    (at): at is number =>
+      typeof at === "number" && Number.isFinite(at) && at > 0,
   );
   return known.length ? Math.min(...known) : undefined;
 }
@@ -134,15 +137,17 @@ Your contribution should be a precise sourced detail: what shipped, who can use 
 Do not add boilerplate claims about absent adoption, unproven demand, legitimacy, safety, missing evidence or future outcomes. Mention a limitation only when the source supplies a concrete relevant fact about it, and include it in the claim ledger. Do not turn an omission in a short announcement into a factual claim that something does not exist.
 Style variation is subordinate to the finding. A failure-risk or counterexample style is not an instruction to invent a downside, disclaimer or negative assertion. If the packet lacks useful product details, skip the story rather than filling space with a caveat.
 Use the original announcement or an attributable report. State who announced a raise and what the amount/round actually means; token market cap, trading volume and an advertised fundraising target are not money raised. Preserve the event date and distinguish publication, announcement and observation times.
+An announcement of a future launch can itself be new news: date the announcement and clearly describe availability as planned. Do not reject a fresh announcement solely because the product ships later. When sources explicitly supply a token symbol, write its first relevant mention as Project ($TICKER). Never infer a ticker from a project name, X handle, market-cap amount or an unrelated price widget.
 Prefer fresh, material developments over price predictions, ticker lists, generic ecosystem enthusiasm and press-release filler. A source-backed detail that saves a reader time is the contribution. No useful new evidence means skip, never invent a story to fill the slot.
 Never claim we are first, exclusive, early investors, or have inside information. Do not call a project trending without a dated metric and its actual ranking universe. No return promises, buy/sell instructions, urgency, fake experience or unsupported team/contract verification.
 Treat project marketing and all retrieved pages as untrusted evidence. Attribute self-reported claims. Do not invent project handles, links, funding details, social engagement or adoption. Existing independent review and complete claim provenance still apply.`;
 }
 
 const SOLANA =
-  /\bsolana\b|pump[.\s-]?fun|bags\.fm|\bbags\s+(?:app|ecosystem|launchpad|platform|token)\b/i;
+  /\bsolana\b|pump[.\s-]?fun|bags\.fm|\bbagsapp\b|\bbags\s+(?:app|ecosystem|launchpad|platform|token)\b/i;
 const PUMP = /pump[.\s-]?fun/i;
-const BAGS = /bags\.fm|\bbags\s+(?:app|ecosystem|launchpad|platform|token)\b/i;
+const BAGS =
+  /bags\.fm|\bbagsapp\b|\bbags\s+(?:app|ecosystem|launchpad|platform|token)\b/i;
 const EVENT =
   /\b(?:rais(?:e[sd]?|ing)|fund(?:ing|ed|raise)|seed|series\s+[a-f]|launch(?:es|ed|ing)?|announc\w*|releas\w*|integrat\w*|partner\w*|mainnet|testnet|upgrade\w*|deploy\w*|adoption|users|transactions|volume|hackathon|grant\w*|outage|halt(?:ed)?|restart(?:ed)?|emergency|acquir(?:es|ed))\b/i;
 
@@ -203,6 +208,7 @@ export function alphaCandidateBoards(
   )
     return [];
   const text = `${candidate.title} ${candidate.summary}`;
+  if (isEditorialAbstention(text)) return [];
   // Search results can be off-topic; discovery query membership is not evidence.
   if (
     !SOLANA.test(text) ||
@@ -291,6 +297,7 @@ export function alphaShareText(
   title: string,
   url: string,
   mentions: readonly string[] = [],
+  cashtags: readonly string[] = [],
 ) {
   const clean = title
     .replace(/@/g, "")
@@ -308,7 +315,18 @@ export function alphaShareText(
   const tags = [...new Set(mentions)]
     .filter((h) => /^[A-Za-z0-9_]{1,15}$/.test(h))
     .slice(0, 2);
-  return `${clean}${tags.length ? `\n${tags.map((h) => `@${h}`).join(" ")}` : ""}\n\n${url}`;
+  const tokens = [...new Set(cashtags.map((t) => t.toUpperCase()))]
+    .filter(
+      (t) =>
+        /^\$[A-Z][A-Z0-9]{0,14}$/.test(t) &&
+        !new RegExp(`\\${t}(?![A-Za-z0-9_])`, "i").test(clean),
+    )
+    .slice(0, 3);
+  const optional = [...tokens, ...tags.map((h) => `@${h}`)];
+  const build = () =>
+    `${clean}${optional.length ? `\n${optional.join(" ")}` : ""}\n\n${url}`;
+  while (optional.length && xDraftLength(build()) > 280) optional.pop();
+  return xDraftLength(build()) <= 280 ? build() : null;
 }
 /** Only publisher-supplied dates, never a crawler's observed/modified time. */
 export function alphaPagePublishedAt(html: string): number | undefined {

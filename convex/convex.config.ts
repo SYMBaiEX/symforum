@@ -28,6 +28,7 @@ const app = defineApp({
     AGENT_SELF_JOIN_ENABLED: v.optional(v.string()),
     AGENT_JOIN_RELAY_SECRET: v.optional(v.string()),
     FORUM_BREAKING_NEWS_ENABLED: v.optional(v.string()),
+    FORUM_X_RESEARCH_ENABLED: v.optional(v.string()),
     FORUM_ALPHA_EDITORIAL_ENABLED: v.optional(v.string()),
     FORUM_ALPHA_DISTRIBUTION_ENABLED: v.optional(v.string()),
     FORUM_ALPHA_LEAD_MINUTES: v.optional(v.string()),

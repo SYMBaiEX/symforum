@@ -17,6 +17,7 @@ import {
   findRecentLexicalOverlap,
   fetchArticleSnapshots,
   fetchAvailableForumTopicSources,
+  xResearchSnapshots,
   forumDraftRevisionImproves,
   forumDraftPrompt,
   forumDraftSchemaForSources,
@@ -164,11 +165,12 @@ describe("Suki forum research helpers", () => {
     const configMock = vi
       .spyOn(convexRouting, "convexModelRoutingConfig")
       .mockResolvedValue({ openRouterApiKey: "fixture-no-network" });
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        `<html><body><article>${candidate.articleText}</article></body></html>`,
-        { headers: { "content-type": "text/html" } },
-      ),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          `<html><body><article>${candidate.articleText}</article></body></html>`,
+          { headers: { "content-type": "text/html" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
     try {
@@ -248,9 +250,15 @@ describe("Suki forum research helpers", () => {
       const candidates = await collectResearchCandidates(context);
 
       expect(candidates).toHaveLength(14);
-      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).not.toContain("research-papers");
-      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).toContain("ai-models");
-      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).not.toContain("projects");
+      expect(
+        candidates.flatMap((candidate) => candidate.boardSlugs),
+      ).not.toContain("research-papers");
+      expect(candidates.flatMap((candidate) => candidate.boardSlugs)).toContain(
+        "ai-models",
+      );
+      expect(
+        candidates.flatMap((candidate) => candidate.boardSlugs),
+      ).not.toContain("projects");
       expect(runQuery).toHaveBeenCalledTimes(1);
       expect(readBatchSize).toBe(14);
       expect(runMutation).not.toHaveBeenCalled();
@@ -336,6 +344,35 @@ describe("Suki forum research helpers", () => {
       // The selected source is reused rather than fetched a second time.
       await fetchArticleSnapshots([verified[0]], verified);
       expect(fetchMock).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("public X API evidence is reused without scraping an authenticated page", async () => {
+    const fetchMock = vi.fn(() => {
+      throw Error("No HTML request is allowed");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const evidence = xResearchSnapshots([
+        {
+          id: "2116573989971583399",
+          authorId: "123456789",
+          username: "public_project",
+          text: "Solana project ($TEST) announces its open-source release.",
+          publishedAt: Date.now() - 60_000,
+        },
+      ]);
+      const sources = await fetchAvailableForumTopicSources(
+        evidence,
+        true,
+        evidence,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sources).toHaveLength(1);
+      expect(sources[0].articleText).toBe(evidence[0].articleText);
+      expect(sources[0].originalPublishedAt).toBe(evidence[0].publishedAt);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -2095,8 +2132,14 @@ function discoverySelection(): Parameters<
 }
 
 test("alpha feeds do not mistake an Atom modified timestamp for publication", () => {
-  const xml = '<feed><entry><title>Solana release</title><link href="https://solana.com/news/release"/><updated>2026-10-29T12:00:00Z</updated><summary>Solana mainnet release</summary></entry></feed>';
-  const rows = parseFeedXml(xml, { boardSlugs: ["crypto"], feedUrl: "https://solana.com/feed", sourceName: "Solana", publisherUrls: true });
+  const xml =
+    '<feed><entry><title>Solana release</title><link href="https://solana.com/news/release"/><updated>2026-10-29T12:00:00Z</updated><summary>Solana mainnet release</summary></entry></feed>';
+  const rows = parseFeedXml(xml, {
+    boardSlugs: ["crypto"],
+    feedUrl: "https://solana.com/feed",
+    sourceName: "Solana",
+    publisherUrls: true,
+  });
   expect(rows).toHaveLength(1);
   expect(rows[0].publishedAt).toBeUndefined();
 });

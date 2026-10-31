@@ -10,6 +10,7 @@ import {
   installationMatches,
 } from "./installation";
 import { v } from "convex/values";
+import { publicationCashtags } from "../lib/token-cashtags";
 import { RateLimiter, DAY, HOUR } from "@convex-dev/rate-limiter";
 import { components, internal } from "./_generated/api";
 import {
@@ -434,7 +435,7 @@ export const claimX = internalMutation({
     for (const project of projects)
       if (alphaProjectMention(project.name, r.title, r.body))
         handles.push(project.username);
-    const text = alphaShareText(r.title, r.url, handles);
+    const text = alphaShareText(r.title, r.url, handles, publicationCashtags(r.body));
     if (!text || !validXDraft(text)) {
       await ctx.db.patch("forumAlphaDeliveries", id, {
         xStatus: "skipped",

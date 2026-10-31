@@ -9,6 +9,13 @@ export const alphaStatus = v.union(
   v.literal("skipped"),
 );
 export const forumAlphaTables = {
+  // Public search evidence only. Never grants, member histories or private posts.
+  forumXResearch: defineTable({
+    key: v.string(), ordinal: v.optional(v.number()), nextAt: v.number(),
+    lease: v.optional(v.string()), status: v.union(v.literal("reading"), v.literal("ready"), v.literal("unavailable")),
+    fetchedAt: v.number(), expiresAt: v.number(),
+    posts: v.array(v.object({ id: v.string(), authorId: v.string(), username: v.string(), text: v.string(), publishedAt: v.number() })),
+  }).index("by_key", ["key"]),
   // Admission is recorded atomically with workflow start. Even a skipped,
   // rejected or uncertain run cannot re-admit this source or agent/day slot.
   forumAlphaDeskRuns: defineTable({

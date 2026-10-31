@@ -8,6 +8,7 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
+import { publicXResearchPosts } from "../lib/forum-x-research";
 import type { Doc, Id } from "./_generated/dataModel";
 import { relayPost, SYMFORUM_X_USER_ID } from "../lib/x-telegram-relay";
 import { randomXSecret, sealX, unsealX } from "../lib/x-agent-crypto";
@@ -19,7 +20,10 @@ import {
 } from "../lib/x-agent-policy";
 
 class XFailure extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    public retryAt?: number,
+  ) {
     super(`X request failed (${status}).`);
   }
 }
@@ -34,7 +38,22 @@ async function request(path: string, token: string, body?: object) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  if (!response.ok) throw new XFailure(response.status);
+  if (!response.ok) {
+    const raw = response.headers.get("retry-after");
+    const retry = raw
+      ? /^\d+$/.test(raw)
+        ? Date.now() + Number(raw) * 1000
+        : Date.parse(raw)
+      : 0;
+    const reset = Number(response.headers.get("x-rate-limit-reset")) * 1000;
+    throw new XFailure(
+      response.status,
+      Math.max(
+        Number.isFinite(retry) ? retry : 0,
+        Number.isFinite(reset) ? reset : 0,
+      ),
+    );
+  }
   const text = await response.text();
   if (text.length > 256_000) throw Error("Oversized X response.");
   return JSON.parse(text) as Record<string, unknown>;
@@ -168,6 +187,49 @@ async function process(
   const args = { activityId, lease };
   try {
     const token = await access(ctx, c.activity, c.account, lease);
+    // Optional discovery shares this account's existing lease, grant and read
+    // allowance. A research outage never pauses normal reposts or comments.
+    try {
+      const research = await ctx.runMutation(
+        internal.forumXResearch.claim,
+        args,
+      );
+      if (research) {
+        let ok = false;
+        let retryAt: number | undefined;
+        let posts: ReturnType<typeof publicXResearchPosts> = [];
+        try {
+          const query = new URLSearchParams({
+            query: research.query,
+            max_results: "10",
+            start_time: new Date(Date.now() - 24 * 3600_000).toISOString(),
+            "tweet.fields":
+              "author_id,created_at,possibly_sensitive,referenced_tweets",
+            expansions: "author_id",
+            "user.fields": "protected,username",
+          });
+          const response = await request(
+            `tweets/search/recent?${query}`,
+            token,
+          );
+          ok = !response.errors;
+          posts = publicXResearchPosts(response, Date.now());
+        } catch (e) {
+          if (e instanceof XFailure) retryAt = e.retryAt;
+        }
+        await ctx.runMutation(internal.forumXResearch.finish, {
+          ...args,
+          desk: research.desk,
+          ok,
+          posts,
+          retryAt,
+        });
+      }
+    } catch {
+      console.warn(
+        "Optional public X research unavailable; ordinary activity continues.",
+      );
+    }
     const pollDue = (c.activity.nextSourcePollAt ?? 0) <= Date.now();
     const relayEnabled =
       pollDue && (await ctx.runQuery(internal.xTelegramRelayData.enabled, {}));

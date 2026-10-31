@@ -80,6 +80,7 @@ type Env = {
   readonly FORUM_SWAP_MANAGED_ENABLED: string | undefined;
   readonly FORUM_SWAP_RECONCILIATION_TARGET: string | undefined;
   readonly FORUM_SWAP_SIGNATURE_FIRST_ENABLED: string | undefined;
+  readonly FORUM_X_RESEARCH_ENABLED: string | undefined;
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
   readonly IDENTITY_SITE_URL: string | undefined;

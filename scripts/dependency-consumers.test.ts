@@ -61,9 +61,9 @@ describe("published lint consumers migrated to the modern matcher", () => {
     expect(lint("import * as item from 'allowed/module';", "import", "no-namespace", { ignore: ["allowed/**"] })).toEqual([]);
     expect(lint("import * as item from 'blocked/module';", "import", "no-namespace", { ignore: ["allowed/**"] })).toHaveLength(1);
     const mixed = "import item from 'node:path'; module.exports=item;";
-    expect(lint(mixed, "import", "no-import-module-exports", { exceptions: ["**/.dependency-fixture.js"] })).toEqual([]);
+    expect(lint(mixed, "import", "no-import-module-exports", { exceptions: [resolve(".dependency-fixture.js")] })).toEqual([]);
     expect(lint(mixed, "import", "no-import-module-exports", { exceptions: ["**/other.js"] })).toHaveLength(1);
-    expect(lint("import 'vitest';", "import", "no-extraneous-dependencies", { devDependencies: ["**/.dependency-fixture.js"] })).toEqual([]);
+    expect(lint("import 'vitest';", "import", "no-extraneous-dependencies", { devDependencies: [resolve(".dependency-fixture.js")] })).toEqual([]);
     expect(lint("import 'vitest';", "import", "no-extraneous-dependencies", { devDependencies: ["**/other.js"] })).toHaveLength(1);
     expect(lint("import value from 'allowed/file.js';", "import", "extensions", { pattern: { js: "never" }, pathGroupOverrides: [{ pattern: "allowed/**", action: "ignore" }] })).toEqual([]);
     const ordered = lint("import a from '@fixture/a'; import z from '@fixture/z';", "import", "order", { groups: ["external", "internal"], pathGroupsExcludedImportTypes: [], pathGroups: [{ pattern: "@fixture/z", group: "external", position: "before" }] });

@@ -441,3 +441,9 @@ local ENOSPC, so a clean full-suite result is not claimed. GitHub verification
 could not start because of account billing/spending restrictions. Neither
 that CI status nor preview status substitutes for the verified production
 publication evidence above.
+
+## Explicit fresh-start authority for historical unknown operations
+
+An unresolved inference still blocks its scout by default. If an operator has checked the original worker receipt and the owner explicitly approves fresh unrelated research, `tokenAlphaData:authorizeFreshResearch` can record one durable quarantine fence per platform. It requires the exact old unknown operation/job/hash and a retained selected-token snapshot, at least 24 hours old. It does not change the old operation, run, receipt or accounting result. There is no automatic expiry or automatic repeat authorization.
+
+Only ordinary new slots can resume. The old mint is excluded from candidate selection and blocked again when saving a snapshot; old first-post/recovery capabilities cannot use this authority. Existing run-key uniqueness, model budgets, source quotas, identity/canary checks and independent review remain enforced. A new pending/unknown operation freezes the lane again. Do not invoke this capability without explicit approval, and never represent it as reconciliation or proof that the original call did not run.

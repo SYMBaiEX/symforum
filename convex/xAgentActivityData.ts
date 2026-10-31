@@ -144,7 +144,7 @@ export const configure = mutation({
     return null;
   },
 });
-async function active(
+export async function active(
   ctx: MutationCtx,
   id: Id<"xAgentActivity">,
   lease: string,

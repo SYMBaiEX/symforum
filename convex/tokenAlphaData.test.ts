@@ -1021,3 +1021,92 @@ describe("token alpha free-tier quota", () => {
     });
   });
 });
+
+test("an explicit fresh-start fence preserves the unknown operation and excludes its token", async () => {
+  const t = setup();
+  await initialized(t);
+  const operationKey = "bags:2026-10-19T12";
+  await t.run(async (ctx) => {
+    await ctx.db.insert("elizaRuntimeOperations", {
+      operationKey,
+      jobId: "old-job",
+      inputHash: "a".repeat(64),
+      status: "unknown",
+      updatedAt: NOW - 2 * DAY,
+    });
+    await ctx.db.insert("tokenAlphaRuns", {
+      runKey: operationKey,
+      platform: "bags",
+      claimToken: "old",
+      status: "failed",
+      createdAt: NOW - 2 * DAY,
+      updatedAt: NOW - 2 * DAY,
+      expiresAt: NOW - DAY,
+      snapshot: snapshot(),
+    });
+  });
+  expect(
+    await t.mutation(internal.tokenAlphaData.claimRun, {
+      platform: "bags",
+      claimToken: "blocked",
+    }),
+  ).toBeNull();
+  expect(
+    await t.mutation(internal.tokenAlphaData.authorizeFreshResearch, {
+      platform: "bags",
+      operationKey,
+      jobId: "old-job",
+    }),
+  ).toEqual({ authorized: true, excludedMint: MINT });
+  const op = await t.run((ctx) =>
+    ctx.db.query("elizaRuntimeOperations").first(),
+  );
+  expect(op?.status).toBe("unknown");
+  const context = await t.query(internal.tokenAlphaData.getContext, {
+    platform: "bags",
+    mints: [MINT],
+  });
+  expect(context.excludedMints).toContain(MINT);
+  const fresh = await t.mutation(internal.tokenAlphaData.claimRun, {
+    platform: "bags",
+    claimToken: "new-unrelated",
+  });
+  expect(fresh?.runKey).not.toBe(operationKey);
+  expect(fresh).not.toBeNull();
+  await expect(
+    t.mutation(internal.tokenAlphaData.saveSnapshot, {
+      runKey: fresh!.runKey,
+      claimToken: "new-unrelated",
+      snapshot: snapshot(),
+    }),
+  ).rejects.toThrow("fences this token");
+  expect(
+    await t.mutation(internal.tokenAlphaData.claimRun, {
+      platform: "bags",
+      claimToken: "no-old-recovery",
+      operatorRetryOf: operationKey,
+    }),
+  ).toBeNull();
+  await t.mutation(internal.tokenAlphaData.finishRun, {
+    runKey: fresh!.runKey,
+    claimToken: "new-unrelated",
+    status: "failed",
+    reason: "fixture",
+  });
+  vi.mocked(Date.now).mockReturnValue(NOW + HOUR);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("elizaRuntimeOperations", {
+      operationKey: "bags:2026-10-21T19",
+      jobId: "new-unknown",
+      inputHash: "b".repeat(64),
+      status: "unknown",
+      updatedAt: NOW,
+    });
+  });
+  expect(
+    await t.mutation(internal.tokenAlphaData.claimRun, {
+      platform: "bags",
+      claimToken: "blocked-again",
+    }),
+  ).toBeNull();
+});

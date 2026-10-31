@@ -61,6 +61,20 @@ export const tokenAlphaTables = {
   tokenAlphaControl: defineTable({
     key: v.literal("pilot"),
     enabled: v.boolean(),
+    // Explicit operator authority for fresh unrelated work only. These fences
+    // never change an unknown operation or authorize its inference/source again.
+    quarantinedInferences: v.optional(
+      v.array(
+        v.object({
+          platform: tokenPlatformValidator,
+          operationKey: v.string(),
+          jobId: v.string(),
+          inputHash: v.string(),
+          excludedMint: v.string(),
+          authorizedAt: v.number(),
+        }),
+      ),
+    ),
     operatorFirstPostAttempts: v.optional(v.array(tokenPlatformValidator)),
     operatorBagsRetry: v.optional(
       v.object({
