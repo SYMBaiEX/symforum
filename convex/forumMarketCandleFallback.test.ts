@@ -192,6 +192,48 @@ test("a new Gecko failure never adds a third same-attempt fallback request", asy
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
+test.each([
+  [{ ...candle, open: 0 }, "candle-price"],
+  [{ ...candle, time: NOW }, "candle-time-unit"],
+  [{ ...candle, time: NOW / 1000 - 122 * 900 }, "candle-window"],
+] as const)(
+  "Tracker rejection persists only safe diagnostic %s",
+  async (invalid, code) => {
+    const t = setup();
+    await pilot(t);
+    await legacyFailure(t);
+    const fetcher = vi.fn(
+      async (url: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            String(url).includes("dexscreener")
+              ? pairs
+              : { oclhv: [invalid], privateMarker: "never-save-provider-body" },
+          ),
+        ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await t.action(api.forumMarketData.read, request);
+    expect(result).toMatchObject({
+      state: "unavailable",
+      payload: null,
+      cache: { failureCode: code, failureProvider: "solana-tracker" },
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("forumMarketDataCache")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique(),
+    );
+    expect(JSON.stringify(row)).not.toContain("never-save-provider-body");
+    expect(console.warn).toHaveBeenLastCalledWith(
+      "public_market_fetch_failed",
+      { stage: "candles", code, failureCount: 2 },
+    );
+  },
+);
+
 test("a different eligible mint cannot select Tracker from a historical candle failure", async () => {
   const t = setup();
   await pilot(t);

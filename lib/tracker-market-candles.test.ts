@@ -94,16 +94,25 @@ describe("exact-mint candle identity and safe diagnostics", () => {
       expect(() =>
         parseTrackerCandles({ oclhv: [candle], ...echo }, NOW, binding, "15m"),
       ).toThrow(expect.objectContaining({ code: "candle-identity" }));
-    for (const c of [
-      { ...candle, time: NOW / 1000 + 61 },
-      { ...candle, time: NOW / 1000 - 122 * 900 },
-      { ...candle, high: 0.1 },
-      { ...candle, open: Infinity },
-      { ...candle, volume: -1 },
-    ])
+    for (const [c, code] of [
+      [{ ...candle, time: NOW / 1000 + 61 }, "candle-future"],
+      [{ ...candle, time: NOW / 1000 - 122 * 900 }, "candle-window"],
+      [{ ...candle, high: 0.1 }, "candle-range"],
+      [{ ...candle, open: Infinity }, "candle-number"],
+      [{ ...candle, volume: -1 }, "candle-volume"],
+      [{ ...candle, time: NOW }, "candle-time-unit"],
+      [{ ...candle, time: 0 }, "candle-time"],
+      [{ ...candle, time: NaN }, "candle-number"],
+      [{ ...candle, time: 1.5 }, "candle-time"],
+      [{ ...candle, open: 0 }, "candle-price"],
+      [{ ...candle, volume: "10" }, "candle-number"],
+    ] as const)
       expect(() =>
         parseTrackerCandles({ oclhv: [c] }, NOW, binding, "15m"),
-      ).toThrow(expect.objectContaining({ code: "candle-numeric" }));
+      ).toThrow(expect.objectContaining({ code }));
+    expect(() =>
+      parseTrackerCandles({ oclhv: [candle, candle] }, NOW, binding, "15m"),
+    ).toThrow(expect.objectContaining({ code: "candle-duplicate" }));
     expect(() =>
       parseTrackerCandles({ oclhv: [] }, NOW, binding, "15m"),
     ).toThrow(expect.objectContaining({ code: "empty-candles" }));

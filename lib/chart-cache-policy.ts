@@ -22,6 +22,15 @@ export type MarketFailureCode =
   | "candle-schema"
   | "candle-identity"
   | "candle-numeric"
+  | "candle-number"
+  | "candle-price"
+  | "candle-volume"
+  | "candle-duplicate"
+  | "candle-time"
+  | "candle-time-unit"
+  | "candle-window"
+  | "candle-future"
+  | "candle-range"
   | "pool-unavailable"
   | "unsupported";
 export type MarketCandleProvider = "geckoterminal" | "solana-tracker";

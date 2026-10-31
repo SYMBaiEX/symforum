@@ -76,26 +76,50 @@ export function parseTrackerCandles(
         )
       )
         throw new PublicMarketSourceError(
-          "candle-numeric",
+          "candle-number",
           "invalid_market_data",
         );
       const candle = row as SymfCandle;
+      if (!Number.isSafeInteger(candle.time) || candle.time <= 0)
+        throw new PublicMarketSourceError("candle-time", "invalid_market_data");
+      // This is a rejection classification only; milliseconds are not converted.
+      if (candle.time >= 1_000_000_000_000)
+        throw new PublicMarketSourceError(
+          "candle-time-unit",
+          "invalid_market_data",
+        );
+      if (candle.time < oldest)
+        throw new PublicMarketSourceError(
+          "candle-window",
+          "invalid_market_data",
+        );
+      if (candle.time * 1000 > now + 60_000)
+        throw new PublicMarketSourceError(
+          "candle-future",
+          "invalid_market_data",
+        );
       if (
-        !Number.isSafeInteger(candle.time) ||
-        candle.time <= 0 ||
-        candle.time < oldest ||
-        candle.time * 1000 > now + 60_000 ||
         candle.open <= 0 ||
         candle.close <= 0 ||
         candle.high <= 0 ||
-        candle.low <= 0 ||
-        candle.volume < 0 ||
+        candle.low <= 0
+      )
+        throw new PublicMarketSourceError(
+          "candle-price",
+          "invalid_market_data",
+        );
+      if (candle.volume < 0)
+        throw new PublicMarketSourceError(
+          "candle-volume",
+          "invalid_market_data",
+        );
+      if (
         candle.high < Math.max(candle.open, candle.close) ||
         candle.low > Math.min(candle.open, candle.close) ||
         candle.low > candle.high
       )
         throw new PublicMarketSourceError(
-          "candle-numeric",
+          "candle-range",
           "invalid_market_data",
         );
       return {
@@ -109,7 +133,10 @@ export function parseTrackerCandles(
     })
     .sort((a, b) => a.time - b.time);
   if (new Set(candles.map((c) => c.time)).size !== candles.length)
-    throw new PublicMarketSourceError("candle-numeric", "invalid_market_data");
+    throw new PublicMarketSourceError(
+      "candle-duplicate",
+      "invalid_market_data",
+    );
   return candles;
 }
 
