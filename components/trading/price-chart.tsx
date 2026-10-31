@@ -435,6 +435,12 @@ function ChartData({
           candles={data.candles}
           compact={compact}
           formatPrice={priceFormat.format}
+          evidence={{
+            mint,
+            interval,
+            checkedAt: data.checkedAt,
+            sourceLabel: chartSourceLabel(data),
+          }}
         />
       </details>
     </>
