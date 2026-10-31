@@ -33,6 +33,7 @@ import {
 } from "@/lib/forum-research";
 import type { ResearchReport, ResearchState } from "@/lib/forum-research";
 import { useTerminalAttention } from "./terminal-attention";
+import { researchExportPreviewJson } from "./research-export-preview";
 
 type Quote = {
   intentKey: string;
@@ -349,6 +350,51 @@ function ResearchPurchaseConnected({
         Optional Solana x402 purchase. Forum content stays free. No recurring
         charges or automatic payments.
       </p>
+      <details className="mb-3 min-w-0 text-sm">
+        <summary className="focus-ring min-h-11 cursor-pointer content-center">
+          Preview export format &amp; methodology
+        </summary>
+        <div className="min-w-0 space-y-3 pb-3 [overflow-wrap:anywhere]">
+          <p className="font-medium">
+            Illustrative schema only · not a generated report
+          </p>
+          <p>
+            This preview describes the JSON fields, not current token data.
+            Opening it does not request a quote, contact a wallet or authorize
+            payment.
+          </p>
+          <h4 className="font-semibold">How the export is assembled</h4>
+          <p>
+            The versioned export deterministically assembles timestamped public
+            observations with a recorded market source and forum coverage. Both
+            citations and source freshness must pass checks before quotation. No
+            new model call is made. Coverage is sampled, not an exhaustive
+            ranking.
+          </p>
+          <p>
+            Facts include reported price, market capitalization (not FDV), pool
+            liquidity, one-hour volume, holder count and one-hour price change.
+            Missing metrics remain unavailable, not zero. Export creation time
+            (generatedAt) is separate from source observation time
+            (metricsAsOf). These are snapshots, not live prices or executable
+            quotes.
+          </p>
+          <p>
+            Analysis uses liquidity / market capitalization and one-hour volume
+            / market capitalization when calculable. Ratios do not prove safe
+            exits, organic demand, holder concentration, audit status or future
+            returns. This is not investment advice or an endorsement. The charge
+            buys this versioned export; existing forum content stays free.
+          </p>
+          <pre
+            className="max-h-64 min-w-0 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted p-3 font-mono text-sm leading-6 [overflow-wrap:anywhere]"
+            tabIndex={0}
+            aria-label="Illustrative research export JSON schema"
+          >
+            {researchExportPreviewJson}
+          </pre>
+        </div>
+      </details>
       <div
         id={readinessId}
         role="status"
