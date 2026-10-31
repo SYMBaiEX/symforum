@@ -107,8 +107,18 @@ async function openPane(
     exact: true,
   });
   const button = dock.getByRole("button", { name, exact: true });
-  if (await button.isVisible()) await button.click();
-  else await page.getByRole("tab", { name, exact: true }).click();
+  if (await button.isVisible()) {
+    await button.click();
+    // Dock navigation deliberately moves focus on its next animation frame.
+    // Observe that handoff before a caller focuses a nested scroll region.
+    const destination =
+      name === "Receipts"
+        ? "terminal-tool-title"
+        : name === "Trade"
+          ? "terminal-order"
+          : `terminal-${name.toLowerCase()}`;
+    await expect(page.locator(`#${destination}`)).toBeFocused();
+  } else await page.getByRole("tab", { name, exact: true }).click();
 }
 
 async function openTool(
@@ -1025,6 +1035,11 @@ test("keyboard view changes keep the chart, order node and protected receipts mo
     page.getByText("No signature recorded", { exact: true }),
   ).toBeVisible();
   await openPane(page, "Chart");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Terminal dock", exact: true })
+      .getByRole("button", { name: "Receipts", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await chart.focus();
   await page.keyboard.press("ArrowRight");
   await expect(markets).toBeFocused();
