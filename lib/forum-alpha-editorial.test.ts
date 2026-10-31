@@ -181,3 +181,22 @@ test("verified project names match full words in relevant coverage", () => {
     false,
   );
 });
+
+test("Bagsapp is an explicit platform signal, while skip notices cannot become news", () => {
+  expect(
+    alphaCandidateBoards(
+      { ...candidate, title: "Bagsapp announces a developer release" },
+      now,
+    ),
+  ).toContain("crypto-bags");
+  expect(
+    alphaCandidateBoards(
+      {
+        ...candidate,
+        title: "Skipped: no qualifying development",
+        summary: "Solana announces a launch",
+      },
+      now,
+    ),
+  ).toEqual([]);
+});

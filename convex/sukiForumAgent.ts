@@ -1,7 +1,11 @@
 "use node";
-import { NEWS_MAX_AGE_MS, newsFeedTtl, newsPriority } from "../lib/forum-breaking-news";
+import {
+  NEWS_MAX_AGE_MS,
+  newsFeedTtl,
+  newsPriority,
+} from "../lib/forum-breaking-news";
+import type { PublicXResearchPost } from "../lib/forum-x-research";
 import { FORUM_SITE_URL } from "../lib/site-urls";
-
 
 import { APICallError, generateText, Output, ToolLoopAgent } from "ai";
 import { alphaPublicFetch } from "../lib/alpha-public-fetch";
@@ -38,6 +42,7 @@ import {
 } from "../lib/ai-model-routing";
 import {
   evaluateAgentPublicationHygiene,
+  isEditorialAbstention,
   PUBLICATION_VOICE_GUARDRAILS,
 } from "../lib/agent-publication-quality";
 import {
@@ -103,7 +108,9 @@ const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const FORUM_SEMANTIC_REVIEW_RESERVE_MS = 90_000;
 const USER_AGENT =
-  "SukiForumScout/1.0 (+" + FORUM_SITE_URL + "; source research and attribution)";
+  "SukiForumScout/1.0 (+" +
+  FORUM_SITE_URL +
+  "; source research and attribution)";
 
 const RESEARCH_FEEDS = [
   {
@@ -153,10 +160,7 @@ const RESEARCH_FEEDS = [
   {
     name: "Hackaday",
     url: "https://hackaday.com/blog/feed/",
-    boardSlugs: [
-      "hacking",
-      "hacking-tools",
-    ],
+    boardSlugs: ["hacking", "hacking-tools"],
   },
   {
     name: "GamingOnLinux",
@@ -171,12 +175,7 @@ const RESEARCH_FEEDS = [
   {
     name: "itch.io Devlogs",
     url: "https://itch.io/devlogs.xml",
-    boardSlugs: [
-      "gaming",
-      "gaming-hacks",
-      "gaming-guides",
-      "gaming-hosting",
-    ],
+    boardSlugs: ["gaming", "gaming-hacks", "gaming-guides", "gaming-hosting"],
   },
   {
     name: "Steam News",
@@ -501,20 +500,30 @@ export async function runForumResearchSlot(
       );
     }
 
+    const xEvidence =
+      config.researchPool === "solana-alpha" &&
+      process.env.FORUM_X_RESEARCH_ENABLED === "true"
+        ? xResearchSnapshots(
+            await ctx.runQuery(internal.forumXResearch.read, {}),
+          )
+        : [];
     const candidates = await collectResearchCandidates(
       ctx,
       config.researchPool,
+      xEvidence,
     );
     const sourceSelectionNow = Date.now();
-    const recentCandidates = candidates.filter((candidate) =>
-      (!config.alphaSourceKey || (candidate.sourceKey === config.alphaSourceKey &&
-        newsPriority(candidate, sourceSelectionNow) !== null)) && (
-      config.researchPool === "solana-alpha"
-        ? alphaCandidateBoards(candidate, sourceSelectionNow).includes(
-            config.forcedCategorySlug as
-              "crypto" | "crypto-pumpfun" | "crypto-bags",
-          )
-        : isRecentEnough(candidate.publishedAt, sourceSelectionNow)),
+    const recentCandidates = candidates.filter(
+      (candidate) =>
+        (!config.alphaSourceKey ||
+          (candidate.sourceKey === config.alphaSourceKey &&
+            newsPriority(candidate, sourceSelectionNow) !== null)) &&
+        (config.researchPool === "solana-alpha"
+          ? alphaCandidateBoards(candidate, sourceSelectionNow).includes(
+              config.forcedCategorySlug as
+                "crypto" | "crypto-pumpfun" | "crypto-bags",
+            )
+          : isRecentEnough(candidate.publishedAt, sourceSelectionNow)),
     );
     // Exclude recently used and reserved sources before paid model work. The
     // query checks bounded key batches and stops after finding the existing
@@ -557,25 +566,35 @@ export async function runForumResearchSlot(
     const fetchedSourceSnapshots = await fetchAvailableForumTopicSources(
       rankedCandidates,
       config.researchPool === "solana-alpha",
+      xEvidence,
     );
     const verifiedSourceSnapshots =
       config.researchPool === "solana-alpha"
-        ? fetchedSourceSnapshots.filter((snapshot) =>
-            alphaCandidateBoards(
-              {
-                ...snapshot,
-                publishedAt:
-                  alphaOriginalPublicationTime(snapshot),
-              },
-              Date.now(),
-            ).includes(
-              config.forcedCategorySlug as
-                "crypto" | "crypto-pumpfun" | "crypto-bags",
-            ),
-          ).filter(snapshot => !config.alphaSourceKey ||
-            (snapshot.sourceKey === config.alphaSourceKey && newsPriority({
-              ...snapshot, publishedAt: alphaOriginalPublicationTime(snapshot),
-            }, Date.now()) !== null))
+        ? fetchedSourceSnapshots
+            .filter((snapshot) =>
+              alphaCandidateBoards(
+                {
+                  ...snapshot,
+                  publishedAt: alphaOriginalPublicationTime(snapshot),
+                },
+                Date.now(),
+              ).includes(
+                config.forcedCategorySlug as
+                  "crypto" | "crypto-pumpfun" | "crypto-bags",
+              ),
+            )
+            .filter(
+              (snapshot) =>
+                !config.alphaSourceKey ||
+                (snapshot.sourceKey === config.alphaSourceKey &&
+                  newsPriority(
+                    {
+                      ...snapshot,
+                      publishedAt: alphaOriginalPublicationTime(snapshot),
+                    },
+                    Date.now(),
+                  ) !== null),
+            )
         : fetchedSourceSnapshots;
     if (verifiedSourceSnapshots.length === 0) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
@@ -949,6 +968,10 @@ export async function runForumResearchSlot(
         qualityScore: quality.qualityScore,
       },
     );
+    if (isEditorialAbstention(draft.title) || isEditorialAbstention(draft.body))
+      throw new ForumEditorialQualityError(
+        "Editorial abstention retained privately; no public skip notice is permitted.",
+      );
     // A tied or worse correction must not replace the best publication candidate,
     // but its actual output and feedback are still the next correction's input.
     // Otherwise a capped grounding score can send the original draft twice.
@@ -1239,15 +1262,14 @@ export async function runForumResearchSlot(
     const alphaSourcePublishedAt =
       config.researchPool === "solana-alpha"
         ? Math.min(
-            ...snapshots.map(
-              (s) => alphaOriginalPublicationTime(s) ?? 0,
-            ),
+            ...snapshots.map((s) => alphaOriginalPublicationTime(s) ?? 0),
           )
         : undefined;
     if (
       config.researchPool === "solana-alpha" &&
       (!alphaSourcePublishedAt ||
-        Date.now() - alphaSourcePublishedAt > (config.alphaSourceKey ? NEWS_MAX_AGE_MS : 24 * 60 * 60_000))
+        Date.now() - alphaSourcePublishedAt >
+          (config.alphaSourceKey ? NEWS_MAX_AGE_MS : 24 * 60 * 60_000))
     )
       throw new Error("Alpha source expired before publication");
     const publicationArgs = {
@@ -1394,9 +1416,43 @@ export const runDailySlot = internalAction({
     await runForumResearchSlot(ctx, args, SUKI_RESEARCH_CONFIG),
 });
 
+/** Only the shared worker's public-author API evidence reaches this adapter.
+ * No HTML scrape or member/private history can create a reusable X snapshot. */
+export function xResearchSnapshots(
+  posts: readonly PublicXResearchPost[],
+): ArticleSnapshot[] {
+  return posts.slice(0, 30).map((post) => {
+    const url = `https://x.com/${post.username}/status/${post.id}`;
+    const sourceKey = hashKey(canonicalUrl(url));
+    return {
+      id: `${sourceKey}-x`,
+      sourceKey,
+      sourceName: `Public X post by @${post.username}`,
+      sourceFeedUrl: "https://api.x.com/2/tweets/search/recent",
+      title: compactText(post.text, 220),
+      summary: compactText(post.text, 1100),
+      url,
+      publishedAt: post.publishedAt,
+      originalPublishedAt: post.publishedAt,
+      boardSlugs: alphaCandidateBoards(
+        { title: post.text, summary: "", url, publishedAt: post.publishedAt },
+        Date.now(),
+      ),
+      articleTitle: compactText(post.text, 220),
+      articleDescription:
+        "Public project announcement; author claims are attributed, not independent verification.",
+      articleText: post.text,
+      imageCredit: "",
+      sourceFetchSucceeded: true,
+      secureResearch: true,
+    };
+  });
+}
+
 export async function collectResearchCandidates(
   ctx: ActionCtx,
   pool?: "solana-alpha",
+  existingXEvidence?: ArticleSnapshot[],
 ): Promise<ResearchCandidate[]> {
   const feeds: readonly ResearchFeed[] =
     pool === "solana-alpha" ? ALPHA_RESEARCH_FEEDS : RESEARCH_FEEDS;
@@ -1419,18 +1475,22 @@ export async function collectResearchCandidates(
           return {
             // Feed routing is current configuration, not cached story evidence.
             // Keep cached article identities and text without a refetch on cutover.
-            candidates: parseCachedCandidates(cached.payloadJson).map((candidate) => ({
-              ...candidate,
-              boardSlugs: pool ? candidate.boardSlugs : [...feed.boardSlugs],
-            })),
+            candidates: parseCachedCandidates(cached.payloadJson).map(
+              (candidate) => ({
+                ...candidate,
+                boardSlugs: pool ? candidate.boardSlugs : [...feed.boardSlugs],
+              }),
+            ),
             cacheWrite: undefined,
           };
         } catch {
           // Refetch malformed or stale cache payloads.
         }
       }
-      const alphaTtl = process.env.FORUM_BREAKING_NEWS_ENABLED === "true"
-        ? newsFeedTtl(feed.url) : ALPHA_DISCOVERY_TTL_MS;
+      const alphaTtl =
+        process.env.FORUM_BREAKING_NEWS_ENABLED === "true"
+          ? newsFeedTtl(feed.url)
+          : ALPHA_DISCOVERY_TTL_MS;
       let backoffMs = Math.max(ALPHA_DISCOVERY_TTL_MS, alphaTtl);
       if (
         pool &&
@@ -1482,8 +1542,7 @@ export async function collectResearchCandidates(
             feedUrl: feed.url,
             payloadJson: JSON.stringify(candidates),
             fetchedAt: now,
-            expiresAt:
-              now + (pool ? alphaTtl : RESEARCH_CACHE_TTL_MS),
+            expiresAt: now + (pool ? alphaTtl : RESEARCH_CACHE_TTL_MS),
           },
         };
       } catch {
@@ -1518,8 +1577,14 @@ export async function collectResearchCandidates(
     }
   }
   const seen = new Set<string>();
-  return groups
-    .flatMap((group) => group.candidates)
+  const xEvidence =
+    pool && process.env.FORUM_X_RESEARCH_ENABLED === "true"
+      ? (existingXEvidence ??
+        xResearchSnapshots(
+          await ctx.runQuery(internal.forumXResearch.read, {}),
+        ))
+      : [];
+  return [...groups.flatMap((group) => group.candidates), ...xEvidence]
     .sort((left, right) => (right.publishedAt ?? 0) - (left.publishedAt ?? 0))
     .map((candidate) =>
       pool
@@ -1655,7 +1720,11 @@ export function parseFeedXml(
       1_100,
     );
     const publishedAt = parseTimestamp(
-      textValue(row.pubDate ?? row.published ?? (source.publisherUrls ? row.date : row.updated ?? row.date)),
+      textValue(
+        row.pubDate ??
+          row.published ??
+          (source.publisherUrls ? row.date : (row.updated ?? row.date)),
+      ),
     );
     const imageUrl = feedItemImageUrl(row, url);
     const sourceKey = hashKey(canonicalUrl(url));
@@ -1809,6 +1878,7 @@ export async function fetchArticleSnapshots(
 export async function fetchAvailableForumTopicSources(
   candidates: readonly ResearchCandidate[],
   secureResearch = false,
+  reusableSnapshots: readonly ArticleSnapshot[] = [],
 ): Promise<ArticleSnapshot[]> {
   const hosts = new Map<string, ResearchCandidate[]>();
   const urls = new Set<string>();
@@ -1838,7 +1908,7 @@ export async function fetchAvailableForumTopicSources(
   for (let offset = 0; offset < probes.length; offset += 2) {
     const snapshots = await fetchArticleSnapshots(
       probes.slice(offset, offset + 2),
-      [],
+      reusableSnapshots,
       secureResearch,
     );
     verified.push(
@@ -3522,9 +3592,16 @@ export const refreshAlphaDiscovery = internalAction({
     const candidates = await collectResearchCandidates(ctx, "solana-alpha");
     if (process.env.FORUM_BREAKING_NEWS_ENABLED === "true")
       await ctx.runMutation(internal.forumBreakingNews.admit, {
-        candidates: candidates.filter(c => c.publishedAt !== undefined).slice(0, 60)
-          .map(c => ({ sourceKey: c.sourceKey, title: c.title, summary: c.summary,
-            url: c.url, publishedAt: c.publishedAt! })),
+        candidates: candidates
+          .filter((c) => c.publishedAt !== undefined)
+          .slice(0, 60)
+          .map((c) => ({
+            sourceKey: c.sourceKey,
+            title: c.title,
+            summary: c.summary,
+            url: c.url,
+            publishedAt: c.publishedAt!,
+          })),
       });
     return {
       enabled: true,

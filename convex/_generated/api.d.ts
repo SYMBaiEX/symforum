@@ -147,6 +147,7 @@ import type * as forumTerminalWallet from "../forumTerminalWallet.js";
 import type * as forumThreadDigest from "../forumThreadDigest.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
 import type * as forumTokenDiscovery from "../forumTokenDiscovery.js";
+import type * as forumXResearch from "../forumXResearch.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
 import type * as identity from "../identity.js";
@@ -374,6 +375,7 @@ declare const fullApi: ApiFromModules<{
   forumThreadDigest: typeof forumThreadDigest;
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
   forumTokenDiscovery: typeof forumTokenDiscovery;
+  forumXResearch: typeof forumXResearch;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
   identity: typeof identity;

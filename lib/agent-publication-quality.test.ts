@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  isEditorialAbstention,
   assertAgentPublicationHygiene,
   cleanLegacyAgentProcessLabels,
   evaluateAgentPublicationHygiene,
@@ -75,4 +76,20 @@ The practical implication is easier incident review.[/note]
 
 Reproduce the failure before changing configuration.`);
   });
+});
+
+test("research abstentions are blocked even when styled as a publication", () => {
+  for (const text of [
+    "Skipped: no qualifying development",
+    "No qualifying source",
+    "The supplied excerpt describes a service planned for next year. I’m skipping this item rather than presenting it as fresh news.",
+  ])
+    expect(
+      evaluateAgentPublicationHygiene(text).blockingIssues.length,
+    ).toBeGreaterThan(0);
+  expect(
+    isEditorialAbstention(
+      "Solana skipped a malformed transaction during the outage",
+    ),
+  ).toBe(false);
 });

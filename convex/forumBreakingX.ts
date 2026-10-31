@@ -1,4 +1,5 @@
 import { createThread } from "@convex-dev/agent";
+import { publicationCashtags } from "../lib/token-cashtags";
 import { components } from "./_generated/api";
 import { v } from "convex/values";
 import { newsPriority, primarySolanaSource } from "../lib/forum-breaking-news";
@@ -79,7 +80,7 @@ export const queue = internalMutation({
       activity.holdReason
     )
       return true;
-    const text = alphaShareText(row.title, row.url);
+    const text = alphaShareText(row.title, row.url, [], publicationCashtags(row.body));
     if (!text || !validXDraft(text)) return true;
     const key = `breaking:${row._id}`;
     if (
