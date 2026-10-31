@@ -2086,13 +2086,15 @@ test("pending contributor settings do not imply tips are disabled or holder proo
     profile.getByText("Holder proof verified", { exact: true }),
   ).toBeHidden();
   await expect(page.getByLabel("Tip amount (SOL)")).toBeVisible();
-  expect(
-    await page.evaluate(() =>
-      (
-        window as typeof window & { __terminalFixtureQueries: string[] }
-      ).__terminalFixtureQueries.includes("forumCommunity:getMine"),
-    ),
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.includes("forumCommunity:getMine"),
+      ),
+    )
+    .toBe(true);
   expect(await recordedOperations(page)).toEqual([]);
   expect(errors).toEqual([]);
 });
