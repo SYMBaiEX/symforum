@@ -41,14 +41,18 @@ function WebsiteTerminalPage({ enabled }: { enabled: boolean }) {
       key={initialMint ?? "default"}
       enabled={enabled}
       initialMint={initialMint}
-      renderUtilities={(mint) => (
+      renderUtilities={(mint, active) => (
         <div className={styles.utilityGrid}>
-          <TerminalBoundary label="Research purchases">
-            <ResearchPurchase key={mint} mint={mint} />
-          </TerminalBoundary>
-          <TerminalBoundary label="Community utilities">
-            <CommunityHub key={mint} mint={mint} compact />
-          </TerminalBoundary>
+          <div hidden={active !== "research"}>
+            <TerminalBoundary label="Research purchases">
+              <ResearchPurchase key={mint} mint={mint} />
+            </TerminalBoundary>
+          </div>
+          <div hidden={active !== "community"}>
+            <TerminalBoundary label="Community utilities">
+              <CommunityHub key={mint} mint={mint} compact />
+            </TerminalBoundary>
+          </div>
         </div>
       )}
     />

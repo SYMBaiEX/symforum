@@ -310,6 +310,28 @@
 .forum-app-shell .forum-main > .forum-surface > .page-frame { padding: 18px 24px 24px; }
 /* A trading desk uses the full work area; reading/community pages keep their frame. */
 .forum-app-shell .forum-main > .forum-surface > .page-frame[data-forum-layout=terminal] { width: 100%; max-width: none; margin: 0; padding: 0; }
+/* Activate the bounded desk only after website/enabled/mint guards mount it. */
+.forum-app-shell [data-terminal-viewport] { container-name: terminal-viewport; }
+.forum-app-shell .forum-main:has([data-terminal-viewport]) { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+.forum-app-shell .forum-main :is(.forum-surface,.page-frame):has([data-terminal-viewport]) { display: flex; flex-direction: column; flex: 1 1 0; width: 100%; min-width: 0; min-height: 0; max-width: none; margin: 0; padding: 0; overflow: hidden; }
+.forum-app-shell:has([data-terminal-viewport]) .forum-footer,
+.forum-app-shell:has([data-terminal-viewport]) .forum-bottom-nav { display: none; }
+/* Keep this root-container query global: native CSS-module transforms rename query identifiers. */
+@container terminal-viewport (max-width: 840px) {
+ .forum-app-shell [data-terminal-layout] { grid-template-columns: minmax(0,1fr); }
+ .forum-app-shell [data-terminal-order] { display: none; border-left: 0; }
+ .forum-app-shell [data-terminal-layout][data-pane=trade] [data-terminal-order] { display: block; }
+ .forum-app-shell [data-terminal-layout][data-pane=trade] [data-terminal-analysis] { display: none; }
+ .forum-app-shell [data-terminal-layout]:is([data-pane=receipts],[data-pane=tools]) [data-terminal-analysis-main] { display: none; }
+ .forum-app-shell [data-terminal-layout]:is([data-pane=chart],[data-pane=markets],[data-pane=trade]) [data-terminal-tools] { display: none; }
+ .forum-app-shell [data-terminal-tools] { flex: 1 1 0; min-height: 0; max-height: none; border-top: 0; }
+ .forum-app-shell [data-terminal-tools][data-expanded=true] { flex-basis: 0; }
+ .forum-app-shell [data-terminal-resize] { display: none; }
+ .forum-app-shell [data-terminal-dock-nav] { padding-bottom: env(safe-area-inset-bottom); }
+ .forum-app-shell [data-terminal-dock-mode=mobile] { display: inline-flex; }
+ .forum-app-shell [data-terminal-dock-mode=desktop] { display: none; }
+ .forum-app-shell [data-terminal-dock-nav] button { flex: 1 1 20%; flex-direction: column; gap: 2px; padding: 5px 4px; min-height: 52px; font-size: 11px; }
+}
 .forum-app-shell .forum-body-grid { margin-top: 12px; gap: 16px; }
 .forum-app-shell .forum-body-content { display: flex; flex-direction: column; gap: 12px; }
 .forum-app-shell .forum-body-content > * { margin-block: 0; }

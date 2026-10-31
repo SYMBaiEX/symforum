@@ -9,11 +9,15 @@ import {
 } from "react";
 import { useAction, useConvexAuth } from "convex/react";
 import {
-  ArrowDown,
   ArrowUpRight,
   ChartNoAxesCombined,
+  ChevronDown,
+  ChevronUp,
   ListFilter,
+  PanelsTopLeft,
+  ReceiptText,
   Wallet,
+  X,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
@@ -35,12 +39,19 @@ import { TerminalBoundary } from "./terminal-boundary";
 import { SwapHistory, WalletPanel } from "./wallet-panel";
 import { WatchlistPanel } from "./watchlist-panel";
 import { TransparencyPanel } from "./transparency-panel";
+import {
+  TerminalAttentionProvider,
+  useTerminalAttentionSnapshot,
+} from "./terminal-attention";
 import styles from "./forum-terminal.module.css";
 
 export type ForumTerminalProps = {
   enabled: boolean;
   initialMint?: string;
-  renderUtilities?: (mint: string) => ReactNode;
+  renderUtilities?: (
+    mint: string,
+    active: "research" | "community",
+  ) => ReactNode;
 };
 
 export function ForumTerminal({
@@ -82,10 +93,12 @@ export function ForumTerminal({
     );
   return (
     <CommerceWalletProvider>
-      <TerminalWorkspace
-        initialMint={initialMint}
-        renderUtilities={renderUtilities}
-      />
+      <TerminalAttentionProvider>
+        <TerminalWorkspace
+          initialMint={initialMint}
+          renderUtilities={renderUtilities}
+        />
+      </TerminalAttentionProvider>
     </CommerceWalletProvider>
   );
 }
@@ -101,12 +114,64 @@ function TerminalWorkspace({
       : symfChoice,
   );
   const [view, setView] = useState<"chart" | "markets">("chart");
+  const [pane, setPane] = useState<
+    "chart" | "markets" | "trade" | "receipts" | "tools"
+  >("chart");
+  const [tool, setTool] = useState<
+    "wallet" | "receipts" | "research" | "community" | "treasury" | null
+  >(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const workspace = useRef<HTMLDivElement>(null);
+  const toolTrigger = useRef<HTMLElement | null>(null);
+  const attention = useTerminalAttentionSnapshot();
   const chartTab = useRef<HTMLButtonElement>(null);
   const marketsTab = useRef<HTMLButtonElement>(null);
+  function focusPane(id: string) {
+    requestAnimationFrame(() =>
+      document.getElementById(id)?.focus({ preventScroll: true }),
+    );
+  }
+  function openView(next: "chart" | "markets", focus = false) {
+    setView(next);
+    setPane(next);
+    if (focus) focusPane(`terminal-${next}`);
+  }
+  function openTool(next: typeof tool, trigger?: HTMLElement) {
+    if (trigger) toolTrigger.current = trigger;
+    setTool(next);
+    setDrawerOpen(true);
+    setPane(next === "receipts" ? "receipts" : "tools");
+    focusPane("terminal-tool-title");
+  }
+  function closeTools() {
+    setDrawerOpen(false);
+    setPane(view);
+    requestAnimationFrame(() => {
+      const previous = toolTrigger.current;
+      if (previous?.getClientRects().length)
+        previous.focus({ preventScroll: true });
+      else {
+        const fallback = workspace.current?.querySelector<HTMLElement>(
+          '[data-terminal-dock="tools"]',
+        );
+        if (fallback?.getClientRects().length)
+          fallback.focus({ preventScroll: true });
+        else chartTab.current?.focus({ preventScroll: true });
+      }
+    });
+  }
   function selectToken(token: MarketChoice) {
     setSelected(token);
-    setView("chart");
-    chartTab.current?.focus();
+    openView("chart");
+    requestAnimationFrame(() => {
+      if (chartTab.current?.getClientRects().length)
+        chartTab.current.focus({ preventScroll: true });
+      else
+        document
+          .getElementById("terminal-chart")
+          ?.focus({ preventScroll: true });
+    });
   }
   function navigateViews(event: KeyboardEvent<HTMLButtonElement>) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -119,7 +184,7 @@ function TerminalWorkspace({
           : view === "chart"
             ? "markets"
             : "chart";
-    setView(next);
+    openView(next);
     (next === "chart" ? chartTab : marketsTab).current?.focus();
   }
   // Public query arguments share a minute bucket across viewers. Do not create
@@ -139,7 +204,12 @@ function TerminalWorkspace({
     };
   }, []);
   return (
-    <div className={styles.page}>
+    <div
+      ref={workspace}
+      className={styles.page}
+      data-terminal-viewport
+      data-pane={pane}
+    >
       <header className={styles.header}>
         <div className={styles.heading}>
           <h1 aria-label="Trading terminal">
@@ -163,7 +233,7 @@ function TerminalWorkspace({
             aria-selected={view === "chart"}
             aria-controls="terminal-chart"
             tabIndex={view === "chart" ? 0 : -1}
-            onClick={() => setView("chart")}
+            onClick={() => openView("chart")}
             onKeyDown={navigateViews}
           >
             <ChartNoAxesCombined size={15} aria-hidden="true" /> Chart
@@ -176,25 +246,13 @@ function TerminalWorkspace({
             aria-selected={view === "markets"}
             aria-controls="terminal-markets"
             tabIndex={view === "markets" ? 0 : -1}
-            onClick={() => setView("markets")}
+            onClick={() => openView("markets")}
             onKeyDown={navigateViews}
           >
             <ListFilter size={15} aria-hidden="true" /> Markets
           </button>
         </div>
         <nav className={styles.headerActions} aria-label="Terminal shortcuts">
-          <a
-            href="#terminal-order"
-            className={`${styles.tradeShortcut} focus-ring`}
-          >
-            Trade <ArrowDown className="size-3.5" aria-hidden="true" />
-          </a>
-          <a
-            href="#terminal-account"
-            className={`${styles.receiptsLink} focus-ring`}
-          >
-            Receipts
-          </a>
           <ForumLink
             href="/forum/crypto"
             className={`${styles.headerLink} focus-ring`}
@@ -204,41 +262,191 @@ function TerminalWorkspace({
           </ForumLink>
         </nav>
       </header>
-      <div className={styles.layout}>
-        <div className={styles.analysis}>
-          <div
-            id="terminal-chart"
-            role="tabpanel"
-            aria-labelledby="terminal-chart-tab"
-            hidden={view !== "chart"}
-            className={styles.chartWorkspace}
-          >
-            <TerminalBoundary
-              key={`market:${selected.mint}`}
-              label="Selected token data"
+      {attention.length > 0 && (
+        <div
+          className={styles.attention}
+          role="status"
+          aria-label="Known protected operations"
+        >
+          <span>Known protected</span>
+          {attention.map(({ target, count }) => (
+            <button
+              key={target}
+              type="button"
+              onClick={(event) => openTool(target, event.currentTarget)}
             >
-              <TokenDetail token={selected} now={now} />
-            </TerminalBoundary>
+              {target === "receipts"
+                ? "Swap receipts"
+                : target === "research"
+                  ? "Research"
+                  : "Community"}{" "}
+              · {count} protected
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.layout} data-terminal-layout data-pane={pane}>
+        <div className={styles.analysis} data-terminal-analysis>
+          <div className={styles.analysisMain} data-terminal-analysis-main>
+            <div
+              id="terminal-chart"
+              role="tabpanel"
+              aria-labelledby="terminal-chart-tab"
+              hidden={view !== "chart"}
+              className={styles.chartWorkspace}
+              tabIndex={-1}
+              aria-label="Chart workspace"
+            >
+              <TerminalBoundary
+                key={`market:${selected.mint}`}
+                label="Selected token data"
+              >
+                <TokenDetail token={selected} now={now} />
+              </TerminalBoundary>
+            </div>
+            <div
+              id="terminal-markets"
+              role="tabpanel"
+              aria-labelledby="terminal-markets-tab"
+              hidden={view !== "markets"}
+              className={styles.marketsWorkspace}
+              tabIndex={-1}
+            >
+              <TerminalBoundary label="Token discovery">
+                <MarketExplorer
+                  selected={selected.mint}
+                  onSelect={selectToken}
+                  now={now}
+                />
+              </TerminalBoundary>
+            </div>
           </div>
-          <div
-            id="terminal-markets"
-            role="tabpanel"
-            aria-labelledby="terminal-markets-tab"
-            hidden={view !== "markets"}
-            className={styles.marketsWorkspace}
+          <section
+            id="terminal-tools"
+            className={styles.toolsDrawer}
+            data-terminal-tools
+            aria-label="Terminal tools"
+            hidden={!drawerOpen}
+            data-expanded={expanded}
           >
-            <TerminalBoundary label="Token discovery">
-              <MarketExplorer
-                selected={selected.mint}
-                onSelect={selectToken}
-                now={now}
-              />
-            </TerminalBoundary>
-          </div>
+            <div className={styles.toolsHeading}>
+              <h2 id="terminal-tool-title" tabIndex={-1}>
+                {tool === "wallet"
+                  ? "Wallet & watches"
+                  : tool === "receipts"
+                    ? "Swap receipts"
+                    : tool === "research"
+                      ? "Research"
+                      : tool === "community"
+                        ? "Community"
+                        : tool === "treasury"
+                          ? "Treasury & burns"
+                          : "Terminal tools"}
+              </h2>
+              <div>
+                {tool && (
+                  <button
+                    type="button"
+                    onClick={() => openTool(null)}
+                    aria-label="Choose a terminal tool"
+                  >
+                    <PanelsTopLeft size={15} aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  data-terminal-resize
+                  type="button"
+                  onClick={() => setExpanded(!expanded)}
+                  aria-label={
+                    expanded ? "Compact tools panel" : "Expand tools panel"
+                  }
+                  aria-expanded={expanded}
+                >
+                  {expanded ? (
+                    <ChevronDown size={16} aria-hidden="true" />
+                  ) : (
+                    <ChevronUp size={16} aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeTools}
+                  aria-label="Close tools panel"
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div
+              className={styles.toolsContent}
+              tabIndex={0}
+              role="region"
+              aria-label="Active terminal tool"
+            >
+              <div className={styles.toolMenu} hidden={tool !== null}>
+                {(
+                  [
+                    ["wallet", "Wallet & watches"],
+                    ["receipts", "Swap receipts"],
+                    ["research", "Research"],
+                    ["community", "Community"],
+                    ["treasury", "Treasury & burns"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => openTool(value)}
+                  >
+                    {label}
+                    <ArrowUpRight size={15} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+              <section
+                id="terminal-account"
+                hidden={tool !== "wallet" && tool !== "receipts"}
+                className={styles.accountWorkspace}
+                aria-label="Your workspace"
+              >
+                {client && (
+                  <AccountPanels
+                    key={selected.mint}
+                    client={client}
+                    selected={selected}
+                    onSelect={selectToken}
+                    active={tool === "receipts" ? "receipts" : "wallet"}
+                  />
+                )}
+              </section>
+              <div
+                id="terminal-utilities"
+                hidden={tool !== "research" && tool !== "community"}
+                className={styles.utilities}
+              >
+                {renderUtilities?.(
+                  selected.mint,
+                  tool === "community" ? "community" : "research",
+                )}
+              </div>
+              <div hidden={tool !== "treasury"}>
+                <TerminalBoundary label="Treasury transparency">
+                  <TransparencyPanel />
+                </TerminalBoundary>
+                <p className={styles.footer}>
+                  Market discovery uses sampled source coverage under existing
+                  free-tier caps. Missing values stay unavailable; FDV is not
+                  market cap. Token names, images and links are untrusted
+                  project metadata, not an endorsement or investment advice.
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
         <aside
           id="terminal-order"
           className={styles.aside}
+          data-terminal-order
           aria-label="Trade selected token"
           tabIndex={-1}
         >
@@ -278,9 +486,12 @@ function TerminalWorkspace({
                 </p>
               </details>
               <p className={styles.executionNote}>
-                <a href="#terminal-account">
+                <button
+                  type="button"
+                  onClick={(event) => openTool("receipts", event.currentTarget)}
+                >
                   Receipts &amp; protected attempts
-                </a>
+                </button>
               </p>
             </section>
           </TerminalBoundary>
@@ -299,48 +510,96 @@ function TerminalWorkspace({
           ) : null}
         </aside>
       </div>
-      <section
-        id="terminal-account"
-        className={styles.accountWorkspace}
-        aria-labelledby="terminal-account-title"
-        tabIndex={-1}
+      <nav
+        className={styles.dock}
+        data-terminal-dock-nav
+        aria-label="Terminal dock"
       >
-        <div className={styles.sectionHeading}>
-          <h2 id="terminal-account-title">Your workspace</h2>
-          <p>Wallet · watches · original receipts</p>
-        </div>
-        {client && (
-          <AccountPanels
-            key={selected.mint}
-            client={client}
-            selected={selected}
-            onSelect={selectToken}
-          />
-        )}
-      </section>
-      {renderUtilities && (
-        <section
-          id="terminal-utilities"
-          className={styles.utilities}
-          aria-labelledby="terminal-context-title"
+        <button
+          className={styles.mobileDock}
+          data-terminal-dock-mode="mobile"
+          data-terminal-dock="chart"
+          type="button"
+          aria-pressed={pane === "chart"}
+          onClick={() => openView("chart", true)}
         >
-          <div className={styles.sectionHeading}>
-            <h2 id="terminal-context-title">Research &amp; community</h2>
-            <p>More context for the selected mint, separate from execution.</p>
-          </div>
-          {renderUtilities(selected.mint)}
-        </section>
-      )}
-      <TerminalBoundary label="Treasury transparency">
-        <TransparencyPanel />
-      </TerminalBoundary>
-      <p className={styles.footer}>
-        Market discovery is limited to sampled source coverage under existing
-        free-tier caps. Missing values stay unavailable; FDV is never
-        substituted for market cap. Token names, images and links are untrusted
-        project metadata. Nothing listed here is an endorsement or investment
-        advice.
-      </p>
+          <ChartNoAxesCombined size={17} aria-hidden="true" />
+          Chart
+        </button>
+        <button
+          className={styles.mobileDock}
+          data-terminal-dock-mode="mobile"
+          data-terminal-dock="markets"
+          type="button"
+          aria-pressed={pane === "markets"}
+          onClick={() => openView("markets", true)}
+        >
+          <ListFilter size={17} aria-hidden="true" />
+          Markets
+        </button>
+        <button
+          className={styles.mobileDock}
+          data-terminal-dock-mode="mobile"
+          data-terminal-dock="trade"
+          type="button"
+          aria-pressed={pane === "trade"}
+          onClick={() => {
+            setPane("trade");
+            focusPane("terminal-order");
+          }}
+        >
+          <Wallet size={17} aria-hidden="true" />
+          Trade
+        </button>
+        <button
+          data-terminal-dock-mode="desktop"
+          data-terminal-dock="wallet"
+          type="button"
+          aria-pressed={drawerOpen && tool === "wallet"}
+          onClick={(event) => openTool("wallet", event.currentTarget)}
+        >
+          <Wallet size={15} aria-hidden="true" />
+          Wallet &amp; watches
+        </button>
+        <button
+          data-terminal-dock="receipts"
+          type="button"
+          aria-pressed={pane === "receipts"}
+          onClick={(event) => openTool("receipts", event.currentTarget)}
+        >
+          <ReceiptText size={17} aria-hidden="true" />
+          Receipts
+        </button>
+        {(
+          [
+            ["research", "Research"],
+            ["community", "Community"],
+            ["treasury", "Treasury"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            data-terminal-dock-mode="desktop"
+            type="button"
+            data-terminal-dock={value}
+            aria-pressed={drawerOpen && tool === value}
+            onClick={(event) => openTool(value, event.currentTarget)}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          className={styles.mobileDock}
+          data-terminal-dock-mode="mobile"
+          data-terminal-dock="tools"
+          type="button"
+          aria-pressed={pane === "tools"}
+          onClick={(event) => openTool(null, event.currentTarget)}
+        >
+          <PanelsTopLeft size={17} aria-hidden="true" />
+          Tools
+        </button>
+      </nav>
     </div>
   );
 }
@@ -447,10 +706,12 @@ function AccountPanels({
   client,
   selected,
   onSelect,
+  active,
 }: {
   client: CommerceWalletClient;
   selected: MarketChoice;
   onSelect: (token: MarketChoice) => void;
+  active: "wallet" | "receipts";
 }) {
   const { isAuthenticated } = useConvexAuth();
   const identity = useCommerceIdentity(client, "solana:signTransaction");
@@ -478,7 +739,7 @@ function AccountPanels({
     );
   return (
     <>
-      <div className={styles.below}>
+      <div className={styles.below} hidden={active !== "wallet"}>
         {wallet ? (
           <TerminalBoundary label="Wallet balances">
             <WalletPanel
@@ -510,9 +771,11 @@ function AccountPanels({
           />
         </TerminalBoundary>
       </div>
-      <TerminalBoundary label="Swap history">
-        <SwapHistory />
-      </TerminalBoundary>
+      <div hidden={active !== "receipts"}>
+        <TerminalBoundary label="Swap history">
+          <SwapHistory />
+        </TerminalBoundary>
+      </div>
     </>
   );
 }
