@@ -61,6 +61,12 @@
   justify-content: end;
   gap: 12px;
 }
+.headerToken {
+  display: none;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
 .headerLink {
   display: inline-flex;
   align-items: center;

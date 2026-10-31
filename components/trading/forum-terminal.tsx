@@ -254,6 +254,15 @@ function TerminalWorkspace({
           </button>
         </div>
         <nav className={styles.headerActions} aria-label="Terminal shortcuts">
+          <span
+            className={styles.headerToken}
+            data-terminal-header-token
+            title={selected.mint}
+          >
+            {selected.symbol === "TOKEN"
+              ? "Selected token"
+              : `$${selected.symbol}`}
+          </span>
           <ForumLink
             href="/forum/crypto"
             className={`${styles.headerLink} focus-ring`}
