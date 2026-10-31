@@ -85,6 +85,7 @@ export const forumCommerceTables = {
     key: v.string(),
     payload: v.string(),
     expiresAt: v.number(),
+    lease: v.optional(v.string()),
     leaseUntil: v.number(),
   }).index("by_key", ["key"]),
   forumVerifiedMints: defineTable({
