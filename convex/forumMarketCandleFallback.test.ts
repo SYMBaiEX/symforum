@@ -7,6 +7,8 @@ import { api, internal } from "./_generated/api";
 import { SYMF_TOKEN } from "../lib/symf-token";
 import { MARKET_QUOTES } from "../lib/terminal-market-source";
 import { CHART_CACHE_FRESH_MS } from "../lib/chart-cache-policy";
+import { marketReadLimiter } from "./forumMarketData";
+import { commerceLimiter } from "./forumCommerce";
 
 const modules = import.meta.glob("./**/*.ts");
 const NOW = Date.parse("2026-10-31T03:00:00Z"),
@@ -375,7 +377,9 @@ test.each(["daily", "rolling", "subcap", "disabled"])(
         });
       });
     const before = await usage(t);
-    const fetcher = vi.fn(async () => new Response(JSON.stringify(pairs)));
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify(pairs)),
+    );
     vi.stubGlobal("fetch", fetcher);
     const result = await t.action(api.forumMarketData.read, request);
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -383,8 +387,91 @@ test.each(["daily", "rolling", "subcap", "disabled"])(
       state: "budget",
       cache: { failureCode: "budget", failureProvider: "solana-tracker" },
     });
-    expect(result.cache.nextRetryAt).toBe(Date.parse("2026-11-01T00:00:00Z"));
+    expect(result.cache.nextRetryAt).toBe(NOW + 120_000);
     expect(await usage(t)).toEqual(before);
+    // Only this provider was denied. A new due intent can try Gecko normally.
+    vi.setSystemTime(result.cache.nextRetryAt! + 1);
+    fetcher.mockImplementation(
+      async (url: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(String(url).includes("dexscreener") ? pairs : gecko),
+        ),
+    );
+    const next = await t.action(api.forumMarketData.read, request);
+    expect(next.state).toBe("ready");
+    expect(JSON.parse(next.payload!).candleSource).toBe("geckoterminal");
+    expect(fetcher).toHaveBeenCalledTimes(3); // first1 + newordinary2, never a third request in one intent
+    expect(await usage(t)).toEqual(before);
+  },
+);
+
+test("a key lost after admission is checked before reserving Tracker quota", async () => {
+  const t = setup();
+  await pilot(t);
+  await legacyFailure(t);
+  const fetcher = vi.fn(async () => {
+    vi.stubEnv("SOLANA_TRACKER_API_KEY", "");
+    return new Response(JSON.stringify(pairs));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const result = await t.action(api.forumMarketData.read, request);
+  expect(result).toMatchObject({
+    state: "budget",
+    cache: {
+      failureCode: "budget",
+      failureProvider: "solana-tracker",
+      nextRetryAt: NOW + 120000,
+    },
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(await usage(t)).toEqual([]);
+});
+
+test.each(["terminal", "shared"])(
+  "global %s daily denial still waits for UTC reset and existing provider deadlines are never shortened",
+  async (cap) => {
+    const t = setup();
+    await pilot(t);
+    await t.run((ctx) =>
+      cap === "terminal"
+        ? marketReadLimiter.limit(ctx, "terminalReadDaily", {
+            key: "all",
+            count: 100,
+          })
+        : commerceLimiter.limit(ctx, "commerceNetworkDaily", {
+            key: "all",
+            count: 1000,
+          }),
+    );
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const reset = Date.parse("2026-11-01T00:00:00Z");
+    expect(await t.action(api.forumMarketData.read, request)).toMatchObject({
+      state: "budget",
+      cache: { nextRetryAt: reset },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await usage(t)).toEqual([]);
+    const other = setup();
+    await pilot(other);
+    const id = await legacyFailure(other, {
+      failureCode: "budget",
+      failureProvider: "solana-tracker",
+      nextAttemptAt: reset,
+    });
+    const before = await other.run((ctx) =>
+      ctx.db.get("forumMarketDataCache", id),
+    );
+    const old = await other.action(api.forumMarketData.read, request);
+    expect(old).toMatchObject({
+      state: "budget",
+      cache: { nextRetryAt: reset },
+    });
+    expect(
+      await other.run((ctx) => ctx.db.get("forumMarketDataCache", id)),
+    ).toEqual(before);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await usage(other)).toEqual([]);
   },
 );
 

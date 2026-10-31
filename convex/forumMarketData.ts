@@ -639,21 +639,26 @@ export const read = action({
         const options = SYMF_CHART_INTERVALS[interval as SymfChartInterval];
         let candles;
         if (reserved.candleProvider === "solana-tracker") {
+          const apiKey = env.SOLANA_TRACKER_API_KEY?.trim();
+          if (!apiKey)
+            throw new PublicMarketSourceError(
+              "budget",
+              "market_provider_unavailable",
+            );
           const quota: boolean = await ctx.runMutation(
             internal.tokenAlphaData.reserveApiRequest,
             { kind: "candle" },
           );
-          if (!quota || !env.SOLANA_TRACKER_API_KEY?.trim())
+          if (!quota)
             throw new PublicMarketSourceError(
               "budget",
               "market_provider_unavailable",
-              nextMarketBudgetReset(Date.now()),
             );
           candles = await readTrackerCandles(
             binding,
             interval as SymfChartInterval,
             checkedAt,
-            env.SOLANA_TRACKER_API_KEY,
+            apiKey,
           );
         } else {
           const data = await readPublicMarket(
