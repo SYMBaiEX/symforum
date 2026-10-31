@@ -1,8 +1,8 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
-let script: string, css: string;
+let script: string, css: string, forumCss: string;
 const origin = "http://127.0.0.1:43228";
 type MemberFixture = {
   reads: { name: string; args: Record<string, unknown> }[];
@@ -33,6 +33,17 @@ test.beforeAll(() => {
       ],
       { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
     );
+  forumCss =
+    FORUM_SHARED_THEME_CSS +
+    readFileSync("styles/forum-shared.css", "utf8") +
+    execFileSync(
+      "bun",
+      [
+        "-e",
+        `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
+      ],
+      { cwd: "apps/forum", encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+    );
   script = execFileSync(
     "bun",
     [
@@ -42,7 +53,11 @@ test.beforeAll(() => {
     { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
   );
 });
-async function harness(page: Page, query = "") {
+async function harness(
+  page: Page,
+  query = "",
+  cssVariant: "platform" | "forum" = "platform",
+) {
   const audit = { errors: [] as string[], outbound: [] as string[] };
   audits.set(page, audit);
   page.on("pageerror", (error) => audit.errors.push(error.message));
@@ -51,7 +66,7 @@ async function harness(page: Page, query = "") {
     if (url.origin === origin && url.pathname === "/forum/members")
       return route.fulfill({
         contentType: "text/html",
-        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script src="/fixture.js"></script>`,
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${cssVariant === "forum" ? forumCss : css}</style><div id="root"></div><script src="/fixture.js"></script>`,
       });
     if (url.origin === origin && url.pathname === "/fixture.js")
       return route.fulfill({ contentType: "text/javascript", body: script });
@@ -227,20 +242,59 @@ test("a hidden summary is never programmatically focused by Escape", async ({
   });
   expect(await page.evaluate(() => window.__summaryFocusCalls)).toBe(0);
 });
-for (const width of [320, 390])
-  test(`${width}px recovery and page-size popup remain bounded with 44px controls`, async ({
+async function expectRealBounds(
+  page: Page,
+  target: Locator,
+  label: string,
+  vertical = true,
+) {
+  const box = await target.boundingBox();
+  expect(box, `${label} has actual rendered bounds`).not.toBeNull();
+  const viewport = page.viewportSize()!;
+  expect(box!.x, `${label} starts inside viewport`).toBeGreaterThanOrEqual(0);
+  expect(
+    box!.x + box!.width,
+    `${label} ends inside viewport`,
+  ).toBeLessThanOrEqual(viewport.width);
+  if (vertical) {
+    expect(
+      box!.y,
+      `${label} starts inside viewport vertically`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      box!.y + box!.height,
+      `${label} ends inside viewport vertically`,
+    ).toBeLessThanOrEqual(viewport.height);
+  }
+}
+for (const [cssVariant, width] of [
+  ["platform", 320],
+  ["platform", 390],
+  ["forum", 320],
+  ["forum", 390],
+] as const)
+  test(`${cssVariant} ${width}px recovery and page-size popup remain bounded with 44px controls`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 568 });
     await harness(
       page,
       "q=missing-fixture-person&perPage=10&sort=threads-desc",
+      cssVariant,
     );
     const clear = page.getByRole("button", {
       name: "Clear search",
       exact: true,
     });
     await expect(clear).toBeVisible();
+    const section = page.locator("section.forum-workspace");
+    await expectRealBounds(page, section, "Member section", false);
+    expect(
+      await section.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+    await expectRealBounds(page, clear, "Clear search");
+    await expectRealBounds(page, search(page), "Member search");
+    await expectRealBounds(page, summary(page), "Page-size summary");
     expect((await clear.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await clear.focus();
     await page.keyboard.press("Enter");
@@ -255,6 +309,12 @@ for (const width of [320, 390])
     const popup = await size.locator("..").boundingBox();
     expect(popup!.x).toBeGreaterThanOrEqual(0);
     expect(popup!.x + popup!.width).toBeLessThanOrEqual(width);
+    await expectRealBounds(page, size.locator(".."), "Page-size popup");
+    await expectRealBounds(page, size, "Page-size selector");
+    await expectRealBounds(page, section, "Populated member section", false);
+    expect(
+      await section.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
     expect((await summary(page).boundingBox())!.height).toBeGreaterThanOrEqual(
       44,
     );
