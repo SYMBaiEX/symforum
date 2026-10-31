@@ -1697,6 +1697,7 @@ function PaymentDialog({
 }) {
   const { isAuthenticated } = useConvexAuth();
   const returnFocus = useRef<HTMLElement | null>(null);
+  const titleFocus = useRef<HTMLHeadingElement | null>(null);
   const live = useQuery(
       api.forumCommunity.getPayment,
       payment ? { intentId: payment.intentId } : "skip",
@@ -1729,7 +1730,7 @@ function PaymentDialog({
       <DialogContent
         data-surface="forum"
         className={styles.paymentDialog}
-        onOpenAutoFocus={() => {
+        onOpenAutoFocus={(event) => {
           // This controlled dialog has several launch buttons rather than a
           // single Radix Trigger. Capture the real launcher before autofocus.
           const active = document.activeElement;
@@ -1737,6 +1738,12 @@ function PaymentDialog({
             active instanceof HTMLElement && active !== document.body
               ? active
               : null;
+          // A long receipt can place its first field below the fold. Start
+          // at the visible review context, without scrolling past that context.
+          if (titleFocus.current) {
+            event.preventDefault();
+            titleFocus.current.focus({ preventScroll: true });
+          }
         }}
         onCloseAutoFocus={(event) => {
           const launcher = returnFocus.current;
@@ -1754,7 +1761,7 @@ function PaymentDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle ref={titleFocus} tabIndex={-1}>
             {row?.purpose === "reward"
               ? "Review reward payment"
               : "Review one-time tip"}

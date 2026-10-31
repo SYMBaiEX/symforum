@@ -175,6 +175,26 @@ async function exercise(page: Page, info: TestInfo) {
     exact: true,
   });
   await expect(dialog).toBeVisible();
+  const paymentTitle = dialog.getByRole("heading", {
+    name: "Review one-time tip",
+    exact: true,
+  });
+  await expect(paymentTitle).toBeFocused();
+  await expect
+    .poll(async () => {
+      const titleBounds = await paymentTitle.boundingBox();
+      const dialogBounds = await dialog.boundingBox();
+      return (
+        !!titleBounds &&
+        !!dialogBounds &&
+        titleBounds.y >= dialogBounds.y &&
+        titleBounds.y + titleBounds.height <=
+          dialogBounds.y + dialogBounds.height &&
+        titleBounds.y >= 0 &&
+        titleBounds.y + titleBounds.height <= page.viewportSize()!.height
+      );
+    })
+    .toBe(true);
   await expect(
     dialog.getByText("Protected uncertain outcome", { exact: true }),
   ).toBeVisible();
