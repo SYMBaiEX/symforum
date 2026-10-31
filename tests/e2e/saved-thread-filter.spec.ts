@@ -2,19 +2,21 @@ import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
-let script: string, css: string;
+let script: string;
+const appCss: Record<string, string> = {};
 test.beforeAll(() => {
-  css =
-    FORUM_SHARED_THEME_CSS +
-    readFileSync("styles/forum-shared.css", "utf8") +
-    execFileSync(
-      "bun",
-      [
-        "-e",
-        `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("apps/platform/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
-      ],
-      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
-    );
+  for (const app of ["platform", "forum"])
+    appCss[app] =
+      FORUM_SHARED_THEME_CSS +
+      readFileSync("styles/forum-shared.css", "utf8") +
+      execFileSync(
+        "bun",
+        [
+          "-e",
+          `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("apps/${app}/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
+        ],
+        { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+      );
   script = execFileSync(
     "bun",
     [
@@ -24,7 +26,7 @@ test.beforeAll(() => {
     { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
   );
 });
-async function harness(page: Page, scenario = "") {
+async function harness(page: Page, scenario = "", app = "platform") {
   const errors: string[] = [],
     requests: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -34,7 +36,7 @@ async function harness(page: Page, scenario = "") {
       if (url.pathname === "/")
         return route.fulfill({
           contentType: "text/html",
-          body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script src="/fixture.js"></script>`,
+          body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${appCss[app]}</style><div id="root"></div><script src="/fixture.js"></script>`,
         });
       if (url.pathname === "/fixture.js")
         return route.fulfill({ contentType: "text/javascript", body: script });
@@ -159,31 +161,53 @@ for (const scenario of ["guest", "authloading", "loading", "empty"])
       ).toHaveCount(0);
     await check(scenario === "loading" || scenario === "empty");
   });
-for (const width of [320, 390])
-  test(`filter and clear control fit ${width}px with forum styling and keyboard access`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 844 });
-    const check = await harness(page);
-    await search(page).fill("design");
-    await expect(search(page)).toHaveCSS("font-size", "16px");
-    const clear = page.getByRole("button", {
-      name: "Clear filter",
-      exact: true,
+for (const app of ["platform", "forum"])
+  for (const width of [320, 390])
+    test(`${app} filter and clear control fit ${width}px with forum styling and keyboard access`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const check = await harness(page, "", app);
+      await search(page).fill("design");
+      await expect(search(page)).toHaveCSS("font-size", "16px");
+      const clear = page.getByRole("button", {
+        name: "Clear filter",
+        exact: true,
+      });
+      await search(page).press("Tab");
+      await expect(clear).toBeFocused();
+      const bounds = await clear.boundingBox();
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      expect(bounds!.width).toBeGreaterThanOrEqual(44);
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      const inputBounds = await search(page).boundingBox();
+      expect(inputBounds!.height).toBeGreaterThanOrEqual(44);
+      expect(inputBounds!.x).toBeGreaterThanOrEqual(0);
+      expect(inputBounds!.x + inputBounds!.width).toBeLessThanOrEqual(width);
+      for (const component of [
+        page.locator(".forum-account-library"),
+        page.locator(".forum-library-search"),
+        page.locator("section.forum-panel"),
+      ]) {
+        const section = await component.boundingBox();
+        expect(section!.x).toBeGreaterThanOrEqual(0);
+        expect(section!.x + section!.width).toBeLessThanOrEqual(width);
+        expect(inputBounds!.x).toBeGreaterThanOrEqual(section!.x);
+        expect(inputBounds!.x + inputBounds!.width).toBeLessThanOrEqual(
+          section!.x + section!.width,
+        );
+        expect(bounds!.x).toBeGreaterThanOrEqual(section!.x);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+          section!.x + section!.width,
+        );
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.keyboard.press("Enter");
+      await expect(search(page)).toBeFocused();
+      await check();
     });
-    await search(page).press("Tab");
-    await expect(clear).toBeFocused();
-    const bounds = await clear.boundingBox();
-    expect(bounds!.height).toBeGreaterThanOrEqual(44);
-    expect(bounds!.width).toBeGreaterThanOrEqual(44);
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-    await page.keyboard.press("Enter");
-    await expect(search(page)).toBeFocused();
-    await check();
-  });
