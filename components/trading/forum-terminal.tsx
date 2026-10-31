@@ -558,6 +558,7 @@ function TerminalWorkspace({
                     selected={selected}
                     onSelect={selectToken}
                     active={tool === "receipts" ? "receipts" : "wallet"}
+                    visible={drawerOpen && tool === "wallet"}
                   />
                 )}
               </section>
@@ -861,11 +862,13 @@ function AccountPanels({
   selected,
   onSelect,
   active,
+  visible = true,
 }: {
   client: CommerceWalletClient;
   selected: MarketChoice;
   onSelect: (token: MarketChoice) => void;
   active: "wallet" | "receipts";
+  visible?: boolean;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const identity = useCommerceIdentity(client, "solana:signTransaction");
@@ -910,6 +913,7 @@ function AccountPanels({
               wallet={wallet}
               selectedMint={selected.mint}
               selectedSymbol={selected.symbol}
+              active={visible && active === "wallet"}
             />
           </TerminalBoundary>
         ) : (
