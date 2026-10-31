@@ -715,9 +715,17 @@
     "kind": "feature",
     "evidence": "components/trading/forum-terminal.tsx:905",
     "acceptance": "Using existing attention/visibility boundaries, no balance action starts before its tool is visible or while offline/hidden; explicit refresh and current caps remain unchanged, with no conditional hooks or wallet initialization on native hosts.",
-    "dependsOn": ["TRADE-040"],
-    "status": "queued",
-    "paths": ["components/trading/forum-terminal.tsx"]
+    "dependsOn": [
+      "TRADE-040"
+    ],
+    "status": "implemented",
+    "paths": [
+      "components/trading/forum-terminal.tsx",
+      "components/trading/wallet-panel.tsx",
+      "tests/e2e/wallet-visible-demand.spec.ts",
+      "tests/e2e/fixtures/wallet-visible-demand.tsx",
+      "tests/e2e/fixtures/wallet-visible-demand-state.tsx"
+    ]
   },
   {
     "id": "TRADE-042",
@@ -1840,8 +1848,13 @@
     "evidence": "components/trading/research-purchase.tsx:514",
     "acceptance": "Enhancement: visible local countdown and expired feedback use prepared.expiresAt; no silent new quote or signing and approve handler retains exact now-time guard.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/research-purchase.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/research-purchase.tsx",
+      "tests/e2e/research-exact-expiry.spec.ts",
+      "tests/e2e/fixtures/research-exact-expiry.tsx",
+      "tests/e2e/fixtures/research-exact-expiry-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-058",
@@ -2433,13 +2446,14 @@
     "evidence": "components/forum/forum-media-gallery.tsx:130",
     "acceptance": "The image viewer exposes a clearly labelled original-image link using the current authorized URL, with safe external-link attributes and no persistence in public caches.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-media-gallery.tsx",
       "tests/e2e/gallery-original-image.spec.ts",
       "tests/e2e/fixtures/gallery-original-image.tsx",
       "tests/e2e/fixtures/gallery-original-image-state.tsx"
-    ]
+    ],
+    "receipt": "PR #270 normally rebase-merged at fafd6a560ef862396f33c66141e4bf2b228e4b0a; exact complete tested tree/authors and all five original domains verified 2026-10-31 15:32 UTC. Bounded public Feed and one existing single-image gallery acceptance passed 15:33 UTC; current URL, safe attributes, 44px and desktop/phone bounds verified without opening the original. External navigation, multiple-image races, physical devices and AT remain fixture-only or unverified."
   },
   {
     "id": "FORUM-042",
