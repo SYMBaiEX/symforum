@@ -44,8 +44,16 @@
     "evidence": "components/trading/market-explorer.tsx:168",
     "acceptance": "An opt-in local filter uses existing marketSources timestamps, distinguishes unavailable rows, explains reduced sample coverage, and changes no query arguments, source cadence or refresh allowance.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "components/trading/market-explorer.module.css",
+      "components/trading/market-sample-view.ts",
+      "components/trading/market-sample-view.test.ts",
+      "tests/e2e/market-sample-usability.spec.ts",
+      "tests/e2e/fixtures/market-sample-usability.tsx",
+      "tests/e2e/fixtures/market-sample-usability-state.ts"
+    ]
   },
   {
     "id": "TRADE-004",
@@ -87,8 +95,16 @@
     "evidence": "components/trading/market-explorer.tsx:255",
     "acceptance": "A concise polite status announces sampled result count and chosen sort after deliberate control changes, without announcing every clock tick or pretending it is a platform-wide ranking.",
     "dependsOn": ["TRADE-002"],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "components/trading/market-explorer.module.css",
+      "components/trading/market-sample-view.ts",
+      "components/trading/market-sample-view.test.ts",
+      "tests/e2e/market-sample-usability.spec.ts",
+      "tests/e2e/fixtures/market-sample-usability.tsx",
+      "tests/e2e/fixtures/market-sample-usability-state.ts"
+    ]
   },
   {
     "id": "TRADE-007",
@@ -124,8 +140,16 @@
     "evidence": "components/trading/market-explorer.tsx:385",
     "acceptance": "Coverage details expose a validated existing nextRefreshAt as an eligibility time, not a promise; budget, deferred and admitted-loading states remain distinct and no retry timer is shortened.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "components/trading/market-explorer.module.css",
+      "components/trading/market-sample-view.ts",
+      "components/trading/market-sample-view.test.ts",
+      "tests/e2e/market-sample-usability.spec.ts",
+      "tests/e2e/fixtures/market-sample-usability.tsx",
+      "tests/e2e/fixtures/market-sample-usability-state.ts"
+    ]
   },
   {
     "id": "TRADE-010",
@@ -136,8 +160,16 @@
     "evidence": "components/trading/market-explorer.tsx:536",
     "acceptance": "Source-link accessible names include a distinguishing exact mint while retaining safe URL handling; two identically named tokens remain distinguishable in a screen-reader link list.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "components/trading/market-explorer.module.css",
+      "components/trading/market-sample-view.ts",
+      "components/trading/market-sample-view.test.ts",
+      "tests/e2e/market-sample-usability.spec.ts",
+      "tests/e2e/fixtures/market-sample-usability.tsx",
+      "tests/e2e/fixtures/market-sample-usability-state.ts"
+    ]
   },
   {
     "id": "TRADE-011",
@@ -160,14 +192,15 @@
     "evidence": "components/trading/token-detail.tsx:50",
     "acceptance": "Mock clipboard success and denial, switch exact mints, and verify feedback cannot claim a new mint was copied when only the prior one was; no production clipboard or network dependency.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/token-detail.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/token-detail-context.spec.ts",
       "tests/e2e/fixtures/token-detail-context.tsx",
       "tests/e2e/fixtures/token-detail-context-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "TRADE-013",
@@ -178,14 +211,15 @@
     "evidence": "components/trading/token-detail.tsx:85",
     "acceptance": "Website/social links receive concise unverified-project-metadata context without removing valid links or treating them as endorsed; credentialed and unsafe schemes remain rejected.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/token-detail.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/token-detail-context.spec.ts",
       "tests/e2e/fixtures/token-detail-context.tsx",
       "tests/e2e/fixtures/token-detail-context-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "TRADE-014",
@@ -196,14 +230,15 @@
     "evidence": "components/trading/token-detail.tsx:66",
     "acceptance": "Keyboard/touch-readable definitions distinguish market cap, FDV, liquidity, holder samples and 1h/24h volume; glossary changes no values, coverage claims, provider usage or financial advice.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/token-detail.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/token-detail-context.spec.ts",
       "tests/e2e/fixtures/token-detail-context.tsx",
       "tests/e2e/fixtures/token-detail-context-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "TRADE-015",
@@ -275,8 +310,17 @@
     "evidence": "components/trading/price-chart.tsx:427",
     "acceptance": "A deliberate clipboard action copies only displayed candle rows, UTC times, provider and original checkedAt; failures are announced and no private context, new bars or network calls are included.",
     "dependsOn": ["TRADE-019"],
-    "status": "queued",
-    "paths": ["components/trading/price-chart.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/price-chart.tsx",
+      "components/trading/candle-readings.tsx",
+      "components/trading/candle-reading-text.ts",
+      "components/trading/candle-reading-text.test.ts",
+      "tests/e2e/chart-reading-tools.spec.ts",
+      "tests/e2e/fixtures/chart-reading-tools.tsx",
+      "tests/e2e/fixtures/chart-reading-tools-state.ts",
+      "tests/e2e/candle-readings.spec.ts"
+    ]
   },
   {
     "id": "TRADE-021",
@@ -336,8 +380,17 @@
     "evidence": "components/trading/price-chart.tsx:403",
     "acceptance": "Touch and keyboard users can reveal original full checkedAt and candle-source identity; stale retained data retains the old timestamp and the control causes no refresh.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/price-chart.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/price-chart.tsx",
+      "components/trading/candle-readings.tsx",
+      "components/trading/candle-reading-text.ts",
+      "components/trading/candle-reading-text.test.ts",
+      "tests/e2e/chart-reading-tools.spec.ts",
+      "tests/e2e/fixtures/chart-reading-tools.tsx",
+      "tests/e2e/fixtures/chart-reading-tools-state.ts",
+      "tests/e2e/candle-readings.spec.ts"
+    ]
   },
   {
     "id": "TRADE-026",
@@ -435,8 +488,15 @@
     "evidence": "components/trading/watchlist-panel.tsx:233",
     "acceptance": "Above/below/all filters operate only on returned alerts, retain exact-mint View and separate Mark read actions, and cause no watch mutation, acknowledgement, scan or notification request.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/watchlist-panel.tsx",
+      "components/trading/alert-inbox-model.ts",
+      "components/trading/alert-inbox-model.test.ts",
+      "tests/e2e/watchlist-alert-inbox.spec.ts",
+      "tests/e2e/fixtures/watchlist-alert-inbox.tsx",
+      "tests/e2e/fixtures/watchlist-alert-inbox-state.ts"
+    ]
   },
   {
     "id": "TRADE-034",
@@ -447,8 +507,15 @@
     "evidence": "components/trading/watchlist-panel.tsx:226",
     "acceptance": "A bounded read-history disclosure renders only acknowledged records already loaded; it does not claim complete history, resurrect unread badges or add backend pagination.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/watchlist-panel.tsx",
+      "components/trading/alert-inbox-model.ts",
+      "components/trading/alert-inbox-model.test.ts",
+      "tests/e2e/watchlist-alert-inbox.spec.ts",
+      "tests/e2e/fixtures/watchlist-alert-inbox.tsx",
+      "tests/e2e/fixtures/watchlist-alert-inbox-state.ts"
+    ]
   },
   {
     "id": "TRADE-035",
@@ -996,14 +1063,15 @@
     "evidence": "components/community/community-hub.tsx:298",
     "acceptance": "Enhancement: each public handle opens its canonical forum member profile using the existing username route helper; no wallet appears in URL.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-identity-links.spec.ts",
       "tests/e2e/fixtures/community-identity-links.tsx",
       "tests/e2e/fixtures/community-identity-links-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "COMMUNITY-015",
@@ -1014,14 +1082,15 @@
     "evidence": "components/community/community-hub.tsx:291",
     "acceptance": "Enhancement: copy exact mint from hub with accessible success/failure feedback; keep full selectable address and no wallet action.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-identity-links.spec.ts",
       "tests/e2e/fixtures/community-identity-links.tsx",
       "tests/e2e/fixtures/community-identity-links-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "COMMUNITY-016",
@@ -1167,14 +1236,15 @@
     "evidence": "components/community/community-hub.tsx:816",
     "acceptance": "Enhancement: related exact mint has a canonical terminal link and copy control; no ticker inference or automatic quote/payment action.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-identity-links.spec.ts",
       "tests/e2e/fixtures/community-identity-links.tsx",
       "tests/e2e/fixtures/community-identity-links-state.ts"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "COMMUNITY-028",
@@ -2066,13 +2136,14 @@
     "evidence": "components/forum/forum-media-gallery.tsx:46",
     "acceptance": "If attachments reorder or disappear while the viewer is open, the selected image remains bound to its attachment ID or closes safely; an array index must not silently switch the user to another image.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-media-gallery.tsx",
       "tests/e2e/forum-gallery-lifecycle.spec.ts",
       "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
       "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "FORUM-039",
@@ -2083,13 +2154,14 @@
     "evidence": "components/forum/forum-media-gallery.tsx:105",
     "acceptance": "Close auto-focus checks that the originating tile is still connected and visible; otherwise use a safe nearby focus target rather than preventing the default and focusing a removed element.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-media-gallery.tsx",
       "tests/e2e/forum-gallery-lifecycle.spec.ts",
       "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
       "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "FORUM-040",
@@ -2100,13 +2172,14 @@
     "evidence": "components/forum/forum-media-gallery.tsx:139",
     "acceptance": "Arrow-key and next/previous changes announce image position and concise title through a polite status region, retain Escape behavior and avoid duplicate announcements from decorative counters.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-media-gallery.tsx",
       "tests/e2e/forum-gallery-lifecycle.spec.ts",
       "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
       "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
-    ]
+    ],
+    "receipt": "PR #261 normally rebase-merged at 26ac42ce070296c40fbf4579f6f27adad04d25ec; exact qualified tree/authors, all five original domains verified 2026-10-31 10:50 UTC. Bounded public Community checks/provenance passed 10:51 UTC; populated/private/financial/gallery authorization and real AT remain isolated-test or unverified acceptance."
   },
   {
     "id": "FORUM-041",

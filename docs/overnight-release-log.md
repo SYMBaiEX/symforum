@@ -444,3 +444,122 @@ operations, job/hold records and infrastructure binding metadata out of it.
 - Next read-only triage suggests existing-data-only market sample usability,
   loaded alert filters/history, and candle-reading copy/timestamps. Respect their
   recorded dependencies and exact ownership only after this release is verified.
+
+## Batch 6 released — 10:51 UTC
+
+- PR #261 normally rebase-merged at `26ac42ce070296c40fbf4579f6f27adad04d25ec`.
+  Its complete tree matches qualified `946e5a67`; all six new main author records
+  retain the exact required name/email. Existing merge methods/protections and
+  disabled Actions were read back; no profile/settings/history rewrite occurred.
+- The exact automatic production release and all five original domains were
+  verified. Bounded public Community Projects/receipt checks returned useful
+  coverage and the correct private-history gate without document overflow,
+  client errors or blocked provider attempts. The public project directory is
+  still empty, so populated identity controls remain fixture-tested only.
+- Actual phone dimensions were 390x844 for inner and visual viewport, scale/DPR1,
+  with one topbar, one bottom navigation at y788–844 and no iframe. Hit testing
+  matched content/navigation, not a duplicate header. Settled PNG captures after
+  two resize frames with capture animations disabled showed correct navigation.
+  Earlier unsynchronized capture anomalies remain unexplained; no production
+  source fix or universal default-animation guarantee is claimed.
+- One bounded server-error sample was empty and the isolated browser closed.
+  Protected/financial/gallery authorization and real assistive technology remain
+  unclaimed live acceptance. No backend, worker, provider/model, payment, replay,
+  budget/schedule/fee/limit or hold change occurred. Forty-three items are now
+  source-deployed; none of the next assignments is counted as completed.
+
+## Batch 7 dispatch — 10:55 UTC
+
+- TRADE-003/006/009/010: `/private/tmp/symforum-overnight-market-sample-usability`,
+  branch `sym/overnight-market-sample-usability`, based on released `26ac42ce`.
+  Existing-data-only stale filtering, deliberate count/sort announcements, honest
+  retry eligibility and exact-mint source labels. Own market explorer/module CSS,
+  optional pure view helper/tests and isolated fixtures. Data/refresh hooks,
+  query semantics, timers, source cadence and quotas remain unchanged.
+- TRADE-033/034: `/private/tmp/symforum-overnight-alert-inbox`, branch
+  `sym/overnight-alert-inbox`, same base. Local filters and bounded acknowledged
+  history from existing loaded alerts only. Own watchlist presentation, optional
+  pure model/tests and isolated fixtures; keep all existing update/ack/admission
+  handlers and the real terminal's owner/auth/native mounting gates unchanged.
+- TRADE-020/025: `/private/tmp/symforum-overnight-candle-evidence`, branch
+  `sym/overnight-candle-evidence`, same base. Copy only displayed bounded readings
+  and expose original provider/full check time in the existing disclosure. Own
+  the existing candle-readings leaf and presentation-only price-chart prop wiring,
+  optional pure text helper/tests and isolated fixtures. Volume units remain
+  unknown where supplied that way; transport/parser/canvas/refresh remain intact.
+- The old chart-readings branch/worktree already existed and was preserved;
+  the new candle-evidence name avoids any overlap. Literal scopes are recorded
+  in the backlog. No parent integration or next PR has started.
+- Primary branch remains `sym/overnight-web3-wave-six`, HEAD `946e5a67`; runtime
+  equals released main. Only the two known-owned planning files are dirty. Counts:
+  43 source-deployed, eight in progress, 171 queued, two blocked, sixteen needing
+  confirmation. Preserve updates and resume actual in-flight work before dispatch.
+
+## Candle candidate handoff — 11:03 UTC
+
+- `d7c115853a01eb81f13221a0af7ab8474dc6e21d` is frozen in
+  `/private/tmp/symforum-overnight-candle-evidence`. Full original UTC/provider,
+  copy of only twenty displayed rows, snapshot-fenced feedback and manual fallback
+  use the existing leaf. Price-chart changes are six render-prop lines only;
+  canvas, transport, retry, parser and selection lifecycle remain unchanged.
+- Sixteen focused browser checks and eighteen unit/parser checks pass, plus types
+  and lint. The original keyboard test initially had three passes/two failures
+  because Copy is a new legitimate tab stop. Approved existing-test adaptation
+  explicitly checks Copy focus then Tab to the original scroll region; all prior
+  geometry, overflow, ArrowRight and After-control assertions remain unchanged.
+- The exact candle-readings leaf and existing keyboard test paths are now in the
+  ownership manifest. Independent review is active; these two items are implemented
+  only, not parent-qualified or deployed. Other six new items remain in progress.
+
+## Candle review update — 11:04 UTC
+
+- Independent review of `d7c11585` was clean. Copied rows match the displayed
+  twenty readings, with exact mint/interval and original provider/check time.
+  Zero/missing volume and unknown units stay distinct; deferred completion cannot
+  label another snapshot. Approved keyboard-test expansion keeps prior assertions.
+- Price-chart transport, retries, parser, canvas, native and financial boundaries
+  are untouched. Real OS clipboard and assistive technology remain unverified;
+  parent integrated tests/builds/release are still required.
+
+## Alert candidate and integration — 11:10 UTC
+
+- Alert candidate `1f9c879a` is frozen and independently reviewed clean. Local
+  unread-direction filters and read history use only the existing loaded sample;
+  both query arguments, full watch form and update/dismiss admission handlers
+  are unchanged. Twenty-five focused browser and eight unit checks pass, plus
+  full application types and scoped lint. Actual terminal guest, loading,
+  native and logout fixture coverage retains the current private-data gates.
+- Fresh integration branch `sym/overnight-web3-wave-seven` starts at released
+  `26ac42ce`, preserving the two known-owned planning updates. Candle and alert
+  candidates are integrated as `e26be9a8` and `f133ef5b`. Four items are implemented
+  only, four market items remain in progress; no final parent gate or PR yet.
+- Market review reproduced lost keyboard focus when an opt-in fresh row ages
+  out. A narrowly scoped stable row-ref cleanup and static accessible description
+  are authorized within the existing assignment, with focused and hidden/unmount
+  regressions required. No effects, timers, data hooks or refresh changes allowed.
+
+## Batch 7 candidate frozen — 11:11 UTC
+
+- Market candidate `ddd22300` integrated as `b1a3ead8`, with thirty-nine focused
+  browser and thirty-nine unit checks passing, plus types and lint. The confirmed
+  removed-row keyboard-focus regression is fixed by a stable callback-ref cleanup;
+  hidden/unmounted panes do not steal focus. No refresh/query code changed.
+- Parent inspected combined source, regenerated native parity and found no
+  backend, configuration, auth or financial-path changes. All eight assigned
+  items are implemented only. Independent market review and the final complete
+  parent qualification are underway against this frozen runtime candidate.
+
+## Batch 7 qualified — 11:15 UTC
+
+- Independent market review was clean: market-only freshness classification,
+  exact-mint source names, truthful eligibility and deliberate announcements retain
+  existing source/query/financial boundaries. The focused-row cleanup is bounded
+  to visible controls and real row removal; assistive technology is not certified.
+- Parent final unchanged-runtime qualification passed: 4,363 unit/backend tests,
+  479 browser tests, both type checks, all five app builds, native parity, three
+  unsuppressed dependency-graph audits and security negative controls. Lint has
+  zero errors and the same three existing warnings. No skipped or failed final
+  tests; all external provider/wallet operations remained blocked in fixtures.
+- Eight assigned items are tested, not merged/deployed. Forty-three remain
+  source-deployed. Commit/secret scan, normal protected review/merge, complete-tree
+  equality and exact automatic web rollout acceptance are still required.
