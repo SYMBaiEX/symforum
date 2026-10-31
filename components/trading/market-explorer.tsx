@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type RefCallback,
+  type RefObject,
+} from "react";
 import { useAction, useQuery } from "convex/react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   ArrowUpRight,
+  Check,
   Copy,
   Search,
   X,
@@ -43,6 +52,7 @@ import {
   type MarketSortKey,
 } from "./market-explorer-model";
 import styles from "./market-explorer.module.css";
+import { marketEligibility, marketSampleView } from "./market-sample-view";
 
 const columns = [
   ["price", "Price"],
@@ -152,6 +162,11 @@ export function MarketExplorer({
 }) {
   const [search, setSearch] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [freshOnly, setFreshOnly] = useState(false);
+  const [viewAnnouncement, setViewAnnouncement] = useState({
+    pending: false,
+    text: "",
+  });
   const [band, setBand] = useState<MarketCapBand>("all");
   const [platform, setPlatform] = useState<"all" | "bags" | "pumpfun">("all");
   const [sort, setSort] = useState<{
@@ -160,9 +175,26 @@ export function MarketExplorer({
   }>({ key: "volume1h", direction: "desc" });
   const coverageId = useId();
   const scrollHintId = useId();
+  const freshnessHintId = useId();
   const root = useRef<HTMLElement>(null);
   const refresh = useVisibleMarketRefresh(root);
   const searchInput = useRef<HTMLInputElement>(null);
+  const freshControl = useRef<HTMLButtonElement>(null);
+  const rowFocusRef = useCallback<RefCallback<HTMLTableRowElement>>((row) => {
+    if (!row) return;
+    return () => {
+      const control = freshControl.current;
+      if (
+        row.contains(document.activeElement) &&
+        root.current?.isConnected &&
+        control?.isConnected &&
+        control.getClientRects().length &&
+        getComputedStyle(control).visibility === "visible"
+      ) {
+        control.focus({ preventScroll: true });
+      }
+    };
+  }, []);
   const data = useQuery(terminalApi.listMarket, {
     band,
     ...(platform === "all" ? {} : { platform }),
@@ -170,18 +202,32 @@ export function MarketExplorer({
     limit: 60,
   });
   const exactMint = isSolanaAddress(search.trim()) ? search.trim() : null;
-  const markets = sortMarketRows(
-    exactMint
-      ? (data?.markets ?? []).filter((market) => market.mint === exactMint)
-      : searchMarkets(data?.markets ?? [], search),
-    sort.key,
-    sort.direction,
-  );
+  const matchingRows = exactMint
+    ? (data?.markets ?? []).filter((market) => market.mint === exactMint)
+    : searchMarkets(data?.markets ?? [], search);
+  const sampleView = marketSampleView(matchingRows, now, freshOnly);
+  const markets = sortMarketRows(sampleView.rows, sort.key, sort.direction);
   const filtered =
-    search.trim().length > 0 || band !== "all" || platform !== "all";
+    search.trim().length > 0 ||
+    band !== "all" ||
+    platform !== "all" ||
+    freshOnly;
   const empty = data === undefined || markets.length === 0;
+  const eligibility = marketEligibility(refresh.result?.nextRefreshAt);
+  // Consume a deliberate control change once loaded, not on later clock/data updates.
+  if (viewAnnouncement.pending && data !== undefined) {
+    const sortLabel = columns.find(([key]) => key === sort.key)![1];
+    setViewAnnouncement({
+      pending: false,
+      text: `${markets.length} sampled ${markets.length === 1 ? "token" : "tokens"} · ${sortLabel} ${sort.direction === "asc" ? "ascending" : "descending"}.`,
+    });
+  }
+  function announceViewChange() {
+    setViewAnnouncement({ pending: true, text: "Updating sampled results…" });
+  }
   function clearSearch() {
     setSearch("");
+    announceViewChange();
     searchInput.current?.focus();
   }
   async function copyMint(mint: string) {
@@ -196,9 +242,12 @@ export function MarketExplorer({
     setSearch("");
     setBand("all");
     setPlatform("all");
+    setFreshOnly(false);
+    announceViewChange();
     searchInput.current?.focus();
   }
   function changeSort(key: MarketSortKey) {
+    announceViewChange();
     setSort((current) => ({
       key,
       direction:
@@ -220,7 +269,10 @@ export function MarketExplorer({
             placeholder="Search name, ticker or mint"
             maxLength={64}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              announceViewChange();
+            }}
           />
         </div>
         {search.length > 0 && (
@@ -239,8 +291,10 @@ export function MarketExplorer({
           <select
             value={band}
             onChange={(event) => {
-              if (isMarketCapBand(event.target.value))
+              if (isMarketCapBand(event.target.value)) {
                 setBand(event.target.value);
+                announceViewChange();
+              }
             }}
           >
             {MARKET_CAP_BANDS.map((item) => (
@@ -256,8 +310,10 @@ export function MarketExplorer({
             value={platform}
             onChange={(event) => {
               const value = event.target.value;
-              if (value === "all" || value === "bags" || value === "pumpfun")
+              if (value === "all" || value === "bags" || value === "pumpfun") {
                 setPlatform(value);
+                announceViewChange();
+              }
             }}
           >
             <option value="all">All platforms</option>
@@ -283,14 +339,33 @@ export function MarketExplorer({
         <small>Quick access, not a market ranking</small>
       </div>
       <div className={styles.context} role="group" aria-label="Sample context">
-        <p role="status">
+        <p>
           <strong>
             {data === undefined
               ? "Loading sample"
               : `${markets.length} ${markets.length === 1 ? "token" : "tokens"}`}
           </strong>
-          <span>Sampled data</span>
+          <span>
+            {freshOnly && data !== undefined
+              ? `${sampleView.excluded} excluded · market age only`
+              : "Sampled data"}
+          </span>
         </p>
+        <button
+          ref={freshControl}
+          type="button"
+          className={styles.freshOnly}
+          aria-label="Fresh market rows only"
+          aria-pressed={freshOnly}
+          aria-describedby={freshnessHintId}
+          onClick={() => {
+            setFreshOnly((value) => !value);
+            announceViewChange();
+          }}
+        >
+          {freshOnly && <Check aria-hidden="true" />}
+          Fresh market only
+        </button>
         <label className={styles.sortControl}>
           <span>Sort</span>
           <select
@@ -299,8 +374,10 @@ export function MarketExplorer({
             onChange={(event) => {
               const [key, direction] = event.target.value.split(":");
               const column = columns.find(([value]) => value === key);
-              if (column && (direction === "asc" || direction === "desc"))
+              if (column && (direction === "asc" || direction === "desc")) {
                 setSort({ key: column[0], direction });
+                announceViewChange();
+              }
             }}
           >
             {columns.flatMap(([key, label]) =>
@@ -316,6 +393,14 @@ export function MarketExplorer({
           </select>
         </label>
       </div>
+      <p
+        role="status"
+        aria-live="polite"
+        aria-label="Market view updates"
+        className="sr-only"
+      >
+        {viewAnnouncement.text}
+      </p>
       <p
         role="status"
         className={copyMessage ? "break-all px-3 py-1 text-xs" : "sr-only"}
@@ -361,7 +446,7 @@ export function MarketExplorer({
                   View exact mint
                 </button>
               )}
-              {(band !== "all" || platform !== "all") && (
+              {(band !== "all" || platform !== "all" || freshOnly) && (
                 <button type="button" onClick={resetFilters}>
                   Reset filters
                 </button>
@@ -417,6 +502,7 @@ export function MarketExplorer({
               markets.map((market) => (
                 <MarketDataRow
                   key={market.mint}
+                  rowFocusRef={rowFocusRef}
                   market={market}
                   selected={selected === market.mint}
                   staleSample={data.stale}
@@ -455,6 +541,30 @@ export function MarketExplorer({
             original scout timestamp. Market cap is not FDV. Sort applies only
             to this sample.
           </p>
+          {data !== undefined && (
+            <p>
+              Within {matchingRows.length} loaded matches: {sampleView.fresh}{" "}
+              fresh, {sampleView.stale} stale, {sampleView.unknown} unavailable
+              or undated.
+            </p>
+          )}
+          <p id={freshnessHintId}>
+            Only known fresh market observations qualify. Holder age does not
+            decide this filter. Stale, unavailable and undated rows are excluded
+            while enabled. This filter does not fetch data.
+          </p>
+          <p>
+            {eligibility ? (
+              <>
+                Server eligibility:{" "}
+                <time dateTime={eligibility}>{eligibility}</time>.
+              </>
+            ) : (
+              "Server eligibility time unavailable."
+            )}{" "}
+            Eligibility is not a scheduled or guaranteed refresh. Visible online
+            demand and shared allowances still apply.
+          </p>
         </details>
       </div>
     </section>
@@ -462,6 +572,7 @@ export function MarketExplorer({
 }
 
 function MarketDataRow({
+  rowFocusRef,
   market,
   selected,
   staleSample,
@@ -469,6 +580,7 @@ function MarketDataRow({
   onCopy,
   now,
 }: {
+  rowFocusRef: RefCallback<HTMLTableRowElement>;
   market: TerminalMarket;
   selected: boolean;
   staleSample: boolean;
@@ -482,7 +594,7 @@ function MarketDataRow({
   const source = sources.sourceUrl ? safeExternalUrl(sources.sourceUrl) : null;
   const change = market.priceChange1hPercent;
   return (
-    <tr data-selected={selected}>
+    <tr ref={rowFocusRef} data-selected={selected}>
       <td className={styles.tokenColumn}>
         <div className="flex min-w-0 items-center gap-1">
           <button
@@ -593,7 +705,7 @@ function MarketDataRow({
             href={source}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`View ${market.symbol} source`}
+            aria-label={`View ${market.symbol} source, mint ${market.mint}`}
           >
             Source <ArrowUpRight aria-hidden="true" />
           </a>

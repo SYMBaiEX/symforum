@@ -31,6 +31,26 @@
 .context strong {
   font-weight: 550;
 }
+.freshOnly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+}
+.freshOnly[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.08);
+}
+.freshOnly svg {
+  width: 14px;
+  height: 14px;
+}
 .context p > span {
   color: hsl(var(--muted-foreground));
 }
@@ -391,6 +411,12 @@
 .coverageDetails[open] {
   max-height: 140px;
   overflow-y: auto;
+}
+.coverageDetails p + p {
+  margin-top: 8px;
+}
+.coverageDetails time {
+  overflow-wrap: anywhere;
 }
 .explorer :is(button, input, select, a, summary):focus-visible,
 .scroll:focus-visible {
