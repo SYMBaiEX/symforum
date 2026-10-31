@@ -89,3 +89,66 @@ operations, job/hold records and infrastructure binding metadata out of it.
   zoom, physical touch, Safari and live assistive technology are not certified.
 - Batch 2 remains tested, not yet merged/deployed at this entry. Local search
   within the already loaded recent project directory is the next isolated slice.
+
+## Batch 2 released — 09:06 UTC
+
+- PR #257 merged at `420fc54832d5190e2297eef477beaa5712186280`; the merged tree
+  exactly matched the qualified candidate. All five original website domains
+  were verified on that release.
+- Live signed-out Community work-section deep links survived direct navigation
+  and reload. Keyboard receipt navigation retained focus and produced the exact
+  first-party receipt-section sign-in return. Desktop and phone checks showed
+  no document overflow or page errors; the bounded deployment-error sample was
+  empty. The isolated browser closed.
+- Nineteen inventory items are now source-deployed across the two frontend
+  batches and separately approved bounty correction. This is not a claim that
+  all 240 tasks, live wallet settlement, native browser zoom or assistive-technology
+  acceptance are complete. Budgets, schedules, fees, free-tier caps, safety gates
+  and every uncertain-outcome hold remain outside this change surface.
+
+## Next-loop handoff
+
+- Primary integration worktree: `/private/tmp/symforum-overnight-20261031`,
+  currently `sym/overnight-web3-wave-two`; its runtime source matches released
+  PR #257. The latest known-owned local changes are this release log and the
+  backlog's newly verified deployment states. Preserve them for the next PR.
+- COMMUNITY-011/012 source candidate: `4ee4bd23` in
+  `/private/tmp/symforum-overnight-project-discovery`, branch
+  `sym/overnight-project-discovery`. It is based on the second batch's runtime
+  source, not an alternative production system. Review was clean; 13 focused
+  browser cases, 38 relevant combined regressions, types and lint pass. Parent
+  must integrate, run final combined gates, open/review/merge and verify the
+  actual website release before marking those items deployed.
+- The next candidate adds only honest recent-directory coverage and local search
+  over existing public records; no new query arguments, subscriptions, actions,
+  timers, providers or financial controllers. Do not repeat its implementation.
+- Further suggested independent scopes: FORUM-004/005 profile input semantics,
+  TRADE-043/044 balance/spendable explanations and zero/missing-data coverage,
+  and TRADE-045/047/049 swap guidance using only existing values. These are
+  suggestions, not active assignments or authorization to change execution logic.
+- No additional backend/worker deployment is approved by the bounty correction.
+  Keep unrelated production changes pending fresh target-specific approval.
+  Continue the scheduled loop within its original 15:45 UTC deadline.
+
+## Batch 3 qualification — 09:21 UTC
+
+- Local project-hub search is qualified over the existing loaded public sample,
+  with honest 24-hub/12-affiliation coverage, exact case-sensitive mint matching,
+  loaded-match counts and separate loading, empty-directory and empty-filter states.
+- Independent source review was clean. Final parent verification passed 4,321
+  unit/backend tests, 320 isolated browser checks, both type checks, all five app
+  builds, generated/native parity, all dependency audits and secret-scanner controls.
+  Lint has zero errors and the same three existing warnings. No provider, payment
+  or model request, production backend change or hold transition was made.
+- This entry records qualification only; merge and exact live-release verification
+  are still required. The previous nineteen deployed inventory items remain the
+  only deployed items at this point.
+- Separate frozen candidates now await independent review and parent integration:
+  profile URL/date validation (`a2b721fb`), wallet zero/missing-data and spendable
+  explanations (`8b6bc6c4`), and amount/fee/slippage guidance (`52d86d31`). Their
+  worker checks pass, but they are not in the batch 3 tested tree or deployed.
+- Thread-author tip integration coverage is active in its own worktree. Red tests
+  demonstrated that an unlinked retained connection and same-tick duplicate form
+  submission could reach the mocked preparation action. A narrowly scoped local
+  admission guard is being tested; existing backend ownership checks, actual
+  author binding, voluntary archive tips and uncertain payment states are unchanged.
