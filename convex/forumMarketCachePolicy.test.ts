@@ -8,6 +8,7 @@ import schema from "./schema";
 import { marketReadLimiter } from "./forumMarketData";
 import { commerceLimiter } from "./forumCommerce";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 import {
   CHART_CACHE_FRESH_MS,
   CHART_CACHE_RETENTION_MS,
@@ -169,7 +170,7 @@ test("200 concurrent chart readers coalesce to one two-request transport and two
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 98,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 2,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -177,7 +178,7 @@ test("200 concurrent chart readers coalesce to one two-request transport and two
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 99,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 1,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -185,7 +186,7 @@ test("200 concurrent chart readers coalesce to one two-request transport and two
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 998,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 2,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -265,7 +266,7 @@ test("an expired/crashed lease cannot replay before its durable attempt fence an
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 97,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 3,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -350,7 +351,7 @@ test("daily budget denial reports the UTC reset without a transport or minute re
   await t.run((ctx) =>
     marketReadLimiter.limit(ctx, "terminalReadDaily", {
       key: "all",
-      count: 100,
+      count: FORUM_READ_POLICY.terminalDailyUnits,
     }),
   );
   const fetcher = vi.fn();

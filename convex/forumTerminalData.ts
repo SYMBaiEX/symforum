@@ -23,13 +23,14 @@ import {
 } from "./forumTerminalSchema";
 import { components } from "./_generated/api";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 
 export const terminalReadLimiter = new RateLimiter(components.rateLimiter, {
-  // Sub-budget of the unchanged shared commerce1000/day limit. Root public
+  // Sub-budget of the shared provider-metered commerce allowance. Root public
   // market/chart cache admissions use the same name/key and accounting window.
   terminalReadDaily: {
     kind: "fixed window",
-    rate: 100,
+    rate: FORUM_READ_POLICY.terminalDailyUnits,
     period: 86_400_000,
     start: 0,
   },

@@ -1,4 +1,5 @@
 import { RateLimiter } from "@convex-dev/rate-limiter";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { isSolanaAddress } from "../lib/forum-commerce";
@@ -26,7 +27,7 @@ const LEASE_MS = 25_000;
 const refreshLimiter = new RateLimiter(components.rateLimiter, {
   terminalSampleRefreshDaily: {
     kind: "fixed window",
-    rate: 48,
+    rate: FORUM_READ_POLICY.marketSampleDailyRefreshes,
     period: 86_400_000,
     start: 0,
   },
