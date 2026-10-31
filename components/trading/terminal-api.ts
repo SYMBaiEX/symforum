@@ -3,12 +3,18 @@ import type { MarketCapBand } from "@/lib/forum-market-cap";
 import type {
   TerminalMarket,
   TerminalMarketList,
+  TerminalMarketRefreshResult,
   TerminalWalletReadState,
 } from "@/lib/forum-terminal-model";
 
 // Explicit public contracts keep the standalone UI worktree type-safe until the
 // integrated schema/codegen adds these modules to the generated API map.
 export const terminalApi = {
+  refreshMarketSample: makeFunctionReference<
+    "action",
+    Record<string, never>,
+    TerminalMarketRefreshResult
+  >("forumTerminalRefresh:refresh"),
   listMarket: makeFunctionReference<
     "query",
     {

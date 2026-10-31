@@ -37,6 +37,9 @@ const limiter = new RateLimiter(components.rateLimiter, {
     capacity: 1,
   },
 });
+// Shared admission names/keys keep batch discovery reads inside the existing
+// burst and daily counters rather than creating a parallel provider allowance.
+export const marketReadLimiter = limiter;
 const kind = v.union(v.literal("chart"), v.literal("market"));
 const state = v.union(
   v.literal("ready"),

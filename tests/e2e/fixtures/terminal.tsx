@@ -29,7 +29,11 @@ const utilities = (mint: string, active: "research" | "community") => (
   </>
 );
 
-createRoot(document.getElementById("root")!).render(
+const root = createRoot(document.getElementById("root")!);
+window.addEventListener("terminal-fixture:unmount", () => root.unmount(), {
+  once: true,
+});
+root.render(
   <ForumRuntimeContext.Provider
     value={{ host: location.search.includes("plugin") ? "plugin" : "website" }}
   >

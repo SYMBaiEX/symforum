@@ -13,6 +13,7 @@ import {
 import type { UiWallet, UiWalletAccount } from "@wallet-standard/ui";
 import { ChevronRight, LoaderCircle, ShieldCheck, Wallet } from "lucide-react";
 import {
+  IdentityRequestError,
   identityRequest,
   refreshIdentitySession,
 } from "@symbaiex/auth/identity-client";
@@ -115,6 +116,7 @@ function WalletPicker({
   const [accounts, setAccounts] = useState<readonly UiWalletAccount[]>([]);
   const [prepared, setPrepared] = useState<PreparedRequest | null>(null);
   const [error, setError] = useState("");
+  const [needsReauthentication, setNeedsReauthentication] = useState(false);
   const inFlight = useRef(false);
   const active = useRef(true);
   const diagnostic = useRef<WalletDiagnosticAttempt | null>(null);
@@ -133,6 +135,21 @@ function WalletPicker({
     setAccounts([]);
     setPrepared(null);
     setError("");
+    setNeedsReauthentication(false);
+  }
+
+  function requiresReauthentication(reason: unknown) {
+    if (
+      purpose !== "link" ||
+      !(reason instanceof IdentityRequestError) ||
+      reason.status !== 401
+    )
+      return false;
+    setNeedsReauthentication(true);
+    setError(
+      "Linking a wallet requires a recent sign-in. Sign in again using an identity already linked to this same account, then add the wallet in Account Connections. No accounts were merged.",
+    );
+    return true;
   }
 
   async function prepare(wallet: UiWallet, account?: UiWalletAccount) {
@@ -162,6 +179,7 @@ function WalletPicker({
     setPrepared(null);
     setAccounts([]);
     setError("");
+    setNeedsReauthentication(false);
     onBusyChange(true);
     const report =
       account && diagnostic.current
@@ -218,7 +236,7 @@ function WalletPicker({
       } else await prepare(wallet);
     } catch (reason) {
       report.failure(connecting ? "connect" : "prepare", reason);
-      if (active.current)
+      if (active.current && !requiresReauthentication(reason))
         setError(
           connecting
             ? walletFailureMessage(reason, wallet.name, "connect")
@@ -286,7 +304,7 @@ function WalletPicker({
             : "session",
         reason,
       );
-      if (active.current)
+      if (active.current && !requiresReauthentication(reason))
         setError(
           current === "signing"
             ? walletFailureMessage(
@@ -404,6 +422,13 @@ function WalletPicker({
               {error}
             </p>
           )}
+          {needsReauthentication && (
+            <Button asChild variant="outline">
+              <a href="/signin?redirectTo=/account/connections">
+                Sign in again to link your wallet
+              </a>
+            </Button>
+          )}
           {!busy &&
             accounts.map((account) => (
               <Button
@@ -431,7 +456,8 @@ function WalletPicker({
                 type="button"
                 onClick={() => void sign()}
               >
-                Sign in with {prepared.wallet.name}
+                {purpose === "link" ? "Link" : "Sign in with"}{" "}
+                {prepared.wallet.name}
               </Button>
             </>
           )}

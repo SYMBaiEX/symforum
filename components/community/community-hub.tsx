@@ -46,6 +46,10 @@ import styles from "./community-hub.module.css";
 
 type Payment = FunctionReturnType<typeof api.forumCommunity.preparePayment>;
 type Work = FunctionReturnType<typeof api.forumCommunity.listBounties>[number];
+type Project = FunctionReturnType<
+  typeof api.forumCommunity.listProjects
+>[number];
+type AffiliationDraft = { mint: string; claim: Project["claims"][number] };
 type Section = "projects" | "work" | "support" | "receipts";
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 function safeMessage(error: unknown) {
@@ -216,10 +220,19 @@ function Projects({
   client: CommerceWalletClient | null;
 }) {
   const projects = useQuery(api.forumCommunity.listProjects, { mint });
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const mine = useQuery(
+    api.forumCommunity.getMine,
+    isAuthenticated && !isLoading ? { now: 0 } : "skip",
+  );
+  const authorId = isAuthenticated && !isLoading ? mine?.userId : undefined;
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AffiliationDraft | null>(null);
   const creationTrigger = useRef<HTMLButtonElement | null>(null);
+  const addProjectTrigger = useRef<HTMLButtonElement | null>(null);
   function openCreation(event: MouseEvent<HTMLButtonElement>) {
     creationTrigger.current = event.currentTarget;
+    setEditing(null);
     setCreating(true);
   }
   return (
@@ -232,7 +245,7 @@ function Projects({
               An exact-mint directory of projects and their contributors.
             </p>
           </div>
-          <Button onClick={openCreation}>
+          <Button ref={addProjectTrigger} onClick={openCreation}>
             <Plus aria-hidden="true" /> Add project
           </Button>
         </div>
@@ -298,6 +311,21 @@ function Projects({
                         Project website
                       </a>
                     )}
+                    {authorId === claim.userId && (
+                      <div className={styles.actions}>
+                        <Button
+                          variant="outline"
+                          aria-label={`Edit your affiliation for ${project.name}`}
+                          onClick={(event) => {
+                            creationTrigger.current = event.currentTarget;
+                            setEditing({ mint: project.mint, claim });
+                            setCreating(true);
+                          }}
+                        >
+                          Edit your affiliation
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </article>
@@ -322,14 +350,26 @@ function Projects({
           className={styles.creationDialog}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            creationTrigger.current?.focus();
+            if (creationTrigger.current?.isConnected)
+              creationTrigger.current.focus();
+            else addProjectTrigger.current?.focus();
           }}
         >
           {client ? (
-            <ProjectForm mint={mint} client={client} />
+            <ProjectForm
+              mint={mint}
+              client={client}
+              editing={editing}
+              authorId={authorId}
+              authorLoading={
+                isLoading || (isAuthenticated && mine === undefined)
+              }
+            />
           ) : (
             <DialogHeader>
-              <DialogTitle>Introduce your project</DialogTitle>
+              <DialogTitle>
+                {editing ? "Edit your affiliation" : "Introduce your project"}
+              </DialogTitle>
               <DialogDescription>Loading wallet…</DialogDescription>
             </DialogHeader>
           )}
@@ -341,9 +381,15 @@ function Projects({
 function ProjectForm({
   mint,
   client,
+  editing,
+  authorId,
+  authorLoading,
 }: {
   mint?: string;
   client: CommerceWalletClient;
+  editing: AffiliationDraft | null;
+  authorId: Id<"users"> | undefined;
+  authorLoading: boolean;
 }) {
   const identity = useCommerceIdentity(client, "solana:signTransaction"),
     resolveMint = useAction(api.forumCommerce.resolveMint),
@@ -351,17 +397,57 @@ function ProjectForm({
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const requirementId = useId();
+  const mintNoteId = useId();
+  const requestVersion = useRef(0);
+  // A resolved mint must not publish a retained edit after the actor/wallet
+  // changes or the dialog closes. Live claim updates never reset the draft.
+  useEffect(
+    () => () => {
+      requestVersion.current += 1;
+    },
+    [
+      authorId,
+      identity.session?.authUserId,
+      identity.connected?.account.address,
+      identity.linked,
+      identity.isLoading,
+    ],
+  );
+  const ownsClaim = !editing || authorId === editing.claim.userId;
+  const requirement =
+    editing && authorLoading
+      ? "Checking the affiliation author…"
+      : !ownsClaim
+        ? "Sign in as the affiliation author to save changes. Your draft has been kept."
+        : !identity.linked
+          ? "Sign in and link the selected wallet to your account before saving a public affiliation."
+          : undefined;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget,
       data = new FormData(form),
       wallet = identity.connected?.account.address;
-    if (!wallet || !identity.linked) return;
+    if (
+      !wallet ||
+      !identity.linked ||
+      identity.isLoading ||
+      !ownsClaim ||
+      (editing && authorLoading) ||
+      busy
+    )
+      return;
+    const version = requestVersion.current;
     setBusy(true);
     setMessage("");
     try {
-      const selected = String(data.get("mint") ?? "").trim();
+      const selected = editing?.mint ?? String(data.get("mint") ?? "").trim();
       await resolveMint({ wallet, mint: selected });
+      if (editing && version !== requestVersion.current) {
+        setMessage(
+          "Your account or wallet changed. Review your affiliation before saving again.",
+        );
+        return;
+      }
       await claim({
         wallet,
         mint: selected,
@@ -370,7 +456,7 @@ function ProjectForm({
         website: String(data.get("website") ?? "") || undefined,
       });
       setMessage(
-        "Affiliation saved. It is labelled self-declared, not verified ownership.",
+        `Affiliation ${editing ? "updated" : "saved"}. It is labelled self-declared, not verified ownership.`,
       );
     } catch (error) {
       setMessage(safeMessage(error));
@@ -381,30 +467,45 @@ function ProjectForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Introduce your project</DialogTitle>
+        <DialogTitle>
+          {editing ? "Edit your affiliation" : "Introduce your project"}
+        </DialogTitle>
         <DialogDescription>
           Your linked wallet is recorded privately with your claim. Your handle,
           role, description and website are public.
         </DialogDescription>
       </DialogHeader>
       <div className={styles.actions}>
-        <CommerceWalletButton requiredFeature="solana:signTransaction" />
+        <CommerceWalletButton
+          disabled={busy}
+          requiredFeature="solana:signTransaction"
+        />
       </div>
       <form className={`${styles.form} ${styles.details}`} onSubmit={submit}>
         <Field label="Exact Solana mint">
           <Input
             name="mint"
             required
-            defaultValue={mint}
+            defaultValue={editing?.mint ?? mint}
+            readOnly={!!editing}
+            disabled={busy}
+            aria-describedby={editing ? mintNoteId : undefined}
             spellCheck={false}
             maxLength={44}
           />
         </Field>
+        {editing && (
+          <p id={mintNoteId} className={styles.muted}>
+            The project mint cannot change when editing an affiliation.
+          </p>
+        )}
         <Field label="Your role">
           <Input
             name="role"
             required
             maxLength={60}
+            defaultValue={editing?.claim.role}
+            disabled={busy}
             placeholder="Builder, researcher, community contributor…"
           />
         </Field>
@@ -414,6 +515,8 @@ function ProjectForm({
             required
             minLength={20}
             maxLength={2000}
+            defaultValue={editing?.claim.description}
+            disabled={busy}
           />
         </Field>
         <Field label="Project website (optional)">
@@ -422,20 +525,25 @@ function ProjectForm({
             type="url"
             placeholder="https://"
             maxLength={1000}
+            defaultValue={editing?.claim.website ?? ""}
+            disabled={busy}
           />
         </Field>
-        {!identity.linked && (
+        {requirement && (
           <p id={requirementId} className={styles.status}>
-            Sign in and link the selected wallet to your account before saving a
-            public affiliation.
+            {requirement}
           </p>
         )}
         <Button
-          disabled={busy || !identity.linked}
+          disabled={busy || identity.isLoading || !!requirement}
           type="submit"
-          aria-describedby={!identity.linked ? requirementId : undefined}
+          aria-describedby={requirement ? requirementId : undefined}
         >
-          {busy ? "Checking mint…" : "Save public affiliation"}
+          {busy
+            ? "Checking mint…"
+            : editing
+              ? "Save affiliation changes"
+              : "Save public affiliation"}
         </Button>
         {message && (
           <p className={styles.status} role="status">
@@ -480,7 +588,7 @@ function WorkBoard({
           </Button>
         </div>
         <div className={styles.filters} aria-label="Filter community work">
-          {(["open", "selected", "paid"] as const).map((s) => (
+          {(["open", "selected", "paid", "cancelled"] as const).map((s) => (
             <Button
               key={s}
               variant={status === s ? "secondary" : "ghost"}
@@ -491,7 +599,9 @@ function WorkBoard({
                 ? "Awaiting payment"
                 : s === "paid"
                   ? "Paid"
-                  : "Open"}
+                  : s === "cancelled"
+                    ? "Cancelled"
+                    : "Open"}
             </Button>
           ))}
         </div>
@@ -507,7 +617,9 @@ function WorkBoard({
                   ? "Awaiting payment"
                   : status === "paid"
                     ? "Verified payments"
-                    : "Open briefs"}
+                    : status === "cancelled"
+                      ? "Cancelled pledges"
+                      : "Open briefs"}
               </span>
               <h3>
                 No {status === "selected" ? "selected" : status} pledges here.
@@ -517,7 +629,9 @@ function WorkBoard({
                   ? "Completed rewards appear here only after their finalized payment is verified."
                   : status === "selected"
                     ? "A sponsor-selected deliverable appears here until its reward is verified."
-                    : "Commission a specific task with useful sources, a clear deliverable and acceptance criteria."}
+                    : status === "cancelled"
+                      ? "Cancelled pledges no longer accept deliverables. Existing payment receipts remain separate."
+                      : "Commission a specific task with useful sources, a clear deliverable and acceptance criteria."}
               </p>
               {status === "open" && (
                 <Button variant="outline" onClick={openCreation}>
@@ -691,7 +805,9 @@ function WorkItem({
           <span className={styles.badge}>
             {work.status === "paid"
               ? "Finalized payment verified"
-              : "Unfunded sponsor pledge"}
+              : work.status === "cancelled"
+                ? "Cancelled pledge"
+                : "Unfunded sponsor pledge"}
           </span>
         </div>
       </div>

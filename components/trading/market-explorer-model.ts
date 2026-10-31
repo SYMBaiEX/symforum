@@ -1,4 +1,27 @@
-import type { TerminalMarket } from "@/lib/forum-terminal-model";
+import type {
+  TerminalMarket,
+  TerminalMarketRefreshResult,
+} from "@/lib/forum-terminal-model";
+
+export const MARKET_REFRESH_INTERVAL_MS = 10 * 60_000;
+
+/** Only known pre-I/O deferral can shorten the admitted-attempt cooldown. */
+export function marketRefreshRetryAt(
+  result: TerminalMarketRefreshResult,
+  now: number,
+  attemptNotBefore: number,
+) {
+  const retryAt = result.nextRefreshAt;
+  if (result.state === "deferred") {
+    const delay = typeof retryAt === "number" ? retryAt - now : NaN;
+    return Number.isFinite(delay) && delay > 0 && delay <= 60_000
+      ? now + Math.max(1000, delay)
+      : attemptNotBefore;
+  }
+  return retryAt != null && Number.isFinite(retryAt)
+    ? Math.max(attemptNotBefore, retryAt)
+    : attemptNotBefore;
+}
 
 export type MarketSortKey =
   | "price"
@@ -99,5 +122,21 @@ export function marketObservation(timestamp: number, now: number) {
     dateTime: date.toISOString(),
     full: `Metrics as of ${date.toLocaleString([], { dateStyle: "medium", timeStyle: "long" })}`,
     stale: elapsed > 15 * 60_000,
+  };
+}
+
+/** Refreshing a pool's market fields never refreshes the holder-count sample. */
+export function marketSources(market: TerminalMarket, now: number) {
+  return {
+    market: marketObservation(
+      market.marketData?.checkedAt ?? market.metricsAsOf,
+      now,
+    ),
+    holders: marketObservation(market.metricsAsOf, now),
+    sourceUrl: market.marketData
+      ? market.marketData.sourceUrl
+      : market.sourceUrl,
+    refreshed: market.marketData !== undefined,
+    unavailable: market.marketData?.state === "unavailable",
   };
 }

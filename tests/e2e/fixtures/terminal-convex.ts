@@ -11,7 +11,10 @@ import {
 } from "../../../lib/forum-market-cap";
 import type { TerminalMarket } from "../../../lib/forum-terminal-model";
 import { SYMF_TOKEN } from "../../../lib/symf-token";
-import type { WatchToken } from "../../../components/trading/terminal-api";
+import type {
+  TokenAlert,
+  WatchToken,
+} from "../../../components/trading/terminal-api";
 import type { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -25,13 +28,20 @@ const subscribe = (fn: () => void) => {
 };
 const snapshot = () => revision;
 let watches: WatchToken[] = [];
+const acknowledgedAlerts = new Set<string>();
 let researchVerified = false;
+let refreshedMarketRows = false;
+let marketCheckedAt: number | null = null;
+const marketRefreshArguments: Record<string, unknown>[] = [];
+const marketRefreshAdmissions: number[] = [];
 let signedOut = false;
 const queryNames: string[] = [];
 const operationCalls: string[] = [];
 Object.assign(window, {
   __terminalFixtureQueries: queryNames,
   __terminalFixtureCalls: operationCalls,
+  __terminalFixtureMarketRefreshArgs: marketRefreshArguments,
+  __terminalFixtureMarketRefreshAdmissions: marketRefreshAdmissions,
 });
 window.addEventListener("terminal-fixture:signout", () => {
   signedOut = true;
@@ -185,6 +195,25 @@ const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
 );
 const selectedMarketRows = () =>
   location.search.includes("currentcohort") ? currentCohort : marketRows;
+function displayedMarket(token: TerminalMarket): TerminalMarket {
+  if (!refreshedMarketRows || token.mint !== nova.mint) return token;
+  const unavailable = location.search.includes("marketrefreshmissing");
+  return {
+    ...token,
+    priceUsd: unavailable ? null : 0.0042,
+    marketCapUsd: null,
+    fdvUsd: unavailable ? null : 9_000_000,
+    liquidityUsd: unavailable ? null : 45_000,
+    volume1hUsd: unavailable ? null : 123_000,
+    volume24hUsd: unavailable ? null : 234_000,
+    priceChange1hPercent: unavailable ? null : -5,
+    marketData: {
+      state: unavailable ? "unavailable" : "available",
+      checkedAt: marketCheckedAt ?? now,
+      sourceUrl: unavailable ? null : "https://example.com/checked-market-pool",
+    },
+  };
+}
 export function useConvexAuth() {
   useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
@@ -265,7 +294,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumTerminal:listMarket") {
-    const rows = location.search.includes("empty") ? [] : selectedMarketRows();
+    const rows = (
+      location.search.includes("empty") ? [] : selectedMarketRows()
+    ).map(displayedMarket);
     result = location.search.includes("marketloading")
       ? undefined
       : {
@@ -284,7 +315,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         };
   } else if (name === "forumTerminal:getMarket")
     result =
-      selectedMarketRows().find((token) => token.mint === input.mint) ?? null;
+      selectedMarketRows()
+        .map(displayedMarket)
+        .find((token) => token.mint === input.mint) ?? null;
   else if (name === "forumTerminal:getRisk")
     result = location.search.includes("stalerisk")
       ? {
@@ -298,7 +331,19 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         }
       : null;
   else if (name === "forumTerminal:listWatchlist") result = watches;
-  else if (name === "forumTerminal:listAlerts") result = [];
+  else if (name === "forumTerminal:listAlerts")
+    result = location.search.includes("samplealerts")
+      ? [nova, quiet].map((token, index): TokenAlert => ({
+          id: `fixture-alert-${index}`,
+          mint: token.mint,
+          symbol: "SAMPLE",
+          direction: "above",
+          thresholdUsd: 0.0001,
+          priceUsd: 0.0002,
+          observedAt: now - 120_000,
+          acknowledged: acknowledgedAlerts.has(`fixture-alert-${index}`),
+        }))
+      : [];
   else if (name === "forumTerminalTransparency:getTransparency")
     result = {
       mint: SYMF_TOKEN.mint,
@@ -388,6 +433,14 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
         listeners.forEach((listener) => listener());
         return null as FunctionReturnType<Ref>;
       }
+      if (name === "forumTerminal:acknowledgeAlert") {
+        if (location.search.includes("alertackfail"))
+          throw new Error("Invented alert acknowledgement failure");
+        acknowledgedAlerts.add(String(input.id));
+        revision++;
+        listeners.forEach((listener) => listener());
+        return null as FunctionReturnType<Ref>;
+      }
       throw new Error(`Unmocked terminal mutation: ${name}`);
     },
     [name],
@@ -398,6 +451,37 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
   return useCallback(
     async (_args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> => {
       operationCalls.push(`action:${name}`);
+      if (name === "forumTerminalRefresh:refresh") {
+        marketRefreshArguments.push(_args as Record<string, unknown>);
+        if (
+          location.search.includes("marketrefreshdeferred") &&
+          marketRefreshArguments.length === 1
+        )
+          return {
+            state: "deferred",
+            checkedAt: null,
+            nextRefreshAt: Date.now() + 1500,
+          } as FunctionReturnType<Ref>;
+        if (location.search.includes("marketrefresherror"))
+          throw new Error("Invented shared refresh failure");
+        const state = location.search.includes("marketrefreshbudget")
+          ? "budget"
+          : location.search.includes("marketrefreshloading")
+            ? "loading"
+            : "ready";
+        if (state === "ready" && location.search.includes("marketrefresh")) {
+          marketRefreshAdmissions.push(Date.now());
+          refreshedMarketRows = true;
+          marketCheckedAt = Date.now();
+          revision++;
+          listeners.forEach((listener) => listener());
+        }
+        return {
+          state,
+          checkedAt: marketCheckedAt,
+          nextRefreshAt: Date.now() + (state === "loading" ? 1500 : 600_000),
+        } as FunctionReturnType<Ref>;
+      }
       if (location.search.includes("orderinput")) {
         if (name === "forumTerminal:getWalletReadState")
           return null as FunctionReturnType<Ref>;

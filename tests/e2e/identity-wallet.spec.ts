@@ -53,13 +53,17 @@ async function harness(
     sessionFail?: boolean;
     focusDeferred?: boolean;
     initialDeferred?: boolean;
+    linkedSession?: boolean;
+    linkChallengeUnauthorized?: boolean;
+    linkProofUnauthorized?: boolean;
   } = {},
 ) {
   page.on("pageerror", (error) => {
     throw error;
   });
   const requests: string[] = [];
-  let signedIn = false;
+  let signedIn = options.linkedSession ?? false;
+  const challengePurposes: unknown[] = [];
   let sessions = 0;
   let release: (() => void) | undefined;
   let releaseSession: (() => void) | undefined;
@@ -114,7 +118,13 @@ async function harness(
       });
     }
     if (url.pathname === "/api/identity/identity/challenge") {
+      challengePurposes.push(route.request().postDataJSON().purpose);
       await gate;
+      if (options.linkChallengeUnauthorized)
+        return route.fulfill({
+          status: 401,
+          json: { message: "private-provider-body-must-not-render" },
+        });
       if (options.fail)
         return route.fulfill({ status: 503, body: "unavailable" });
       const now = Date.now();
@@ -140,10 +150,19 @@ async function harness(
       });
     }
     if (url.pathname === "/api/identity/sign-in/solana") {
+      if (options.linkProofUnauthorized)
+        return route.fulfill({
+          status: 401,
+          json: { message: "private-provider-body-must-not-render" },
+        });
       if (options.proofFail)
         return route.fulfill({ status: 503, body: "unavailable" });
       signedIn = true;
-      return route.fulfill({ json: { authenticated: true } });
+      return route.fulfill({
+        json: options.linkedSession
+          ? { linked: true }
+          : { authenticated: true },
+      });
     }
     if (url.origin === "https://oauth.telegram.org")
       return route.fulfill({
@@ -154,6 +173,7 @@ async function harness(
   });
   return {
     requests,
+    challengePurposes,
     release: () => release?.(),
     releaseSession: () => releaseSession?.(),
   };
@@ -262,6 +282,65 @@ test("opt-in diagnostics locate an internal connect failure without auth request
   expect(count(run.requests, "/identity/challenge")).toBe(0);
   expect(count(run.requests, "/sign-in/solana")).toBe(0);
 });
+
+test("a fresh signed-in wallet link keeps the existing session and uses a link challenge", async ({
+  page,
+}) => {
+  const run = await harness(page, { linkedSession: true });
+  await page.goto("http://127.0.0.1:43192/?link&internal");
+  await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  await page.getByRole("button", { name: "Link wallet", exact: true }).click();
+  await choose(page);
+  await page.getByRole("button", { name: "Link Phantom", exact: true }).click();
+  await expect(page.getByText("Signed in successfully")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  expect(run.challengePurposes).toEqual(["link"]);
+  expect((await events(page)).map((event) => event.action)).toEqual([
+    "connect",
+    "signMessage",
+  ]);
+  expect(count(run.requests, "/sign-in/solana")).toBe(1);
+});
+
+for (const phase of ["challenge", "proof"] as const) {
+  test(`a link rejected at ${phase} offers same-account recovery without retrying or leaking errors`, async ({
+    page,
+  }) => {
+    const run = await harness(page, {
+      linkedSession: true,
+      linkChallengeUnauthorized: phase === "challenge",
+      linkProofUnauthorized: phase === "proof",
+    });
+    await page.goto("http://127.0.0.1:43192/?link");
+    await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+    await page
+      .getByRole("button", { name: "Link wallet", exact: true })
+      .click();
+    await choose(page);
+    if (phase === "proof")
+      await page
+        .getByRole("button", { name: "Link Phantom", exact: true })
+        .click();
+    await expect(page.getByRole("alert")).toContainText(
+      "identity already linked to this same account",
+    );
+    await expect(
+      page.getByRole("link", { name: "Sign in again to link your wallet" }),
+    ).toHaveAttribute("href", "/signin?redirectTo=/account/connections");
+    await expect(
+      page.getByText("private-provider-body-must-not-render"),
+    ).toHaveCount(0);
+    expect(run.challengePurposes).toEqual(["link"]);
+    expect(count(run.requests, "/sign-in/solana")).toBe(
+      phase === "challenge" ? 0 : 1,
+    );
+    expect(
+      (await events(page)).filter((event) => event.action === "signMessage"),
+    ).toHaveLength(phase === "challenge" ? 0 : 1);
+    await expect(page.getByLabel("Session state")).toHaveText("authenticated");
+  });
+}
 
 test("successful opt-in diagnostics report stages without proof or account data", async ({
   page,

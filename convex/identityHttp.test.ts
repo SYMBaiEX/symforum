@@ -413,6 +413,86 @@ test("Google authorization uses the first-party callback and retains provider st
   );
   expect(url.searchParams.get("state")).toBeTruthy();
 });
+test("a fresh signed-in wallet link preserves the owner and session without creating a second user", async () => {
+  const t = setup();
+  const { cookie } = await signedIn(t);
+  const before = await (
+    await request(t, "/get-session", undefined, cookie)
+  ).json();
+  const issued = await request(
+    t,
+    "/identity/challenge",
+    { provider: "solana", purpose: "link" },
+    cookie,
+  );
+  expect(issued.status).toBe(200);
+  const challenge = await issued.json();
+  const keys = await crypto.subtle.generateKey("Ed25519", true, [
+    "sign",
+    "verify",
+  ]);
+  const raw = new Uint8Array(
+    await crypto.subtle.exportKey("raw", keys.publicKey),
+  );
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let number = raw.reduce((value, byte) => value * 256n + BigInt(byte), 0n),
+    address = "";
+  while (number) {
+    address = alphabet[Number(number % 58n)] + address;
+    number /= 58n;
+  }
+  for (const byte of raw) {
+    if (byte) break;
+    address = "1" + address;
+  }
+  const message = createSignInMessage({ ...challenge.input, address });
+  const proof = {
+    nonce: challenge.nonce,
+    address,
+    publicKey: bytesToBase64Url(raw),
+    signedMessage: bytesToBase64Url(message),
+    signature: bytesToBase64Url(
+      new Uint8Array(
+        await crypto.subtle.sign(
+          "Ed25519",
+          keys.privateKey,
+          new Uint8Array(message),
+        ),
+      ),
+    ),
+  };
+  const boundCookie = cookie + "; " + cookies(issued);
+  const linked = await request(t, "/sign-in/solana", proof, boundCookie);
+  expect(linked.status).toBe(200);
+  expect(await linked.json()).toEqual({ linked: true });
+  const after = await (
+    await request(t, "/get-session", undefined, boundCookie)
+  ).json();
+  expect(after.user.id).toBe(before.user.id);
+  expect(after.session.id).toBe(before.session.id);
+  const account = await t.run((ctx) =>
+    ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "account",
+      where: [
+        { field: "providerId", value: "solana" },
+        { field: "accountId", value: address },
+      ],
+    }),
+  );
+  expect(account?.userId).toBe(before.user.id);
+  const users = await t.run((ctx) =>
+    ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      paginationOpts: { numItems: 2, cursor: null },
+    }),
+  );
+  expect(users.page).toHaveLength(1);
+  expect(users.isDone).toBe(true);
+  expect(
+    (await request(t, "/sign-in/solana", proof, boundCookie)).status,
+  ).not.toBe(200);
+});
+
 test("expired fresh-auth window cannot link or unlink identities", async () => {
   const t = setup(),
     { cookie } = await signedIn(t);

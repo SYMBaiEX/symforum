@@ -11,7 +11,7 @@ import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
 import type { ChartMarketData } from "./price-chart-data";
 import { TokenLogo, type MarketChoice } from "./market-identity";
-import { formatMarketPercent } from "./market-explorer-model";
+import { formatMarketPercent, marketSources } from "./market-explorer-model";
 import {
   marketMoney,
   marketQuantity,
@@ -33,6 +33,8 @@ export function TokenDetail({
 }) {
   const indexed = useQuery(terminalApi.getMarket, { mint: token.mint, now });
   const market = indexed && indexed.mint !== token.mint ? null : indexed;
+  const sources = market ? marketSources(market, now) : null;
+  const marketData = market?.marketData;
   const displayToken =
     token.symbol === "TOKEN" && market
       ? {
@@ -82,7 +84,7 @@ export function TokenDetail({
     ["Website", market?.website],
     ["X", market?.twitter],
     ["Telegram", market?.telegram],
-    ["Market source", market?.sourceUrl],
+    ["Market source", sources?.sourceUrl],
   ].flatMap(([label, url]) => {
     const href = safeExternalUrl(url);
     return href ? [{ label, href }] : [];
@@ -163,11 +165,19 @@ export function TokenDetail({
           )}
         </dl>
         <p className={styles.marketStatus} role="status">
-          {fresh ? "Checked market data" : "Indexed market sample"}
+          {fresh
+            ? "Checked market data"
+            : sources?.refreshed
+              ? sources.unavailable
+                ? "Market fields unavailable"
+                : "Checked market sample"
+              : "Indexed market sample"}
           {market
-            ? now - market.metricsAsOf > 15 * 60_000
-              ? " · 1h change is a stale sample"
-              : " · 1h sampled"
+            ? market.priceChange1hPercent == null
+              ? " · 1h change unavailable"
+              : sources?.market.stale
+                ? " · 1h change is a stale sample"
+                : " · 1h sampled"
             : " · 1h change unavailable"}
           . Not a quote.
         </p>
@@ -198,9 +208,13 @@ export function TokenDetail({
         <div className={styles.source} role="status">
           {fresh
             ? `Price, market cap, FDV, liquidity and 24h volume checked ${new Date(fresh.checkedAt).toLocaleString()}. `
-            : "Price, cap, FDV, liquidity and 24h volume use the indexed sample until a fresh checked market response arrives. "}
+            : marketData
+              ? `Market fields checked ${new Date(marketData.checkedAt).toLocaleString()}. ${sources?.unavailable ? "No supported pool data was available. " : sources?.market.stale ? "Stale checked market fields. " : ""}`
+              : "Price, cap, FDV, liquidity and 24h volume use the indexed sample until a fresh checked market response arrives. "}
           {market
-            ? `Holders and 1h volume/change sampled ${new Date(market.metricsAsOf).toLocaleString()}. ${now - market.metricsAsOf > 15 * 60_000 ? "Stale sampled metrics." : ""}`
+            ? marketData
+              ? `1h volume/change checked ${new Date(marketData.checkedAt).toLocaleString()}. Holders sampled ${new Date(market.metricsAsOf).toLocaleString()}. ${sources?.holders.stale ? "Stale holder sample." : ""}`
+              : `Holders and 1h volume/change sampled ${new Date(market.metricsAsOf).toLocaleString()}. ${now - market.metricsAsOf > 15 * 60_000 ? "Stale sampled metrics." : ""}`
             : market === undefined
               ? "Loading the indexed snapshot…"
               : "No indexed snapshot for this token. No estimates substituted."}{" "}

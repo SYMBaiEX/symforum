@@ -71,3 +71,67 @@ paused identities, stale/invalid source cohorts, exact reuse, source budget
 denial, hour rollover, model-hold preservation and atomic projection rollback.
 Browser tests separately cover visible source age, unknown cap versus FDV,
 exact-mint selection, no chart fanout and persistent protected receipts.
+
+## Independently checked display markets
+
+The hourly source pipeline is healthy even when its retained rows are older
+than the 15-minute freshness window. A completed empty cap-segment scan does
+not change an older token's timestamp. Source observation, generation and
+publication are different outcomes; neither a held model call nor an old
+retained row alone establishes a failed source refresh.
+
+An active Markets view can additionally request `forumTerminalRefresh:refresh`
+with no arguments. This is a display-only read, not another scout run:
+
+- One globally shared intent admits at most one batch per full ten minutes,
+  measured from admission rather than rounded clock buckets. Two hundred
+  simultaneous viewers coalesce to one transport. Closed/hidden/offline views
+  do not request refreshes; there is no new background cron.
+- The server selects at most 30 distinct retained, previously validated scout
+  mints. It reads at most 30 recent rows per platform and interleaves them so a
+  productive Pump.fun cohort cannot exclude the only eligible Bags.fm token.
+  Clients cannot supply mints, URLs, filters or a force/retry flag.
+- One fixed public DEX Screener Solana batch is requested, with a one-megabyte
+  streaming ceiling, eight-second timeout, strict pool/base/quote binding and
+  no redirect, fallback or automatic retry. Per-token pool candidates remain
+  bounded to 100. Missing or ambiguous tokens produce unavailable fields.
+- Each transport reserves one unit of the **existing** shared terminal100/day
+  and commerce1000/day allowances before fetching. A stricter refresh-only
+  48/day ceiling limits this feature to 48 of those terminal units. Existing
+  chart, wallet and risk reads retain their original admission and costs;
+  other traffic can still exhaust the shared allowances earlier.
+- The ten-minute fence is saved before transport. A failed or abandoned read
+  is not reopened after its short lease expires. Its allowance is not refunded.
+  A later interval is a new read; an old writer cannot commit after its lease,
+  admission interval or ownership has changed. Budget denial returns a capped
+  state rather than buying another request.
+  A shared-burst denial before any intent, daily reservation or transport is
+  explicitly `deferred`; only that proven no-I/O state can try admission after
+  its short server deadline instead of waiting for an admitted interval.
+
+The single bounded display cache never writes scout snapshots, ingestion
+timestamps, source ranks, alert baselines, model inputs, publication runs or
+payment/inference holds. Original discovery time remains the 24-hour identity
+allowlist anchor; checking a quote cannot keep an untracked token listed
+forever. Eligibility is checked again when a batch completes.
+
+Price, reported cap, FDV, liquidity, rolling-hour/24-hour volume and hourly
+change have an independent `marketData.checkedAt` and DEX Screener pool link.
+This timestamp means the response was retrieved and bound, not that a trade
+occurred or an on-chain price was independently proven then. Holders and scout
+evidence retain the original `metricsAsOf` and source link. No current holder
+count is inferred from the refreshed price response. A newer scout observation
+supersedes an older display overlay. Stale overlays remain dated; unavailable
+tokens do not inherit old prices under a new checked timestamp.
+
+Cap filters apply after merging a bounded sample of at most 60 retained rows,
+so a refreshed token cannot remain under the wrong old scout cap band. Only
+returned rows have discussion links hydrated. This is still sampled coverage,
+not an exhaustive market query. Refreshing is demand- and budget-dependent,
+not a promise of uninterrupted real-time or 24/7 data. All stale and unavailable
+states remain explicit, and the 15-minute freshness threshold is unchanged.
+
+Local tests additionally cover 200-viewer transport coalescing, all three
+allowances, the ten-full-minute boundary, failed/expired lease fencing, source
+fairness, exact cohort binding, missing fields, cap-band changes, holder/scout
+provenance, expiry during transport and unchanged uncertain holds/alerts.

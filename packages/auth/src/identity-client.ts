@@ -24,6 +24,17 @@ export async function refreshIdentitySession() {
   return result.data;
 }
 
+/** Safe HTTP metadata only: never expose a provider's raw response body. */
+export class IdentityRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "IdentityRequestError";
+  }
+}
+
 export async function identityRequest<T>(
   path: string,
   body: Record<string, unknown>,
@@ -36,7 +47,8 @@ export async function identityRequest<T>(
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(
+    throw new IdentityRequestError(
+      response.status,
       response.status === 429
         ? "Too many requests. Please try again later."
         : response.status === 401
