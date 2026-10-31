@@ -167,6 +167,8 @@
     "vitest": "4.1.12"
   },
   "overrides": {
+    "glob@>=13 <14": "14.0.3",
+    "minimatch@>=10 <11": "11.0.3",
     "@react-email/render": "2.2.0",
     "qs": "6.17.1",
     "body-parser": "2.4.0",

@@ -20,6 +20,8 @@
     "crypto-browserify": "file:./vendor/node-crypto-compat"
   },
   "overrides": {
+    "glob@>=13 <14": "14.0.3",
+    "minimatch@>=10 <11": "11.0.3",
     "pdfjs-dist": "6.2.108",
     "esbuild": "0.28.2",
     "crypto-browserify": "file:./vendor/node-crypto-compat"
