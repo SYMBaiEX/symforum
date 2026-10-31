@@ -2,10 +2,11 @@ import type { ButtonHTMLAttributes } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { getFunctionName } from "convex/server";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { TokenAlert } from "./terminal-api";
+import type { TokenAlert, WatchToken } from "./terminal-api";
 
 const state = vi.hoisted(() => ({
   alerts: [] as TokenAlert[],
+  watches: [] as WatchToken[],
   buttons: [] as ButtonHTMLAttributes<HTMLButtonElement>[],
   save: vi.fn(),
   acknowledge: vi.fn(),
@@ -13,7 +14,9 @@ const state = vi.hoisted(() => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (ref: Parameters<typeof getFunctionName>[0]) =>
-    getFunctionName(ref) === "forumTerminal:listAlerts" ? state.alerts : [],
+    getFunctionName(ref) === "forumTerminal:listAlerts"
+      ? state.alerts
+      : state.watches,
   useMutation: (ref: Parameters<typeof getFunctionName>[0]) =>
     getFunctionName(ref) === "forumTerminal:acknowledgeAlert"
       ? state.acknowledge
@@ -50,6 +53,7 @@ const alert: TokenAlert = {
 
 beforeEach(() => {
   state.alerts = [alert];
+  state.watches = [];
   state.buttons = [];
   state.save.mockReset();
   state.acknowledge.mockReset();
@@ -121,5 +125,53 @@ test("acknowledged alerts have no action and missing symbols cannot change mint 
   expect(onSelect).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({ mint: selected.mint }),
   );
+  expect(state.acknowledge).not.toHaveBeenCalled();
+});
+
+test("saved threshold readings preserve full stored precision and ordinary cents", () => {
+  state.watches = [
+    {
+      mint: selected.mint,
+      symbol: "SOL",
+      priceAboveUsd: 0.1234567890123456,
+      priceBelowUsd: 0.0000000123456789,
+      updatedAt: 1,
+    },
+  ];
+  const html = renderToStaticMarkup(
+    <WatchlistPanel selected={selected} onSelect={vi.fn()} />,
+  );
+  expect(html).toContain("$0.1234567890123456");
+  expect(html).toContain("$0.0000000123456789");
+  state.watches[0].priceAboveUsd = 0.5;
+  expect(
+    renderToStaticMarkup(
+      <WatchlistPanel selected={selected} onSelect={vi.fn()} />,
+    ),
+  ).toContain("$0.50");
+});
+
+test("threshold clear controls stage drafts without a mutation", () => {
+  state.watches = [
+    {
+      mint: selected.mint,
+      symbol: "SOL",
+      priceAboveUsd: 10,
+      priceBelowUsd: 5,
+      updatedAt: 1,
+    },
+  ];
+  const html = renderToStaticMarkup(
+    <WatchlistPanel selected={selected} onSelect={vi.fn()} />,
+  );
+  expect(html).toContain(
+    "Clear actions only change this draft; save to apply them.",
+  );
+  for (const label of ["Clear above", "Clear below", "Clear thresholds"]) {
+    const clear = state.buttons.find((button) => button.children === label);
+    expect(clear).toMatchObject({ type: "button", disabled: false });
+    clear?.onClick?.({} as never);
+  }
+  expect(state.save).not.toHaveBeenCalled();
   expect(state.acknowledge).not.toHaveBeenCalled();
 });
