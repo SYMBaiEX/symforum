@@ -43,6 +43,7 @@ import {
 import {
   mergeFeedItems,
   refreshLoadedFeed,
+  restoreLoadedFeed,
   forumHomeHref,
   type ForumFeedSort,
 } from "./forum-home-model";
@@ -186,7 +187,8 @@ export function LiveFeed({
   const failedMode = useRef<"more" | "refresh">("refresh");
   const generation = useRef(0);
   const busy = useRef(false);
-  const pageCount = useRef(restored?.pages ?? 1);
+  const restoreGoal = useRef(restored?.pages ?? 1);
+  const pageCount = useRef(0);
   const restorePending = useRef(true);
   useEffect(() => {
     const capture = () =>
@@ -196,14 +198,14 @@ export function LiveFeed({
       window.removeEventListener("forum:reading-navigation", capture);
   }, [cacheKey]);
   useEffect(() => {
-    if (!result || !restorePending.current) return;
+    if (!result || pending || error || !restorePending.current) return;
     restorePending.current = false;
     const frame = requestAnimationFrame(() => {
       if (savedPosition.current)
         window.scrollTo({ top: savedPosition.current.y, behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [result]);
+  }, [result, pending, error]);
 
   useEffect(() => {
     try {
@@ -239,16 +241,32 @@ export function LiveFeed({
 
   useEffect(() => {
     const request = ++generation.current;
+    const targetPages = restoreGoal.current;
+    let completedPages = 0;
+    pageCount.current = 0;
     setPending("initial");
     setResult(undefined);
-    void refreshLoadedFeed(queryPage, pageCount.current).then(
-      (page) => {
-        if (generation.current !== request) return;
+    setError(false);
+    void restoreLoadedFeed(
+      queryPage,
+      targetPages,
+      (page, count) => {
+        completedPages = count;
+        pageCount.current = count;
         setResult(page);
+      },
+      () => generation.current === request,
+    ).then(
+      (page) => {
+        if (generation.current !== request || !page) return;
         setPending(null);
       },
       (caught: unknown) => {
         if (generation.current !== request) return;
+        // Keep the user's current view after a partial restore; never jump late
+        // to a saved position that depended on pages we could not reload.
+        restorePending.current = false;
+        failedMode.current = completedPages > 0 ? "more" : "refresh";
         reportAppError(caught, {
           scope: "forum",
           eventType: "forum_feed_failed",
@@ -291,7 +309,12 @@ export function LiveFeed({
       if (generation.current !== request) return;
       setResult(next);
       if (mode === "more") pageCount.current += 1;
-      else setRefreshed(true);
+      else {
+        // An initial first-page failure has no accepted pages yet. Its atomic
+        // retry still fetches one page, which becomes the new loaded baseline.
+        pageCount.current = Math.max(1, pageCount.current);
+        setRefreshed(true);
+      }
     } catch (caught) {
       if (generation.current !== request) return;
       reportAppError(caught, {
