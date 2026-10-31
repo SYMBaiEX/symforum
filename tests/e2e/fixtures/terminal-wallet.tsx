@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import type { CommerceWalletClient } from "../../../lib/commerce-wallet-client";
-import { useConvexAuth } from "./terminal-convex";
+import { useConvexAuth, fixtureFlags } from "./terminal-convex";
 
 // No signer or transport is implemented, including in the input-state scenario.
 const client = {
   wallet: {
     getState: () => ({
-      connected: location.search.includes("orderquote")
+      connected: fixtureFlags.has("orderquote")
         ? { account: { address: "11111111111111111111111111111111" } }
         : null,
     }),
@@ -25,7 +25,9 @@ export function useCommerceIdentity() {
   const linked =
     isAuthenticated &&
     !isLoading &&
-    /research|orderinput|orderquote/.test(location.search);
+    (fixtureFlags.has("research") ||
+      fixtureFlags.has("orderinput") ||
+      fixtureFlags.has("orderquote"));
   return {
     linked,
     connected: linked
@@ -42,9 +44,7 @@ export function useCommerceIdentity() {
 export function CommerceWalletButton({ disabled }: { disabled?: boolean }) {
   return (
     <button type="button" disabled={disabled}>
-      {location.search.includes("orderquote")
-        ? "1111…1111"
-        : "Sign in with wallet"}
+      {fixtureFlags.has("orderquote") ? "1111…1111" : "Sign in with wallet"}
     </button>
   );
 }

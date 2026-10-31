@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
+import installationFixture from "../fixtures/installation.symbaiex.json";
 
 const NOVA_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -2941,6 +2942,22 @@ for (const width of [390, 1440])
       page.getByRole("heading", { name: "The next project starts here." }),
     ).toBeVisible();
     await expect(page.getByRole("article")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Your receipts", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Sign in to view your receipts",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        (
+          window as unknown as { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.includes("forumCommunity:listPayments"),
+      ),
+    ).toBe(false);
     await expect(page.getByLabel("Exact Solana mint")).toHaveCount(0);
     await page.screenshot({
       path: `tmp/forum-render-tests/community-empty-${width}.png`,
@@ -3041,7 +3058,19 @@ for (const width of [320, 390])
     await expectInsideWidth(page, signIn);
     const href = new URL((await signIn.getAttribute("href"))!, page.url());
     expect(href.pathname).toBe("/signin");
-    expect(href.searchParams.get("redirectTo")).toMatch(/\/community$/);
+    const returnTo = new URL(href.searchParams.get("redirectTo")!, page.url());
+    expect(returnTo.origin).toBe(new URL(page.url()).origin);
+    expect(returnTo.pathname).toBe("/community");
+    expect(returnTo.searchParams.getAll("section")).toEqual(["receipts"]);
+    expect(returnTo.searchParams.getAll("mint")).toEqual([]);
+    expect([...returnTo.searchParams.keys()]).toEqual(["section"]);
+    expect(
+      await page.evaluate(() =>
+        (
+          window as unknown as { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.includes("forumCommunity:listPayments"),
+      ),
+    ).toBe(false);
     await expect(
       page.getByText("Protected outcome", { exact: true }),
     ).toHaveCount(0);
@@ -3271,9 +3300,15 @@ test("native community host stays read-only without initializing wallet or trans
   page,
 }) => {
   const { errors, chartMints } = await harness(page, "community&plugin");
-  await expect(
-    page.getByRole("link", { name: "Open community" }),
-  ).toHaveAttribute("href", /\/community$/);
+  const handoff = new URL(
+    (await page
+      .getByRole("link", { name: "Open community" })
+      .getAttribute("href"))!,
+  );
+  expect(handoff.origin).toBe(new URL(installationFixture.sites.forum).origin);
+  expect(handoff.pathname).toBe("/community");
+  expect(handoff.searchParams.getAll("section")).toEqual(["projects"]);
+  expect([...handoff.searchParams.keys()]).toEqual(["section"]);
   await expect(
     page.getByRole("button", { name: "Sign in with wallet" }),
   ).toHaveCount(0);

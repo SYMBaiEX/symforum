@@ -226,7 +226,7 @@
     "evidence": "components/trading/price-chart.tsx:439",
     "acceptance": "The table exposes already-returned candle volume with a clear unit/availability description, preserves zero volume as zero, fits via its own scrollport, and issues no new market request.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/trading/price-chart.tsx"]
   },
   {
@@ -286,7 +286,7 @@
     "evidence": "components/trading/price-chart.tsx:456",
     "acceptance": "Candle timestamps use semantic time elements with full ISO datetime and an accessible year/UTC description while retaining compact visible labels; old bars cannot look like today's trades.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/trading/price-chart.tsx"]
   },
   {
@@ -334,7 +334,7 @@
     "evidence": "components/trading/price-chart.tsx:170",
     "acceptance": "A compact disclosure shows actual candle count and first/last UTC timestamps, separate from fetch freshness, and correctly represents sparse/historical responses without claiming continuous coverage.",
     "dependsOn": ["TRADE-024"],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/trading/price-chart.tsx"]
   },
   {
@@ -370,8 +370,9 @@
     "evidence": "components/trading/watchlist-panel.tsx:127",
     "acceptance": "Invalid threshold inputs expose aria-invalid and stable aria-describedby links to a visible error; focus moves to the first invalid field and no mutation occurs on invalid values.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/trading/watchlist-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "TRADE-032",
@@ -382,8 +383,9 @@
     "evidence": "components/trading/watchlist-panel.tsx:109",
     "acceptance": "Saved thresholds expose full stored numeric precision and USD units without relying only on rounded marketMoney text; blank input continues to mean keep the saved threshold.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/trading/watchlist-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "TRADE-033",
@@ -430,8 +432,9 @@
     "evidence": "components/trading/watchlist-panel.tsx:171",
     "acceptance": "Explicit clear-above/clear-below actions submit null only for that threshold using the existing mutation; the other threshold and watch-enabled state remain unchanged; blanks still preserve saved values.",
     "dependsOn": ["TRADE-031", "TRADE-032"],
-    "status": "tested",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/trading/watchlist-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "TRADE-037",
@@ -442,8 +445,9 @@
     "evidence": "components/trading/watchlist-panel.tsx:158",
     "acceptance": "Acknowledging an alert no longer changes the unrelated watch submit label to Saving; each operation has accurate accessible progress while preserving one-at-a-time mutation admission.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/trading/watchlist-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/trading/watchlist-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "TRADE-038",
@@ -684,8 +688,9 @@
     "evidence": "components/trading/market-identity.tsx:23",
     "acceptance": "After a failed icon, replacing its already-approved source URL permits the new image to render; the same failed URL does not loop-retry, and unsafe URLs still render the text fallback.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/trading/market-identity.tsx"]
+    "status": "deployed",
+    "paths": ["components/trading/market-identity.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "TRADE-058",
@@ -732,7 +737,7 @@
     "evidence": "components/community/community-hub.tsx:129",
     "acceptance": "Enhancement: support an allowlisted section query for projects/work/support/receipts; refresh and Back restore it without eager private queries or payment preparation.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -744,7 +749,7 @@
     "evidence": "apps/platform/app/community/page.tsx:8",
     "acceptance": "Enhancement: preserve only validated mint and section values across /community redirects; reject duplicates/invalid values; no external redirect.",
     "dependsOn": ["COMMUNITY-001"],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["apps/platform/app/community/page.tsx"]
   },
   {
@@ -756,7 +761,7 @@
     "evidence": "components/community/community-hub.tsx:1401",
     "acceptance": "Enhancement: Sign in returns to receipts and the original validated mint rather than the default projects pane; no saved payment is replayed.",
     "dependsOn": ["COMMUNITY-001", "COMMUNITY-002"],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -804,7 +809,7 @@
     "evidence": "components/community/community-hub.module.css:44",
     "acceptance": "Regression: at320/390/768/1440 and200% zoom every nav label and active state is reachable; payment-dialog Escape remains locally owned; no external traffic.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/community/community-hub.module.css"]
   },
   {
@@ -852,7 +857,7 @@
     "evidence": "docs/forum-community-utilities.md:111",
     "acceptance": "Enhancement: directory explicitly says recent projects rather than complete registry; empty scoped/global copy remains distinct and no limits increase.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "in_progress",
     "paths": ["docs/forum-community-utilities.md"]
   },
   {
@@ -864,7 +869,7 @@
     "evidence": "components/community/community-hub.tsx:274",
     "acceptance": "Enhancement: search loaded names/symbols/exact mints/roles only; show loaded-match count and clear control; zero new RPC or provider requests.",
     "dependsOn": ["COMMUNITY-011"],
-    "status": "queued",
+    "status": "in_progress",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -973,8 +978,9 @@
     "evidence": "components/community/community-hub.tsx:857",
     "acceptance": "Confirmed missing integration: feed the existing private submission link/summary into the form; reactive updates must not replace dirty input; save remains the existing upsert.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "deployed",
+    "paths": ["components/community/community-hub.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "COMMUNITY-022",
@@ -985,8 +991,9 @@
     "evidence": "components/community/community-hub.tsx:874",
     "acceptance": "Enhancement: after save show saved timestamp when available and pending-changes state; never imply sponsor acceptance or reward payment.",
     "dependsOn": ["COMMUNITY-021"],
-    "status": "tested",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "deployed",
+    "paths": ["components/community/community-hub.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "COMMUNITY-023",
@@ -1456,8 +1463,9 @@
     "evidence": "components/forum/forum-control-panel.tsx:158",
     "acceptance": "Hydrate profile fields once per authenticated profile identity; a later subscription result must not overwrite dirty local fields. Saving a snapshot must not erase edits made while its request was pending. Cover account switch and logout.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/forum/forum-control-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/forum/forum-control-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "FORUM-002",
@@ -1468,8 +1476,9 @@
     "evidence": "components/forum/forum-control-panel.tsx:173",
     "acceptance": "A remote preference update must not replace locally edited notification toggles; reconcile a known saved snapshot without losing newer edits and reset drafts on identity change.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/forum/forum-control-panel.tsx"]
+    "status": "deployed",
+    "paths": ["components/forum/forum-control-panel.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "FORUM-003",
@@ -1745,8 +1754,9 @@
     "evidence": "components/forum/forum-compose.tsx:649",
     "acceptance": "If file one succeeds and file two fails, keep file one's confirmed storage record visible, report the failed file separately and offer only an explicit targeted retry. Do not upload confirmed successes again automatically.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/forum/forum-compose.tsx"]
+    "status": "deployed",
+    "paths": ["components/forum/forum-compose.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "FORUM-026",
@@ -1877,8 +1887,9 @@
     "evidence": "components/forum/forum-thread-view.tsx:648",
     "acceptance": "Quote/reply navigation uses instant or otherwise intentional reduced-motion scrolling when requested; keep the composer focus handoff and scroll offset working under the fixed header.",
     "dependsOn": [],
-    "status": "tested",
-    "paths": ["components/forum/forum-thread-view.tsx"]
+    "status": "deployed",
+    "paths": ["components/forum/forum-thread-view.tsx"],
+    "receipt": "PR #255 / a43ebdc6: original website domains verified live with bounded public Feed/Community checks; protected flows covered by local regressions, not live payment acceptance."
   },
   {
     "id": "FORUM-037",
@@ -2664,9 +2675,9 @@
     "evidence": "convex/forumCommunity.ts:379",
     "acceptance": "Add a matching mint/status/updatedAt index and apply both filters before the existing bounded take. A fixture with 32 newer nonmatching statuses must still return an older matching bounty; preserve no-mint and omitted-status behavior.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": ["convex/forumCommunity.ts"],
-    "authorization": "Fresh target-specific production approval and bounded index-backfill readiness check before deployment."
+    "receipt": "PR #256 / 9f807188: approved production index deployment and bounded read-only index/public-query verification passed; website release verified. No production records created."
   },
   {
     "id": "INFRA-042",

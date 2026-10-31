@@ -29,6 +29,7 @@ import {
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { formatChartAxisPrice } from "./chart-axis-format";
 import { Button } from "@/components/ui/button";
+import { CandleReadings } from "./candle-readings";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -430,47 +431,11 @@ function ChartData({
         <summary className="focus-ring cursor-pointer">
           Read candle data
         </summary>
-        <div
-          className={compact ? "mt-3" : "mt-3 max-h-60 overflow-auto"}
-          tabIndex={0}
-          role="region"
-          aria-label="Recent candle data"
-        >
-          <table className="w-full text-left tabular-nums">
-            <caption className="sr-only">Latest 20 USD candles, UTC</caption>
-            <thead>
-              <tr>
-                <th scope="col">UTC</th>
-                <th scope="col">Open</th>
-                <th scope="col">High</th>
-                <th scope="col">Low</th>
-                <th scope="col">Close</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.candles
-                .slice(-20)
-                .reverse()
-                .map((candle) => (
-                  <tr key={candle.time}>
-                    <td className="whitespace-nowrap py-2 pr-3">
-                      {new Date(candle.time * 1000)
-                        .toISOString()
-                        .slice(5, 16)
-                        .replace("T", " ")}
-                    </td>
-                    {[candle.open, candle.high, candle.low, candle.close].map(
-                      (value, index) => (
-                        <td key={index} className="px-2">
-                          {priceFormat.format(value)}
-                        </td>
-                      ),
-                    )}
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+        <CandleReadings
+          candles={data.candles}
+          compact={compact}
+          formatPrice={priceFormat.format}
+        />
       </details>
     </>
   );

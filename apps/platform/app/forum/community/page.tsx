@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CommunityHub } from "@/components/community/community-hub";
 import { forumSiteUrl } from "@/lib/site-urls";
+import { communityRouteFromRecord } from "@/lib/community-navigation";
 
 export const metadata: Metadata = {
   title: "Community projects and rewards",
@@ -14,11 +15,7 @@ export default async function CommunityPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const mint =
-    typeof params.mint === "string" &&
-    /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(params.mint)
-      ? params.mint
-      : undefined;
+  const { mint } = communityRouteFromRecord(params);
   if (!process.env.NEXT_PUBLIC_CONVEX_URL)
     return (
       <section className="page-frame page-frame-dense">

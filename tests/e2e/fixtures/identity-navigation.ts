@@ -3,3 +3,6 @@ export function usePathname() {
     ? "/account/connections"
     : "/signin";
 }
+export function useSearchParams() {
+  return new URLSearchParams(window.location.search);
+}
