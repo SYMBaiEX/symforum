@@ -670,3 +670,144 @@ operations, job/hold records and infrastructure binding metadata out of it.
 - Six inventory items are tested, not merged/deployed. Fifty-one are currently
   source-deployed. Commit, redacted secret scan, normal protected merge and exact
   automatic production/domain acceptance remain before a shipped claim.
+
+## Batch 8 released — 11:46 UTC
+
+- PR #263 normally rebase-merged at `f4bca4be0386b7b46112431f8fa20b2b4cd8b97d`
+  at 11:41 UTC. Complete tree equals qualified `d0933aa9`; all seven new main
+  authors are exact. Protections remained enabled and Actions disabled.
+- Exact automatic production READY was observed 11:44:15 UTC; all five original
+  domains matched at 11:44:31. One isolated public member-directory visit checked
+  desktop and phone no-match states, bounded page-size popup, Escape and visible
+  summary focus. Clear retained sort/page-size context and search focus.
+- Pagination had automatically clamped the zero-result page before Clear; that
+  prior reset is not attributed to the new button. Public records were not
+  printed. Empty-state captures and aggregate checks showed no overflow or
+  observed client errors. The isolated browser closed after acceptance.
+- Bounded exact-release error sample was zero of thirty, uncapped. This is not
+  a private-action, payment, real touch/OS popup or assistive-technology guarantee.
+- Fifty-seven tasks are now source-deployed. No backend/worker, fee, model,
+  budget, schedule, free-tier data limit, review gate or hold change occurred.
+
+## Batch 9 dispatch — 11:47 UTC
+
+- COMMUNITY-004/005: `/private/tmp/symforum-overnight-community-scope-guidance`,
+  branch `sym/overnight-community-scope-guidance`, based on released `f4bca4be`.
+  Own Community hub/module CSS and new community-scope-guidance spec/fixture/state.
+  Show the exact mint scope and an honest full-community recovery path, plus
+  three existing task-oriented section links. Compact prop scope cannot be
+  cleared merely by removing a URL value. Preserve mounted private controllers,
+  selected trading token, existing queries/payments and the non-escrow warning.
+- TRADE-039/059: `/private/tmp/symforum-overnight-wallet-identity-receipts`, branch
+  `sym/overnight-wallet-identity-receipts`, same base. Own wallet panel, optional
+  existing terminal CSS module and new wallet-identity-receipts spec/fixture/state.
+  Explicit already-linked full address inspection/copy and distinct existing
+  explorer names only. Preserve real owner/native mounting gates, query counts,
+  refresh behavior and all receipt/hold states; no-signature rows stay nonlinks.
+- TRADE-055/056: `/private/tmp/symforum-overnight-token-picker-identity`, branch
+  `sym/overnight-token-picker-identity`, same base. Own token picker and new
+  token-picker-identity spec/fixture/state. Test reverse/closed search responses
+  and make case-sensitive exact-mint identity inspectable, not an endorsement.
+  Preserve the 650ms debounce, verification/admission and explicit selection.
+- All three have linked dependencies and normal app-local forum-ui links to
+  their own package. No SDK/provider/tool configuration or financial changes
+  are authorized; the missing optional Solana docs connector will not be installed.
+  Main read the Solana frontend guidance and checked official public docs instead.
+- Literal paths are claimed before dispatch. Counts: fifty-seven deployed,
+  six in progress, 159 queued, two blocked, sixteen needing confirmation. Parent
+  remains on the released batch-8 branch; only these two known-owned planning
+  files are dirty. Finish active candidates and review before another source group.
+
+## Batch 9 keyboard-test ownership — 11:50 UTC
+
+- Wallet address inspection adds a legitimate keyboard stop. Parent read the
+  existing 320/390px wallet-readability traversal and extended wallet ownership
+  to that exact spec for a minimal test-order update: explicitly assert the new
+  stop, then retain every existing spendable summary/end-sentinel, amount,
+  geometry, focus and no-additional-read assertion. No assertion is removed or
+  weakened, and no provider/wallet action is added. Other old tests stay untouched.
+
+## Batch 9 integrated candidates — 12:00 UTC
+
+- Parent branch `sym/overnight-web3-wave-nine` starts at released `f4bca4be`,
+  preserving known-owned release/dispatch updates. Wallet `11a2163d` integrated
+  as `4d05786c`, Community `0a5081d7` as `fbe36eba`; independent reviews clean.
+  Wallet had twenty-nine focused browser/ten unit checks; Community fourteen new
+  and thirty-eight existing browser/fifty-four unit checks, with types/lint.
+- Wallet optional follow-up `b20fe871`, integrated as `6e71abd0`, hardens a
+  PRE-EXISTING invalid-date rendering path, not a regression introduced by the
+  new labels. Synthetic NaN/out-of-range values previously removed the panel;
+  a five-line formatter now safely omits invalid machine time and names it
+  unavailable, without substituting current time. Original visible date text,
+  all valid ISO values (including zero, negative and range endpoints), receipt
+  states, identities, query and recovery behavior remain. Thirty-five browser
+  checks/types/lint pass; independent follow-up review clean.
+- The approved old wallet keyboard test adds only the new identity summary
+  stop/44px check; all original assertions remain. No shared/global CSS changed.
+- Four items are implemented only. Token-picker scope/race tests remain active;
+  final parent qualification and next PR have not started.
+
+## Batch 9 picker and final candidate — 12:11 UTC
+
+- Picker `62a8d948`, integrated as `b8546ec8`, adds only exact-identity inspection
+  and layout. Original reverse/closed-response tests were already green before
+  edits; generation fencing, action arguments, verification and the 650ms delay
+  remain byte-identical. Full mint inspection is separate from token selection,
+  and the match label requires validated original-case address equality.
+- Long metadata reproduced a PRE-EXISTING original-base picker overflow at
+  320px under standalone CSS. Owned-leaf chip truncation/min-width containment
+  corrects it; no global styles changed. Fifteen new cases, including synthetic
+  touch, and eight existing modal/hold/strict laptop cases pass, plus twenty-two
+  relevant unit cases/types/lint. An earlier duplicate test locator was corrected
+  separately from that real geometry finding; no assertion was weakened.
+- Parent independently ran all forty-nine integrated wallet/Community/readability
+  browser checks successfully, then reviewed the combined final source. Wallet
+  and Community source reviews are clean. Picker functional review is clean;
+  independent geometry review is completing. All six items are implemented only.
+- The frozen runtime candidate is `b8546ec8` plus native generation. Full final
+  parent qualification is starting. No PR, deployment or live protected-operation
+  verification is claimed at this point.
+
+## Batch 9 retained test-clock failure — 12:16 UTC
+
+- Initial full unit qualification failed seven existing private-terminal auth
+  cases; the isolated original suite reproduced all seven. Results are retained.
+  Their fixed fixture session expiry was October 31 at 12:00 UTC, while the
+  fixture mocked only Date.now. The installed auth adapter checks new Date's
+  constructor time, which passed that expiry during this run. Earlier passes
+  before noon are not evidence that the fixture was deterministic.
+- Parent exclusively owns `convex/forumTerminal.test.ts` for a TEST-ONLY clock
+  repair: freeze Date itself at the original fixture time, restore afterward,
+  and add a constructor/Date.now consistency assertion. Existing auth/ownership,
+  quota, failure and expiry expectations remain unchanged. No runtime backend,
+  schema, auth policy, account, budget or production deployment is modified.
+- Generated Convex guidance, test guide, auth schema context and the installed
+  adapter were read before this correction. Final qualification is not green
+  until the corrected unchanged candidate passes every full release gate again.
+
+## Batch 9 clock correction verified in isolation — 12:18 UTC
+
+- Original isolated suite: four passed/seven failed. The corrected suite:
+  twelve passed, including every original test and the new clock-consistency
+  check. Independent review confirmed Date-only fake timers preserve the original
+  session expiry and do not fake scheduling timers, extend sessions or bypass
+  auth. Cleanup restores real Date/timers and all existing mocks/environment.
+- Initial combined browser run passed all 566 cases; both types, five app builds,
+  parity, audits and security controls also passed, but the seven unit failures
+  meant the release was NOT qualified. Those results and failure logs remain.
+- Every full release gate is now restarting against the corrected unchanged
+  candidate, with new log names so no failed history is overwritten. The only
+  Convex-folder edit is the local test fixture, not a deployed backend function.
+
+## Batch 9 corrected candidate qualified — 12:24 UTC
+
+- All final gates passed on the corrected unchanged candidate: 4,364 unit/backend
+  tests, 566 browser tests, both types, all five builds, native parity, three
+  unsuppressed dependency audits and security controls. Lint retains three old
+  warnings and zero errors. No tests or original assertions were skipped/weakened.
+- Initial failed unit results and the isolated reproduction remain available;
+  the second full run follows the reviewed deterministic clock correction, not
+  an unexplained retry. Only a local test changed under Convex, not runtime auth.
+- Functional and geometry reviews are clean. Six inventory items are tested,
+  not merged/deployed; fifty-seven remain source-deployed. Exact commit/secret
+  scan, protected merge and automatic production/domain acceptance remain.
