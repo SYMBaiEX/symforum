@@ -2054,3 +2054,45 @@ for (const width of [390, 1440])
       expect(errors).toEqual([]);
     }
   });
+
+test("pending contributor settings do not imply tips are disabled or holder proof is absent", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors } = await harness(
+    page,
+    "community&tipsavailable&orderinput&settingsloading",
+  );
+  await page
+    .getByRole("button", { name: "Tips & profile", exact: true })
+    .click();
+  const profile = page.getByRole("region", {
+    name: "Your contributor profile",
+    exact: true,
+  });
+  await expect(profile).toBeVisible();
+  await expect(profile.getByRole("status")).toContainText(
+    "Loading your contributor settings…",
+  );
+  await expect(
+    profile.getByRole("button", {
+      name: /Enable public tips|Disable public tips|Check holder proof|Show holder badge|Hide holder badge/,
+    }),
+  ).toBeHidden();
+  await expect(
+    profile.getByText("No current verified holder proof.", { exact: true }),
+  ).toBeHidden();
+  await expect(
+    profile.getByText("Holder proof verified", { exact: true }),
+  ).toBeHidden();
+  await expect(page.getByLabel("Tip amount (SOL)")).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (
+        window as typeof window & { __terminalFixtureQueries: string[] }
+      ).__terminalFixtureQueries.includes("forumCommunity:getMine"),
+    ),
+  ).toBe(true);
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});

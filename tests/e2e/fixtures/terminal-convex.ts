@@ -219,11 +219,15 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         : [protectedPayment];
   else if (name === "forumCommunity:getPayment") result = protectedPayment;
   else if (name === "forumCommunity:getMine")
-    result = {
-      userId: memberId,
-      recipient: null,
-      supporter: null,
-    } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>;
+    result =
+      location.search.includes("settingsloading") &&
+      location.search.includes("orderinput")
+        ? undefined
+        : ({
+            userId: memberId,
+            recipient: null,
+            supporter: null,
+          } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>);
   else if (name === "forumCommunity:listSubmissions") result = [];
   else if (name === "forumCommunity:listTipRecipients")
     result = location.search.includes("tipsloading")
