@@ -51,6 +51,7 @@ import { forumMemberProfilePath } from "@/components/forum/forum-refs";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
+import { filterTipRecipients } from "./tip-recipient-model";
 import {
   communityHref,
   communityRoute,
@@ -1550,6 +1551,31 @@ function Tips({
     prepare = useMutation(api.forumCommunity.preparePayment),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
+  const [recipientFilter, setRecipientFilter] = useState("");
+  const [selectedRecipientId, setSelectedRecipientId] = useState("");
+  const filterHelpId = useId();
+  const filteredRecipients = filterTipRecipients(
+    recipients ?? [],
+    recipientFilter,
+  );
+  const selectedRecipient = recipients?.find(
+    (row) => row.userId === selectedRecipientId,
+  );
+  const selectedOutsideFilter =
+    selectedRecipientId !== "" &&
+    !filteredRecipients.some((row) => row.userId === selectedRecipientId);
+  const recipientOptions = [
+    ...filteredRecipients,
+    ...(selectedOutsideFilter
+      ? [
+          selectedRecipient ?? {
+            userId: selectedRecipientId,
+            username: "",
+            wallet: "",
+          },
+        ]
+      : []),
+  ];
   return (
     <>
       {!busy &&
@@ -1591,7 +1617,7 @@ function Tips({
           </p>
         ) : null)}
       <form
-        className={`${styles.form} ${styles.details}`}
+        className={`${styles.form} ${styles.details} ${styles.tipControls}`}
         hidden={
           !busy &&
           (!recipients?.length || !identity.isAuthenticated || !identity.linked)
@@ -1623,17 +1649,66 @@ function Tips({
           }
         }}
       >
+        <Field label="Filter loaded contributor handles">
+          <Input
+            value={recipientFilter}
+            onChange={(event) => setRecipientFilter(event.target.value)}
+            aria-describedby={filterHelpId}
+            placeholder="Search a handle"
+          />
+        </Field>
+        <div className={styles.tipFilterSummary}>
+          <p id={filterHelpId} role="status">
+            Shown {filteredRecipients.length} of {recipients?.length ?? 0}{" "}
+            loaded opt-in recipients. Recent sample of up to 24, not all
+            contributors.
+          </p>
+          {recipientFilter && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRecipientFilter("")}
+            >
+              Clear handle filter
+            </Button>
+          )}
+        </div>
+        {recipients &&
+          filteredRecipients.length === 0 &&
+          recipients.length > 0 && (
+            <p className={styles.muted}>
+              No loaded handles match this filter. Any existing selection is
+              retained.
+            </p>
+          )}
         <Field label="Contributor">
-          <select name="recipient" required className={styles.select}>
+          <select
+            name="recipient"
+            required
+            className={styles.select}
+            onChange={(event) =>
+              setSelectedRecipientId(event.currentTarget.value)
+            }
+          >
             <option value="">Choose a contributor</option>
-            {recipients?.map((row) => (
+            {recipientOptions.map((row) => (
               <option value={row.userId} key={row.userId}>
-                @{row.username} ({row.wallet.slice(0, 4)}…{row.wallet.slice(-4)}
-                )
+                {row.wallet
+                  ? `@${row.username} (${row.wallet.slice(0, 4)}…${row.wallet.slice(-4)})${selectedOutsideFilter && row.userId === selectedRecipientId ? " · selected outside filter" : ""}`
+                  : "Previously selected contributor · not in loaded list"}
               </option>
             ))}
           </select>
         </Field>
+        {selectedRecipient ? (
+          <PublicTipRecipient recipient={selectedRecipient} />
+        ) : selectedRecipientId ? (
+          <p role="status" className={styles.muted}>
+            The selected contributor is not in the loaded recipient list.
+            Current public profile and receiving-wallet context are unavailable
+            here; the exact selection is retained.
+          </p>
+        ) : null}
         <Field label="Tip amount (SOL)">
           <Input
             name="amount"
@@ -1655,6 +1730,40 @@ function Tips({
         </p>
       )}
     </>
+  );
+}
+function PublicTipRecipient({
+  recipient,
+}: {
+  recipient: { userId: string; username: string; wallet: string };
+}) {
+  return (
+    <div className={styles.tipRecipientContext}>
+      <p>
+        Recipient profile:{" "}
+        {recipient.username.trim() && recipient.username !== "Forum member" ? (
+          <ForumLink
+            href={forumMemberProfilePath(recipient.username)}
+            prefetch={false}
+            className={styles.tipProfileLink}
+          >
+            @{recipient.username}
+          </ForumLink>
+        ) : (
+          "Forum member"
+        )}
+      </p>
+      <details>
+        <summary className="focus-ring min-h-11 cursor-pointer content-center">
+          Public receiving wallet
+        </summary>
+        <code className={styles.tipPublicWallet}>{recipient.wallet}</code>
+        <p className={styles.muted}>
+          This is the contributor’s published opt-in receiving address, not your
+          connected wallet. Check the final payment review before approval.
+        </p>
+      </details>
+    </div>
   );
 }
 function SupporterSettings({ client }: { client: CommerceWalletClient }) {
@@ -2164,6 +2273,7 @@ function AuthorTipContent({ threadId }: { threadId: Id<"forumThreads"> }) {
   return (
     <div className={styles.panel}>
       <h3>Support @{recipient.username}</h3>
+      <PublicTipRecipient recipient={recipient} />
       <ThreadTipForm
         client={client}
         threadId={threadId}
@@ -2191,13 +2301,21 @@ function ThreadTipForm({
     [amount, setAmount] = useState("0.01"),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
+  const identityHelpId = useId();
+  const identityHelp = identity.isLoading
+    ? "Checking your sign-in and linked wallet before tip review."
+    : !identity.isAuthenticated
+      ? "Sign in and link a wallet before reviewing an optional author tip."
+      : !identity.linked
+        ? "Choose a wallet linked to your account before reviewing this tip."
+        : "";
   return (
     <>
       <div className={styles.actions}>
         <CommerceWalletButton requiredFeature="solana:signTransaction" />
       </div>
       <form
-        className={styles.form}
+        className={`${styles.form} ${styles.tipControls}`}
         onSubmit={(event) => {
           event.preventDefault();
           const wallet = identity.connected?.account.address;
@@ -2231,9 +2349,45 @@ function ThreadTipForm({
           />
         </Field>
         <div className={styles.actions}>
-          <Button disabled={busy || !identity.linked} type="submit">
+          <Button
+            disabled={busy || !identity.linked}
+            type="submit"
+            aria-describedby={identityHelp ? identityHelpId : undefined}
+          >
             <Heart aria-hidden="true" /> Review tip
           </Button>
+          {identityHelp && (
+            <div
+              id={identityHelpId}
+              role="status"
+              className={styles.tipIdentityHint}
+            >
+              <p>
+                {identityHelp} No payment request is made by these instructions.
+              </p>
+              {!identity.isLoading &&
+                (!identity.isAuthenticated ? (
+                  <ForumLink
+                    href={communitySignInHref({
+                      section: "support",
+                      invalid: false,
+                    })}
+                    prefetch={false}
+                    className={styles.tipProfileLink}
+                  >
+                    Sign in to your community account
+                  </ForumLink>
+                ) : (
+                  <ForumLink
+                    href="/account/connections"
+                    prefetch={false}
+                    className={styles.tipProfileLink}
+                  >
+                    Manage linked wallets
+                  </ForumLink>
+                ))}
+            </div>
+          )}
         </div>
         {message && (
           <p role="alert" className={styles.status}>
