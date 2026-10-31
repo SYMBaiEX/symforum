@@ -66,6 +66,7 @@ export const forumCommunityTables = {
   })
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_mint_and_updatedAt", ["mint", "updatedAt"])
+    .index("by_mint_and_status_and_updatedAt", ["mint", "status", "updatedAt"])
     .index("by_sponsorId_and_updatedAt", ["sponsorId", "updatedAt"]),
   forumCommunitySubmissions: defineTable({
     workId: v.id("forumCommunityWork"),

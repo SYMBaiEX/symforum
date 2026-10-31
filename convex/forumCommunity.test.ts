@@ -199,6 +199,158 @@ describe("community authorization and public claims", () => {
     expect(projects[0].mint).toBe(mint);
   });
 });
+describe("public bounty listing", () => {
+  const statuses = ["open", "selected", "paid", "cancelled"] as const;
+
+  test.each(statuses)(
+    "filters exact mint and %s status before limiting to the newest 32",
+    async (status) => {
+      const t = setup(),
+        mint = key(30),
+        otherMint = key(31);
+      const matchingIds = await t.run(async (ctx) => {
+        const sponsorId = await ctx.db.insert("users", {
+          username: "public-sponsor",
+          email: "private-sponsor@example.test",
+        });
+        const ids = [];
+        for (let i = 0; i < 33; i++) {
+          ids.push(
+            await ctx.db.insert("forumCommunityWork", {
+              sponsorId,
+              mint,
+              kind: "bounty",
+              title: `Matching bounty ${i}`,
+              brief,
+              amountLamports: "1000000",
+              status,
+              createdAt: i,
+              updatedAt: i,
+            }),
+          );
+        }
+        for (let i = 0; i < 33; i++) {
+          await ctx.db.insert("forumCommunityWork", {
+            sponsorId,
+            mint,
+            kind: "research",
+            title: `Newer other-status bounty ${i}`,
+            brief,
+            amountLamports: "1000000",
+            status: status === "open" ? "selected" : "open",
+            createdAt: 100 + i,
+            updatedAt: 100 + i,
+          });
+          await ctx.db.insert("forumCommunityWork", {
+            sponsorId,
+            mint: otherMint,
+            kind: "bounty",
+            title: `Newer other-mint bounty ${i}`,
+            brief,
+            amountLamports: "1000000",
+            status,
+            createdAt: 200 + i,
+            updatedAt: 200 + i,
+          });
+        }
+        return ids;
+      });
+      const rows = await t.query(api.forumCommunity.listBounties, {
+        mint,
+        status,
+      });
+      expect(rows.map((row) => row.workId)).toEqual(
+        matchingIds.slice(1).reverse(),
+      );
+      expect(
+        rows.every((row) => row.mint === mint && row.status === status),
+      ).toBe(true);
+      expect(Object.keys(rows[0]).sort()).toEqual(
+        [
+          "workId",
+          "sponsorId",
+          "sponsor",
+          "mint",
+          "kind",
+          "title",
+          "brief",
+          "amountLamports",
+          "status",
+          "selectedSubmissionId",
+          "updatedAt",
+        ].sort(),
+      );
+      expect(rows[0].sponsor).toBe("public-sponsor");
+      expect(rows[0].selectedSubmissionId).toBeNull();
+      expect(JSON.stringify(rows)).not.toContain(
+        "private-sponsor@example.test",
+      );
+    },
+  );
+
+  test("preserves mint-only mixed statuses, unscoped status/default and 32-row caps", async () => {
+    const t = setup(),
+      mint = key(32),
+      otherMint = key(33);
+    const stored = await t.run(async (ctx) => {
+      const sponsorId = await ctx.db.insert("users", {
+        username: "listing-sponsor",
+      });
+      const rows = [];
+      for (let i = 0; i < 40; i++) {
+        for (const status of statuses) {
+          const updatedAt = i * 10 + statuses.indexOf(status);
+          const workMint = i % 3 === 0 ? null : i % 3 === 1 ? mint : otherMint;
+          const workId = await ctx.db.insert("forumCommunityWork", {
+            sponsorId,
+            mint: workMint,
+            kind: "bounty",
+            title: `${status} bounty ${i}`,
+            brief,
+            amountLamports: "1000000",
+            status,
+            createdAt: updatedAt,
+            updatedAt,
+          });
+          rows.push({ workId, mint: workMint, status, updatedAt });
+        }
+      }
+      return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+    });
+    const mintOnly = await t.query(api.forumCommunity.listBounties, { mint });
+    expect(mintOnly.map((row) => row.workId)).toEqual(
+      stored
+        .filter((row) => row.mint === mint)
+        .slice(0, 32)
+        .map((row) => row.workId),
+    );
+    expect(new Set(mintOnly.map((row) => row.status)).size).toBe(4);
+    for (const status of statuses) {
+      const unscoped = await t.query(api.forumCommunity.listBounties, {
+        status,
+      });
+      expect(unscoped.map((row) => row.workId)).toEqual(
+        stored
+          .filter((row) => row.status === status)
+          .slice(0, 32)
+          .map((row) => row.workId),
+      );
+    }
+    expect(await t.query(api.forumCommunity.listBounties, {})).toEqual(
+      await t.query(api.forumCommunity.listBounties, { status: "open" }),
+    );
+    expect(
+      await t.query(api.forumCommunity.listBounties, { mint: key(34) }),
+    ).toEqual([]);
+    await expect(
+      t.query(api.forumCommunity.listBounties, {
+        mint: "not-a-solana-mint",
+        status: "open",
+      }),
+    ).rejects.toThrow("Use the exact Solana mint address.");
+  });
+});
+
 describe("sponsor-approved work", () => {
   test("a pledge moves no funds, submissions stay owner/sponsor-private and only sponsor selects", async () => {
     const t = setup(),
