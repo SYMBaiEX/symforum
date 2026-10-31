@@ -122,6 +122,7 @@ function CommunityContent({
   compact: boolean;
 }) {
   const [section, setSection] = useState<Section>("projects"),
+    [receiptsVisited, setReceiptsVisited] = useState(false),
     [payment, setPayment] = useState<Payment | null>(null);
   const client = useCommerceWallet();
   const contentId = useId();
@@ -131,6 +132,10 @@ function CommunityContent({
     support: "Tips & holder profile",
     receipts: "Your receipts",
   };
+  function goToReceipts() {
+    setReceiptsVisited(true);
+    setSection("receipts");
+  }
   return (
     <div className={`${styles.hub} ${compact ? styles.compact : ""}`}>
       {!compact && (
@@ -163,7 +168,9 @@ function CommunityContent({
             variant="ghost"
             aria-pressed={section === id}
             aria-controls={contentId}
-            onClick={() => setSection(id)}
+            onClick={() =>
+              id === "receipts" ? goToReceipts() : setSection(id)
+            }
           >
             {label}
           </Button>
@@ -177,13 +184,19 @@ function CommunityContent({
         {section === "support" && (
           <Support client={client} onPayment={setPayment} />
         )}
-        {section === "receipts" && <Receipts onPayment={setPayment} />}
+        {/* Do not eagerly load private receipts, but retain the existing
+            subscription and known protection notice after their first use. */}
+        {receiptsVisited && (
+          <div hidden={section !== "receipts"}>
+            <Receipts onPayment={setPayment} />
+          </div>
+        )}
       </div>
       <p className={styles.safetyNote}>
         <ShieldCheck size={15} aria-hidden="true" />
         <span>
           Have an unresolved payment?{" "}
-          <button type="button" onClick={() => setSection("receipts")}>
+          <button type="button" onClick={goToReceipts}>
             Open your receipts
           </button>{" "}
           to check the same attempt. Never pay again to resolve a missing
