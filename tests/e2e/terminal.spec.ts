@@ -49,6 +49,9 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
       const key = `${mint}:${url.searchParams.get("interval")}`;
       const previous = chartPayloads.get(key);
       const payload = {
+        ...(scenario.includes("solanacandles")
+          ? { candleSource: "solana-tracker" }
+          : {}),
         mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
         pool: "11111111111111111111111111111111",
         interval: url.searchParams.get("interval"),
@@ -228,6 +231,141 @@ async function recordedOperations(page: Page) {
     ...(window as typeof window & { __terminalFixtureCalls: string[] })
       .__terminalFixtureCalls,
   ]);
+}
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1024, height: 900 },
+  { width: 1440, height: 900 },
+  { width: 640, height: 450 }, // 200% desktop reflow space
+])
+  test(`instrument layout keeps failure states compact and navigable at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const { errors, chartMints } = await harness(
+      page,
+      "guest&chartcache-unsupported&dark",
+    );
+    const empty = page.locator("[data-terminal-chart-empty]");
+    await expect(empty.getByRole("status")).toHaveText(
+      "No chart is supported for this indexed token.",
+    );
+    const box = await empty.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(180);
+    expect(box!.height).toBeLessThanOrEqual(240);
+    await expect(
+      page.getByRole("img", { name: /candlestick chart/ }),
+    ).toHaveCount(0);
+    const workspace = await page
+      .locator("[data-terminal-viewport]")
+      .boundingBox();
+    const header = page.getByRole("heading", {
+      name: "Trading terminal",
+      exact: true,
+    });
+    await expect(header).toHaveCount(1);
+    if (workspace!.width <= 840) {
+      expect(
+        (await header.locator("..").locator("..").boundingBox())!.height,
+      ).toBe(0);
+      await expect(
+        page.locator(
+          '[data-terminal-dock-nav] [data-terminal-dock-mode="mobile"]',
+        ),
+      ).toHaveCount(5);
+    } else {
+      await expect(
+        page.getByRole("complementary", { name: "Trade selected token" }),
+      ).toBeVisible();
+    }
+    const symbolSize = await page
+      .getByRole("heading", { name: "$SYMF", exact: true })
+      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    expect(symbolSize).toBeGreaterThanOrEqual(16);
+    await expectViewportBounded(page);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/instrument-empty-${viewport.width}.png`,
+    });
+    const browse = empty.getByRole("button", {
+      name: "Browse markets",
+      exact: true,
+    });
+    await browse.scrollIntoViewIfNeeded();
+    await browse.click();
+    await expect(
+      page.getByRole("table", { name: "Sampled markets", exact: true }),
+    ).toBeVisible();
+    expect(chartMints).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+test("compact chart credits the actual candle provider beside the original check time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const { errors } = await harness(page, "guest&solanacandles");
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const credit = page.locator('#terminal-chart p[title^="Checked "]');
+  await expect(credit).toContainText("Solana Tracker · Checked");
+  await expect(credit).not.toContainText("GeckoTerminal");
+  await expectInsideWidth(page, credit);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 390, 1440])
+    test(`instrument chart maintains readable hierarchy in ${theme} at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+      const { errors } = await harness(page, `guest&${theme}`);
+      await expect(
+        page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+      ).toBeVisible();
+      const instrument = page.locator(
+        'section[aria-labelledby="terminal-token-title"]',
+      );
+      const primary = instrument.locator("dl").first().locator("dd");
+      expect(
+        await primary.evaluate((element) =>
+          parseFloat(getComputedStyle(element).fontSize),
+        ),
+      ).toBeGreaterThanOrEqual(18);
+      const checked = instrument.locator('p[title^="Checked "]');
+      expect((await checked.boundingBox())!.height).toBeLessThan(44);
+      await page.screenshot({
+        path: `tmp/forum-render-tests/instrument-${theme}-${width}.png`,
+        animations: "disabled",
+      });
+      await instrument.getByText("Read candle data", { exact: true }).click();
+      const readings = page.getByRole("region", {
+        name: "Recent candle data",
+        exact: true,
+      });
+      await expect(readings).toBeVisible();
+      expect(
+        await readings.evaluate(
+          (element) => getComputedStyle(element).overflowY,
+        ),
+      ).toBe("visible");
+      await instrument
+        .getByText("Market details & sources", { exact: true })
+        .click();
+      for (const label of ["24h volume", "1h change"])
+        await expect(
+          instrument
+            .locator("dt:visible")
+            .filter({ hasText: new RegExp(`^${label}$`) }),
+        ).toHaveCount(1);
+      await expectViewportBounded(page);
+      expect(errors).toEqual([]);
+    });
 }
 
 for (const viewport of [
@@ -880,7 +1018,7 @@ for (const width of [390, 1440])
     ])
       await expect(
         selectedToken
-          .locator("dt")
+          .locator("dt:visible")
           .filter({ hasText: new RegExp(`^${label}(?:\\s|$)`) }),
       ).toHaveCount(1);
     expect(chartMints).toContain(NOVA_MINT);

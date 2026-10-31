@@ -16,6 +16,7 @@ import {
   retainedChartData,
   chartResponsePolicy,
   chartStateMessage,
+  chartSourceLabel,
   type CheckedChartData,
   type ChartCacheState,
   type ChartMarketData,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/chart-cache-policy";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { formatChartAxisPrice } from "./chart-axis-format";
+import { Button } from "@/components/ui/button";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -187,6 +189,7 @@ function ChartData({
   onMarket,
   compact,
   demandRoot,
+  onBrowseMarkets,
 }: {
   interval: SymfChartInterval;
   light: boolean;
@@ -196,6 +199,7 @@ function ChartData({
   onMarket?: (market: ChartMarketData) => void;
   compact?: boolean;
   demandRoot: RefObject<HTMLDivElement | null>;
+  onBrowseMarkets?: () => void;
 }) {
   const { host } = useForumRuntime();
   const [data, setData] = useState<CheckedChartData | null>(null);
@@ -334,8 +338,12 @@ function ChartData({
   if (!data)
     return (
       <div
-        className={`${styles.candleCanvas} ${compact ? terminalStyles.chartCanvas : ""}`}
+        className={`${styles.candleCanvas} ${compact ? `${terminalStyles.chartCanvas} ${terminalStyles.chartEmpty}` : ""}`}
+        data-terminal-chart-empty={compact ? true : undefined}
       >
+        {compact && (
+          <span className={terminalStyles.chartEmptyLabel}>Market chart</span>
+        )}
         <p
           role="status"
           title={
@@ -343,12 +351,35 @@ function ChartData({
               ? `Next permitted check after ${new Date(retryAt).toLocaleString()}.`
               : undefined
           }
-          className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground"
+          className={
+            compact
+              ? terminalStyles.chartEmptyMessage
+              : "grid h-full place-items-center px-6 text-center text-sm text-muted-foreground"
+          }
         >
           {state || offline
             ? chartStateMessage(state, false, offline)
             : "Loading verified market data…"}
         </p>
+        {compact && retryAt && (
+          <p className={terminalStyles.chartEmptyHint}>
+            Next eligible check{" "}
+            {new Date(retryAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        )}
+        {compact && onBrowseMarkets && (
+          <Button
+            variant="outline"
+            className={`${terminalStyles.chartEmptyAction} focus-ring`}
+            type="button"
+            onClick={onBrowseMarkets}
+          >
+            Browse markets
+          </Button>
+        )}
       </div>
     );
   return (
@@ -367,6 +398,7 @@ function ChartData({
         <p
           title={`Checked ${new Date(data.checkedAt).toLocaleString()}. USD candles, UTC.`}
         >
+          {chartSourceLabel(data)} ·{" "}
           {`Checked ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
           {(data.stale || offline) && (
             <span role="status">
@@ -390,7 +422,7 @@ function ChartData({
           Read candle data
         </summary>
         <div
-          className="mt-3 max-h-60 overflow-auto"
+          className={compact ? "mt-3" : "mt-3 max-h-60 overflow-auto"}
           tabIndex={0}
           role="region"
           aria-label="Recent candle data"
@@ -442,6 +474,7 @@ export function TokenPriceChart({
   endpoint = `/api/token/${encodeURIComponent(mint)}/chart`,
   onMarket,
   compact,
+  onBrowseMarkets,
 }: {
   mint: string;
   symbol: string;
@@ -449,6 +482,7 @@ export function TokenPriceChart({
   endpoint?: string;
   onMarket?: (market: ChartMarketData) => void;
   compact?: boolean;
+  onBrowseMarkets?: () => void;
 }) {
   const demandRoot = useRef<HTMLDivElement>(null);
   const [interval, setInterval] = useState<SymfChartInterval>("15m");
@@ -485,6 +519,7 @@ export function TokenPriceChart({
         symbol={symbol}
         endpoint={endpoint}
         onMarket={onMarket}
+        onBrowseMarkets={onBrowseMarkets}
       />
     </div>
   );
