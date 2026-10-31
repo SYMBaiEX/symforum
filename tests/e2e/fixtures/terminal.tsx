@@ -58,7 +58,7 @@ createRoot(document.getElementById("root")!).render(
             </header>
             <aside
               aria-hidden="true"
-              className="forum-left-rail"
+              className="forum-left-rail hidden md:block"
               style={{
                 position: "fixed",
                 insetBlock: 0,

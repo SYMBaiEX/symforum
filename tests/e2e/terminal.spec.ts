@@ -175,6 +175,18 @@ for (const viewport of [
       expect(chart!.height).toBeGreaterThanOrEqual(180);
     }
     await expect(page.locator("[data-terminal-viewport]")).toHaveCount(1);
+    const rail = page.locator(".forum-left-rail");
+    if (viewport.width >= 768) await expect(rail).toBeVisible();
+    else await expect(rail).toBeHidden();
+    const contentLeft = viewport.width >= 768 ? 192 : 0;
+    const main = await page.locator("main.forum-main").boundingBox();
+    const workspace = await page
+      .locator("[data-terminal-viewport]")
+      .boundingBox();
+    expect(main!.x).toBeCloseTo(contentLeft, 0);
+    expect(main!.width).toBeCloseTo(viewport.width - contentLeft, 0);
+    expect(workspace!.x).toBeCloseTo(contentLeft, 0);
+    expect(workspace!.width).toBeCloseTo(viewport.width - contentLeft, 0);
     await expect(
       page.getByRole("navigation", { name: "Forum navigation", exact: true }),
     ).toBeHidden();
