@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useAction } from "convex/react";
 import { useTheme } from "next-themes";
 import { Copy, Check, ArrowUpRight, Shield } from "lucide-react";
@@ -11,6 +18,7 @@ import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
 import { tokenDiscussionLink } from "./token-discussion-link";
 import type { ChartMarketData } from "./price-chart-data";
+import { tokenChartReading } from "./token-chart-reading";
 import { TokenLogo, type MarketChoice } from "./market-identity";
 import {
   formatMarketPercent,
@@ -56,6 +64,22 @@ export function TokenDetail({
   const [copy, setCopy] = useState<"copied" | "failed" | null>(null);
   const copyRevision = useRef({ value: 0 });
   const projectMetadataId = useId();
+  const [liveMarket, setLiveMarket] = useState<ChartMarketData | null>(null);
+  const chartContext = useMemo(() => ({ mint: token.mint }), [token.mint]);
+  const currentChartContext = useRef<object | null>(chartContext);
+  useLayoutEffect(() => {
+    currentChartContext.current = chartContext;
+    setLiveMarket(null);
+    return () => {
+      currentChartContext.current = null;
+    };
+  }, [chartContext]);
+  const receiveMarket = useCallback(
+    (data: ChartMarketData) => {
+      if (currentChartContext.current === chartContext) setLiveMarket(data);
+    },
+    [chartContext],
+  );
   // Invalidate before paint, including when returning to an earlier mint.
   useLayoutEffect(() => {
     const revision = copyRevision.current;
@@ -65,7 +89,6 @@ export function TokenDetail({
       revision.value++;
     };
   }, [token.mint]);
-  const [liveMarket, setLiveMarket] = useState<ChartMarketData | null>(null);
   async function copyMint() {
     const revision = copyRevision.current;
     const attempt = ++revision.value;
@@ -77,12 +100,18 @@ export function TokenDetail({
       if (attempt === revision.value) setCopy("failed");
     }
   }
-  const fresh =
-    liveMarket?.mint === token.mint &&
-    !liveMarket.stale &&
-    now - liveMarket.checkedAt <= 180_000
-      ? liveMarket
-      : null;
+  const chartReading = tokenChartReading(
+    liveMarket,
+    token.mint,
+    now,
+    indexed === null,
+  );
+  const chart = chartReading?.data;
+  const fresh = chartReading && !chartReading.stale ? chart : null;
+  const staleChart = chartReading?.stale === true;
+  const chartObservation = chart
+    ? marketObservation(chart.checkedAt, now)
+    : null;
   const sampleSource = {
     label: marketData
       ? "Refreshed market sample"
@@ -93,10 +122,12 @@ export function TokenDetail({
     url: safeExternalUrl(sources?.sourceUrl),
     unavailable: sources?.unavailable ?? false,
   };
-  const priceSource = fresh
+  const priceSource = chart
     ? {
-        label: "Chart market response (provider not supplied)",
-        observation: marketObservation(fresh.checkedAt, now),
+        label: staleChart
+          ? "Retained chart market response (provider not supplied)"
+          : "Chart market response (provider not supplied)",
+        observation: { ...chartObservation!, stale: staleChart },
         url: null,
         unavailable: false,
       }
@@ -112,19 +143,19 @@ export function TokenDetail({
   const readings = [
     {
       label: "Price",
-      value: fresh ? fresh.priceUsd : market?.priceUsd,
+      value: chart ? chart.priceUsd : market?.priceUsd,
       unit: "USD",
       source: priceSource,
     },
     {
       label: "Market cap",
-      value: fresh ? fresh.stats?.marketCap : market?.marketCapUsd,
+      value: chart ? chart.stats?.marketCap : market?.marketCapUsd,
       unit: "USD",
       source: priceSource,
     },
     {
       label: "Liquidity",
-      value: fresh ? fresh.stats?.liquidity : market?.liquidityUsd,
+      value: chart ? chart.stats?.liquidity : market?.liquidityUsd,
       unit: "USD",
       source: priceSource,
     },
@@ -138,7 +169,7 @@ export function TokenDetail({
       label: "FDV",
       value: fresh ? fresh.stats?.fdv : market?.fdvUsd,
       unit: "USD",
-      source: priceSource,
+      source: fresh ? priceSource : sampleSource,
     },
     {
       label: "Holders",
@@ -148,7 +179,7 @@ export function TokenDetail({
     },
     {
       label: "24h volume",
-      value: fresh ? fresh.stats?.volume24h : market?.volume24hUsd,
+      value: chart ? chart.stats?.volume24h : market?.volume24hUsd,
       unit: "USD",
       source: priceSource,
     },
@@ -293,13 +324,24 @@ export function TokenDetail({
           )}
         </dl>
         <p className={styles.marketStatus} role="status">
-          {fresh
-            ? "Checked market data"
-            : sources?.refreshed
-              ? sources.unavailable
-                ? "Market fields unavailable"
-                : "Checked market sample"
-              : "Indexed market sample"}
+          {staleChart ? (
+            <>
+              Stale chart market data · {chartObservation?.label} ·{" "}
+              <time dateTime={chartObservation!.dateTime!}>
+                {chartObservation?.dateTime} UTC
+              </time>
+            </>
+          ) : fresh ? (
+            "Checked market data"
+          ) : sources?.refreshed ? (
+            sources.unavailable ? (
+              "Market fields unavailable"
+            ) : (
+              "Checked market sample"
+            )
+          ) : (
+            "Indexed market sample"
+          )}
           {market
             ? market.priceChange1hPercent == null
               ? " · 1h change unavailable"
@@ -316,7 +358,7 @@ export function TokenDetail({
         mint={token.mint}
         symbol={displayToken.symbol}
         light={resolvedTheme === "light"}
-        onMarket={setLiveMarket}
+        onMarket={receiveMarket}
         onBrowseMarkets={onBrowseMarkets}
       />
       <details className={styles.marketDetails}>

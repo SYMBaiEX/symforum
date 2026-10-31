@@ -57,7 +57,10 @@ export function ForumRecentThreadsPage({
 function LiveForumRecentThreadsPage({ mode }: { mode: ForumRecentThreadMode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [queryNow] = useState(() => Date.now());
+  // The backend uses only the UTC day; retain the existing mount-time window.
+  const [queryNow] = useState(
+    () => Math.floor(Date.now() / 86_400_000) * 86_400_000,
+  );
   const page = parsePage(searchParams.get("page"));
   const recentThreads = useQuery(forumRefs.listRecentThreads, {
     mode,
