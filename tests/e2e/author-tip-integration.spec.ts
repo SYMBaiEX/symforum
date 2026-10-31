@@ -286,3 +286,46 @@ test("local invalid amount creates no preparation and releases only the local ad
     },
   ]);
 });
+
+test("a known pre-intent async rejection releases local admission only for a deliberate corrected request", async ({
+  page,
+}) => {
+  const check = await harness(page, "admission&rejectable");
+  const review = page.getByRole("button", { name: "Review tip", exact: true });
+  const original = {
+    name: "forumCommunity:preparePayment",
+    args: {
+      wallet: "11111111111111111111111111111111",
+      threadId: "public-thread-one",
+      recipientId: "actual-thread-author",
+      amountLamports: "10000000",
+    },
+  };
+  await review.click();
+  await expect(review).toBeDisabled();
+  expect(await operations(page)).toEqual([original]);
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("author-tip:reject-before-intent")),
+  );
+  await expect(page.getByRole("alert")).toHaveText(
+    "Fixture preparation rejected before creating any intent.",
+  );
+  await expect(review).toBeEnabled();
+  // Awaiting this enabled state must not itself dispatch an automatic retry.
+  expect(await operations(page)).toEqual([original]);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    (await queries(page)).some(
+      (query) => query.name === "forumCommunity:getPayment",
+    ),
+  ).toBe(false);
+  await page
+    .getByRole("textbox", { name: "Optional author tip (SOL)" })
+    .fill("0.02");
+  await review.click();
+  await expect(review).toBeDisabled();
+  await check([
+    original,
+    { ...original, args: { ...original.args, amountLamports: "20000000" } },
+  ]);
+});

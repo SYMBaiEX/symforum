@@ -4,6 +4,7 @@ import type { CommerceWalletClient } from "../../../lib/commerce-wallet-client";
 const parameters = new URLSearchParams(location.search);
 const recipientWallet = "22222222222222222222222222222222";
 const payerWallet = "11111111111111111111111111111111";
+let rejectBeforeIntent: (() => void) | undefined;
 let resolved = !parameters.has("loading"),
   revision = 0;
 const listeners = new Set<() => void>();
@@ -17,6 +18,11 @@ window.addEventListener("author-tip:resolve", () => {
   resolved = true;
   revision++;
   listeners.forEach((listener) => listener());
+});
+window.addEventListener("author-tip:reject-before-intent", () => {
+  const reject = rejectBeforeIntent;
+  rejectBeforeIntent = undefined;
+  reject?.();
 });
 export function useQuery(reference: FunctionReference<"query">, args: unknown) {
   useSyncExternalStore(
@@ -101,8 +107,15 @@ export function useMutation(reference: FunctionReference<"mutation">) {
     operations.push({ name, args });
     // Only admission tests may invoke this fake. It creates no intent, has no
     // transport, and stays pending so the same component can exercise its lock.
+    // The rejection case is explicitly pre-intent, not an uncertain payment.
     if (parameters.has("admission") && name === "forumCommunity:preparePayment")
-      return new Promise(() => {});
+      return new Promise((_resolve, reject) => {
+        if (parameters.has("rejectable"))
+          rejectBeforeIntent = () =>
+            reject({
+              data: "Fixture preparation rejected before creating any intent.",
+            });
+      });
     throw new Error("Fixture forbids mutations");
   };
 }
