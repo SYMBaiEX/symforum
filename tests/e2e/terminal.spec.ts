@@ -231,6 +231,10 @@ test("one real order input persists through internal tools and viewport changes 
   await expect(amount).toBeVisible();
   await amount.fill(".5");
   await expect(amount).toHaveValue("0.5");
+  await page.getByText("Before you approve", { exact: true }).click();
+  await expect(
+    page.getByText(/Review fees, slippage and minimum received before signing/),
+  ).toBeVisible();
   await expect(
     page.getByText("Swaps are not yet enabled. No payments can be made here.", {
       exact: true,
@@ -302,6 +306,60 @@ test("a protected community receipt stays bounded in the terminal and Escape res
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
   await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("known private outcomes survive hidden community views and clear on fixture sign-out", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "held");
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const paymentQueryCount = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.filter(
+          (name) => name === "forumCommunity:listPayments",
+        ).length,
+    );
+  expect(await paymentQueryCount()).toBe(0);
+  await openTool(page, "Community");
+  expect(await paymentQueryCount()).toBe(0);
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  await expect(
+    page.getByText("Protected outcome", { exact: true }),
+  ).toBeVisible();
+  expect(await paymentQueryCount()).toBeGreaterThan(0);
+  const attention = page.getByRole("status", {
+    name: "Known protected operations",
+    exact: true,
+  });
+  const community = attention.getByRole("button", {
+    name: /^Community.*1 protected/,
+  });
+  await expect(community).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Community utilities", exact: true })
+    .getByRole("button", { name: "Project hubs", exact: true })
+    .click();
+  await expect(
+    page.getByText("Protected outcome", { exact: true }),
+  ).toBeHidden();
+  await expect(community).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close tools panel", exact: true })
+    .click();
+  await openPane(page, "Chart");
+  await expect(community).toBeVisible();
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("terminal-fixture:signout")),
+  );
+  await expect(attention).toBeHidden();
   expect(errors).toEqual([]);
 });
 

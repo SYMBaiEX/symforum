@@ -26,6 +26,14 @@ const subscribe = (fn: () => void) => {
 const snapshot = () => revision;
 let watches: WatchToken[] = [];
 let researchVerified = false;
+let signedOut = false;
+const queryNames: string[] = [];
+Object.assign(window, { __terminalFixtureQueries: queryNames });
+window.addEventListener("terminal-fixture:signout", () => {
+  signedOut = true;
+  revision++;
+  listeners.forEach((listener) => listener());
+});
 const now = Date.now();
 // These branded IDs and identities are invented; no fixture can open a transport.
 const memberId = "fixture-member" as Id<"users">;
@@ -174,8 +182,9 @@ const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
 const selectedMarketRows = () =>
   location.search.includes("currentcohort") ? currentCohort : marketRows;
 export function useConvexAuth() {
+  useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
-    isAuthenticated: !location.search.includes("guest"),
+    isAuthenticated: !signedOut && !location.search.includes("guest"),
     isLoading: false,
   };
 }
@@ -187,6 +196,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   if (args === "skip") return undefined;
   const input = args as Record<string, unknown>;
   const name = getFunctionName(ref);
+  queryNames.push(name);
   let result: unknown;
   if (name === "forumCommunity:listProjects")
     result = location.search.includes("empty") ? [] : projects;
