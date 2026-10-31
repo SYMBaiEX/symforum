@@ -232,6 +232,11 @@
   color: hsl(var(--foreground));
   font-weight: 550;
 }
+.meta > strong,
+.meta > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .muted {
   color: hsl(var(--muted-foreground));
   font-size: 13px;
@@ -470,7 +475,8 @@
   border-radius: 10px;
   box-shadow: none;
 }
-.creationDialog > button {
+.creationDialog:global([data-surface="forum"][data-ui="dialog"]) > button:last-child,
+.paymentDialog:global([data-surface="forum"][data-ui="dialog"]) > button:last-child {
   display: grid;
   place-items: center;
   width: 44px;
