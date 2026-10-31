@@ -35,7 +35,7 @@ export type TerminalMarket = {
 };
 
 export type TerminalMarketRefreshResult = {
-  state: "ready" | "loading" | "budget" | "unavailable";
+  state: "ready" | "loading" | "deferred" | "budget" | "unavailable";
   checkedAt: number | null;
   nextRefreshAt: number | null;
 };
