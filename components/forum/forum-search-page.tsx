@@ -313,6 +313,7 @@ function LiveForumSearchPage() {
             <label className="grid min-w-0 gap-2">
               <span className="text-xs text-muted-foreground">Keywords</span>
               <Input
+                aria-describedby="forum-search-keywords-help"
                 value={query}
                 minLength={2}
                 onChange={(event) => setQuery(event.target.value)}
@@ -320,6 +321,14 @@ function LiveForumSearchPage() {
                 className="rounded-xl border-row-border"
               />
             </label>
+            <p
+              id="forum-search-keywords-help"
+              className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]"
+            >
+              {query.trim().length === 1
+                ? "Add at least one more character, or clear Keywords and search by Author under Advanced filters."
+                : "Use at least two characters, or leave Keywords blank and enter a member handle in Author under Advanced filters."}
+            </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="grid min-w-0 gap-2">
                 <span className="text-xs text-muted-foreground">Board</span>
@@ -500,11 +509,11 @@ function LiveForumSearchPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button className="rounded-xl" type="submit">
+              <Button className="rounded-xl [&&]:!min-h-11" type="submit">
                 Search
               </Button>
               <Button
-                className="rounded-xl"
+                className="rounded-xl [&&]:!min-h-11"
                 disabled={!hasCustomFilters}
                 onClick={resetSearchForm}
                 type="button"
