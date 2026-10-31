@@ -7,6 +7,11 @@ import {
 
 const n = v.union(v.number(), v.null());
 const s = v.union(v.string(), v.null());
+export const terminalMarketDataValidator = v.object({
+  state: v.union(v.literal("available"), v.literal("unavailable")),
+  checkedAt: v.number(),
+  sourceUrl: s,
+});
 export const terminalBandValidator = v.union(
   v.literal("all"),
   v.literal("under50k"),
@@ -41,6 +46,7 @@ export const terminalMarketValidator = v.object({
   sourceRank: n,
   threadId: s,
   threadUrl: s,
+  marketData: v.optional(terminalMarketDataValidator),
 });
 export const terminalWalletValidator = v.object({
   wallet: v.string(),

@@ -1,6 +1,11 @@
 import type { MarketCapBand } from "./forum-market-cap";
 
 export type TerminalPlatform = "bags" | "pumpfun" | "other";
+export type TerminalMarketData = {
+  state: "available" | "unavailable";
+  checkedAt: number;
+  sourceUrl: string | null;
+};
 export type TerminalMarket = {
   mint: string;
   name: string;
@@ -25,6 +30,14 @@ export type TerminalMarket = {
   sourceRank: number | null;
   threadId: string | null;
   threadUrl: string | null;
+  /** Display-only market fields. Holders and scout evidence retain metricsAsOf. */
+  marketData?: TerminalMarketData;
+};
+
+export type TerminalMarketRefreshResult = {
+  state: "ready" | "loading" | "budget" | "unavailable";
+  checkedAt: number | null;
+  nextRefreshAt: number | null;
 };
 
 export type TerminalMarketList = {
