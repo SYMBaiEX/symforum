@@ -498,6 +498,50 @@ a.identityControl,
   font-size: 12px;
   line-height: 1.7;
 }
+.tipRecipientContext,
+.tipIdentityHint,
+.tipFilterSummary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.tipRecipientContext {
+  display: grid;
+  gap: 8px;
+}
+.tipIdentityHint {
+  flex-basis: 100%;
+}
+.tipFilterSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tipFilterSummary p {
+  flex: 1 1 180px;
+}
+.tipProfileLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+}
+.tipPublicWallet {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+  font-size: 14px;
+  line-height: 1.8;
+}
+/* Standalone forum controls otherwise enforce 40px with !important. */
+.tipControls :is(input, select, button) {
+  min-height: 44px !important;
+}
 .prose {
   max-width: 78ch;
   overflow-wrap: anywhere;
