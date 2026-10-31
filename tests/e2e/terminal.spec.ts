@@ -1961,7 +1961,7 @@ test("an available contributor keeps the linked-wallet tip form but does not sub
   await expect(amount).toBeVisible();
   await amount.fill("0.01");
   await page
-    .getByLabel("Contributor", { exact: true })
+    .getByRole("combobox", { name: "Contributor", exact: true })
     .selectOption("fixture-member");
   await expect(
     page.getByRole("button", { name: "Review one-time tip", exact: true }),
