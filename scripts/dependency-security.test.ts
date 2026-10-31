@@ -9,8 +9,6 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const emailRequire = createRequire(require.resolve("react-email"));
-const workerRequire = createRequire(new URL("../workers/eliza-shadow/package.json", import.meta.url));
-const coreRequire = createRequire(workerRequire.resolve("@elizaos/core"));
 type GlobOptions = {
   cwd: string;
   nodir?: boolean;
@@ -25,15 +23,14 @@ type GlobApi = {
 };
 
 // Exercise consumers' actual resolved dependencies, not a direct test-only copy.
-for (const [label, consumer] of [["react-email", emailRequire], ["Eliza core", coreRequire]] as const) {
-  describe(`${label} security override compatibility`, () => {
+const consumer = emailRequire;
+describe("react-email security override compatibility", () => {
     const glob = consumer("glob") as GlobApi;
     const globRequire = createRequire(consumer.resolve("glob"));
 
     it("resolves the reviewed patched versions under Bun 1.4.2", () => {
       expect(consumer("glob/package.json").version).toBe("14.0.3");
       expect(globRequire("minimatch/package.json").version).toBe("11.0.3");
-      expect(workerRequire("@elizaos/core/package.json").version).toBe("1.7.2");
     });
 
     it("retains named async/sync APIs, extglobs, ignore and file-type options", async () => {
@@ -82,8 +79,7 @@ for (const [label, consumer] of [["react-email", emailRequire], ["Eliza core", c
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
     });
-  });
-}
+});
 
 it("migrates legacy consumers to real minimatch 11 while retaining their class APIs", () => {
   const eslintRequire = createRequire(require.resolve("eslint"));

@@ -54,20 +54,23 @@ glob pattern.
 
 ## Verification and upkeep
 
-Install both graphs before running compatibility tests:
+The root suite tests only its installed graph; it does not require the independent
+worker to be installed. Install and test the worker separately:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
-bun install --cwd workers/eliza-shadow --frozen-lockfile --ignore-scripts
 bunx vitest run scripts/dependency-security.test.ts scripts/dependency-consumers.test.ts
 bunx eslint scripts/dependency-security.test.ts scripts/dependency-consumers.test.ts
 bun run typecheck
+bun install --cwd workers/eliza-shadow --frozen-lockfile --ignore-scripts
 bun run --cwd workers/eliza-shadow build
 bun run --cwd workers/eliza-shadow test
 bun run deps:audit
 ```
 
-Tests resolve dependencies from the actual consuming packages. They cover glob
+Root tests and the worker's native `test/dependency-security.test.mjs` each resolve
+dependencies from their own actual consuming packages, with no cross-graph
+imports or skipped missing-dependency checks. They cover glob
 async/sync/extglob/ignore/file-type behavior, cancellation while a directory read
 completes, and the amplification pattern in a timeout-bounded child process.
 Actual ESLint rules cover all migrated callable sites, raw/resolved allowlists,
