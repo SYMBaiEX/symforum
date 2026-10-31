@@ -33,11 +33,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
+import {
+  forumProfileInputIssues,
+  type ForumProfileInputIssues,
+} from "@/lib/forum-profile-inputs";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 type ForumNotificationPreferencesDraft = Pick<
   ForumNotificationPreferencesRecord,
@@ -175,6 +179,14 @@ function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [profileValidationAttempted, setProfileValidationAttempted] =
+    useState(false);
+  const profileInputContainer = useRef<HTMLDivElement | null>(null);
+  const profileInputIssues = forumProfileInputIssues({
+    avatarUrl,
+    birthday,
+    websiteUrl,
+  });
   const [notificationDraft, setNotificationDraft] =
     useState<ForumNotificationPreferencesDraft>(
       DEFAULT_NOTIFICATION_PREFERENCES_DRAFT,
@@ -232,6 +244,16 @@ function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }
       : receivedReputation.length + givenReputation.length;
 
   async function saveProfile() {
+    const firstInvalid = (["avatarUrl", "birthday", "websiteUrl"] as const).find(
+      (field) => profileInputIssues[field],
+    );
+    if (firstInvalid) {
+      setProfileValidationAttempted(true);
+      profileInputContainer.current
+        ?.querySelector<HTMLInputElement>(`input[name="${firstInvalid}"]`)
+        ?.focus();
+      return;
+    }
     const revision = profileRevision.current;
     setPending(true);
     setSaved(false);
@@ -335,7 +357,11 @@ function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }
         warnings={warnings}
       />
       <section className="forum-profile-sections">
-        <div className="forum-panel scroll-mt-24 p-4" id="ucp-profile">
+        <div
+          className="forum-panel scroll-mt-24 p-4"
+          id="ucp-profile"
+          ref={profileInputContainer}
+        >
           <ForumProfileForm
             profile={profile}
             avatarUrl={avatarUrl}
@@ -345,6 +371,8 @@ function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }
             location={location}
             timeZone={timeZone}
             websiteUrl={websiteUrl}
+            inputIssues={profileInputIssues}
+            validationAttempted={profileValidationAttempted}
             onAvatarUrlChange={(value) => {
               setAvatarUrl(value);
               editProfile();
@@ -409,6 +437,7 @@ function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }
             </Button>
             <Button
               className="rounded-xl text-xs"
+              data-profile-save
               type="button"
               disabled={pending}
               onClick={saveProfile}
@@ -624,6 +653,8 @@ function ForumProfileForm({
   signature,
   timeZone,
   websiteUrl,
+  inputIssues,
+  validationAttempted,
 }: {
   avatarUrl: string;
   bio: string;
@@ -644,7 +675,26 @@ function ForumProfileForm({
   signature: string;
   timeZone: string;
   websiteUrl: string;
+  inputIssues: ForumProfileInputIssues;
+  validationAttempted: boolean;
 }) {
+  const fieldId = useId();
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof ForumProfileInputIssues, boolean>>
+  >({});
+  const issue = (field: keyof ForumProfileInputIssues) =>
+    validationAttempted || touched[field] ? inputIssues[field] : undefined;
+  function touchField(
+    field: keyof ForumProfileInputIssues,
+    next: EventTarget | null,
+  ) {
+    // Let Save validate before inserting errors that could move the pointer's
+    // button between mousedown and click. Other blur paths validate normally.
+    if (next instanceof HTMLElement && next.matches("[data-profile-save]")) {
+      return;
+    }
+    setTouched((current) => ({ ...current, [field]: true }));
+  }
   return (
     <div className="grid gap-5">
       <div>
@@ -667,6 +717,13 @@ function ForumProfileForm({
           <label className="grid gap-2">
             <span className="text-xs text-muted-foreground">Avatar URL</span>
             <Input
+              name="avatarUrl"
+              inputMode="url"
+              autoCapitalize="none"
+              spellCheck={false}
+              aria-describedby={`${fieldId}-avatar-help${issue("avatarUrl") ? ` ${fieldId}-avatar-error` : ""}`}
+              aria-invalid={!!issue("avatarUrl")}
+              onBlur={(event) => touchField("avatarUrl", event.relatedTarget)}
               value={avatarUrl}
               maxLength={500}
               onChange={(event) => onAvatarUrlChange(event.target.value)}
@@ -674,9 +731,25 @@ function ForumProfileForm({
               className="rounded-xl border-row-border"
             />
           </label>
+          <p id={`${fieldId}-avatar-help`} className="text-xs text-muted-foreground">
+            Optional. Use a full http:// or https:// image URL. Leave blank to use
+            your account avatar.
+          </p>
+          {issue("avatarUrl") && (
+            <p id={`${fieldId}-avatar-error`} role="alert" className="text-sm text-destructive">
+              {issue("avatarUrl")}
+            </p>
+          )}
           <label className="grid gap-2">
             <span className="text-xs text-muted-foreground">Website</span>
             <Input
+              name="websiteUrl"
+              inputMode="url"
+              autoCapitalize="none"
+              spellCheck={false}
+              aria-describedby={`${fieldId}-website-help${issue("websiteUrl") ? ` ${fieldId}-website-error` : ""}`}
+              aria-invalid={!!issue("websiteUrl")}
+              onBlur={(event) => touchField("websiteUrl", event.relatedTarget)}
               value={websiteUrl}
               maxLength={240}
               onChange={(event) => onWebsiteUrlChange(event.target.value)}
@@ -684,6 +757,15 @@ function ForumProfileForm({
               className="rounded-xl border-row-border"
             />
           </label>
+          <p id={`${fieldId}-website-help`} className="text-xs text-muted-foreground">
+            Optional. Include http:// or https://. Leave blank to remove your
+            website.
+          </p>
+          {issue("websiteUrl") && (
+            <p id={`${fieldId}-website-error`} role="alert" className="text-sm text-destructive">
+              {issue("websiteUrl")}
+            </p>
+          )}
         </div>
       </div>
       <label className="grid gap-2">
@@ -710,12 +792,26 @@ function ForumProfileForm({
         <label className="grid gap-2">
           <span className="text-xs text-muted-foreground">Birthday</span>
           <Input
+            name="birthday"
+            inputMode="text"
+            autoComplete="bday"
+            aria-describedby={`${fieldId}-birthday-help${issue("birthday") ? ` ${fieldId}-birthday-error` : ""}`}
+            aria-invalid={!!issue("birthday")}
+            onBlur={(event) => touchField("birthday", event.relatedTarget)}
             value={birthday}
             maxLength={10}
             onChange={(event) => onBirthdayChange(event.target.value)}
             placeholder="YYYY-MM-DD"
             className="rounded-xl border-row-border"
           />
+          <span id={`${fieldId}-birthday-help`} className="text-xs text-muted-foreground">
+            Optional. Use a real calendar date in YYYY-MM-DD format.
+          </span>
+          {issue("birthday") && (
+            <span id={`${fieldId}-birthday-error`} role="alert" className="text-sm text-destructive">
+              {issue("birthday")}
+            </span>
+          )}
         </label>
         <label className="grid gap-2">
           <span className="text-xs text-muted-foreground">Timezone</span>
