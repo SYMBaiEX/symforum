@@ -21,12 +21,9 @@ export function trackerCandleUrl(
   ];
   if (!seconds)
     throw new PublicMarketSourceError("unsupported", "invalid_candle_interval");
-  const end = Math.floor(now / 1000);
   return `https://data.solanatracker.io/chart/${binding.mint}/${binding.pool}?${new URLSearchParams(
     {
       type: interval,
-      time_from: String(end - seconds * 120),
-      time_to: String(end),
       currency: "usd",
       marketCap: "false",
       removeOutliers: "true",
@@ -41,7 +38,16 @@ export function parseTrackerCandles(
   now: number,
   binding: { mint: string; pool: string; quote: string },
   interval: SymfChartInterval,
+  requestedRange?: { from: number; to: number },
 ): SymfCandle[] {
+  if (
+    requestedRange &&
+    (!Number.isSafeInteger(requestedRange.from) ||
+      !Number.isSafeInteger(requestedRange.to) ||
+      requestedRange.from <= 0 ||
+      requestedRange.to < requestedRange.from)
+  )
+    throw new PublicMarketSourceError("candle-window", "invalid_market_data");
   const data = record(value);
   for (const [key, expected] of [
     ["mint", binding.mint],
@@ -59,14 +65,10 @@ export function parseTrackerCandles(
         "wrong_market_token",
       );
   }
-  if (!Array.isArray(data.oclhv) || data.oclhv.length > 200)
+  if (!Array.isArray(data.oclhv) || data.oclhv.length > 2000)
     throw new PublicMarketSourceError("candle-schema", "invalid_candle_schema");
   if (data.oclhv.length === 0)
     throw new PublicMarketSourceError("empty-candles", "empty_market_candles");
-  const seconds = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400 }[
-    interval
-  ];
-  const oldest = Math.floor(now / 1000) - seconds * 120 - seconds;
   const candles = data.oclhv
     .map((raw) => {
       const row = record(raw);
@@ -88,7 +90,10 @@ export function parseTrackerCandles(
           "candle-time-unit",
           "invalid_market_data",
         );
-      if (candle.time < oldest)
+      if (
+        requestedRange &&
+        (candle.time < requestedRange.from || candle.time > requestedRange.to)
+      )
         throw new PublicMarketSourceError(
           "candle-window",
           "invalid_market_data",
@@ -137,7 +142,8 @@ export function parseTrackerCandles(
       "candle-duplicate",
       "invalid_market_data",
     );
-  return candles;
+  // Validate every source row first; tail selection never hides malformed bars.
+  return candles.slice(-120);
 }
 
 /** Caller must durably reserve both the shared read allowance and Tracker quota. */

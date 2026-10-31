@@ -389,7 +389,9 @@ export const claim = internalMutation({
           row.failureStage === "candles" &&
           row.failureCode !== undefined &&
           row.failureCode !== "incomplete" &&
-          current.cache.failureProvider === "geckoterminal"
+          (current.cache.failureProvider === "geckoterminal" ||
+            (current.cache.failureProvider === "solana-tracker" &&
+              row.failureCode === "candle-window"))
           ? "solana-tracker"
           : "geckoterminal"
         : undefined;

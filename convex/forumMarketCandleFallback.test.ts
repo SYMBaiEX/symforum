@@ -126,11 +126,15 @@ test("legacy known Gecko failure selects a two-request Tracker substitute; 200 v
     }),
   );
   const heldBefore = await t.run((ctx) => ctx.db.get("tokenAlphaRuns", heldId));
+  const history = Array.from({ length: 160 }, (_, i) => ({
+    ...candle,
+    time: candle.time - i * 900,
+  }));
   const fetcher = vi.fn(
     async (url: RequestInfo | URL) =>
       new Response(
         JSON.stringify(
-          String(url).includes("dexscreener") ? pairs : { oclhv: [candle] },
+          String(url).includes("dexscreener") ? pairs : { oclhv: history },
         ),
       ),
   );
@@ -152,6 +156,12 @@ test("legacy known Gecko failure selects a two-request Tracker substitute; 200 v
     quote: MARKET_QUOTES[0],
     checkedAt: NOW,
   });
+  expect(JSON.parse(result.payload!).candles).toEqual(
+    history.slice(0, 120).reverse(),
+  );
+  const sourceUrl = new URL(String(fetcher.mock.calls[1]![0]));
+  expect(sourceUrl.searchParams.has("time_from")).toBe(false);
+  expect(sourceUrl.searchParams.has("time_to")).toBe(false);
   expect(await usage(t)).toMatchObject([
     { requests: 1, candleRequests: 1, enrichmentRequests: 0 },
   ]);
@@ -195,7 +205,7 @@ test("a new Gecko failure never adds a third same-attempt fallback request", asy
 test.each([
   [{ ...candle, open: 0 }, "candle-price"],
   [{ ...candle, time: NOW }, "candle-time-unit"],
-  [{ ...candle, time: NOW / 1000 - 122 * 900 }, "candle-window"],
+  [{ ...candle, time: NOW / 1000 + 61 }, "candle-future"],
 ] as const)(
   "Tracker rejection persists only safe diagnostic %s",
   async (invalid, code) => {
@@ -313,6 +323,38 @@ test.each(["pending", "incomplete", "hint", "tracker"])(
     if (state === "tracker" || state === "incomplete")
       expect(admitted.candleProvider).toBe("geckoterminal");
     else expect(admitted.fetch).toBe(false);
+    expect(await usage(t)).toEqual([]);
+  },
+);
+
+test.each(["due", "before-hint", "pending", "incomplete"])(
+  "legacy Tracker candle-window %s requires ordinary due completed admission",
+  async (state) => {
+    const t = setup();
+    await pilot(t);
+    await legacyFailure(t, {
+      failureProvider: "solana-tracker",
+      failureCode: "candle-window",
+      ...(state === "before-hint"
+        ? { nextAttemptAt: NOW + 60000 }
+        : state === "pending"
+          ? { leaseUntil: NOW + 1000 }
+          : state === "incomplete"
+            ? { leaseUntil: NOW - 1 }
+            : {}),
+    });
+    const admission = await t.mutation(internal.forumMarketData.claim, {
+      ...request,
+      lease: "shape-corrected-later-intent",
+    });
+    if (state === "due")
+      expect(admission).toMatchObject({
+        fetch: true,
+        candleProvider: "solana-tracker",
+      });
+    else if (state === "incomplete")
+      expect(admission.candleProvider).toBe("geckoterminal");
+    else expect(admission.fetch).toBe(false);
     expect(await usage(t)).toEqual([]);
   },
 );
