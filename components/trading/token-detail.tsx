@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { useTheme } from "next-themes";
 import { Copy, Check, ArrowUpRight, Shield } from "lucide-react";
@@ -48,13 +48,27 @@ export function TokenDetail({
       : token;
   const { resolvedTheme } = useTheme();
   const [copy, setCopy] = useState<"copied" | "failed" | null>(null);
+  const copyRevision = useRef({ value: 0 });
+  const projectMetadataId = useId();
+  // Invalidate before paint, including when returning to an earlier mint.
+  useLayoutEffect(() => {
+    const revision = copyRevision.current;
+    revision.value++;
+    setCopy(null);
+    return () => {
+      revision.value++;
+    };
+  }, [token.mint]);
   const [liveMarket, setLiveMarket] = useState<ChartMarketData | null>(null);
   async function copyMint() {
+    const revision = copyRevision.current;
+    const attempt = ++revision.value;
+    setCopy(null);
     try {
       await navigator.clipboard.writeText(token.mint);
-      setCopy("copied");
+      if (attempt === revision.value) setCopy("copied");
     } catch {
-      setCopy("failed");
+      if (attempt === revision.value) setCopy("failed");
     }
   }
   const fresh =
@@ -227,6 +241,48 @@ export function TokenDetail({
               </div>
             ))}
           </dl>
+          <details className={styles.metricGlossary}>
+            <summary className="focus-ring">What these metrics mean</summary>
+            <dl>
+              <div>
+                <dt>Market cap</dt>
+                <dd>Source-reported value of circulating supply. Not FDV.</dd>
+              </div>
+              <div>
+                <dt>FDV</dt>
+                <dd>
+                  Source-reported fully diluted valuation. Not circulating
+                  market cap.
+                </dd>
+              </div>
+              <div>
+                <dt>Liquidity</dt>
+                <dd>
+                  Source-reported pool liquidity, not a guarantee of executable
+                  depth or the amount you can trade.
+                </dd>
+              </div>
+              <div>
+                <dt>Holders</dt>
+                <dd>
+                  Addresses in the original holder sample, not verified people.
+                  A fresh price does not refresh this sample.
+                </dd>
+              </div>
+              <div>
+                <dt>1h / 24h volume</dt>
+                <dd>
+                  Source-reported USD trading volume over one-hour and 24-hour
+                  windows. Source coverage and observation times can differ from
+                  the chart.
+                </dd>
+              </div>
+            </dl>
+            <p>
+              Missing values remain unavailable. Definitions do not refresh or
+              verify metrics. Only a fresh swap quote is executable.
+            </p>
+          </details>
         </div>
         <div className={styles.source} role="status">
           {fresh
@@ -256,9 +312,22 @@ export function TokenDetail({
           {market?.description && (
             <p className={styles.muted}>{market.description}</p>
           )}
+          {links.some((link) => link.label !== "Market source") && (
+            <p id={projectMetadataId} className={styles.muted}>
+              Website and social links are unverified project metadata, not
+              endorsements.
+            </p>
+          )}
           <div className={styles.links}>
             {links.map((link) => (
-              <a key={link.label} href={link.href} {...external}>
+              <a
+                key={link.label}
+                href={link.href}
+                {...external}
+                aria-describedby={
+                  link.label === "Market source" ? undefined : projectMetadataId
+                }
+              >
                 {link.label}
                 <ArrowUpRight aria-hidden="true" />
               </a>

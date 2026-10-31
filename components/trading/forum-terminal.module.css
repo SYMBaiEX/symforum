@@ -556,6 +556,34 @@
   border-bottom: 1px solid hsl(var(--border));
   color: hsl(var(--foreground));
 }
+.marketDetails .metricGlossary {
+  margin-top: 12px;
+  border-top: 1px solid hsl(var(--border));
+  overflow-wrap: anywhere;
+}
+.marketDetails .metricGlossary > summary {
+  min-height: 44px;
+  padding: 4px 0;
+  color: hsl(var(--foreground));
+  line-height: 20px;
+  cursor: pointer;
+  align-content: center;
+}
+.marketDetails .metricGlossary dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0;
+}
+.marketDetails .metricGlossary dt {
+  font-weight: 550;
+}
+.marketDetails .metricGlossary dd,
+.marketDetails .metricGlossary p {
+  margin: 2px 0 8px;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.65;
+}
 .source {
   padding: 8px 12px;
   color: hsl(var(--muted-foreground));
