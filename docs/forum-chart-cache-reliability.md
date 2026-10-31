@@ -4,6 +4,10 @@ The terminal and the legacy SYMF chart use the same Convex admission controls,
 with separate cache keys for dynamically selected pools and the legacy pinned
 SYMF pool. The pinned chart never falls back to a different pool. Mint, pool,
 quote-token and candle validation remain mandatory before saving new data.
+Both website SYMF chart URLs now resolve to the configured official pinned-pool
+cache, with an additional exact pool/SOL-quote check at the HTTP boundary. Other
+tokens retain dynamic pool selection. Old generic cache records and the public
+Convex reader are not migrated, reset or removed by this website canonicalization.
 
 ## Freshness and failures
 

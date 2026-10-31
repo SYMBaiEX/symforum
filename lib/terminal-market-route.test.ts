@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { terminalMarketResponse } from "./terminal-market-route";
 import { SYMF_TOKEN } from "./symf-token";
+import { MARKET_QUOTES } from "./terminal-market-source";
 import {
   CHART_CACHE_RETENTION_MS,
   type MarketCacheView,
@@ -20,6 +21,7 @@ const payload = (checkedAt = now) =>
   JSON.stringify({
     mint: SYMF_TOKEN.mint,
     pool: SYMF_TOKEN.pool,
+    quote: MARKET_QUOTES[0],
     interval: "15m",
     checkedAt,
     candles: [{ time: now / 1000, close: 1 }],
@@ -195,5 +197,61 @@ test("pinned legacy chart requests use the distinct fixed-pool server path", asy
     kind: "chart",
     interval: "15m",
     pinnedSymf: true,
+  });
+});
+
+test("both website SYMF chart URLs use the canonical pinned cache, ignoring caller overrides", async () => {
+  action.mockResolvedValue(view());
+  const input = new Request(
+    `https://forum.symbaiex.com/api/token/${SYMF_TOKEN.mint}/chart?interval=15m&pinnedSymf=false&pool=untrusted&provider=untrusted`,
+  );
+  const response = await terminalMarketResponse(
+    SYMF_TOKEN.mint,
+    "chart",
+    input,
+  );
+  expect(response.status).toBe(200);
+  expect(action).toHaveBeenCalledWith(expect.anything(), {
+    mint: SYMF_TOKEN.mint,
+    kind: "chart",
+    interval: "15m",
+    pinnedSymf: true,
+  });
+});
+
+test.each(["pool", "quote"])(
+  "canonical SYMF responses reject an incorrect %s",
+  async (field) => {
+    action.mockResolvedValue(
+      view({
+        payload: JSON.stringify({
+          ...JSON.parse(payload()),
+          [field]: "untrusted",
+        }),
+      }),
+    );
+    const response = await terminalMarketResponse(
+      SYMF_TOKEN.mint,
+      "chart",
+      request(),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).not.toHaveProperty("candles");
+  },
+);
+
+test("other token chart routes keep dynamic-pool behavior", async () => {
+  const otherMint = MARKET_QUOTES[1];
+  action.mockResolvedValue(
+    view({
+      payload: JSON.stringify({ ...JSON.parse(payload()), mint: otherMint }),
+    }),
+  );
+  const response = await terminalMarketResponse(otherMint, "chart", request());
+  expect(response.status).toBe(200);
+  expect(action).toHaveBeenCalledWith(expect.anything(), {
+    mint: otherMint,
+    kind: "chart",
+    interval: "15m",
   });
 });
