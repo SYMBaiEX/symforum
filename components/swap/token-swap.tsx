@@ -721,9 +721,6 @@ function LiveSwap({
           />
         </div>
         {input && <code title={input.mint}>{short(input.mint)}</code>}
-        <p id={`${id}-amount-help`} className="commerce-note">
-          {swapAmountHelp(input?.symbol, input?.decimals)}
-        </p>
         {amountError && (
           <p id={`${id}-amount-error`} className="commerce-error" role="alert">
             {amountError}
@@ -781,14 +778,26 @@ function LiveSwap({
           <option value={100}>1%</option>
         </select>
       </div>
-      <p id={`${id}-slippage-help`} className="commerce-note">
-        Slippage limits how much less you may receive than the quote. The
-        default is 0.5%; a higher limit permits a lower minimum received.
-        Changing this limit requires a fresh quote. Check the quoted minimum
-        before approval.
-      </p>
       <details className="commerce-details">
         <summary>Wallet compatibility</summary>
+        <p id={`${id}-amount-help`} className="commerce-note">
+          {swapAmountHelp(input?.symbol, input?.decimals)}
+        </p>
+        <p id={`${id}-slippage-help`} className="commerce-note">
+          Slippage limits how much less you may receive than the quote. The
+          default is 0.5%; a higher limit permits a lower minimum received.
+          Changing this limit requires a fresh quote. Check the quoted minimum
+          before approval.
+        </p>
+        {best && (
+          <p id={`${id}-fee-help`}>
+            The platform fee shown in the estimate is included in the quote, not
+            an extra charge on top. Its collection token is shown when the route
+            provides it. Pool fees are reflected in the route quote. Network
+            fees and token-account rent are separate; their full cost is not
+            known here.
+          </p>
+        )}
         <div className="commerce-inline">
           <label htmlFor={`${id}-format`}>Transaction format</label>
           <select
@@ -843,12 +852,6 @@ function LiveSwap({
               {Math.max(0, Math.ceil((best.expiresAt - now) / 1000))}s
             </span>
           </div>
-          <p id={`${id}-fee-help`}>
-            The platform fee above is included in the quote, not an extra charge
-            on top. Its collection token is shown when the route provides it.
-            Pool fees are reflected in the route quote. Network fees and
-            token-account rent are separate; their full cost is not known here.
-          </p>
           <p>
             Network fees and any token-account rent are extra. Wallet approval
             shows the final transaction.

@@ -155,6 +155,12 @@ for (const scenario of ["", "unknown-fee"])
       new RegExp(`collected in ${scenario ? "11111…11111" : "USDC"}`),
     );
     await expect(
+      page.locator("dd[aria-describedby]"),
+    ).toHaveAccessibleDescription(
+      /included in the quote.*their full cost is not known here/,
+    );
+    await page.getByText("Wallet compatibility", { exact: true }).click();
+    await expect(
       page.getByText(/their full cost is not known here/),
     ).toBeVisible();
     await expect(page.getByText("0.995 USDC", { exact: true })).toBeVisible();
@@ -177,6 +183,7 @@ for (const width of [320, 390])
     await amount(page).fill("0.1234567891");
     await amount(page).blur();
     await expect(amount(page)).toHaveAttribute("aria-invalid", "true");
+    await page.getByText("Wallet compatibility", { exact: true }).click();
     for (const text of [
       page.getByText(/Extra decimals are rejected, never rounded/),
       page.getByRole("alert"),

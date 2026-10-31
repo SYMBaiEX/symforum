@@ -676,6 +676,11 @@
   font-size: 12px;
   line-height: 16px;
 }
+/* Validation belongs to the full amount card, never its compact label column. */
+.aside .body :global(.token-swap .commerce-amount > .commerce-note),
+.aside .body :global(.token-swap .commerce-amount > .commerce-error) {
+  grid-column: 1 / -1;
+}
 .aside .body :global(.token-swap .commerce-reverse) {
   justify-self: center;
   width: 44px;
