@@ -229,6 +229,24 @@ export function ForumCatchUp() {
               <p className="mb-2 text-xs leading-5 text-muted-foreground">
                 {collection.description}
               </p>
+              {boards === undefined ? (
+                <p
+                  role="status"
+                  className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]"
+                >
+                  Loading board options for {collection.title}…
+                </p>
+              ) : !boards.some((board) =>
+                  collection.slugs.some((slug) => slug === board.slug),
+                ) ? (
+                <p
+                  role="status"
+                  className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]"
+                >
+                  No matching boards for {collection.title} in the loaded
+                  options.
+                </p>
+              ) : null}
               {(boards ?? [])
                 .filter((board) =>
                   collection.slugs.some((slug) => slug === board.slug),
