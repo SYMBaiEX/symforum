@@ -563,3 +563,110 @@ operations, job/hold records and infrastructure binding metadata out of it.
 - Eight assigned items are tested, not merged/deployed. Forty-three remain
   source-deployed. Commit/secret scan, normal protected review/merge, complete-tree
   equality and exact automatic web rollout acceptance are still required.
+
+## Batch 7 released — 11:20 UTC
+
+- PR #262 normally rebase-merged at `dfa89c336e8119cb44ce5a3ea5087590e1646cf6`
+  at 11:16:20 UTC. Complete tree equals qualified `8bb3db4a`; all four new main
+  authors retain the exact required identity. Existing protections and disabled
+  Actions were read back; no settings/profile/history changes occurred.
+- Automatic production READY was observed at 11:19:44 UTC. Every original domain
+  bound the exact release at 11:19:53 UTC. One signed-out public Feed visit showed
+  twelve articles at desktop and phone dimensions, with no overflow, client
+  errors or blocked provider attempts. Settled capture/navigation geometry was
+  correct. The isolated browser closed after the check.
+- The bounded exact-release server-error sample was zero of thirty, uncapped.
+  No protected terminal/financial flow was exercised live; local fixtures are
+  not settlement, actual clipboard or assistive-technology certification.
+- Fifty-one tasks are now source-deployed. No backend, worker, agent settings,
+  financial controls, budgets, schedules, data limits, fees or holds changed.
+
+## Batch 8 dispatch — 11:21 UTC
+
+- FORUM-006/011: `/private/tmp/symforum-overnight-settings-feedback`, branch
+  `sym/overnight-settings-feedback`, based on released `dfa89c33`. Own the control
+  panel and new control-panel-feedback spec/fixture/state only. Announce and
+  associate relevant add-username failures, preserve input/busy/permissions and
+  correct the literal signature newline. Unrelated remove-row failures must not
+  mark the input invalid. Existing mutation payloads/admission/auth fences remain.
+- FORUM-049/050: `/private/tmp/symforum-overnight-saved-filters`, branch
+  `sym/overnight-saved-filters`, same base. Own saved-thread presentation and new
+  saved-thread-filter spec/fixture/state only. Trim local filter consistently,
+  show visible versus loaded counts and deliberate clear/focus feedback. Preserve
+  the cap-forty query, guest/private gates and all removal behavior unchanged.
+- FORUM-047/048: `/private/tmp/symforum-overnight-member-recovery`, branch
+  `sym/overnight-member-recovery`, same base. Own member presentation and new
+  member-controls spec/fixture/state only. Distinguish no-match recovery from
+  genuine empty/loading, reset only query/page while retaining sort/page size,
+  and verify disclosure Escape/focus at 320px. Reuse existing URL/query updates.
+- Literal ownership is recorded before dispatch. All six tasks are in progress,
+  not completed. Counts: fifty-one deployed, six in progress, 165 queued, two
+  blocked, sixteen needing confirmation. Parent remains on the released batch-7
+  branch with only these two known-owned planning updates dirty. Finish these
+  assignments and independent review before starting another source group.
+
+## Batch 8 saved-thread candidate — 11:28 UTC
+
+- Parent integration branch is now `sym/overnight-web3-wave-eight`, based on
+  released `dfa89c33`, preserving both known-owned planning files.
+- Saved-filter candidate `9919134f` integrated as `087ea01d`. Eight focused
+  actual-forum browser checks, five relevant unit tests, full application types
+  and scoped lint pass. Root inspected trimmed matching, loaded-only counts and
+  clear/focus recovery; independent source review is active. Query cap, access
+  gates and removal behavior remain unchanged. Two items are implemented only.
+- Initial worker type check could not resolve the bare forum-ui package because
+  new worktrees lacked the normal app-local workspace link present in primary.
+  Parent recreated that exact ignored link to each worktree's own package;
+  unchanged saved-filter source then passed full types. No tracked source,
+  configuration or shared dependency workaround was used.
+- Settings and member candidates are still in progress. No final parent suite,
+  PR or deployment for this batch has started.
+
+## Batch 8 source reviews — 11:34 UTC
+
+- Settings `2ec62bb4` integrated as `4aa93e54`, member recovery `c540d338`
+  as `1dbc552b`; independent source reviews were clean. Settings focused checks
+  covered twenty-four browser and twenty-two relevant unit cases; member checks
+  covered twenty-three browser and seven relevant unit cases, with types/lint.
+- Additional hardening exposed a cross-app distinction: platform paragraphs
+  inherited wrapping, but standalone forum CSS let a long failed username expand
+  the section to 1,578px at a 320px viewport, masked by document clipping.
+  Follow-up `b9bf70e4`, integrated as `8b01b4a2`, adds only error-local wrapping.
+  The stronger two-app regression checks actual section/error/internal bounds,
+  full content/ARIA and the exact original payload. Independent review is clean.
+- Saved-filter test-only `67d86bfc`, integrated as `a43d52a7`, verifies both
+  real app styles at 320/390px, direct component bounds, 16px input and 44px
+  controls. Ten focused browser checks and types/lint pass, with no production
+  source changes. Parent reviewed that follow-up; existing assertions remain.
+- All six tasks are implemented only. The member cross-app test-only follow-up
+  is finishing before the final parent suite; no PR/deployment or qualification
+  claim is made yet. No global stylesheet, query, mutation contract or auth change.
+
+## Batch 8 final candidate — 11:35 UTC
+
+- Member test-only follow-up `03b3cc64`, integrated as `85f7d9bd`, adds actual
+  standalone-app CSS/config alongside platform CSS. Eleven focused cases pass;
+  direct control, popup and section geometry stays bounded at 320/390px, without
+  relying on document clipping. No member source fix was needed. All previous
+  focus, Escape, URL preservation and 44px assertions remain intact.
+- Parent reviewed every combined source/test follow-up and applied the React
+  state/event checklist: local derived matching is computed once, deliberate
+  recovery lives in existing handlers, and no new subscription/effect path was
+  introduced. The three source leaves retain original backend/financial behavior.
+- Runtime candidate is frozen at `85f7d9bd` plus regenerated native parity.
+  Full final parent qualification is starting; all six items remain implemented,
+  not yet qualified, merged or deployed.
+
+## Batch 8 qualified — 11:40 UTC
+
+- Final parent qualification passed on the unchanged combined runtime: 4,363
+  unit/backend tests and 514 browser tests, both type checks, all five app builds,
+  native parity, three unsuppressed dependency audits and security controls.
+  Lint retains the same three existing warnings and zero errors; no tests skipped
+  or assertions weakened. Fixtures denied real provider/wallet operations.
+- Cross-app tests include direct section/control geometry, not just document
+  width, so a clipped overflow cannot conceal a broken component. The one
+  confirmed standalone error-wrap regression is corrected in the leaf only.
+- Six inventory items are tested, not merged/deployed. Fifty-one are currently
+  source-deployed. Commit, redacted secret scan, normal protected merge and exact
+  automatic production/domain acceptance remain before a shipped claim.
