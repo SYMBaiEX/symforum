@@ -431,6 +431,55 @@ for (const width of [390, 840, 1024, 1033, 1034, 1035, 1100])
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },
+])
+  test(`normal mobile quote keeps the full receive estimate readable at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const { errors, externalRequests } = await harness(page, "orderquote");
+    await openPane(page, "Trade");
+    const order = page.getByRole("complementary", {
+      name: "Trade selected token",
+    });
+    await order
+      .getByRole("textbox", { name: "You pay", exact: true })
+      .fill("1");
+    const receive = order.getByRole("status", {
+      name: "You receive",
+      exact: true,
+    });
+    await expect(receive).toHaveText("123.456789");
+    const width = await receive.evaluate((node) => ({
+      content: node.scrollWidth,
+      available: node.clientWidth,
+      fontSize: parseFloat(getComputedStyle(node).fontSize),
+    }));
+    expect(width.fontSize).toBeGreaterThanOrEqual(24);
+    expect(
+      width.content,
+      "A normal phone quote must not ellipsize the receive estimate",
+    ).toBeLessThanOrEqual(width.available);
+    await receive.scrollIntoViewIfNeeded();
+    await expectUnobscured(receive);
+    const primary = order.getByRole("button", {
+      name: "Buy SYMF",
+      exact: true,
+    });
+    await primary.scrollIntoViewIfNeeded();
+    await expectUnobscured(primary);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/fixture-normal-quote-mobile-${viewport.width}x${viewport.height}.png`,
+      animations: "disabled",
+    });
+    await expectViewportBounded(page);
+    await expectNoSwapExecution(page);
+    expect(externalRequests).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
   { width: 768, height: 900 },
   { width: 1024, height: 900 },
   { width: 1440, height: 900 },
@@ -720,7 +769,9 @@ for (const viewport of [
     const receiveWidth = await receive.evaluate((node) => ({
       content: node.scrollWidth,
       available: node.clientWidth,
+      fontSize: parseFloat(getComputedStyle(node).fontSize),
     }));
+    expect(receiveWidth.fontSize).toBeGreaterThanOrEqual(24);
     expect(
       receiveWidth.content,
       "The normal quote estimate must be fully readable, not ellipsized",
