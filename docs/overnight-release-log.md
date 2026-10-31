@@ -1321,3 +1321,76 @@ operations, job/hold records and infrastructure binding metadata out of it.
   existing test file, dependency, global CSS, backend or account gate changed.
 - Counts: eighty-six deployed, three implemented, 133 queued, two blocked and
   sixteen needing confirmation. Full unchanged-candidate qualification follows.
+
+## Batch 14 release — PR #269, 15:11 UTC
+
+- Normal protected rebase merge at 15:07:38 UTC, main
+  `d31473ec5e885a0efe5b1e9caa1b99c419c01755`. Qualified candidate `f7e83014`
+  and main share exact complete tree `83033ad3ceae6f91f97e83c44f3334f9a52b8e55`;
+  all four new authors match the required identity. Actions and protections
+  remain unchanged; pending preview metadata was not a terminal failure.
+- First unchanged parent run passed 4,404 unit/backend and 823 isolated browser
+  tests, both types, all five app builds, parity, three unsuppressed dependency
+  audits and security controls. Three existing lint warnings, zero errors;
+  four commits/3.18 MB redacted scan with no leaks. No existing tests changed.
+- Exact automatic production READY observed 15:10:28 UTC; all five original
+  domains matched by 15:10:40. One signed-out Search visit at desktop and phone
+  sizes verified associated default/one-character guidance, keyboard focus,
+  44px Search/Reset and bounds. No search submitted or control clicked; URL
+  remained /search. Acceptance completed 15:11:41, own browser closed before
+  15:11:54. Exact-release error sample zero of thirty, uncapped. Private
+  operational receipt remains outside public PR text; no further live polling.
+- Chart/provider, protected holder/financial, physical device and AT behavior
+  remain source/fixture acceptance, not live certification. No backend, worker,
+  account, fee, budget, schedule, cap, gate or uncertain-hold changes.
+- Counts: eighty-nine deployed, 133 queued, two blocked, sixteen needing
+  confirmation. No queued task is claimed complete merely from source triage.
+
+## Final narrow dispatch — 15:12 UTC
+
+- FORUM-041 only, based on `d31473ec`: isolated worktree
+  `/private/tmp/symforum-overnight-gallery-original`, branch
+  `sym/overnight-gallery-original`. Exact ownership: forum-media-gallery and
+  new gallery-original-image spec/fixture/state, recorded before dispatch.
+- Add a plain keyboard-accessible original-image link to the current authorized
+  selection, with safe external-link attributes and no cache, optimizer,
+  persistence, prefetch, request, new state or changed gallery handlers.
+- Both actual app styles, 320/390px and short-landscape direct bounds/44px,
+  keyboard/focus/Escape, current-URL replacement, selection navigation/removal
+  and unsafe URL exclusion required. Existing lifecycle tests stay unchanged.
+  All external/provider/wallet/financial traffic denied; no live image action.
+- Freeze by 15:20 UTC or report pending work; no broader layout/controller fix.
+  Parent independent review and every full gate still required. No further
+  substantial batch will start; original 15:45 UTC stop remains unchanged.
+- Counts: eighty-nine deployed, one in progress, 132 queued, two blocked and
+  sixteen needing confirmation. Assignment is not completion or deployment.
+
+## Final gallery candidate — 15:19 UTC
+
+- Frozen `a6da9a12` independently reviewed and integrated into the final
+  latest-main branch. Only ten production markup lines add a plain, contextual
+  original-image anchor inside the existing footer, after the existing arrows.
+  Removing those lines reproduces the entire baseline component byte-for-byte:
+  filters, current identity, state/effects, navigation, close and focus unchanged.
+- Exact current authorized URL only, safe new-tab/referrer attributes, existing
+  project styles and 44px target. No cache, optimizer, persistence, prefetch,
+  query, new state, permission, SDK, dependency or financial operation.
+- Worker and independent reruns each passed 22 browser cases (twelve new and
+  all ten original lifecycle cases untouched) and two original gallery units;
+  worker full types, lint, formatting and diff checks passed. Both actual app
+  styles and SurfaceScope at 320/390 and short landscape cover direct bounds,
+  44px controls, current URL replacement/reorder/removal/unsafe URL exclusion,
+  real initial focus, Tab/ShiftTab trapping, Escape and visible fallback focus.
+- Retain baseline missing-link RED and genuine short-landscape failure of the
+  separate-row prototype. Source correction places the link in the existing
+  footer, not a global layout workaround. Ambiguous SVG/image locator and an
+  unsupported initial-focus assumption were fixture corrections: existing
+  multiple-image Previous/single-image Close initial policy is now asserted,
+  with all old geometry/focus tests unchanged. No assertion weakened or skipped.
+- External network/provider/wallet/financial traffic denied; only inert local
+  image responses. No original link clicked. Real external navigation, Safari,
+  physical devices and AT remain unverified. Native generated bundle changed
+  only for the reviewed markup; CSS bytes unchanged.
+- Counts: eighty-nine deployed, one implemented, 132 queued, two blocked and
+  sixteen needing confirmation. Full unchanged parent qualification follows;
+  no additional substantial source batch will begin before the hard stop.
