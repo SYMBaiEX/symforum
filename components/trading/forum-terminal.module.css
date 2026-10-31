@@ -6,6 +6,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  max-height: calc(
+    var(--terminal-visible-height, 100dvh) - var(--site-header-offset, 56px)
+  );
   min-height: 0;
   min-width: 0;
   overflow: hidden;

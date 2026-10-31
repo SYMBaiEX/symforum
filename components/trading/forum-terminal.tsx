@@ -129,6 +129,32 @@ function TerminalWorkspace({
   const marketsTab = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const root = workspace.current;
+    const viewport = window.visualViewport;
+    if (!root || !viewport) return;
+    const update = () => {
+      // Keyboard sizing is local to this workspace. Pinch zoom must retain
+      // browser-controlled layout rather than treating magnification as a keyboard.
+      if (
+        Math.abs(viewport.scale - 1) > 0.01 ||
+        !Number.isFinite(viewport.height) ||
+        viewport.height <= 0
+      )
+        root.style.removeProperty("--terminal-visible-height");
+      else
+        root.style.setProperty(
+          "--terminal-visible-height",
+          `${viewport.height}px`,
+        );
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      root.style.removeProperty("--terminal-visible-height");
+    };
+  }, []);
+  useEffect(() => {
+    const root = workspace.current;
     if (!root || typeof ResizeObserver === "undefined") return;
     let wasWide = root.clientWidth > 840;
     const observer = new ResizeObserver(([entry]) => {
