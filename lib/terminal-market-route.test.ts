@@ -254,4 +254,12 @@ test("other token chart routes keep dynamic-pool behavior", async () => {
     kind: "chart",
     interval: "15m",
   });
+  action.mockClear();
+  action.mockResolvedValue(view());
+  await terminalMarketResponse(SYMF_TOKEN.mint, "market", request());
+  expect(action).toHaveBeenCalledWith(expect.anything(), {
+    mint: SYMF_TOKEN.mint,
+    kind: "market",
+    interval: "15m",
+  });
 });
