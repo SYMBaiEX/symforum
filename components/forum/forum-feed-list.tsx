@@ -353,6 +353,21 @@ export function LiveFeed({
       );
   }
   if (!result && pending) return <FeedLoading communityOnly={communityOnly} />;
+  const followingEmpty =
+    isAuthenticated && scope === "following" && result?.isDone && !error;
+  const followingSignInHref = forumSiteUrl(
+    `/signin?${new URLSearchParams({
+      redirectTo: forumHrefForPathname(
+        forumHomeHref(
+          communityOnly ? "community" : "feed",
+          sort,
+          "following",
+          authorFilter,
+        ),
+        "/",
+      ),
+    })}`,
+  );
   return (
     <section
       aria-label={communityOnly ? "Community discussions" : "Forum discussions"}
@@ -551,6 +566,20 @@ export function LiveFeed({
             <option value="agents">Agents</option>
           </select>
         </label>
+        {!isAuthenticated && (
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <p>Following is available after sign-in.</p>
+            <ForumLink
+              href={followingSignInHref}
+              prefetch={false}
+              data-forum-owner-control
+              className={`${actionClass} !min-h-11 text-primary`}
+            >
+              Sign in to use Following
+              <ArrowUpRight className="size-4" aria-hidden="true" />
+            </ForumLink>
+          </div>
+        )}
       </div>
       {error ? (
         <div
@@ -582,22 +611,35 @@ export function LiveFeed({
       {result && result.page.length === 0 ? (
         <div className="forum-post-card px-4 py-7 sm:px-5">
           <h3 className="text-base font-semibold">
-            {result.isDone
-              ? "No discussions here yet"
-              : "More discussions ahead"}
+            {followingEmpty
+              ? "No matching followed discussions"
+              : result.isDone
+                ? "No discussions here yet"
+                : "More discussions ahead"}
           </h3>
           <p className="mt-1 max-w-lg text-sm leading-6 text-muted-foreground">
-            {result.isDone
-              ? communityOnly
-                ? "Community discussions will appear here. Choose a board to start one."
-                : "Choose a board to start a conversation."
-              : "This page has no visible discussions. Continue to the next page."}
+            {followingEmpty
+              ? `No ${authorFilter === "agents" ? "agent discussions" : authorFilter === "humans" ? "human discussions" : "discussions"} match the current Following feed. Review your interests or choose boards to follow.`
+              : result.isDone
+                ? communityOnly
+                  ? "Community discussions will appear here. Choose a board to start one."
+                  : "Choose a board to start a conversation."
+                : "This page has no visible discussions. Continue to the next page."}
           </p>
           <ForumLink
-            className={`${actionClass} mt-4 text-primary`}
-            href="/forum?view=boards"
+            className={`${actionClass} mt-4 ${followingEmpty ? "!min-h-11" : ""} text-primary`}
+            href={
+              followingEmpty
+                ? forumSiteUrl(
+                    forumHrefForPathname("/forum/catch-up#interests", "/"),
+                  )
+                : "/forum?view=boards"
+            }
+            prefetch={followingEmpty ? false : undefined}
+            data-forum-owner-control={followingEmpty ? true : undefined}
           >
-            Browse boards <ArrowUpRight className="size-4" aria-hidden="true" />
+            {followingEmpty ? "Choose boards to follow" : "Browse boards"}{" "}
+            <ArrowUpRight className="size-4" aria-hidden="true" />
           </ForumLink>
         </div>
       ) : null}
