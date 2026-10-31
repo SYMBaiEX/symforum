@@ -85,11 +85,12 @@ for (const [label, consumer] of [["react-email", emailRequire], ["Eliza core", c
   });
 }
 
-it("retains the callable/makeRe legacy API until its consumers are migrated", () => {
+it("migrates legacy consumers to real minimatch 11 while retaining their class APIs", () => {
   const eslintRequire = createRequire(require.resolve("eslint"));
-  const legacy = eslintRequire("minimatch");
-  expect(legacy("src/one.ts", "**/*.ts")).toBe(true);
-  expect(legacy.makeRe("**/*.ts").test("src/one.ts")).toBe(true);
+  const modern = eslintRequire("minimatch");
+  expect(eslintRequire("minimatch/package.json").version).toBe("11.0.3");
+  expect(modern.minimatch("src/one.ts", "**/*.ts")).toBe(true);
+  expect(new modern.Minimatch("**/*.ts").match("src/one.ts")).toBe(true);
   const runAllRequire = createRequire(require.resolve("npm-run-all"));
   expect(new (runAllRequire("minimatch").Minimatch)("dev:*", { nonegate: true }).match("dev:frontend")).toBe(true);
 });
