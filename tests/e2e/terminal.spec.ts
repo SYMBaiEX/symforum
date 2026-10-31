@@ -158,6 +158,12 @@ for (const viewport of [
     await expect(
       page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
     ).toBeVisible();
+    if (viewport.width === 320) {
+      const chart = await page
+        .getByRole("img", { name: /SYMF USD candlestick chart/ })
+        .boundingBox();
+      expect(chart!.height).toBeGreaterThanOrEqual(180);
+    }
     await expect(page.locator("[data-terminal-viewport]")).toHaveCount(1);
     await expect(
       page.getByRole("navigation", { name: "Forum navigation", exact: true }),
@@ -266,6 +272,50 @@ test("one real order input persists through internal tools and viewport changes 
   expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
   await expect(
     page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("an open order token picker keeps its owner visible across focused-layout resize", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { errors } = await harness(page, "orderinput");
+  const amount = page.getByRole("textbox", { name: "You pay", exact: true });
+  await expect(amount).toBeVisible();
+  await amount.fill(".5");
+  await expect(amount).toHaveValue("0.5");
+  const originalAmount = await amount.elementHandle();
+  const trigger = page.getByRole("button", { name: "Pay token", exact: true });
+  const originalTrigger = await trigger.elementHandle();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Select a token",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("[data-terminal-viewport]")).toHaveAttribute(
+    "data-pane",
+    "trade",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(amount).toBeVisible();
+  await expect(amount).toHaveValue("0.5");
+  expect(await originalAmount?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await originalTrigger?.evaluate((node) => node.isConnected)).toBe(
+    true,
+  );
+  await expect(
+    page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Pay token", exact: true }),
   ).toHaveCount(1);
   await expectViewportBounded(page);
   expect(errors).toEqual([]);
