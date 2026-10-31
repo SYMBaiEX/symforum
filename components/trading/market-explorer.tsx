@@ -198,7 +198,7 @@ export function MarketExplorer({
         tabIndex={0}
       >
         <div className={styles.empty} hidden={!empty}>
-          <p role="status">
+          <p>
             {data === undefined
               ? "Loading the latest sampled tokens…"
               : filtered
