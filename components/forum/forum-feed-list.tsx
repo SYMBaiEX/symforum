@@ -233,10 +233,11 @@ export function LiveFeed({
         communityOnly,
         scope,
         authorFilter,
-        now: Date.now(),
+        // Only signed-in preferences use time (temporary muted-word expiry).
+        ...(isAuthenticated ? { now: Date.now() } : {}),
         paginationOpts: { numItems: PAGE_SIZE, cursor },
       }),
-    [convex, sort, communityOnly, scope, authorFilter],
+    [convex, sort, communityOnly, scope, authorFilter, isAuthenticated],
   );
 
   useEffect(() => {
