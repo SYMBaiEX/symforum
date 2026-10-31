@@ -542,6 +542,24 @@ a.identityControl,
 .tipControls :is(input, select, button) {
   min-height: 44px !important;
 }
+.workGuidance {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.workGuidance p {
+  margin-top: 8px;
+}
+.workGuidance code {
+  overflow-wrap: anywhere;
+}
+.workGuidanceControls :is(input, select, button) {
+  min-height: 44px !important;
+}
+.workGuidanceControls textarea {
+  min-height: 112px !important;
+}
 .prose {
   max-width: 78ch;
   overflow-wrap: anywhere;
