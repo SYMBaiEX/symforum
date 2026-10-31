@@ -37,7 +37,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ForumNotificationPreferencesDraft = Pick<
   ForumNotificationPreferencesRecord,
@@ -85,6 +85,39 @@ export function ForumControlPanel({ enabled }: { enabled: boolean }) {
 function LiveForumControlPanel() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
+  const profile = useQuery(
+    forumRefs.getMyForumProfile,
+    isAuthenticated ? {} : "skip",
+  );
+  if (isLoading) {
+    return <ForumLoading label="Checking forum session" variant="ucp" />;
+  }
+  if (!isAuthenticated) {
+    const signInHref = `/signin?${new URLSearchParams({
+      redirectTo: pathname ?? "/forum/control-panel",
+    }).toString()}`;
+    return (
+      <ForumStatusBox
+        title="Sign in required"
+        body="Use a SYM handle to edit your forum title, signature, and display settings."
+        action={
+          <Button asChild className="rounded-xl text-xs" variant="outline">
+            <Link href={asRoute(signInHref)}>Sign in</Link>
+          </Button>
+        }
+      />
+    );
+  }
+  if (profile === undefined) {
+    return <ForumLoading label="Syncing forum control panel" variant="ucp" />;
+  }
+  // Account-owned local state and in-flight completion feedback cannot survive
+  // an identity change or logout. Queries still use the original auth gates.
+  return <ForumAccountControlPanel key={profile.userId} profile={profile} />;
+}
+
+function ForumAccountControlPanel({ profile }: { profile: MyForumProfileRecord }) {
+  const { isAuthenticated } = useConvexAuth();
   const [activeSection, setActiveSection] = useState("ucp-profile");
   const routeHash = useForumHash();
   useEffect(() => {
@@ -103,14 +136,13 @@ function LiveForumControlPanel() {
     )
       setActiveSection(section);
   }, [routeHash]);
-  const profile = useQuery(
-    forumRefs.getMyForumProfile,
-    isAuthenticated ? {} : "skip",
-  );
-  const notificationPreferences = useQuery(
+  const notificationResult = useQuery(
     forumRefs.getMyForumNotificationPreferences,
     isAuthenticated ? {} : "skip",
   );
+  const notificationPreferences = notificationResult?.userId === profile.userId
+    ? notificationResult
+    : undefined;
   const warnings = useQuery(
     forumRefs.listMyForumWarnings,
     isAuthenticated ? { limit: 12 } : "skip",
@@ -150,13 +182,20 @@ function LiveForumControlPanel() {
   const [notificationPending, setNotificationPending] = useState(false);
   const [notificationSaved, setNotificationSaved] = useState(false);
   const [notificationError, setNotificationError] = useState("");
+  const profileDirty = useRef(false);
+  const profileRevision = useRef(0);
+  const notificationDirty = useRef(false);
+  const notificationRevision = useRef(0);
   const hasSignaturePreview = signature.trim().length > 0;
-  const signInHref = `/signin?${new URLSearchParams({
-    redirectTo: pathname ?? "/forum/control-panel",
-  }).toString()}`;
+
+  function editProfile() {
+    profileDirty.current = true;
+    profileRevision.current++;
+    setSaved(false);
+  }
 
   useEffect(() => {
-    if (!profile) {
+    if (profileDirty.current) {
       return;
     }
     setAvatarUrl(profile.avatarUrl ?? "");
@@ -171,7 +210,7 @@ function LiveForumControlPanel() {
   }, [profile]);
 
   useEffect(() => {
-    if (!notificationPreferences) {
+    if (!notificationPreferences || notificationDirty.current) {
       return;
     }
     setNotificationDraft({
@@ -183,28 +222,6 @@ function LiveForumControlPanel() {
     });
   }, [notificationPreferences]);
 
-  if (isLoading) {
-    return <ForumLoading label="Checking forum session" variant="ucp" />;
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <ForumStatusBox
-        title="Sign in required"
-        body="Use a SYM handle to edit your forum title, signature, and display settings."
-        action={
-          <Button asChild className="rounded-xl text-xs" variant="outline">
-            <Link href={asRoute(signInHref)}>Sign in</Link>
-          </Button>
-        }
-      />
-    );
-  }
-
-  if (profile === undefined) {
-    return <ForumLoading label="Syncing forum control panel" variant="ucp" />;
-  }
-
   const pendingContentCount =
     pendingContent === undefined
       ? undefined
@@ -215,6 +232,7 @@ function LiveForumControlPanel() {
       : receivedReputation.length + givenReputation.length;
 
   async function saveProfile() {
+    const revision = profileRevision.current;
     setPending(true);
     setSaved(false);
     setError("");
@@ -230,7 +248,10 @@ function LiveForumControlPanel() {
         timeZone: timeZone.trim() || undefined,
         websiteUrl: websiteUrl.trim() || undefined,
       });
-      setSaved(true);
+      if (revision === profileRevision.current) {
+        profileDirty.current = false;
+        setSaved(true);
+      }
     } catch (caught) {
       if (isAuthRequiredError(caught)) {
         setError("Sign in again to save forum profile settings.");
@@ -250,12 +271,16 @@ function LiveForumControlPanel() {
   }
 
   async function saveNotificationPreferences() {
+    const revision = notificationRevision.current;
     setNotificationPending(true);
     setNotificationSaved(false);
     setNotificationError("");
     try {
       await updateNotificationPreferences(notificationDraft);
-      setNotificationSaved(true);
+      if (revision === notificationRevision.current) {
+        notificationDirty.current = false;
+        setNotificationSaved(true);
+      }
     } catch (caught) {
       if (isAuthRequiredError(caught)) {
         setNotificationError(
@@ -322,41 +347,41 @@ function LiveForumControlPanel() {
             websiteUrl={websiteUrl}
             onAvatarUrlChange={(value) => {
               setAvatarUrl(value);
-              setSaved(false);
+              editProfile();
             }}
             onBioChange={(value) => {
               setBio(value);
-              setSaved(false);
+              editProfile();
             }}
             onCustomTitleChange={(value) => {
               setCustomTitle(value);
-              setSaved(false);
+              editProfile();
             }}
             onBirthdayChange={(value) => {
               setBirthday(value);
-              setSaved(false);
+              editProfile();
             }}
             onLocationChange={(value) => {
               setLocation(value);
-              setSaved(false);
+              editProfile();
             }}
             signature={signature}
             onSignatureChange={(value) => {
               setSignature(value);
-              setSaved(false);
+              editProfile();
             }}
             showSignatures={showSignatures}
             onShowSignaturesChange={(value) => {
               setShowSignatures(value);
-              setSaved(false);
+              editProfile();
             }}
             onTimeZoneChange={(value) => {
               setTimeZone(value);
-              setSaved(false);
+              editProfile();
             }}
             onWebsiteUrlChange={(value) => {
               setWebsiteUrl(value);
-              setSaved(false);
+              editProfile();
             }}
           />
           {error ? (
@@ -401,6 +426,8 @@ function LiveForumControlPanel() {
             preferences={notificationPreferences}
             saved={notificationSaved}
             onChange={(patch) => {
+              notificationDirty.current = true;
+              notificationRevision.current++;
               setNotificationDraft((current) => ({ ...current, ...patch }));
               setNotificationSaved(false);
               setNotificationError("");
