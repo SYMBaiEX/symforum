@@ -24,9 +24,11 @@ export const search = action({
     const value = args.search.trim();
     if (value.length > 64 || (value.length > 0 && value.length < 2)) return [];
     const key = value ? `search:${value}` : "top:24h";
+    const lease = crypto.randomUUID();
     const cached = await ctx.runMutation(internal.forumTokenDiscovery.reserve, {
       wallet: args.wallet,
       key,
+      lease,
     });
     if (cached !== null)
       return parseDiscoveredTokens(
@@ -51,15 +53,22 @@ export const search = action({
       const body = await response.text();
       if (body.length > 500000) throw new Error("Response too large.");
       const result = parseDiscoveredTokens(JSON.parse(body));
-      await ctx.runMutation(internal.forumTokenDiscovery.save, {
-        key,
-        payload: JSON.stringify(result),
-      });
+      const saved: boolean = await ctx.runMutation(
+        internal.forumTokenDiscovery.save,
+        {
+          key,
+          lease,
+          payload: JSON.stringify(result),
+        },
+      );
+      if (!saved)
+        throw new Error("Token discovery claim is no longer current.");
       return result;
     } catch {
       // Brief negative caching prevents a failing provider being hammered by reopening the modal.
       await ctx.runMutation(internal.forumTokenDiscovery.save, {
         key,
+        lease,
         payload: "[]",
         failed: true,
       });
@@ -70,10 +79,12 @@ export const search = action({
   },
 });
 export const reserve = internalMutation({
-  args: { wallet: v.string(), key: v.string() },
+  args: { wallet: v.string(), key: v.string(), lease: v.string() },
   returns: v.union(v.string(), v.null()),
-  handler: async (ctx, { wallet, key }) => {
+  handler: async (ctx, { wallet, key, lease }) => {
     await commerceActor(ctx, wallet);
+    if (!lease.trim() || lease.length > 128)
+      throw new Error("Invalid token discovery lease.");
     const row = await ctx.db
       .query("forumTokenDiscoveryCache")
       .withIndex("by_key", (q) => q.eq("key", key))
@@ -88,6 +99,7 @@ export const reserve = internalMutation({
     });
     const next = {
       key,
+      lease,
       payload: "[]",
       expiresAt: 0,
       leaseUntil: Date.now() + 12000,
@@ -100,16 +112,21 @@ export const reserve = internalMutation({
 export const save = internalMutation({
   args: {
     key: v.string(),
+    lease: v.string(),
     payload: v.string(),
     failed: v.optional(v.boolean()),
   },
-  returns: v.null(),
-  handler: async (ctx, { key, payload, failed }) => {
+  returns: v.boolean(),
+  handler: async (ctx, { key, lease, payload, failed }) => {
     if (payload.length > 100000) throw new Error("Invalid token cache.");
     const row = await ctx.db
       .query("forumTokenDiscoveryCache")
       .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
+    // An expired or replaced read cannot publish data or clear a newer lease,
+    // including through the negative-cache path. Legacy rows own no new lease.
+    if (!row || row.lease !== lease || row.leaseUntil <= Date.now())
+      return false;
     if (row)
       await ctx.db.patch("forumTokenDiscoveryCache", row._id, {
         payload,
@@ -122,7 +139,7 @@ export const save = internalMutation({
         internal.forumTokenDiscovery.expire,
         { id: row._id },
       );
-    return null;
+    return true;
   },
 });
 export const expire = internalMutation({
