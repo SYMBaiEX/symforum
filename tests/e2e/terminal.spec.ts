@@ -1831,6 +1831,60 @@ test("community receipt loading and authenticated-empty states remain distinct w
   }
 });
 
+test("pending identity checks do not flash sign-in or expose editable payment fields", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let result = await harness(page, "community&authloading");
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  const receipts = page.getByRole("region", {
+    name: "Your receipts",
+    exact: true,
+  });
+  await expect(receipts.getByRole("status")).toContainText(
+    "Loading private receipts…",
+  );
+  await expect(
+    receipts.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    receipts.getByText("Protected outcome", { exact: true }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      (
+        window as typeof window & { __terminalFixtureQueries: string[] }
+      ).__terminalFixtureQueries.includes("forumCommunity:listPayments"),
+    ),
+  ).toBe(false);
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(result.errors).toEqual([]);
+  result = await harness(page, "community&tipsavailable&walletloading");
+  await page
+    .getByRole("button", { name: "Tips & profile", exact: true })
+    .click();
+  const support = page.getByRole("region", {
+    name: "Tips & profile",
+    exact: true,
+  });
+  await expect(
+    support
+      .getByText("Checking your community wallet…", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    support.getByRole("heading", {
+      name: "Sign in to support a contributor",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(support.getByLabel("Tip amount (SOL)")).toBeHidden();
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
 test("tip loading, no-recipient and signed-out states do not offer an unusable payment form", async ({
   page,
 }) => {

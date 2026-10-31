@@ -188,8 +188,11 @@ const selectedMarketRows = () =>
 export function useConvexAuth() {
   useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
-    isAuthenticated: !signedOut && !location.search.includes("guest"),
-    isLoading: false,
+    isAuthenticated:
+      !signedOut &&
+      !location.search.includes("guest") &&
+      !location.search.includes("authloading"),
+    isLoading: location.search.includes("authloading"),
   };
 }
 export function useQuery<Ref extends FunctionReference<"query">>(
