@@ -28,7 +28,7 @@ test("a late cache writer cannot overwrite a newer lease; failures are negativel
   const t = convexTest(schema, modules);
   registerLimiter(t);
   const key = `chart:${SYMF_TOKEN.mint}:15m`;
-  await t.mutation(internal.forumMarketData.claim, {
+  const admission = await t.mutation(internal.forumMarketData.claim, {
     mint: SYMF_TOKEN.mint,
     kind: "chart",
     interval: "15m",
@@ -37,6 +37,7 @@ test("a late cache writer cannot overwrite a newer lease; failures are negativel
   await t.mutation(internal.forumMarketData.save, {
     key,
     lease: "old",
+    attemptAt: admission.cache.lastAttemptAt ?? undefined,
     payload: "{}",
   });
   const row = await t.run((ctx) =>
@@ -49,6 +50,7 @@ test("a late cache writer cannot overwrite a newer lease; failures are negativel
   await t.mutation(internal.forumMarketData.save, {
     key,
     lease: "new",
+    attemptAt: admission.cache.lastAttemptAt ?? undefined,
     payload: null,
   });
   expect(

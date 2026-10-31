@@ -1,5 +1,9 @@
 import { isSolanaAddress, record } from "./forum-commerce";
 import type { MarketBinding } from "./symf-market-overview";
+import {
+  PublicMarketSourceError,
+  marketProviderRetryAt,
+} from "./chart-cache-policy";
 
 export const MARKET_QUOTES = [
   "So11111111111111111111111111111111111111112",
@@ -67,7 +71,7 @@ export function marketPrice(
 }
 
 /** Enforce the byte ceiling while reading, not after buffering a hostile body. */
-export async function readPublicMarket(
+async function readBoundedPublicMarket(
   url: string,
   limit: number,
   fetcher: typeof fetch = fetch,
@@ -77,20 +81,42 @@ export async function readPublicMarket(
     parsed.protocol !== "https:" ||
     !["api.dexscreener.com", "api.geckoterminal.com"].includes(parsed.hostname)
   )
-    throw Error("invalid_market_provider");
+    throw new PublicMarketSourceError("unsupported", "invalid_market_provider");
   const response = await fetcher(url, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(8_000),
     redirect: "error",
   });
-  if (!response.ok) throw Error("market_provider_unavailable");
+  if (!response.ok) {
+    const retryAfterAt =
+      response.status === 429 || response.status === 503
+        ? marketProviderRetryAt(response.headers.get("retry-after"), Date.now())
+        : null;
+    void response.body?.cancel().catch(() => {});
+    throw new PublicMarketSourceError(
+      response.status === 429
+        ? "http-429"
+        : response.status >= 500
+          ? "http-5xx"
+          : "http-4xx",
+      "market_provider_unavailable",
+      retryAfterAt,
+    );
+  }
   const length = response.headers.get("content-length");
   if (length !== null && (!/^\d+$/.test(length) || Number(length) > limit)) {
     void response.body?.cancel().catch(() => {});
-    throw Error("market_response_too_large");
+    throw new PublicMarketSourceError(
+      "invalid-response",
+      "market_response_too_large",
+    );
   }
   const reader = response.body?.getReader();
-  if (!reader) throw Error("market_provider_empty");
+  if (!reader)
+    throw new PublicMarketSourceError(
+      "invalid-response",
+      "market_provider_empty",
+    );
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
@@ -100,7 +126,10 @@ export async function readPublicMarket(
       size += next.value.byteLength;
       if (size > limit) {
         void reader.cancel().catch(() => {});
-        throw Error("market_response_too_large");
+        throw new PublicMarketSourceError(
+          "invalid-response",
+          "market_response_too_large",
+        );
       }
       chunks.push(next.value);
     }
@@ -113,7 +142,34 @@ export async function readPublicMarket(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-  ) as unknown;
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    ) as unknown;
+  } catch {
+    throw new PublicMarketSourceError(
+      "invalid-response",
+      "invalid_market_response",
+    );
+  }
+}
+
+/** Typed safe diagnostics; never retain provider body, URL or raw exception text. */
+export async function readPublicMarket(
+  url: string,
+  limit: number,
+  fetcher: typeof fetch = fetch,
+): Promise<unknown> {
+  try {
+    return await readBoundedPublicMarket(url, limit, fetcher);
+  } catch (error) {
+    if (error instanceof PublicMarketSourceError) throw error;
+    const timeout =
+      error instanceof Error &&
+      ["TimeoutError", "AbortError"].includes(error.name);
+    throw new PublicMarketSourceError(
+      timeout ? "timeout" : "network",
+      "market_provider_unavailable",
+    );
+  }
 }

@@ -2,6 +2,26 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const nullableNumber = v.union(v.number(), v.null());
+export const marketFailureStageValidator = v.union(
+  v.literal("admission"),
+  v.literal("pool"),
+  v.literal("candles"),
+  v.literal("trades"),
+  v.literal("cache"),
+);
+export const marketFailureCodeValidator = v.union(
+  v.literal("burst"),
+  v.literal("budget"),
+  v.literal("incomplete"),
+  v.literal("http-429"),
+  v.literal("http-4xx"),
+  v.literal("http-5xx"),
+  v.literal("timeout"),
+  v.literal("network"),
+  v.literal("invalid-response"),
+  v.literal("pool-unavailable"),
+  v.literal("unsupported"),
+);
 export const refreshedMarketValidator = v.object({
   mint: v.string(),
   checkedAt: v.number(),
@@ -41,5 +61,13 @@ export const forumMarketTables = {
     expiresAt: v.number(),
     lease: v.string(),
     leaseUntil: v.number(),
+    lastSuccessAt: v.optional(v.number()),
+    lastAttemptAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    retainUntil: v.optional(v.number()),
+    failureCount: v.optional(v.number()),
+    failureStage: v.optional(marketFailureStageValidator),
+    failureCode: v.optional(marketFailureCodeValidator),
+    cleanupAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
 };

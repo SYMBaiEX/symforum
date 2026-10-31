@@ -1,16 +1,26 @@
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
 import { RateLimiter } from "@convex-dev/rate-limiter";
-import { action, internalMutation } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  type MutationCtx,
+} from "./_generated/server";
 import { components, internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { commerceLimiter } from "./forumCommerce";
+import {
+  marketFailureCodeValidator,
+  marketFailureStageValidator,
+} from "./forumMarketSchema";
 import { SYMF_TOKEN } from "../lib/symf-token";
-import { isSolanaAddress } from "../lib/forum-commerce";
+import { isSolanaAddress, record } from "../lib/forum-commerce";
 import type { TerminalMarket } from "../lib/forum-terminal-model";
 import {
   readPublicMarket,
   selectMarketBinding,
   marketPrice,
+  MARKET_QUOTES,
 } from "../lib/terminal-market-source";
 import {
   parseMarketCandles,
@@ -21,9 +31,19 @@ import {
   parseMarketStats,
   parseMarketTrades,
 } from "../lib/symf-market-overview";
+import {
+  CHART_CACHE_FRESH_MS,
+  CHART_CACHE_RETENTION_MS,
+  CHART_CACHE_LEASE_MS,
+  PublicMarketSourceError,
+  marketFailureBackoff,
+  nextMarketBudgetReset,
+  type MarketCacheView,
+  type MarketFailureStage,
+  type MarketFailureCode,
+} from "../lib/chart-cache-policy";
 
 const limiter = new RateLimiter(components.rateLimiter, {
-  // Shared with owner terminal reads. This tightens, never raises, commerce's cap.
   terminalReadDaily: {
     kind: "fixed window",
     rate: 100,
@@ -37,135 +57,338 @@ const limiter = new RateLimiter(components.rateLimiter, {
     capacity: 1,
   },
 });
-// Shared admission names/keys keep batch discovery reads inside the existing
-// burst and daily counters rather than creating a parallel provider allowance.
 export const marketReadLimiter = limiter;
 const kind = v.union(v.literal("chart"), v.literal("market"));
 const state = v.union(
   v.literal("ready"),
   v.literal("loading"),
+  v.literal("deferred"),
   v.literal("unavailable"),
   v.literal("budget"),
   v.literal("unsupported"),
 );
+const cacheStatus = v.object({
+  lastSuccessAt: v.union(v.number(), v.null()),
+  lastAttemptAt: v.union(v.number(), v.null()),
+  nextRetryAt: v.union(v.number(), v.null()),
+  failureCount: v.number(),
+  failureStage: v.union(marketFailureStageValidator, v.null()),
+  failureCode: v.union(marketFailureCodeValidator, v.null()),
+});
 const view = v.object({
   state,
   payload: v.union(v.string(), v.null()),
   stale: v.boolean(),
+  cache: cacheStatus,
 });
 const getMarket = makeFunctionReference<
   "query",
   { mint: string; now: number },
   TerminalMarket | null
 >("forumTerminal:getMarket");
-const cacheKey = (mint: string, type: string, interval: string) =>
-  `${type}:${mint}:${type === "chart" ? interval : "all"}`;
+type CacheRow = Doc<"forumMarketDataCache">;
+type ReadArgs = {
+  mint: string;
+  kind: "chart" | "market";
+  interval: string;
+  pinnedSymf?: boolean;
+};
+const cacheKey = (args: ReadArgs) =>
+  `${args.pinnedSymf ? "pinned-chart" : args.kind}:${args.mint}:${args.kind === "chart" ? args.interval : "all"}`;
+const stamp = (value: number | undefined): number | null =>
+  Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+const count = (value: number | undefined) =>
+  Number.isSafeInteger(value) && Number(value) >= 0
+    ? Math.min(1000, Number(value))
+    : 0;
+
+function successAt(row: CacheRow | null): number | null {
+  if (!row) return null;
+  if (stamp(row.lastSuccessAt)) return stamp(row.lastSuccessAt);
+  // Legacy payload time is retained; a new request never renews its age.
+  try {
+    return stamp(record(JSON.parse(row.payload ?? "null")).checkedAt as number);
+  } catch {
+    return null;
+  }
+}
+function retainedUntil(row: CacheRow | null) {
+  const success = successAt(row);
+  return success === null
+    ? 0
+    : Math.min(
+        row?.retainUntil ?? success + CHART_CACHE_RETENTION_MS,
+        success + CHART_CACHE_RETENTION_MS,
+      );
+}
+function attemptAt(row: CacheRow | null) {
+  return (
+    stamp(row?.lastAttemptAt) ??
+    (row?.leaseUntil ? stamp(row.leaseUntil - CHART_CACHE_LEASE_MS) : null)
+  );
+}
+function retryAt(row: CacheRow | null) {
+  if (!row) return null;
+  return (
+    stamp(row.nextAttemptAt) ??
+    (row.leaseUntil > 0 && attemptAt(row) !== null
+      ? Math.max(
+          row.leaseUntil,
+          attemptAt(row)! + marketFailureBackoff(count(row.failureCount) + 1),
+        )
+      : stamp(row.expiresAt))
+  );
+}
+function persistedView(row: CacheRow | null, now: number): MarketCacheView {
+  const lastSuccessAt = successAt(row);
+  const payload =
+    row?.payload &&
+    lastSuccessAt !== null &&
+    lastSuccessAt <= now + 60_000 &&
+    retainedUntil(row) > now
+      ? row.payload
+      : null;
+  const fresh =
+    payload !== null &&
+    lastSuccessAt !== null &&
+    now < lastSuccessAt + CHART_CACHE_FRESH_MS;
+  const pending = Boolean(row && row.leaseUntil > now);
+  const incomplete = Boolean(
+    row && row.leaseUntil > 0 && row.leaseUntil <= now,
+  );
+  return {
+    state: pending
+      ? "loading"
+      : fresh
+        ? "ready"
+        : row?.failureCode === "budget"
+          ? "budget"
+          : "unavailable",
+    payload,
+    stale: payload !== null && !fresh,
+    cache: {
+      lastSuccessAt,
+      lastAttemptAt: attemptAt(row),
+      nextRetryAt: retryAt(row),
+      failureCount: Math.min(
+        1000,
+        count(row?.failureCount) + (incomplete ? 1 : 0),
+      ),
+      failureStage: incomplete ? "cache" : (row?.failureStage ?? null),
+      failureCode: incomplete ? "incomplete" : (row?.failureCode ?? null),
+    },
+  };
+}
+function unsupported(): MarketCacheView {
+  return {
+    state: "unsupported",
+    payload: null,
+    stale: false,
+    cache: {
+      lastSuccessAt: null,
+      lastAttemptAt: null,
+      nextRetryAt: null,
+      failureCount: 0,
+      failureStage: "admission",
+      failureCode: "unsupported",
+    },
+  };
+}
+async function allowed(ctx: MutationCtx, args: ReadArgs, now: number) {
+  if (
+    !isSolanaAddress(args.mint) ||
+    !Object.hasOwn(SYMF_CHART_INTERVALS, args.interval) ||
+    (args.pinnedSymf &&
+      (args.mint !== SYMF_TOKEN.mint || args.kind !== "chart"))
+  )
+    return false;
+  if (args.mint === SYMF_TOKEN.mint) return true;
+  const market = await ctx.runQuery(getMarket, { mint: args.mint, now });
+  return Boolean(
+    market &&
+    Number.isFinite(market.metricsAsOf) &&
+    market.metricsAsOf >= now - CHART_CACHE_RETENTION_MS &&
+    market.metricsAsOf <= now + 60_000,
+  );
+}
+function keyArgs(key: string): ReadArgs | null {
+  const [type, mint, interval, extra] = key.split(":");
+  if (
+    extra ||
+    !mint ||
+    !interval ||
+    !["chart", "pinned-chart", "market"].includes(type)
+  )
+    return null;
+  return {
+    mint,
+    kind: type === "market" ? "market" : "chart",
+    interval: type === "market" ? "15m" : interval,
+    pinnedSymf: type === "pinned-chart",
+  };
+}
+function validPayloadShape(
+  payload: Record<string, unknown>,
+  type: ReadArgs["kind"],
+  checkedAt: number,
+) {
+  const stats = record(payload.stats);
+  if (
+    !["marketCap", "fdv", "liquidity", "volume24h"].every(
+      (key) =>
+        key in stats &&
+        (stats[key] === null ||
+          (typeof stats[key] === "number" &&
+            Number.isFinite(stats[key]) &&
+            Number(stats[key]) >= 0)),
+    )
+  )
+    return false;
+  if (type === "market")
+    return (
+      payload.trades === null ||
+      (Array.isArray(payload.trades) && payload.trades.length <= 20)
+    );
+  if (
+    !Array.isArray(payload.candles) ||
+    payload.candles.length < 1 ||
+    payload.candles.length > 200 ||
+    new Set(payload.candles.map((raw) => record(raw).time)).size !==
+      payload.candles.length
+  )
+    return false;
+  return payload.candles.every((raw) => {
+    const candle = record(raw);
+    if (
+      !["time", "open", "high", "low", "close"].every(
+        (key) =>
+          typeof candle[key] === "number" &&
+          Number.isFinite(candle[key]) &&
+          Number(candle[key]) > 0,
+      ) ||
+      typeof candle.volume !== "number" ||
+      !Number.isFinite(candle.volume) ||
+      candle.volume < 0
+    )
+      return false;
+    return (
+      Number.isSafeInteger(candle.time) &&
+      Number(candle.time) * 1000 <= checkedAt + 60_000 &&
+      Number(candle.high) >=
+        Math.max(Number(candle.open), Number(candle.close)) &&
+      Number(candle.low) <=
+        Math.min(Number(candle.open), Number(candle.close)) &&
+      Number(candle.low) <= Number(candle.high)
+    );
+  });
+}
+function cleanupDeadline(row: CacheRow) {
+  const historyAt = attemptAt(row) ?? successAt(row) ?? row._creationTime;
+  // Negative history must outlive its next retry, or a cold outage would reset
+  // the failure streak each time its short backoff expires.
+  return Math.max(
+    retainedUntil(row),
+    retryAt(row) ?? 0,
+    row.leaseUntil,
+    historyAt + CHART_CACHE_RETENTION_MS,
+  );
+}
+async function scheduleCleanup(ctx: MutationCtx, row: CacheRow, now: number) {
+  const deadline = cleanupDeadline(row);
+  if (row.cleanupAt === deadline) return;
+  await ctx.db.patch("forumMarketDataCache", row._id, { cleanupAt: deadline });
+  await ctx.scheduler.runAfter(
+    Math.max(1, deadline - now + 1),
+    internal.forumMarketData.expire,
+    { id: row._id },
+  );
+}
 
 export const claim = internalMutation({
-  args: { mint: v.string(), kind, interval: v.string(), lease: v.string() },
-  returns: v.object({
-    fetch: v.boolean(),
-    state,
-    payload: v.union(v.string(), v.null()),
-    stale: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
+  args: {
+    mint: v.string(),
+    kind,
+    interval: v.string(),
+    lease: v.string(),
+    pinnedSymf: v.optional(v.boolean()),
+  },
+  returns: v.object({ ...view.fields, fetch: v.boolean() }),
+  handler: async (ctx, args): Promise<MarketCacheView & { fetch: boolean }> => {
     const now = Date.now();
     if (
-      !isSolanaAddress(args.mint) ||
-      !Object.hasOwn(SYMF_CHART_INTERVALS, args.interval)
+      !args.lease.trim() ||
+      args.lease.length > 128 ||
+      !(await allowed(ctx, args, now))
     )
-      return {
-        fetch: false,
-        state: "unsupported" as const,
-        payload: null,
-        stale: false,
-      };
-    // Arbitrary mint requests must never create uncapped provider/cache fanout.
-    if (args.mint !== SYMF_TOKEN.mint) {
-      const market = await ctx.runQuery(getMarket, { mint: args.mint, now });
-      if (
-        !market ||
-        !Number.isFinite(market.metricsAsOf) ||
-        // This is an identity allowlist, not use of a stale sample as a quote.
-        // The indexed list retains24h; the fetched chart binds a fresh response
-        // to that exact mint/pool. Scout selection still requires <=15m data.
-        market.metricsAsOf < now - 24 * 3_600_000 ||
-        market.metricsAsOf > now + 60_000
-      )
-        return {
-          fetch: false,
-          state: "unsupported" as const,
-          payload: null,
-          stale: false,
-        };
-    }
-    const key = cacheKey(args.mint, args.kind, args.interval);
+      return { ...unsupported(), fetch: false };
+    const key = cacheKey(args);
     const row = await ctx.db
       .query("forumMarketDataCache")
       .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
-    if (row && row.expiresAt > now)
-      return {
-        fetch: false,
-        state: row.payload ? ("ready" as const) : ("unavailable" as const),
-        payload: row.payload,
-        stale: false,
-      };
-    if (row && row.leaseUntil > now)
-      return {
-        fetch: false,
-        state: row.payload ? ("ready" as const) : ("loading" as const),
-        payload: row.payload,
-        stale: Boolean(row.payload),
-      };
+    const current = persistedView(row, now);
+    if (
+      (current.payload !== null && !current.stale) ||
+      (current.cache.nextRetryAt ?? 0) > now ||
+      (row?.leaseUntil ?? 0) > now
+    )
+      return { ...current, fetch: false };
     const burst = await limiter.limit(ctx, "terminalMarketBurst", {
       key: "all",
     });
     if (!burst.ok)
       return {
+        ...current,
+        state: "deferred",
         fetch: false,
-        state: "loading" as const,
-        payload: row?.payload ?? null,
-        stale: Boolean(row?.payload),
+        cache: {
+          ...current.cache,
+          nextRetryAt: now + 1500,
+          failureStage: "admission",
+          failureCode: "burst",
+        },
       };
     const sub = await limiter.limit(ctx, "terminalReadDaily", {
       key: "all",
       count: 2,
     });
-    if (!sub.ok)
-      return {
-        fetch: false,
-        state: "budget" as const,
-        payload: row?.payload ?? null,
-        stale: Boolean(row?.payload),
-      };
-    const shared = await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
-      key: "all",
-      count: 2,
-    });
-    if (!shared.ok)
-      return {
-        fetch: false,
-        state: "budget" as const,
-        payload: row?.payload ?? null,
-        stale: Boolean(row?.payload),
-      };
-    const data = {
+    const shared =
+      sub.ok &&
+      (await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
+        key: "all",
+        count: 2,
+      }));
+    const admitted = Boolean(shared && shared.ok);
+    const value = {
       key,
-      payload: row?.payload ?? null,
-      expiresAt: 0,
+      payload: current.payload,
+      expiresAt: row?.expiresAt ?? 0,
       lease: args.lease,
-      leaseUntil: now + 25_000,
+      leaseUntil: admitted ? now + CHART_CACHE_LEASE_MS : 0,
+      lastSuccessAt: current.cache.lastSuccessAt ?? undefined,
+      retainUntil: retainedUntil(row),
+      cleanupAt: row?.cleanupAt,
+      lastAttemptAt: admitted
+        ? now
+        : (current.cache.lastAttemptAt ?? undefined),
+      nextAttemptAt: admitted
+        ? now + marketFailureBackoff(current.cache.failureCount + 1)
+        : nextMarketBudgetReset(now),
+      failureCount: current.cache.failureCount,
+      failureStage: admitted
+        ? (current.cache.failureStage ?? undefined)
+        : ("admission" as const),
+      failureCode: admitted
+        ? (current.cache.failureCode ?? undefined)
+        : ("budget" as const),
     };
-    if (row) await ctx.db.replace("forumMarketDataCache", row._id, data);
-    else await ctx.db.insert("forumMarketDataCache", data);
-    return {
-      fetch: true,
-      state: "loading" as const,
-      payload: row?.payload ?? null,
-      stale: Boolean(row?.payload),
-    };
+    const id = row
+      ? row._id
+      : await ctx.db.insert("forumMarketDataCache", value);
+    if (row) await ctx.db.replace("forumMarketDataCache", id, value);
+    const persisted = await ctx.db.get("forumMarketDataCache", id);
+    await scheduleCleanup(ctx, persisted!, now);
+    return { ...persistedView(persisted, now), fetch: admitted };
   },
 });
 
@@ -173,27 +396,98 @@ export const save = internalMutation({
   args: {
     key: v.string(),
     lease: v.string(),
+    attemptAt: v.optional(v.number()),
     payload: v.union(v.string(), v.null()),
+    failureStage: v.optional(marketFailureStageValidator),
+    failureCode: v.optional(marketFailureCodeValidator),
+    retryAfterAt: v.optional(v.number()),
   },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    if (args.payload && args.payload.length > 200_000)
-      throw Error("invalid_market_cache");
+  returns: view,
+  handler: async (ctx, args): Promise<MarketCacheView> => {
+    const now = Date.now();
     const row = await ctx.db
       .query("forumMarketDataCache")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
-    if (row && row.lease === args.lease) {
-      await ctx.db.patch("forumMarketDataCache", row._id, {
-        payload: args.payload,
-        expiresAt: Date.now() + (args.payload ? 300_000 : 30_000),
-        leaseUntil: 0,
-      });
-      await ctx.scheduler.runAfter(3_600_000, internal.forumMarketData.expire, {
-        id: row._id,
-      });
+    const request = keyArgs(args.key);
+    if (!request || !(await allowed(ctx, request, now))) return unsupported();
+    // Legacy and late callbacks cannot mutate a current/newer attempt.
+    if (
+      !row ||
+      row.lease !== args.lease ||
+      row.leaseUntil <= now ||
+      args.attemptAt === undefined ||
+      row.lastAttemptAt !== args.attemptAt ||
+      (row.nextAttemptAt ?? 0) <= now
+    )
+      return persistedView(row, now);
+    let checkedAt: number | null = null;
+    if (args.payload !== null) {
+      if (args.payload.length > 200_000) throw Error("invalid_market_cache");
+      let payload: Record<string, unknown>;
+      try {
+        payload = record(JSON.parse(args.payload));
+      } catch {
+        throw Error("invalid_market_cache");
+      }
+      checkedAt = stamp(payload.checkedAt as number);
+      if (
+        !checkedAt ||
+        checkedAt < args.attemptAt ||
+        checkedAt > now + 60_000 ||
+        payload.mint !== request.mint ||
+        !isSolanaAddress(String(payload.pool)) ||
+        !MARKET_QUOTES.includes(
+          payload.quote as (typeof MARKET_QUOTES)[number],
+        ) ||
+        (request.kind === "chart" && payload.interval !== request.interval) ||
+        (request.pinnedSymf &&
+          (payload.pool !== SYMF_TOKEN.pool ||
+            payload.quote !== MARKET_QUOTES[0])) ||
+        !validPayloadShape(payload, request.kind, checkedAt)
+      )
+        throw Error("invalid_market_cache");
     }
-    return null;
+    const failures =
+      args.payload !== null ? 0 : Math.min(1000, count(row.failureCount) + 1);
+    const retryAfterAt = stamp(args.retryAfterAt);
+    const nextAttemptAt =
+      checkedAt !== null
+        ? Math.max(
+            checkedAt + CHART_CACHE_FRESH_MS,
+            retryAfterAt !== null
+              ? Math.min(retryAfterAt, now + CHART_CACHE_RETENTION_MS)
+              : 0,
+          )
+        : Math.max(
+            row.nextAttemptAt ?? 0,
+            now + marketFailureBackoff(failures),
+            retryAfterAt !== null
+              ? Math.min(retryAfterAt, now + CHART_CACHE_RETENTION_MS)
+              : 0,
+          );
+    const old = persistedView(row, now);
+    await ctx.db.patch("forumMarketDataCache", row._id, {
+      payload: args.payload ?? old.payload,
+      expiresAt:
+        checkedAt !== null ? checkedAt + CHART_CACHE_FRESH_MS : row.expiresAt,
+      lastSuccessAt: checkedAt ?? successAt(row) ?? undefined,
+      retainUntil:
+        checkedAt !== null
+          ? checkedAt + CHART_CACHE_RETENTION_MS
+          : retainedUntil(row),
+      nextAttemptAt,
+      leaseUntil: 0,
+      failureCount: failures,
+      failureStage:
+        args.failureStage ?? (args.payload === null ? "cache" : undefined),
+      failureCode:
+        args.failureCode ??
+        (args.payload === null ? "invalid-response" : undefined),
+    });
+    const persisted = await ctx.db.get("forumMarketDataCache", row._id);
+    await scheduleCleanup(ctx, persisted!, now);
+    return persistedView(persisted, now);
   },
 });
 export const expire = internalMutation({
@@ -201,45 +495,82 @@ export const expire = internalMutation({
   returns: v.null(),
   handler: async (ctx, { id }) => {
     const row = await ctx.db.get("forumMarketDataCache", id);
-    if (row && row.expiresAt <= Date.now() && row.leaseUntil <= Date.now())
-      await ctx.db.delete("forumMarketDataCache", id);
+    if (row) {
+      const now = Date.now();
+      if (cleanupDeadline(row) <= now)
+        await ctx.db.delete("forumMarketDataCache", id);
+      // Current writes already own their timer; obsolete callbacks die here.
+      else if (row.cleanupAt === undefined)
+        await scheduleCleanup(ctx, row, now);
+    }
     return null;
   },
 });
 
+function safeFailure(error: unknown): {
+  code: MarketFailureCode;
+  retryAfterAt?: number;
+} {
+  if (error instanceof PublicMarketSourceError)
+    return {
+      code: error.code,
+      ...(error.retryAfterAt !== null
+        ? { retryAfterAt: error.retryAfterAt }
+        : {}),
+    };
+  return {
+    code:
+      error instanceof Error && error.message === "market_pool_unavailable"
+        ? "pool-unavailable"
+        : "invalid-response",
+  };
+}
 export const read = action({
-  args: { mint: v.string(), kind, interval: v.optional(v.string()) },
+  args: {
+    mint: v.string(),
+    kind,
+    interval: v.optional(v.string()),
+    pinnedSymf: v.optional(v.boolean()),
+  },
   returns: view,
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    state: "ready" | "loading" | "unavailable" | "budget" | "unsupported";
-    payload: string | null;
-    stale: boolean;
-  }> => {
+  handler: async (ctx, args): Promise<MarketCacheView> => {
     const interval = args.interval ?? "15m",
       lease = crypto.randomUUID();
-    const reserved = await ctx.runMutation(internal.forumMarketData.claim, {
-      ...args,
-      interval,
-      lease,
-    });
-    if (!reserved.fetch)
-      return {
-        state: reserved.state,
-        payload: reserved.payload,
-        stale: reserved.stale,
-      };
+    const request = { ...args, interval };
+    const reserved: MarketCacheView & { fetch: boolean } =
+      await ctx.runMutation(internal.forumMarketData.claim, {
+        ...request,
+        lease,
+      });
+    if (!reserved.fetch) {
+      const { fetch: ignored, ...current } = reserved;
+      void ignored;
+      return current;
+    }
     let payload: string | null = null;
+    let stage: MarketFailureStage = "pool";
+    let diagnostic: { code: MarketFailureCode; retryAfterAt?: number } | null =
+      null;
+    let diagnosticStage: MarketFailureStage | undefined;
     try {
       const pairs = await readPublicMarket(
         `https://api.dexscreener.com/token-pairs/v1/solana/${args.mint}`,
         200_000,
       );
-      const binding = selectMarketBinding(pairs, args.mint);
+      const poolCandidates = args.pinnedSymf
+        ? Array.isArray(pairs) && pairs.length <= 100
+          ? pairs.filter((pair) => record(pair).pairAddress === SYMF_TOKEN.pool)
+          : []
+        : pairs;
+      const binding = selectMarketBinding(poolCandidates, args.mint);
+      if (
+        args.pinnedSymf &&
+        (binding.pool !== SYMF_TOKEN.pool || binding.quote !== MARKET_QUOTES[0])
+      )
+        throw Error("market_pool_unavailable");
       const checkedAt = Date.now();
       if (args.kind === "chart") {
+        stage = "candles";
         const options = SYMF_CHART_INTERVALS[interval as SymfChartInterval];
         const data = await readPublicMarket(
           `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/ohlcv/${options.timeframe}?${new URLSearchParams({ aggregate: options.aggregate, limit: "120", currency: "usd", token: "base" })}`,
@@ -256,25 +587,42 @@ export const read = action({
       } else {
         const stats = parseMarketStats(pairs, binding);
         let trades = null;
+        stage = "trades";
         try {
           const data = await readPublicMarket(
             `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/trades?trade_volume_in_usd_greater_than=0`,
             1_000_000,
           );
           trades = parseMarketTrades(data, checkedAt, binding);
-        } catch {
-          /* Independently valid stats remain useful when the trade source fails. */
+        } catch (error) {
+          diagnostic = safeFailure(error);
+          diagnosticStage = "trades";
         }
+        // Valid statistics remain independently useful; failed trades are null.
         payload = JSON.stringify({ ...binding, checkedAt, stats, trades });
       }
-    } catch {
-      /* Only a safe state is returned; no raw provider errors. */
+    } catch (error) {
+      diagnostic = safeFailure(error);
+      diagnosticStage = stage;
     }
-    await ctx.runMutation(internal.forumMarketData.save, {
-      key: cacheKey(args.mint, args.kind, interval),
+    if (diagnostic)
+      console.warn("public_market_fetch_failed", {
+        stage: diagnosticStage,
+        code: diagnostic.code,
+        failureCount: payload === null ? reserved.cache.failureCount + 1 : 0,
+      });
+    return await ctx.runMutation(internal.forumMarketData.save, {
+      key: cacheKey(request),
       lease,
+      attemptAt: reserved.cache.lastAttemptAt ?? undefined,
       payload,
+      ...(diagnostic
+        ? {
+            failureStage: diagnosticStage,
+            failureCode: diagnostic.code,
+            retryAfterAt: diagnostic.retryAfterAt,
+          }
+        : {}),
     });
-    return { state: payload ? "ready" : "unavailable", payload, stale: false };
   },
 });
