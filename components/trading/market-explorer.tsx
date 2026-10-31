@@ -7,7 +7,9 @@ import {
   ArrowUp,
   ArrowUpDown,
   ArrowUpRight,
+  Copy,
   Search,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,6 +22,7 @@ import type {
   TerminalMarketRefreshResult,
 } from "@/lib/forum-terminal-model";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
+import { isSolanaAddress } from "@/lib/forum-commerce";
 import { TokenLogo, symfChoice, type MarketChoice } from "./market-identity";
 import { terminalApi } from "./terminal-api";
 import {
@@ -148,6 +151,7 @@ export function MarketExplorer({
   now: number;
 }) {
   const [search, setSearch] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   const [band, setBand] = useState<MarketCapBand>("all");
   const [platform, setPlatform] = useState<"all" | "bags" | "pumpfun">("all");
   const [sort, setSort] = useState<{
@@ -173,6 +177,19 @@ export function MarketExplorer({
   const filtered =
     search.trim().length > 0 || band !== "all" || platform !== "all";
   const empty = data === undefined || markets.length === 0;
+  const exactMint = isSolanaAddress(search.trim()) ? search.trim() : null;
+  function clearSearch() {
+    setSearch("");
+    searchInput.current?.focus();
+  }
+  async function copyMint(mint: string) {
+    try {
+      await navigator.clipboard.writeText(mint);
+      setCopyMessage("Exact mint copied.");
+    } catch {
+      setCopyMessage(`Could not copy mint. Copy it manually: ${mint}`);
+    }
+  }
   function resetFilters() {
     setSearch("");
     setBand("all");
@@ -204,6 +221,17 @@ export function MarketExplorer({
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        {search.length > 0 && (
+          <button
+            type="button"
+            className="focus-ring inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-border"
+            aria-label="Clear search"
+            title="Clear search only"
+            onClick={clearSearch}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        )}
         <label>
           <span>Market cap</span>
           <select
@@ -286,6 +314,12 @@ export function MarketExplorer({
           </select>
         </label>
       </div>
+      <p
+        role="status"
+        className={copyMessage ? "break-all px-3 py-1 text-xs" : "sr-only"}
+      >
+        {copyMessage}
+      </p>
       <p id={scrollHintId} className={styles.scrollHint}>
         Scroll for more metrics
       </p>
@@ -310,15 +344,19 @@ export function MarketExplorer({
           </span>
           {data !== undefined && filtered && (
             <div className={styles.emptyActions}>
-              {search.trim() && (
+              {exactMint && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearch("");
-                    searchInput.current?.focus();
-                  }}
+                  className="focus-ring"
+                  onClick={() =>
+                    onSelect({
+                      mint: exactMint,
+                      symbol: "TOKEN",
+                      name: "Selected Solana token",
+                    })
+                  }
                 >
-                  Clear search
+                  View exact mint
                 </button>
               )}
               {(band !== "all" || platform !== "all") && (
@@ -327,6 +365,12 @@ export function MarketExplorer({
                 </button>
               )}
             </div>
+          )}
+          {data !== undefined && exactMint && (
+            <p className="mt-2 text-xs">
+              Address format only; token identity and market data are not
+              verified.
+            </p>
           )}
         </div>
         <table aria-label="Sampled markets" hidden={empty}>
@@ -375,6 +419,7 @@ export function MarketExplorer({
                   selected={selected === market.mint}
                   staleSample={data.stale}
                   onSelect={onSelect}
+                  onCopy={copyMint}
                   now={now}
                 />
               ))}
@@ -419,12 +464,14 @@ function MarketDataRow({
   selected,
   staleSample,
   onSelect,
+  onCopy,
   now,
 }: {
   market: TerminalMarket;
   selected: boolean;
   staleSample: boolean;
   onSelect: (choice: MarketChoice) => void;
+  onCopy: (mint: string) => Promise<void>;
   now: number;
 }) {
   const sources = marketSources(market, now);
@@ -435,31 +482,42 @@ function MarketDataRow({
   return (
     <tr data-selected={selected}>
       <td className={styles.tokenColumn}>
-        <button
-          className={styles.assetChoice}
-          type="button"
-          aria-label={`View ${market.symbol}, mint ${shortMint(market.mint)}`}
-          aria-pressed={selected}
-          onClick={() => onSelect(market)}
-        >
-          <TokenLogo token={market} />
-          <span>
-            <strong>
-              <span className={styles.symbol} title={market.symbol}>
-                ${market.symbol}
-              </span>
-              <small title={market.name}>{market.name}</small>
-            </strong>
-            <span className={styles.mintLine}>
-              <code title={market.mint}>{shortMint(market.mint)}</code>
-              {(stale || sources.unavailable) && (
-                <span className={styles.stale}>
-                  {sources.unavailable ? "Unavailable" : "Stale"}
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            className={styles.assetChoice}
+            type="button"
+            aria-label={`View ${market.symbol}, mint ${shortMint(market.mint)}`}
+            aria-pressed={selected}
+            onClick={() => onSelect(market)}
+          >
+            <TokenLogo token={market} />
+            <span>
+              <strong>
+                <span className={styles.symbol} title={market.symbol}>
+                  ${market.symbol}
                 </span>
-              )}
+                <small title={market.name}>{market.name}</small>
+              </strong>
+              <span className={styles.mintLine}>
+                <code title={market.mint}>{shortMint(market.mint)}</code>
+                {(stale || sources.unavailable) && (
+                  <span className={styles.stale}>
+                    {sources.unavailable ? "Unavailable" : "Stale"}
+                  </span>
+                )}
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+          <button
+            type="button"
+            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md"
+            aria-label={`Copy exact mint for ${market.symbol}, ${market.mint}`}
+            title={`Copy exact mint: ${market.mint}`}
+            onClick={() => void onCopy(market.mint)}
+          >
+            <Copy size={14} aria-hidden="true" />
+          </button>
+        </div>
       </td>
       <NumberCell
         value={market.priceUsd}
