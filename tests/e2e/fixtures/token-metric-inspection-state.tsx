@@ -11,6 +11,11 @@ export const checkedAt = now - 60000;
 export const reads: string[] = [];
 export const forbidden: string[] = [];
 const scenario = new URLSearchParams(location.search).get("scenario");
+const originalSourceUrl = new URLSearchParams(location.search).has(
+  "long-source",
+)
+  ? `https://indexed.example.test/original/${"historic-holder-snapshot-".repeat(10)}`
+  : "https://indexed.example.test/original";
 const listeners = new Set<() => void>();
 let selection = mintA;
 export function select(mint: string) {
@@ -61,7 +66,7 @@ export function useQuery(
     twitter: null,
     telegram: null,
     description: null,
-    sourceUrl: "https://indexed.example.test/original",
+    sourceUrl: originalSourceUrl,
     sourceRank: null,
     threadId: null,
     threadUrl: null,

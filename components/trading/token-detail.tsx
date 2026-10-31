@@ -351,14 +351,21 @@ export function TokenDetail({
                         <>
                           {" "}
                           ·{" "}
-                          <a
-                            href={source.url}
-                            {...external}
-                            aria-label={`${label} sample source for ${token.mint}`}
-                            className="focus-ring underline"
-                          >
-                            Sample source
-                          </a>
+                          {label === "Holders" ? (
+                            <span>
+                              Original holder reference (not refreshed market
+                              data): <code>{source.url}</code>
+                            </span>
+                          ) : (
+                            <a
+                              href={source.url}
+                              {...external}
+                              aria-label={`${label} sample source for ${token.mint}`}
+                              className="focus-ring underline"
+                            >
+                              Sample source
+                            </a>
+                          )}
                         </>
                       )}
                     </p>
