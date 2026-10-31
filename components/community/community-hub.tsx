@@ -52,6 +52,7 @@ import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
 import { filterTipRecipients } from "./tip-recipient-model";
+import { appendWorkBrief, deliveryUrlPreview } from "./work-brief-model";
 import {
   communityHref,
   communityRoute,
@@ -995,6 +996,8 @@ function BountyForm({ mint }: { mint?: string }) {
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const requirementId = useId();
+  const templateHelpId = useId();
+  const [templateMessage, setTemplateMessage] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget,
@@ -1028,7 +1031,11 @@ function BountyForm({ mint }: { mint?: string }) {
           requested when you create it.
         </DialogDescription>
       </DialogHeader>
-      <form className={styles.form} onSubmit={submit}>
+      <form
+        className={`${styles.form} ${styles.workGuidanceControls}`}
+        onSubmit={submit}
+        onReset={() => setTemplateMessage("")}
+      >
         <Field label="Type">
           <select name="kind" className={styles.select}>
             <option value="bounty">Build or contribute</option>
@@ -1047,6 +1054,48 @@ function BountyForm({ mint }: { mint?: string }) {
             placeholder="Define the deliverable, sources, deadline and how you will choose a submission."
           />
         </Field>
+        <div className={styles.workGuidance}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            aria-describedby={templateHelpId}
+            onClick={(event) => {
+              const form = event.currentTarget.form;
+              const brief = form?.elements.namedItem("brief");
+              const kind = form?.elements.namedItem("kind");
+              if (
+                !(brief instanceof HTMLTextAreaElement) ||
+                !(kind instanceof HTMLSelectElement)
+              )
+                return;
+              const next = appendWorkBrief(
+                brief.value,
+                kind.value === "research" ? "research" : "bounty",
+              );
+              if (next === null) {
+                setTemplateMessage(
+                  "Template not added: there is not enough room within 5,000 characters. Your text is unchanged.",
+                );
+                return;
+              }
+              brief.value = next;
+              brief.focus();
+              setTemplateMessage(
+                "Editable guidance appended. Replace the placeholders before publishing.",
+              );
+            }}
+          >
+            Append brief template
+          </Button>
+          <p id={templateHelpId}>
+            Uses the selected type and appends to your text. Edit deliverables,
+            public sources, a requested UTC deadline and acceptance criteria. It
+            does not change the pledge, title, mint or type, publish work or
+            enforce a deadline. A pledge is not escrow.
+          </p>
+          {templateMessage && <p role="status">{templateMessage}</p>}
+        </div>
         <Field label="Sponsor pledge (SOL)">
           <Input
             name="amount"
@@ -1197,6 +1246,8 @@ function SubmissionForm({
       draftUrl: saved?.url ?? "",
       draftSummary: saved?.summary ?? "",
     });
+  const deliveryPreviewId = useId();
+  const destination = deliveryUrlPreview(url);
   const dirty = url !== baseline.draftUrl || summary !== baseline.draftSummary;
   const savedMatchesBaseline =
     saved?.url === baseline.url && saved.summary === baseline.summary;
@@ -1223,7 +1274,7 @@ function SubmissionForm({
   return (
     <form
       aria-label={saved ? "Edit your deliverable" : "Submit your deliverable"}
-      className={`${styles.form} ${styles.details}`}
+      className={`${styles.form} ${styles.details} ${styles.workGuidanceControls}`}
       onSubmit={(event) => {
         event.preventDefault();
         if (busy || awaitingSaved || divergent || !dirty) return;
@@ -1324,8 +1375,28 @@ function SubmissionForm({
           value={url}
           onChange={(event) => setUrl(event.target.value)}
           disabled={busy}
+          aria-describedby={deliveryPreviewId}
         />
       </Field>
+      <div id={deliveryPreviewId} className={styles.workGuidance} role="status">
+        {destination.state === "valid" ? (
+          <p>
+            Destination host: <code>{destination.hostname}</code>
+          </p>
+        ) : (
+          <p>
+            {destination.state === "empty"
+              ? "Add a public HTTPS delivery link to preview its destination host."
+              : "Destination preview unavailable. Use a public HTTPS link without credentials that meets the existing link requirements."}
+          </p>
+        )}
+        <p>
+          Local format preview only: this site has not been fetched, resolved,
+          checked or endorsed. Visiting a delivery link opens another website,
+          which may receive browser and network information. Keep private files,
+          credentials and access tokens out of links.
+        </p>
+      </div>
       <Field label="What did you deliver?">
         <Textarea
           name="summary"
