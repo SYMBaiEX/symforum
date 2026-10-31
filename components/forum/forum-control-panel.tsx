@@ -850,7 +850,7 @@ function ForumProfileForm({
           maxLength={900}
           rows={4}
           onChange={(event) => onSignatureChange(event.target.value)}
-          placeholder={"[b]Build notes[/b]\\n" + PRIMARY_SITE_URL}
+          placeholder={"[b]Build notes[/b]\n" + PRIMARY_SITE_URL}
           className="rounded-xl border-row-border"
         />
         <span className="text-xs leading-5 text-muted-foreground">
@@ -1035,6 +1035,10 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [failedAddUsername, setFailedAddUsername] = useState<string | null>(null);
+  const relationshipErrorId = useId();
+  const hasUsernameError =
+    error.length > 0 && failedAddUsername === username.trim();
 
   async function changeRelationship(
     kind: ForumRelationshipKind,
@@ -1044,6 +1048,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
     const normalizedUsername = targetUsername.trim();
     if (normalizedUsername.length === 0) {
       setError("Add a username first.");
+      setFailedAddUsername(enabled ? normalizedUsername : null);
       return;
     }
 
@@ -1052,6 +1057,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
     );
     setNotice("");
     setError("");
+    setFailedAddUsername(null);
     try {
       await updateRelationship({
         username: normalizedUsername,
@@ -1074,7 +1080,10 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
         action: "forum:updateForumRelationship",
         notify: false,
       });
-      setError(userFacingError(caught, "Could not update member list"));
+      setFailedAddUsername(enabled ? normalizedUsername : null);
+      setError(
+        `Could not ${enabled ? "add" : "remove"} ${normalizedUsername}. ${userFacingError(caught, "Could not update member list")}`,
+      );
     } finally {
       setPendingKey(null);
     }
@@ -1110,9 +1119,12 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
           <span className="text-xs text-muted-foreground">Username</span>
           <Input
             value={username}
+            aria-invalid={hasUsernameError || undefined}
+            aria-describedby={hasUsernameError ? relationshipErrorId : undefined}
             onChange={(event) => {
               setUsername(event.target.value);
               setError("");
+              setFailedAddUsername(null);
               setNotice("");
             }}
             placeholder="sym-austin"
@@ -1143,7 +1155,11 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
           </Button>
         </div>
         {error ? (
-          <p className="rounded-xl bg-card p-4 text-sm text-muted-foreground">
+          <p
+            id={relationshipErrorId}
+            role="alert"
+            className="rounded-xl bg-card p-4 text-sm text-muted-foreground"
+          >
             {error}
           </p>
         ) : null}
