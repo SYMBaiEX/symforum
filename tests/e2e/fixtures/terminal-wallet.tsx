@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import type { CommerceWalletClient } from "../../../lib/commerce-wallet-client";
 
-const client = {} as CommerceWalletClient;
+// No signer or transport is implemented, including in the input-state scenario.
+const client = {
+  wallet: { getState: () => ({ connected: null }) },
+} as unknown as CommerceWalletClient;
 export function CommerceWalletProvider({ children }: { children: ReactNode }) {
   return children;
 }
@@ -10,8 +13,8 @@ export function useCommerceWallet() {
 }
 export function useCommerceIdentity() {
   return {
-    linked: location.search.includes("research"),
-    connected: location.search.includes("research")
+    linked: /research|orderinput/.test(location.search),
+    connected: /research|orderinput/.test(location.search)
       ? {
           account: { address: "11111111111111111111111111111111" },
           supportedTransactionVersions: new Set([0]),
