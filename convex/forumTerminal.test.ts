@@ -116,7 +116,9 @@ async function actor(t: ReturnType<typeof setup>, n: number) {
   };
 }
 beforeEach(() => {
-  vi.spyOn(Date, "now").mockReturnValue(NOW);
+  // The auth adapter uses new Date(), so Date.now alone leaves sessions wall-clock dependent.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.stubEnv("CONVEX_SITE_URL", issuer);
   vi.stubEnv("BETTER_AUTH_ENABLED", "true");
   vi.stubEnv("FORUM_COMMERCE_TREASURY", treasury);
@@ -124,8 +126,14 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+test("authentication and terminal samples use the same fixed fixture clock", () => {
+  expect(Date.now()).toBe(NOW);
+  expect(new Date().getTime()).toBe(NOW);
 });
 
 describe("public sampled terminal markets", () => {
