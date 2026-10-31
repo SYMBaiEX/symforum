@@ -316,6 +316,52 @@ function CommunityContent({
           </div>
         </header>
       )}
+      <details className={styles.taskGuide}>
+        <summary className="focus-ring">Find your next step</summary>
+        <nav aria-label="Community task guide">
+          {(
+            [
+              [
+                "projects",
+                "Find project builders",
+                "Browse self-declared project affiliations.",
+              ],
+              [
+                "work",
+                "Commission useful work",
+                "Publish an unfunded pledge or submit a deliverable.",
+              ],
+              [
+                "support",
+                "Support a contributor",
+                "Explore optional tips and contributor profile settings.",
+              ],
+            ] as const
+          ).map(([next, title, description]) => (
+            <ForumLink
+              key={next}
+              href={communityHref({ section: next, mint, invalid: false })}
+              prefetch={false}
+              aria-controls={contentId}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                navigate(next);
+              }}
+            >
+              <strong>{title}</strong>
+              <span>{description}</span>
+            </ForumLink>
+          ))}
+        </nav>
+      </details>
       <nav className={styles.nav} aria-label="Community utilities">
         {(
           [
@@ -337,6 +383,29 @@ function CommunityContent({
         ))}
       </nav>
       <div id={contentId} role="region" aria-label={sectionLabels[section]}>
+        {mint && (section === "projects" || section === "work") && (
+          <section
+            className={styles.scopeNotice}
+            aria-label="Community mint scope"
+          >
+            <div>
+              <strong>Projects and work for this exact mint</strong>
+              <code>{mint}</code>
+            </div>
+            <p>
+              {compact
+                ? "This view follows the terminal’s selected token. Open the full community to browse beyond it."
+                : "These projects and work items are filtered to this token, not the full community."}
+            </p>
+            <ForumLink
+              href={communityHref({ section, invalid: false })}
+              prefetch={false}
+            >
+              {compact ? "Open full community" : "Browse full community"}
+              <ArrowUpRight size={15} aria-hidden="true" />
+            </ForumLink>
+          </section>
+        )}
         {section === "projects" && <Projects mint={mint} client={client} />}
         {section === "work" && (
           <WorkBoard mint={mint} client={client} onPayment={setPayment} />
