@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   useEffect,
   useId,
   useRef,
@@ -9,6 +10,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
@@ -48,6 +50,12 @@ import { ForumLink } from "@/components/forum/forum-link";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
+import {
+  communityHref,
+  communityRoute,
+  communitySignInHref,
+  type CommunitySection,
+} from "@/lib/community-navigation";
 
 type Payment = FunctionReturnType<typeof api.forumCommunity.preparePayment>;
 type Work = FunctionReturnType<typeof api.forumCommunity.listBounties>[number];
@@ -58,7 +66,7 @@ type AffiliationDraft = { mint: string; claim: Project["claims"][number] };
 type Submission = FunctionReturnType<
   typeof api.forumCommunity.listSubmissions
 >[number];
-type Section = "projects" | "work" | "support" | "receipts";
+type Section = CommunitySection;
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 function safeMessage(error: unknown) {
   if (
@@ -101,40 +109,63 @@ export function CommunityHub({
   const { host } = useForumRuntime();
   if (host !== "website")
     return (
-      <section className={styles.panel}>
-        <h2>Community projects and rewards</h2>
-        <p className={styles.muted}>
-          Open the forum to manage wallet-linked project claims, author tips and
-          sponsor-funded work.
-        </p>
-        <div className={styles.actions}>
-          <Button asChild>
-            <a
-              href={forumSiteUrl(
-                `/community${mint ? `?mint=${encodeURIComponent(mint)}` : ""}`,
-              )}
-              {...external}
-            >
-              Open community <ExternalLink aria-hidden="true" />
-            </a>
-          </Button>
-        </div>
-      </section>
+      <Suspense fallback={<p role="status">Loading community link…</p>}>
+        <CommunityHandoff mint={mint} />
+      </Suspense>
     );
   return (
     <CommerceWalletProvider>
-      <CommunityContent mint={mint} compact={compact} />
+      <Suspense fallback={<p role="status">Loading community utilities…</p>}>
+        <CommunityContent mint={mint} compact={compact} />
+      </Suspense>
     </CommerceWalletProvider>
   );
 }
+function CommunityHandoff({ mint }: { mint?: string }) {
+  const route = communityRoute(useSearchParams());
+  return (
+    <section className={styles.panel}>
+      <h2>Community projects and rewards</h2>
+      <p className={styles.muted}>
+        Open the forum to manage wallet-linked project claims, author tips and
+        sponsor-funded work.
+      </p>
+      <div className={styles.actions}>
+        <Button asChild>
+          <a
+            href={forumSiteUrl(
+              communityHref({
+                ...route,
+                mint: route.invalid ? undefined : (route.mint ?? mint),
+              }),
+            )}
+            {...external}
+          >
+            Open community <ExternalLink aria-hidden="true" />
+          </a>
+        </Button>
+      </div>
+    </section>
+  );
+}
 function CommunityContent({
-  mint,
+  mint: suppliedMint,
   compact,
 }: {
   mint?: string;
   compact: boolean;
 }) {
-  const [section, setSection] = useState<Section>("projects"),
+  const params = useSearchParams();
+  const search = params.toString();
+  const route = communityRoute(params);
+  // The terminal's live selection is local state and can differ from its URL.
+  const mint = compact
+    ? suppliedMint
+    : route.invalid
+      ? undefined
+      : (route.mint ?? suppliedMint);
+  const [section, setSection] = useState<Section>(route.section),
+    [previousSearch, setPreviousSearch] = useState(search),
     [receiptsVisited, setReceiptsVisited] = useState(false),
     [payment, setPayment] = useState<Payment | null>(null);
   const client = useCommerceWallet();
@@ -145,12 +176,46 @@ function CommunityContent({
     support: "Tips & profile",
     receipts: "Your receipts",
   };
+  if (search !== previousSearch) {
+    setPreviousSearch(search);
+    setSection(route.section);
+  }
+  if (section === "receipts" && !receiptsVisited) setReceiptsVisited(true);
+  function navigate(next: Section) {
+    if (compact) {
+      const query = new URLSearchParams(window.location.search);
+      query.set("section", next);
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}?${query}`,
+      );
+      setSection(next);
+      return;
+    }
+    const path =
+      window.location.pathname === "/forum/community"
+        ? "/forum/community"
+        : "/community";
+    window.history.pushState(
+      null,
+      "",
+      communityHref({ section: next, mint, invalid: false }, path),
+    );
+    setSection(next);
+  }
   function goToReceipts() {
     setReceiptsVisited(true);
-    setSection("receipts");
+    navigate("receipts");
   }
   return (
     <div className={`${styles.hub} ${compact ? styles.compact : ""}`}>
+      {route.invalid && (
+        <p role="status">
+          This community link contains invalid options. Showing the public
+          project directory; no payment was opened.
+        </p>
+      )}
       {!compact && (
         <header className={styles.header}>
           <div>
@@ -181,9 +246,7 @@ function CommunityContent({
             variant="ghost"
             aria-pressed={section === id}
             aria-controls={contentId}
-            onClick={() =>
-              id === "receipts" ? goToReceipts() : setSection(id)
-            }
+            onClick={() => (id === "receipts" ? goToReceipts() : navigate(id))}
           >
             {label}
           </Button>
@@ -201,7 +264,14 @@ function CommunityContent({
             subscription and known protection notice after their first use. */}
         {receiptsVisited && (
           <div hidden={section !== "receipts"}>
-            <Receipts onPayment={setPayment} />
+            <Receipts
+              onPayment={setPayment}
+              signInHref={communitySignInHref({
+                section: "receipts",
+                mint,
+                invalid: false,
+              })}
+            />
           </div>
         )}
       </div>
@@ -1512,7 +1582,13 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
     </>
   );
 }
-function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
+function Receipts({
+  onPayment,
+  signInHref,
+}: {
+  onPayment: (payment: Payment) => void;
+  signInHref: string;
+}) {
   const { isAuthenticated, isLoading } = useConvexAuth(),
     rows = useQuery(
       api.forumCommunity.listPayments,
@@ -1552,10 +1628,7 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
           <div className={styles.localState}>
             <h3>Sign in to view your receipts</h3>
             <p>Your community payment history is private to your account.</p>
-            <ForumLink
-              href="/signin?redirectTo=/community"
-              className={styles.link}
-            >
+            <ForumLink href={signInHref} className={styles.link}>
               Sign in
             </ForumLink>
           </div>
