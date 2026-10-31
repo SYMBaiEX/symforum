@@ -1940,6 +1940,19 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
           discount or right to moderate; browsing, posting and reputation remain
           free.
         </p>
+        <details
+          className="mt-3 min-w-0"
+          aria-label="Optional holder-check guidance"
+        >
+          <summary className="focus-ring min-h-11 cursor-pointer content-center">
+            About holder checks
+          </summary>
+          <p className={styles.muted}>
+            Checking holder proof requests no wallet payment and uses the
+            existing data allowance. To refresh, explicitly choose Check holder
+            proof.
+          </p>
+        </details>
         {mine?.supporter?.eligible ? (
           <p className={styles.badge}>
             <ShieldCheck size={14} aria-hidden="true" /> Holder proof verified
