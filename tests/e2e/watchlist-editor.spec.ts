@@ -8,6 +8,10 @@ type Editor = {
   calls: { name: string; args: Record<string, unknown> }[];
   selected: { mint: string }[];
   mode: "success" | "reject" | "defer";
+  serverOnlyUpdate(bounds: {
+    priceAboveUsd?: number | null;
+    priceBelowUsd?: number | null;
+  }): void;
   settle(success: boolean): void;
 };
 declare global {
@@ -87,7 +91,7 @@ test("clear above is a reversible draft; Save preserves the lower threshold", as
   expect(await calls(page)).toEqual([
     {
       name: "forumTerminal:setWatchlist",
-      args: { mint, enabled: true, priceAboveUsd: null, priceBelowUsd: 5 },
+      args: { mint, enabled: true, priceAboveUsd: null },
     },
   ]);
   await expect(
@@ -108,15 +112,12 @@ test("clear below can be undone and blank fields still keep both saved threshold
   expect((await calls(page))[0].args).toEqual({
     mint,
     enabled: true,
-    priceAboveUsd: 10,
-    priceBelowUsd: 5,
   });
   await page.getByRole("button", { name: "Clear below", exact: true }).click();
   await save(page);
   expect((await calls(page))[1].args).toEqual({
     mint,
     enabled: true,
-    priceAboveUsd: 10,
     priceBelowUsd: null,
   });
 });
@@ -142,6 +143,72 @@ test("clear both also waits for explicit Save", async ({ page }) => {
   });
 });
 
+test("clearing one bound preserves another tab's newer unrelated bound", async ({
+  page,
+}) => {
+  await harness(page);
+  await page.evaluate(() =>
+    window.__watchEditor.serverOnlyUpdate({ priceBelowUsd: 6 }),
+  );
+  await expect(
+    page.getByText("Saved thresholds: above $10.00, below $5.00."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Clear above", exact: true }).click();
+  await save(page);
+  expect((await calls(page))[0].args).toEqual({
+    mint,
+    enabled: true,
+    priceAboveUsd: null,
+  });
+  await expect(
+    page.getByText("Saved thresholds: above not set, below $6.00."),
+  ).toBeVisible();
+});
+
+test("blank KEEP omits both bounds and preserves newer server values", async ({
+  page,
+}) => {
+  await harness(page);
+  await page.evaluate(() =>
+    window.__watchEditor.serverOnlyUpdate({
+      priceAboveUsd: 12,
+      priceBelowUsd: 6,
+    }),
+  );
+  await save(page);
+  expect((await calls(page))[0].args).toEqual({ mint, enabled: true });
+  await expect(
+    page.getByText("Saved thresholds: above $12.00, below $6.00."),
+  ).toBeVisible();
+});
+
+test("server validation still rejects a locally-valid edit against a newer bound", async ({
+  page,
+}) => {
+  await harness(page);
+  await page.evaluate(() =>
+    window.__watchEditor.serverOnlyUpdate({
+      priceAboveUsd: 20,
+      priceBelowUsd: 12,
+    }),
+  );
+  await page
+    .getByRole("textbox", { name: "Alert above, USD", exact: true })
+    .fill("11");
+  await save(page);
+  expect((await calls(page))[0].args).toEqual({
+    mint,
+    enabled: true,
+    priceAboveUsd: 11,
+  });
+  await expect(
+    page.getByText(/Your existing settings are unchanged/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Alert above, USD", exact: true }),
+  ).toHaveValue("11");
+});
+
 test("precision is preserved when existing thresholds are kept", async ({
   page,
 }) => {
@@ -155,9 +222,12 @@ test("precision is preserved when existing thresholds are kept", async ({
   expect((await calls(page))[0].args).toEqual({
     mint,
     enabled: true,
-    priceAboveUsd: 0.1234567890123456,
-    priceBelowUsd: 0.0000000123456789,
   });
+  await expect(
+    page.getByText(
+      /Saved thresholds: above \$0\.1234567890123456, below \$0\.0000000123456789/,
+    ),
+  ).toBeVisible();
 });
 
 test("invalid thresholds have associated errors, focus the bad field, and cannot save", async ({
@@ -217,7 +287,6 @@ test("failed Save retains the saved thresholds and staged clear for deliberate r
       mint,
       enabled: true,
       priceAboveUsd: null,
-      priceBelowUsd: 5,
     }),
   );
 });
@@ -316,7 +385,7 @@ test("keyboard-only threshold clearing reaches Save without submitting on clear"
   expect(await calls(page)).toEqual([
     {
       name: "forumTerminal:setWatchlist",
-      args: { mint, enabled: true, priceAboveUsd: null, priceBelowUsd: 5 },
+      args: { mint, enabled: true, priceAboveUsd: null },
     },
   ]);
 });
@@ -362,6 +431,5 @@ for (const viewport of [
       mint,
       enabled: true,
       priceAboveUsd: null,
-      priceBelowUsd: 0.0000000123456789,
     });
   });

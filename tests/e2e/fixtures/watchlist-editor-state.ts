@@ -35,6 +35,7 @@ let watches: WatchToken[] = [
     updatedAt: 1,
   },
 ];
+let serverWatches = watches.map((watch) => ({ ...watch }));
 let alerts: TokenAlert[] = [
   {
     id: "fixture-alert",
@@ -52,6 +53,14 @@ export const editor = {
   calls: [] as Call[],
   selected: [] as { mint: string }[],
   mode: "success" as "success" | "reject" | "defer",
+  serverOnlyUpdate: (
+    bounds: Partial<Pick<WatchToken, "priceAboveUsd" | "priceBelowUsd">>,
+  ) => {
+    // Deliberately withhold the query echo to model another tab's newer commit.
+    serverWatches = serverWatches.map((watch) =>
+      watch.mint === fixtureMint ? { ...watch, ...bounds } : watch,
+    );
+  },
   settle: (_success: boolean): void => {
     throw new Error("No pending fixture mutation");
   },
@@ -84,15 +93,40 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
             alert.id === values.id ? { ...alert, acknowledged: true } : alert,
           );
         } else {
-          watches = watches.filter((watch) => watch.mint !== values.mint);
+          const existing = serverWatches.find(
+            (watch) => watch.mint === values.mint,
+          );
+          const high =
+            values.priceAboveUsd === undefined
+              ? (existing?.priceAboveUsd ?? null)
+              : (values.priceAboveUsd as number | null);
+          const low =
+            values.priceBelowUsd === undefined
+              ? (existing?.priceBelowUsd ?? null)
+              : (values.priceBelowUsd as number | null);
+          if (
+            values.enabled &&
+            ([high, low].some(
+              (value) =>
+                value != null && (!Number.isFinite(value) || value <= 0),
+            ) ||
+              (high != null && low != null && high <= low))
+          )
+            throw new Error(
+              "Invented server merged-state validation rejection",
+            );
+          serverWatches = serverWatches.filter(
+            (watch) => watch.mint !== values.mint,
+          );
           if (values.enabled)
-            watches.push({
+            serverWatches.push({
               mint: String(values.mint),
               symbol: "SOL",
-              priceAboveUsd: values.priceAboveUsd as number | null,
-              priceBelowUsd: values.priceBelowUsd as number | null,
+              priceAboveUsd: high,
+              priceBelowUsd: low,
               updatedAt: Date.now(),
             });
+          watches = serverWatches.map((watch) => ({ ...watch }));
         }
         publish();
       };
@@ -103,8 +137,12 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
           editor.settle = (success) => {
             editor.mode = "success";
             if (success) {
-              finish();
-              resolve();
+              try {
+                finish();
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
             } else reject(new Error("Invented fixture rejection"));
           };
         });

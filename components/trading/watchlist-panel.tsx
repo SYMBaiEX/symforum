@@ -86,7 +86,14 @@ export function WatchlistPanel({
       await save({
         mint: selected.mint,
         enabled,
-        ...(enabled ? { priceAboveUsd: high, priceBelowUsd: low } : {}),
+        // Omit KEEP fields so the server preserves their latest values, even
+        // when another tab updated them before this subscription caught up.
+        ...(enabled && (clearAbove || above.trim())
+          ? { priceAboveUsd: high }
+          : {}),
+        ...(enabled && (clearBelow || below.trim())
+          ? { priceBelowUsd: low }
+          : {}),
       });
       setAbove("");
       setBelow("");
