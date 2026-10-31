@@ -853,6 +853,83 @@ test("private watch updates preserve saved thresholds and protected swaps stay p
   expect(errors).toEqual([]);
 });
 
+for (const width of [320, 390, 1440]) {
+  test(`sample alerts open their exact mint without marking it read or changing watch settings at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const { errors, chartMints } = await harness(page, "samplealerts");
+    await openTool(page, "Wallet & watches");
+    const view = page.getByRole("button", {
+      name: `View token for alert, mint ${NOVA_MINT}`,
+      exact: true,
+    });
+    await expect(view).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await expect(
+      page.getByRole("button", { name: "Mark read", exact: true }),
+    ).toHaveCount(2);
+    await view.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => chartMints.includes(NOVA_MINT)).toBe(true);
+    await openTool(page, "Wallet & watches");
+    await expect(
+      page.getByRole("button", {
+        name: `Selected token for alert, mint ${NOVA_MINT}`,
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Mark read", exact: true }),
+    ).toHaveCount(2);
+    expect(
+      await page.evaluate(() =>
+        (
+          window as unknown as { __terminalFixtureCalls: string[] }
+        ).__terminalFixtureCalls.filter((call) => call.startsWith("mutation:")),
+      ),
+    ).toEqual([]);
+    await page
+      .getByRole("button", { name: "Mark read", exact: true })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Mark read", exact: true }),
+    ).toHaveCount(1);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("failed alert acknowledgement retains the unread alert and exact-mint action", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "samplealerts&alertackfail");
+  await openTool(page, "Wallet & watches");
+  await page
+    .getByRole("button", { name: "Mark read", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "This alert could not be marked read. Try later.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Mark read", exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("button", {
+      name: `View token for alert, mint ${NOVA_MINT}`,
+      exact: true,
+    }),
+  ).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
 test("native host does not initialize wallet or market transport", async ({
   page,
 }) => {

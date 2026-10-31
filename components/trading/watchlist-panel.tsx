@@ -243,14 +243,36 @@ export function WatchlistPanel({
                       Sample {marketMoney(alert.priceUsd)} at{" "}
                       {new Date(alert.observedAt).toLocaleString()}
                     </small>
+                    <small>
+                      Mint{" "}
+                      <code title={alert.mint}>{shortMint(alert.mint)}</code>
+                    </small>
                   </span>
-                  <Button
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void dismiss(alert)}
-                  >
-                    Mark read
-                  </Button>
+                  <div className={styles.toolbar}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={busy || alert.mint === selected.mint}
+                      aria-label={`${alert.mint === selected.mint ? "Selected token" : "View token"} for alert, mint ${alert.mint}`}
+                      onClick={() =>
+                        onSelect({
+                          mint: alert.mint,
+                          symbol: alert.symbol ?? shortMint(alert.mint),
+                          name: "Alerted Solana token",
+                        })
+                      }
+                    >
+                      {alert.mint === selected.mint ? "Selected" : "View token"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void dismiss(alert)}
+                    >
+                      Mark read
+                    </Button>
+                  </div>
                 </li>
               ))}
           </ul>

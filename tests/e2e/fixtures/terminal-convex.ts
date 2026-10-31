@@ -11,7 +11,10 @@ import {
 } from "../../../lib/forum-market-cap";
 import type { TerminalMarket } from "../../../lib/forum-terminal-model";
 import { SYMF_TOKEN } from "../../../lib/symf-token";
-import type { WatchToken } from "../../../components/trading/terminal-api";
+import type {
+  TokenAlert,
+  WatchToken,
+} from "../../../components/trading/terminal-api";
 import type { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -25,6 +28,7 @@ const subscribe = (fn: () => void) => {
 };
 const snapshot = () => revision;
 let watches: WatchToken[] = [];
+const acknowledgedAlerts = new Set<string>();
 let researchVerified = false;
 let signedOut = false;
 const queryNames: string[] = [];
@@ -298,7 +302,19 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         }
       : null;
   else if (name === "forumTerminal:listWatchlist") result = watches;
-  else if (name === "forumTerminal:listAlerts") result = [];
+  else if (name === "forumTerminal:listAlerts")
+    result = location.search.includes("samplealerts")
+      ? [nova, quiet].map((token, index): TokenAlert => ({
+          id: `fixture-alert-${index}`,
+          mint: token.mint,
+          symbol: "SAMPLE",
+          direction: "above",
+          thresholdUsd: 0.0001,
+          priceUsd: 0.0002,
+          observedAt: now - 120_000,
+          acknowledged: acknowledgedAlerts.has(`fixture-alert-${index}`),
+        }))
+      : [];
   else if (name === "forumTerminalTransparency:getTransparency")
     result = {
       mint: SYMF_TOKEN.mint,
@@ -384,6 +400,14 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
             priceBelowUsd: input.priceBelowUsd as number | null,
             updatedAt: Date.now(),
           });
+        revision++;
+        listeners.forEach((listener) => listener());
+        return null as FunctionReturnType<Ref>;
+      }
+      if (name === "forumTerminal:acknowledgeAlert") {
+        if (location.search.includes("alertackfail"))
+          throw new Error("Invented alert acknowledgement failure");
+        acknowledgedAlerts.add(String(input.id));
         revision++;
         listeners.forEach((listener) => listener());
         return null as FunctionReturnType<Ref>;
