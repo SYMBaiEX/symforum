@@ -6,6 +6,8 @@ import {
   candleReadingTime,
   candleReadings,
   sourceVolumeLabel,
+  candleReadingAnnouncement,
+  type CandleReadingLimit,
 } from "./candle-readings-model";
 import {
   candleCheckTime,
@@ -25,7 +27,48 @@ export function CandleReadings({
   evidence?: CandleEvidence;
 }) {
   const id = useId();
-  const readings = candleReadings(candles);
+  const scope = `${evidence?.mint ?? ""}:${evidence?.interval ?? ""}`;
+  const [view, setView] = useState({
+    scope,
+    candles,
+    checkedAt: evidence?.checkedAt,
+    source: evidence?.sourceLabel,
+    limit: 20 as CandleReadingLimit,
+    index: null as number | null,
+    announcement: "",
+  });
+  if (
+    view.scope !== scope ||
+    view.candles !== candles ||
+    view.checkedAt !== evidence?.checkedAt ||
+    view.source !== evidence?.sourceLabel
+  ) {
+    setView({
+      scope,
+      candles,
+      checkedAt: evidence?.checkedAt,
+      source: evidence?.sourceLabel,
+      limit: view.scope === scope ? view.limit : 20,
+      index: null,
+      announcement: "",
+    });
+  }
+  const readings = candleReadings(candles, view.limit);
+  function moveReading(direction: number) {
+    const next = view.index === null ? 0 : view.index + direction;
+    const candle = readings.rows[next];
+    if (!candle) return;
+    setView({
+      ...view,
+      index: next,
+      announcement: candleReadingAnnouncement(
+        candle,
+        next,
+        readings.rows.length,
+        formatPrice,
+      ),
+    });
+  }
   const text = evidence
     ? candleReadingText(readings.rows, evidence, formatPrice)
     : null;
@@ -143,6 +186,74 @@ export function CandleReadings({
         Checked time dates the source check, not each bar. Returned bars may be
         sparse. Prices USD; volume unit unknown.
       </p>
+      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+        <label
+          className="flex min-w-0 flex-wrap items-center gap-2"
+          htmlFor={`${id}-window`}
+        >
+          <span>Readings</span>
+          <select
+            id={`${id}-window`}
+            aria-label="Displayed candle readings"
+            className="focus-ring min-h-11 min-w-0 max-w-full rounded-md border border-border bg-background px-2 text-base"
+            value={view.limit}
+            onChange={(event) => {
+              const limit: CandleReadingLimit =
+                event.target.value === "all"
+                  ? "all"
+                  : event.target.value === "50"
+                    ? 50
+                    : 20;
+              const shown = candleReadings(candles, limit).rows.length;
+              setView({
+                ...view,
+                limit,
+                index: null,
+                announcement: `Showing ${shown} of ${readings.count} loaded bars, newest first.`,
+              });
+            }}
+          >
+            <option value="20">Latest 20</option>
+            <option value="50">Latest 50</option>
+            <option value="all">All loaded ({readings.count})</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          className="focus-ring min-h-11 min-w-11 rounded-md border border-border px-3 py-2"
+          aria-controls={`${id}-reading`}
+          aria-describedby={`${id}-reading-order`}
+          disabled={view.index === null || view.index === 0}
+          onClick={() => moveReading(-1)}
+        >
+          Previous reading
+        </button>
+        <button
+          type="button"
+          className="focus-ring min-h-11 min-w-11 rounded-md border border-border px-3 py-2"
+          aria-controls={`${id}-reading`}
+          aria-describedby={`${id}-reading-order`}
+          disabled={
+            !readings.rows.length ||
+            (view.index !== null && view.index >= readings.rows.length - 1)
+          }
+          onClick={() => moveReading(1)}
+        >
+          Next reading
+        </button>
+        <p id={`${id}-reading-order`} className="w-full">
+          Newest loaded bar first. Next starts here and moves to older bars;
+          Previous moves to newer bars.
+        </p>
+        <div
+          id={`${id}-reading`}
+          aria-live="polite"
+          aria-atomic="true"
+          className={view.announcement ? "w-full break-words" : "sr-only"}
+        >
+          {view.announcement}
+        </div>
+      </div>
       <div
         className="max-w-full overflow-x-auto overscroll-x-contain focus-ring"
         tabIndex={0}
