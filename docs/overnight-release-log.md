@@ -1394,3 +1394,201 @@ operations, job/hold records and infrastructure binding metadata out of it.
 - Counts: eighty-nine deployed, one implemented, 132 queued, two blocked and
   sixteen needing confirmation. Full unchanged parent qualification follows;
   no additional substantial source batch will begin before the hard stop.
+
+## Final release — PR #270, 15:34 UTC
+
+- Normal protected rebase merge at 15:28:48 UTC, main
+  `fafd6a560ef862396f33c66141e4bf2b228e4b0a`. Qualified `fa47e1b5` and main
+  share exact complete tree `03e7249f45b2d9a876f15b72739d1d7c41e7fc25`;
+  both new authors exact. Actions and all protections remain unchanged.
+- Corrected execution passed every gate on the SAME unchanged source: 4,404
+  unit/backend, 835 browser tests (6.6 minutes), both types, all five clean app
+  builds, native parity, three unsuppressed dependency audits and security
+  controls. Three old lint warnings, zero errors; two commits/2.54 MB redacted
+  scan with no leaks. No existing test or tracked file changed during checks.
+- Retain initial execution failures: 4,401 unit passes/three EPERM errors
+  (temporary-directory and two loopback-listener tests); browser launch MachPort
+  permission failures produced 81 failed/754 unrun before own interruption130;
+  build port-binding EPERM; audits DNS-failed after types/lint/parity passed.
+  No code or assertion change. Required-permission reruns passed all checks
+  except the build's persisted same error. Only this worktree's ignored platform
+  build cache, with no open files, was moved to a recoverable private backup;
+  fresh all-five builds then passed. Initial and corrected logs remain private.
+  Initial static stream is retained separately because the final security
+  command was not reached. This was not a clean initial pass or skipped gate.
+- Exact automatic production READY observed 15:32:12 UTC; all five original
+  domains matched 15:32:25. One public signed-out Feed visit showed twelve
+  main articles and six attachment tiles, with desktop/phone bounds checked.
+  One existing single-image gallery accepted 15:33:28: new link equals current
+  displayed image, safe external attributes, contextual name and 44px target
+  bounded at both sizes. Original not clicked; gallery closed with Escape.
+- Multiple-image/URL-removal races, external original availability/new-tab
+  delivery, Safari, physical devices, AT and financial outcomes are not live
+  certified. Own browser closed before one exact-release error sample at
+  15:34:30: zero of thirty, uncapped. No further production polling required.
+- Counts: ninety deployed, 132 queued, two blocked, sixteen needing
+  confirmation; 240 total. Only the two known-owned planning files are updated
+  locally after rollout; runtime remains exactly the qualified/merged tree.
+
+## New owner report — filtered Feed, 15:34 UTC
+
+- Owner screenshot shows signed-in Discover/Active with Authors=Humans,
+  no visible articles and nonterminal More discussions ahead/Load more.
+  This is a separate UX issue, not covered by prior public All-author checks.
+- Frontend precedence is explicit URL authors, then saved preference, then all.
+  Humans is a server argument, not a client-side post filter. Backend performs
+  exactly one bounded raw page read, then authorization/author-kind filtering;
+  an empty filtered page retains the raw cursor and isDone=false. Existing
+  regressions intentionally test this continuation contract; it is not evidence
+  of missing publications or a cross-filter cache leak.
+- During the already authorized final public visit, one additional explicit
+  signed-out Humans selection reproduced zero articles and the enabled
+  continuation at 15:34:02, bounded at desktop/phone. No Load more click or
+  repeated search, no authenticated acceptance claim. All-author default had
+  twelve articles. A direct explicit authors=all link was supplied to the owner;
+  no account preference, authorization or backend state was changed by us.
+- Small safe future UX: contextual no-human-posts-in-this-batch copy, explicit
+  Show everyone and retained deliberate continuation; never infer no humans
+  globally, silently widen filters, drain unbounded pages or change query caps.
+  Saved-Humans versus explicit-All and query-argument coverage gaps remain;
+  no speculative late source batch or new production backend authority.
+- Read-only next-session priorities are recorded privately, not completed:
+  visible/online wallet demand, thread-dialog target/focus, failed successful-
+  post draft cleanup, exact research-expiry presentation and local section
+  error containment. User-facing races/clipping still need deterministic proof.
+  Original 15:45 UTC overnight stop remains unchanged.
+
+## Overnight window closed — 15:45 UTC / 10:45 AM CDT
+
+- Heartbeat paused at the original hard stop. No additional source batch,
+  deployment, production polling or provider action after the window.
+- Final local inventory: ninety source-deployed, 132 queued, two blocked and
+  sixteen needing confirmation; no active source assignment or open batch PR.
+  Latest PR #270 is verified live; its final local checks and retained failure
+  history are recorded above. This is not a claim that every utility or real
+  financial/assistive-technology acceptance has been completed.
+- Only this ledger and the backlog contain known-owned post-release updates;
+  runtime remains exactly the tested and merged source. Preserve these notes.
+- Owner's new Humans-filter Feed report is diagnosed and publicly reproduced;
+  explicit authors=all workaround supplied. Filtered-empty UX is not patched.
+  Further work needs a new operating window, with separate production backend
+  authority where applicable. No budgets, schedules, caps, gates or holds changed.
+
+## Owner-directed continuation — October 31, 17:09 UTC
+
+- Owner confirmed the Feed filters were the issue and requested continued
+  platform implementation, reviewed/merged PRs, and attribution of a token-info
+  API free-cap warning. Fresh main is `fafd6a56`; there are no open PRs.
+  The overnight heartbeat remains paused; this is direct interactive work,
+  not an inferred extension/reactivation of the closed automation window.
+- Preserve the unrelated main checkout and known-owned post-release notes.
+  Two isolated current-main worktrees, with their own app-local UI links,
+  begin the next coherent frontend utility batch. Literal paths are recorded
+  in the backlog before dispatch; no overlapping source writer.
+- TRADE-041: forum-terminal, wallet-panel and new wallet-visible-demand
+  spec/fixture/state. Admit the existing private balance read only on visible,
+  online, foreground wallet demand; retain keyed identity, mounted protected
+  receipt/payment state, read arguments, TTL/caps and explicit refresh safety.
+- COMMUNITY-057: research-purchase and new research-exact-expiry
+  spec/fixture/state. Use exact prepared expiry for local presentation without
+  increasing the existing minute-bucket config-query cadence or changing
+  approval, reservation, saved/protected receipt and settlement handlers.
+- Focused new/old regressions, actual app styles and mobile/keyboard bounds,
+  full types/scoped lint and independent review required. All external/provider,
+  wallet and financial actions denied or inert; no live quote, payment, model
+  or canary. Parent retains all final unit/browser/type/lint/parity/audit/security
+  and five-app build gates before normal merge/exact automatic web verification.
+- Separate source/doc investigation will distinguish provider quotas from our
+  own admission caps. Production evidence is read-only and bounded; no tier,
+  key, rate, schedule, budget or hold changes. Any backend deployment or paid
+  plan/limit increase requires fresh specific authority and verified evidence.
+- Counts: ninety deployed, two in progress, 130 queued, two blocked and sixteen
+  needing confirmation. Dispatch is not a completion claim.
+
+## Continued-session quota finding and narrow follow-ups
+
+- Read-only indexed production metadata confirms application-owned admission
+  exhaustion rather than evidence of a Helius/Jupiter provider rejection.
+  Exact live counters, cache times and operational receipts remain private.
+  These counters represent durable reserved units, not actual provider billing.
+  No reservations, provider calls, configuration writes or hold operations were
+  performed by the audit; no historical failure was reset or replayed.
+- The fixed 100-unit daily terminal cap cannot support even one five-minute
+  chart continuously: 288 daily misses at two reserved units each is 576,
+  before wallet/risk/other token reads. A provider subscription alone does not
+  alter this hard-coded local guard. Raising/reallocating it or changing backend
+  policy needs a separately approved, provider-budgeted production rollout.
+- Root additionally owns ONLY lib/terminal-market-route.ts and its existing
+  terminal-market-route.test.ts for an accurate admission-error label: say
+  platform allowance, not an implied provider free-tier rejection. Add
+  focused assertions preserving typed states, status, Retry-After, original
+  cache provenance and no extra action. No provider/raw-body disclosure. This
+  narrow additional fix is not counted as another original backlog completion.
+- Wallet worker may allow only inert exact-mint resolveMint metadata required
+  by the real existing swap subtree; balance reads must remain zero when hidden.
+  A separately reproduced existing 34px Refresh target may receive scoped local
+  44px minimum classes in the already-owned WalletPanel, without global CSS or
+  old geometry assertion changes. Neither is authority for new financial calls.
+- Research expiry remains presentation-only. Do not introduce a new permanent
+  identity-invalidation policy or modify any quote/payment/recovery handler.
+  A possible pre-existing late-quote wallet-binding concern is a separate source
+  finding requiring deterministic reproduction, not silently fixed by a clock.
+
+## Independent edge-case follow-ups in the continued batch
+
+- Wallet review reproduced two new local P2 cases with inert real components:
+  CSS-hidden geometry still intersected, and synchronous offscreen movement
+  preceded the observer update. Normal production drawer/mobile reachability
+  was not proven. The approved same-predicate follow-up rejects current computed
+  hidden/collapse visibility and live viewport bounds before both automatic and
+  manual reads. No extra observer, timer, provider or query policy. Keep both
+  RED cases and all existing assertions; use both frozen commits as a chain.
+- Research's new keyboard check exposed an existing controlled-dialog focus
+  problem without a Radix trigger. Root inspected the actual Review button,
+  section and DialogContent, then approved ONLY local presentation refs on the
+  actual Review button/section and a close-auto-focus callback. Prefer a visible,
+  connected, enabled original button; otherwise a visible connected section
+  with tabIndex=-1. Never focus a removed/hidden/disabled target, send an action,
+  steal focus after unmount, or alter onOpenChange/busy/payment/auth handlers.
+  Keep the focus RED, assert ordinary and unavailable-trigger fallback behavior
+  with the original keyboard checks intact; no shared dialog/CSS change.
+- Root's no-payload API copy now omits daily: Tracker's local rolling allowance
+  can also produce budget state. A third additive regression covers that case,
+  and the provider429 fixture uses the actual unavailable state. Independent
+  forty-unit rerun passed, all original assertions unchanged. This does not fix
+  the cap, change retained-chart wording or renew any retry deadline.
+
+## Continued-session reviewed candidate
+
+- Owner declined renewed scheduled follow-ups; the prior automation remains
+  paused. Work proceeds interactively, not under a new unattended window.
+- TRADE-041 frozen two-commit chain `1b44c1da` then `a49b2052` independently
+  reviewed and integrated. Worker seventy-six browser/seventeen unit checks;
+  independent seventy-six browser/fourteen unit checks passed, plus full worker
+  types/lint. Existing fifty-five wallet/identity/strict laptop cases unchanged.
+  Two reviewer CSS/current-geometry REDs were fixed narrowly in the same shared
+  auto/manual predicate. No polling, cache, TTL, provider or controller changes.
+  Pointer-visible geometry is not pixel-overlay/physical-device certification.
+- COMMUNITY-057 frozen `db805db2` independently reviewed and integrated. Worker
+  thirty-one new/thirty-three old browser cases, fifty-five focused units, full
+  types/lint passed. Independent all sixty-four browser/fifty-two relevant units
+  passed; initial independent browser launch restriction was retained separately
+  from identical permitted rerun. Existing financial, quote, verification,
+  recovery, minute-config and query portions programmatically byte-identical.
+- Exact quote expiry presentation never renews intent lifetime; foreground
+  resync and protected-state/close/unmount stop behavior covered. Local refs and
+  close-auto-focus restore visible enabled origin or visible section fallback;
+  hidden/unmounted targets do not steal focus. Both actual app styles at 320/390
+  check keyboard/direct bounds and existing 44px Close/Approve after settled
+  animation. Close geometry needed no CSS edit. Keep expiry/focus RED evidence
+  and Radix-hidden locator-only fixture corrections; no weaker assertions.
+- Root's no-payload admission-label correction `5b7e0ab1` independently reviewed,
+  forty route/cache tests passed; exactly one production string and three
+  additive tests. Generic wording correctly includes daily and rolling local
+  budgets, unlike actual typed provider429 failure. Caps/backoff and retained
+  chart messaging unchanged; no claim to resolve exhausted admission.
+- Parent read all runtime diffs and fixture boundaries. No real provider,
+  signer, quote, payment, public message, budget change or hold operation.
+  Native generated assets include only the reviewed source; final unchanged
+  full qualification follows. Counts: ninety deployed, two implemented,
+  130 queued, two blocked, sixteen needing confirmation; no deployment claim.
