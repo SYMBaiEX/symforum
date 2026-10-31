@@ -232,6 +232,67 @@
   font-size: 12px;
   line-height: 1.65;
 }
+.publicIdentity {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-block: 12px;
+}
+.publicMint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+.publicMint code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+  line-height: 1.65;
+}
+.identityActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.identityControl,
+.contributorLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.identityControl {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+a.identityControl,
+.contributorLink {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.contributorLink {
+  font-weight: 650;
+}
+.identityStatus {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.6;
+}
+.manualMint {
+  min-width: 0;
+  min-height: 44px;
+  font-size: 16px;
+}
 .claim {
   margin-top: 20px;
   padding-left: 16px;

@@ -47,6 +47,7 @@ import {
 } from "@/lib/forum-community";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { ForumLink } from "@/components/forum/forum-link";
+import { forumMemberProfilePath } from "@/components/forum/forum-refs";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
@@ -97,6 +98,89 @@ function useMinute() {
     return () => clearInterval(interval);
   }, []);
   return now;
+}
+
+/** Row-local state is remounted for each exact mint; late copies cannot label a replacement mint. */
+function PublicMintIdentity({
+  mint,
+  marketLink = false,
+}: {
+  mint: string;
+  marketLink?: boolean;
+}) {
+  const [copyState, setCopyState] = useState<
+    "copying" | "copied" | "denied" | null
+  >(null);
+  const copying = useRef(false);
+  const feedbackId = useId();
+  async function copyMint() {
+    if (copying.current) return;
+    copying.current = true;
+    setCopyState("copying");
+    try {
+      if (!navigator.clipboard?.writeText)
+        throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(mint);
+      setCopyState("copied");
+    } catch {
+      setCopyState("denied");
+    } finally {
+      copying.current = false;
+    }
+  }
+  return (
+    <div className={styles.publicIdentity}>
+      <div className={styles.publicMint}>
+        <span>Mint</span>
+        <code>{mint}</code>
+      </div>
+      <div className={styles.identityActions}>
+        <Button
+          type="button"
+          variant="outline"
+          className={styles.identityControl}
+          aria-label={`Copy mint ${mint}`}
+          aria-describedby={feedbackId}
+          disabled={copyState === "copying"}
+          onClick={() => {
+            void copyMint();
+          }}
+        >
+          {copyState === "copying"
+            ? "Copying…"
+            : copyState === "copied"
+              ? "Copied"
+              : "Copy mint"}
+        </Button>
+        {marketLink && (
+          <a
+            className={styles.identityControl}
+            href={forumSiteUrl(`/trade?mint=${encodeURIComponent(mint)}`)}
+          >
+            Open token market <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
+        )}
+      </div>
+      <p id={feedbackId} role="status" className={styles.identityStatus}>
+        {copyState === "copied"
+          ? "Exact mint copied."
+          : copyState === "denied"
+            ? "Clipboard unavailable. Use the field below to copy this exact mint manually."
+            : copyState === "copying"
+              ? "Copying this exact mint…"
+              : ""}
+      </p>
+      {copyState === "denied" && (
+        <Input
+          className={styles.manualMint}
+          readOnly
+          value={mint}
+          aria-label={`Exact mint ${mint} to copy manually`}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      )}
+    </div>
+  );
 }
 
 export function CommunityHub({
@@ -439,14 +523,21 @@ function Projects({
                     <ArrowUpRight size={15} aria-hidden="true" />
                   </a>
                 </div>
-                <div className={styles.mintLine}>
-                  <span>Mint</span>
-                  <code>{project.mint}</code>
-                </div>
+                <PublicMintIdentity key={project.mint} mint={project.mint} />
                 {project.claims.map((claim) => (
                   <div className={styles.claim} key={claim.userId}>
                     <div className={styles.meta}>
-                      <strong>@{claim.username}</strong>
+                      {claim.username && claim.username !== "Forum member" ? (
+                        <ForumLink
+                          className={styles.contributorLink}
+                          href={forumMemberProfilePath(claim.username)}
+                          prefetch={false}
+                        >
+                          @{claim.username}
+                        </ForumLink>
+                      ) : (
+                        <strong>Forum member</strong>
+                      )}
                       <span>{claim.role}</span>
                       <span className={styles.badge}>
                         Self-declared affiliation
@@ -964,7 +1055,9 @@ function WorkItem({
       </div>
       <div className={styles.meta}>By @{work.sponsor}</div>
       <p className={styles.prose}>{work.brief}</p>
-      {work.mint && <code className={styles.address}>{work.mint}</code>}
+      {work.mint && (
+        <PublicMintIdentity key={work.mint} mint={work.mint} marketLink />
+      )}
       {isAuthenticated &&
         !isLoading &&
         mine !== undefined &&
