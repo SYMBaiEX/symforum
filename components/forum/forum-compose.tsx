@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import {
   useImperativeHandle,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useId,
@@ -59,6 +60,51 @@ type ForumAttachmentUploadResponse = ForumAttachmentDraft & {
 };
 
 const FORUM_DRAFT_SCHEMA_VERSION = 1;
+type StoredForumDraft = {
+  body?: string;
+  title?: string;
+  data?: Record<string, string>;
+};
+type DraftProtectionReason =
+  "version" | "malformed" | "unavailable" | "changed";
+type ProtectedForumDraft = {
+  key: string;
+  scope: string;
+  raw: string | null;
+  reason: DraftProtectionReason;
+};
+function readForumDraft(
+  raw: string,
+):
+  | { kind: "ready"; draft: StoredForumDraft }
+  | { kind: "version" | "malformed" } {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return { kind: "malformed" };
+    const draft = value as Record<string, unknown>;
+    if (
+      draft.version !== undefined &&
+      draft.version !== FORUM_DRAFT_SCHEMA_VERSION
+    )
+      return { kind: "version" };
+    if (
+      (draft.body !== undefined && typeof draft.body !== "string") ||
+      (draft.title !== undefined && typeof draft.title !== "string") ||
+      (draft.data !== undefined &&
+        (!draft.data ||
+          typeof draft.data !== "object" ||
+          Array.isArray(draft.data) ||
+          !Object.values(draft.data).every(
+            (value) => typeof value === "string",
+          )))
+    )
+      return { kind: "malformed" };
+    return { kind: "ready", draft: draft as StoredForumDraft };
+  } catch {
+    return { kind: "malformed" };
+  }
+}
 
 export function ForumCompose({
   body,
@@ -131,33 +177,58 @@ export function ForumCompose({
       ),
     ).join(" ") || undefined;
   const controlsDisabled = disabled || pending;
+  const runtime = useForumRuntime();
+  // Callers supply owner/route-bound storage keys. Acting-profile changes also
+  // fence local recovery controls; no auth requests or new storage keys are used.
+  const draftScope = `${runtime.host}:${runtime.actingAs?.userId ?? "human"}:${draftKey ?? ""}`;
+  const activeDraft = useRef({ scope: draftScope, disabled: controlsDisabled });
+  useLayoutEffect(() => {
+    activeDraft.current = { scope: draftScope, disabled: controlsDisabled };
+  });
   const [hydratedDraftKey, setHydratedDraftKey] = useState<
     string | undefined
   >();
   const loadedDraftKey = useRef<string | undefined>(undefined);
   const [draftSaved, setDraftSaved] = useState(false);
+  const protectedDraftRef = useRef<ProtectedForumDraft | null>(null);
+  const [protectedDraft, setProtectedDraft] =
+    useState<ProtectedForumDraft | null>(null);
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const protection =
+    protectedDraft?.scope === draftScope ? protectedDraft : null;
+  const protectDraft = useCallback(
+    (raw: string | null, reason: DraftProtectionReason) => {
+      if (!draftKey) return;
+      const record = { key: draftKey, scope: draftScope, raw, reason };
+      protectedDraftRef.current = record;
+      setProtectedDraft(record);
+      setReplaceConfirmed(false);
+      setDraftSaved(false);
+    },
+    [draftKey, draftScope],
+  );
   const titleEnabled =
     typeof title === "string" && typeof onTitleChange === "function";
 
   useEffect(() => {
-    if (!draftKey || loadedDraftKey.current === draftKey) return;
-    loadedDraftKey.current = draftKey;
+    if (!draftKey || loadedDraftKey.current === draftScope) return;
+    loadedDraftKey.current = draftScope;
+    protectedDraftRef.current = null;
+    setProtectedDraft(null);
+    setReplaceConfirmed(false);
+    setRecoveryMessage("");
     let restoredBody = false;
+    let raw: string | null = null;
     try {
-      const raw = window.localStorage.getItem(draftKey);
-      if (raw) {
-        const draft = JSON.parse(raw) as {
-          body?: unknown;
-          title?: unknown;
-          version?: unknown;
-          data?: Record<string, string>;
-        };
-        if (
-          draft.version !== undefined &&
-          draft.version !== FORUM_DRAFT_SCHEMA_VERSION
-        ) {
+      raw = window.localStorage.getItem(draftKey);
+      if (raw !== null) {
+        const parsed = readForumDraft(raw);
+        if (parsed.kind !== "ready") {
+          protectDraft(raw, parsed.kind);
           return;
         }
+        const draft = parsed.draft;
         if (
           draft.data &&
           Object.values(draft.data).every((value) => typeof value === "string")
@@ -176,17 +247,25 @@ export function ForumCompose({
         }
       }
     } catch {
+      protectDraft(raw, "unavailable");
       // Storage can be unavailable in private or sandboxed browsers.
     } finally {
-      if (!restoredBody && body.trim().length === 0 && bodyTemplate) {
+      if (
+        !protectedDraftRef.current &&
+        !restoredBody &&
+        body.trim().length === 0 &&
+        bodyTemplate
+      ) {
         onBodyChange(bodyTemplate);
       }
-      setHydratedDraftKey(draftKey);
+      setHydratedDraftKey(draftScope);
     }
   }, [
     body,
     bodyTemplate,
     draftKey,
+    draftScope,
+    protectDraft,
     onBodyChange,
     onTitleChange,
     title,
@@ -195,7 +274,11 @@ export function ForumCompose({
   ]);
 
   useEffect(() => {
-    if (!draftKey || hydratedDraftKey !== draftKey) {
+    if (
+      !draftKey ||
+      hydratedDraftKey !== draftScope ||
+      protectedDraftRef.current?.scope === draftScope
+    ) {
       return;
     }
     try {
@@ -222,12 +305,94 @@ export function ForumCompose({
       setDraftSaved(false);
       // Storage can be unavailable in private or sandboxed browsers.
     }
-  }, [body, hydratedDraftKey, draftKey, title, titleEnabled, draftData]);
+  }, [
+    body,
+    hydratedDraftKey,
+    draftKey,
+    draftScope,
+    title,
+    titleEnabled,
+    draftData,
+  ]);
+
+  function currentProtectedDraft() {
+    const record = protectedDraftRef.current;
+    if (
+      !record ||
+      record.scope !== draftScope ||
+      record.key !== draftKey ||
+      activeDraft.current.scope !== record.scope ||
+      activeDraft.current.disabled
+    )
+      return null;
+    try {
+      const raw = window.localStorage.getItem(record.key);
+      if (raw !== record.raw) {
+        protectDraft(raw, "changed");
+        setRecoveryMessage(
+          "The saved copy changed. Nothing was replaced. Review or download the current copy before confirming again.",
+        );
+        return null;
+      }
+      return record;
+    } catch {
+      setRecoveryMessage(
+        "Local storage is unavailable. Nothing was replaced or downloaded.",
+      );
+      return null;
+    }
+  }
+  function downloadProtectedDraft() {
+    const record = currentProtectedDraft();
+    if (!record || record.raw === null) return;
+    const json = record.reason === "version";
+    const url = URL.createObjectURL(
+      new Blob([record.raw], {
+        type: json ? "application/json" : "text/plain;charset=utf-8",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = json ? "forum-draft-backup.json" : "forum-draft-backup.txt";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  function replaceProtectedDraft() {
+    if (!replaceConfirmed || controlsDisabled) return;
+    const record = currentProtectedDraft();
+    if (!record) return;
+    try {
+      window.localStorage.setItem(
+        record.key,
+        JSON.stringify({
+          version: FORUM_DRAFT_SCHEMA_VERSION,
+          body,
+          ...(draftData ? { data: draftData } : {}),
+          ...(titleEnabled ? { title } : {}),
+          savedAt: Date.now(),
+        }),
+      );
+      protectedDraftRef.current = null;
+      setProtectedDraft(null);
+      setReplaceConfirmed(false);
+      setRecoveryMessage("");
+      setDraftSaved(true);
+    } catch {
+      setRecoveryMessage(
+        "Could not replace the saved draft. Keep a backup and try again when local storage is available.",
+      );
+    }
+  }
 
   async function submitWithDraftCleanup() {
     if (controlsDisabled) return;
     const submitted = await onSubmit();
-    if (draftKey && submitted === true) {
+    if (
+      draftKey &&
+      submitted === true &&
+      activeDraft.current.scope === draftScope &&
+      protectedDraftRef.current?.scope !== draftScope
+    ) {
       try {
         window.localStorage.removeItem(draftKey);
       } catch {
@@ -262,6 +427,58 @@ export function ForumCompose({
 
   return (
     <div className="forum-composer forum-panel min-w-0" aria-busy={pending}>
+      {protection && (
+        <section
+          className="mb-3 rounded-xl border border-border p-3 text-sm"
+          aria-label="Saved draft recovery"
+        >
+          <h3>Saved draft protected</h3>
+          <p>
+            {protection.reason === "version"
+              ? "This saved draft uses an unsupported format."
+              : protection.reason === "unavailable"
+                ? "The saved draft could not be read from local storage."
+                : protection.reason === "changed"
+                  ? "The saved copy changed while you were editing."
+                  : "The saved draft could not be read safely."}{" "}
+            This editor has not overwritten the saved copy. Current editor text
+            is not being saved over it.
+          </p>
+          <p>
+            Download a local backup before replacing it. Replacement permanently
+            overwrites the saved copy with the current editor text; it does not
+            publish a post.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={controlsDisabled || protection.raw === null}
+              onClick={downloadProtectedDraft}
+            >
+              Download saved draft
+            </Button>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={replaceConfirmed}
+                disabled={controlsDisabled}
+                onChange={(event) => setReplaceConfirmed(event.target.checked)}
+              />
+              I understand replacement overwrites the saved copy.
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={controlsDisabled || !replaceConfirmed}
+              onClick={replaceProtectedDraft}
+            >
+              Replace saved draft with current text
+            </Button>
+          </div>
+          {recoveryMessage && <p role="status">{recoveryMessage}</p>}
+        </section>
+      )}
       {titleEnabled ? (
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">
@@ -537,7 +754,11 @@ export function ForumCompose({
       ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
-          {draftSaved ? "Draft saved on this device" : "Ctrl/⌘ Enter to post"}
+          {protection
+            ? "Saved draft protected; current edits are not saved"
+            : draftSaved
+              ? "Draft saved on this device"
+              : "Ctrl/⌘ Enter to post"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {footerActions}
