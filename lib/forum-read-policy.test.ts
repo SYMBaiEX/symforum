@@ -17,6 +17,8 @@ describe("approved provider read policy (pure data, not activated admission)", (
       rollingDays: 32,
       requestsPerWindow: 5,
       windowMs: 1_000,
+      sendRequestsPerWindow: 1,
+      sendWindowMs: 1_000,
     });
     expect(FORUM_READ_POLICY.jupiter).toEqual({
       requestsPerWindow: 50,

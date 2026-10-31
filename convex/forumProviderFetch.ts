@@ -18,7 +18,7 @@ export type ProviderAdmission =
 
 const admit = makeFunctionReference<
   "mutation",
-  { provider: MeteredProvider; credits: number },
+  { provider: MeteredProvider; credits: number; sendTransaction?: true },
   ProviderAdmission
 >("forumProviderAdmission:admit");
 
@@ -71,6 +71,7 @@ export function providerFetch(
     const url = new URL(rawUrl);
     let provider: MeteredProvider | null = null;
     let credits = 1;
+    let sendTransaction = false;
     if (rpcUrls.has(url.toString())) {
       provider = "helius";
       // Only the bounded single JSON-RPC requests used by existing transports
@@ -108,6 +109,7 @@ export function providerFetch(
       if (cost === null)
         throw new ProviderAdmissionError(provider, "invalid-request", null);
       credits = cost;
+      sendTransaction = rpc.method === "sendTransaction";
     } else if (url.hostname === "api.dexscreener.com") {
       provider = "dexscreener";
     } else if (url.hostname === "api.geckoterminal.com") {
@@ -124,7 +126,12 @@ export function providerFetch(
         url.port
       )
         throw new ProviderAdmissionError(provider, "invalid-request", null);
-      let result = await ctx.runMutation(admit, { provider, credits });
+      const admission = {
+        provider,
+        credits,
+        ...(sendTransaction ? { sendTransaction: true as const } : {}),
+      };
+      let result = await ctx.runMutation(admit, admission);
       // Multi-read preparation/proof workflows may encounter the conservative
       // per-second RPC envelope. Wait only BEFORE any transport has started,
       // retaining the original request, signal and business expiry. Never wait
@@ -142,7 +149,7 @@ export function providerFetch(
           break;
         await waitBeforeIo(delay, signal);
         signal?.throwIfAborted();
-        result = await ctx.runMutation(admit, { provider, credits });
+        result = await ctx.runMutation(admit, admission);
       }
       if (!result.ok)
         throw new ProviderAdmissionError(

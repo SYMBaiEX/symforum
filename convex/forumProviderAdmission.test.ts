@@ -15,7 +15,7 @@ import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 const modules = import.meta.glob("./**/*.ts");
 const admit = makeFunctionReference<
   "mutation",
-  { provider: MeteredProvider; credits: number },
+  { provider: MeteredProvider; credits: number; sendTransaction?: true },
   ProviderAdmission
 >("forumProviderAdmission:admit");
 const NOW = Date.parse("2026-10-31T12:00:00Z");
@@ -68,6 +68,22 @@ async function todayUsed(t: ReturnType<typeof setup>, now = Date.now()) {
     }),
   );
   return 10000 - value.value;
+}
+async function sendSlotUsed(t: ReturnType<typeof setup>, now = Date.now()) {
+  const slot = modulo(Math.floor(now / 1000), 2);
+  const value = await t.run((ctx) =>
+    limiter.getValue(ctx, "forumProviderBurstV1", {
+      key: `helius-send:${slot}`,
+      config: {
+        kind: "fixed window",
+        rate: 1,
+        capacity: 1,
+        period: 2000,
+        start: slot * 1000,
+      },
+    }),
+  );
+  return 1 - value.value;
 }
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -364,4 +380,172 @@ test("200 concurrent wrapped RPC calls stay bounded, with no more than one upstr
       times.filter((time) => time >= start && time < start + 1000),
     ).toHaveLength(5);
   expect(await todayUsed(t)).toBe(10);
+});
+
+test("200 parallel send-method admissions share a stricter one-per-second subgate", async () => {
+  const t = setup();
+  const send = { ...request(), sendTransaction: true as const };
+  const results = await Promise.all(
+    Array.from({ length: 200 }, () => t.mutation(admit, send)),
+  );
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  expect(results.filter((r) => !r.ok)).toEqual(
+    Array.from({ length: 199 }, () => ({
+      ok: false,
+      reason: "burst",
+      retryAt: NOW + 2000,
+    })),
+  );
+  expect(await todayUsed(t)).toBe(1);
+  // A denied method-specific request did not consume any of the four remaining
+  // shared RPC slots or credits. Reads still obey the original overall limit.
+  for (let i = 0; i < 4; i++)
+    expect((await t.mutation(admit, request())).ok).toBe(true);
+  expect(await t.mutation(admit, request())).toMatchObject({
+    ok: false,
+    reason: "burst",
+  });
+  expect(await todayUsed(t)).toBe(5);
+});
+
+test("send subgate covers second boundaries without spending denied credit or changing the stored deadline", async () => {
+  const t = setup();
+  const send = { ...request(), sendTransaction: true as const };
+  vi.setSystemTime(NOW + 999);
+  expect((await t.mutation(admit, send)).ok).toBe(true);
+  vi.setSystemTime(NOW + 1000);
+  const denied = { ok: false, reason: "burst", retryAt: NOW + 2000 };
+  expect(await t.mutation(admit, send)).toEqual(denied);
+  vi.setSystemTime(NOW + 1999);
+  expect(await t.mutation(admit, send)).toEqual(denied);
+  expect(await todayUsed(t)).toBe(1);
+  vi.setSystemTime(NOW + 2000);
+  expect((await t.mutation(admit, send)).ok).toBe(true);
+  expect(await todayUsed(t)).toBe(2);
+});
+
+test("overall RPC denial does not prematurely consume the stricter method subgate", async () => {
+  const t = setup();
+  for (let i = 0; i < 5; i++) await t.mutation(admit, request());
+  const send = { ...request(), sendTransaction: true as const };
+  expect(await t.mutation(admit, send)).toMatchObject({
+    ok: false,
+    reason: "burst",
+  });
+  expect(await todayUsed(t)).toBe(5);
+  expect(await sendSlotUsed(t)).toBe(0);
+  vi.setSystemTime(NOW + 2000);
+  expect((await t.mutation(admit, send)).ok).toBe(true);
+  expect(await todayUsed(t)).toBe(6);
+});
+
+test("daily denial does not consume a send slot and retains the later daily deadline", async () => {
+  const t = setup();
+  await seedCredit(t, NOW, 10000);
+  const send = { ...request(), sendTransaction: true as const };
+  const nextDay = (Math.floor(NOW / DAY) + 1) * DAY;
+  expect(await t.mutation(admit, send)).toEqual({
+    ok: false,
+    reason: "daily",
+    retryAt: nextDay,
+  });
+  expect(await todayUsed(t)).toBe(10000);
+  expect(await sendSlotUsed(t)).toBe(0);
+  vi.setSystemTime(nextDay);
+  expect((await t.mutation(admit, send)).ok).toBe(true);
+  expect(await todayUsed(t)).toBe(1);
+});
+
+test("rolling-credit denial never consumes a method slot or implies a submission outcome", async () => {
+  const t = setup();
+  const startDay = Math.floor(NOW / DAY) * DAY;
+  for (let offset = 30; offset >= 1; offset--)
+    await seedCredit(t, startDay - offset * DAY, 10000);
+  vi.setSystemTime(NOW);
+  const send = { ...request(), sendTransaction: true as const };
+  expect(await t.mutation(admit, send)).toEqual({
+    ok: false,
+    reason: "rolling",
+    retryAt: startDay + 3 * DAY,
+  });
+  expect(await sendSlotUsed(t)).toBe(0);
+  vi.setSystemTime(startDay + 3 * DAY);
+  expect((await t.mutation(admit, send)).ok).toBe(true);
+});
+
+test.each([
+  {
+    provider: "dexscreener" as const,
+    credits: 1,
+    sendTransaction: true as const,
+  },
+  {
+    provider: "geckoterminal" as const,
+    credits: 1,
+    sendTransaction: true as const,
+  },
+  { provider: "helius" as const, credits: 2, sendTransaction: true as const },
+])(
+  "invalid method-specific admission %# is rejected before consuming any quota",
+  async (args) => {
+    const t = setup();
+    await expect(t.mutation(admit, args)).rejects.toThrow(
+      "Invalid provider admission.",
+    );
+    expect(await todayUsed(t)).toBe(0);
+    expect(
+      (await t.mutation(admit, { ...request(), sendTransaction: true })).ok,
+    ).toBe(true);
+  },
+);
+
+test("concurrent wrapped send-method requests each attempt upstream at most once under the stricter subgate", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+  const t = setup();
+  const rpc = "https://mainnet.helius-rpc.com/?api-key=inert";
+  const times: number[] = [];
+  const ids: number[] = [];
+  const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+    times.push(Date.now());
+    ids.push((JSON.parse(init!.body as string) as { id: number }).id);
+    return new Response("{}");
+  });
+  const runMutation = async (
+    _ref: unknown,
+    args: {
+      provider: MeteredProvider;
+      credits: number;
+      sendTransaction?: true;
+    },
+  ) => t.mutation(admit, args);
+  const read = providerFetch(
+    { runMutation } as unknown as Pick<ActionCtx, "runMutation">,
+    { rpcUrls: [rpc], fetcher },
+  );
+  const work = Promise.allSettled(
+    Array.from({ length: 200 }, (_, id) =>
+      read(rpc, {
+        method: "POST",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method: "sendTransaction",
+          params: ["INERT NOT A TRANSACTION"],
+        }),
+      }),
+    ),
+  );
+  await vi.advanceTimersByTimeAsync(2500);
+  const results = await work;
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
+  expect(results.filter((r) => r.status === "rejected")).toHaveLength(198);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(new Set(ids).size).toBe(2);
+  expect(times).toEqual([NOW, NOW + 2000]);
+  for (const start of times)
+    expect(
+      times.filter((time) => time >= start && time < start + 1000),
+    ).toHaveLength(1);
+  expect(await todayUsed(t)).toBe(2);
 });
