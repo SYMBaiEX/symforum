@@ -95,12 +95,13 @@ async function loadTokenCandidates(
   platform: TokenPlatform,
   stage: (value: DataStage) => void,
   capBand?: MarketCapBand,
+  allowEmptyBandFallback = false,
 ) {
   stage("configuration");
   if (!env.SOLANA_TRACKER_API_KEY || env.ELIZA_RUNTIME_MODE !== "live")
     throw new Error("token_pilot_configuration_unavailable");
   stage("rankings");
-  const indexed = await fetchTokenRankings({
+  let indexed = await fetchTokenRankings({
     apiKey: env.SOLANA_TRACKER_API_KEY,
     platform,
     now: Date.now(),
@@ -110,6 +111,26 @@ async function loadTokenCandidates(
         kind: "ranking",
       }),
   });
+  // A successful empty segment is a known result, not an ambiguous request.
+  // One broader scan may use the existing shared enrichment allowance; the
+  // normal ranking reservation, total provider cap and all source holds stay.
+  if (
+    !indexed.length &&
+    allowEmptyBandFallback &&
+    capBand &&
+    capBand !== "all"
+  ) {
+    indexed = await fetchTokenRankings({
+      apiKey: env.SOLANA_TRACKER_API_KEY,
+      platform,
+      now: Date.now(),
+      capBand: "all",
+      reserveRequest: async () =>
+        await ctx.runMutation(internal.tokenAlphaData.reserveApiRequest, {
+          kind: "enrichment",
+        }),
+    });
+  }
   stage("mint-verification");
   const verified = await verifySolanaMints(indexed.map((item) => item.mint));
   const candidates = indexed
@@ -158,6 +179,7 @@ export async function observeTokenData(
         stage = value;
       },
       discoveryBandForSlot(Date.now(), platform),
+      true,
     );
     const completed = await ctx.runMutation(completeObservation, {
       runKey: claim.runKey,

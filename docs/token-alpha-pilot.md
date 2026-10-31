@@ -447,3 +447,9 @@ publication evidence above.
 An unresolved inference still blocks its scout by default. If an operator has checked the original worker receipt and the owner explicitly approves fresh unrelated research, `tokenAlphaData:authorizeFreshResearch` can record one durable quarantine fence per platform. It requires the exact old unknown operation/job/hash and a retained selected-token snapshot, at least 24 hours old. It does not change the old operation, run, receipt or accounting result. There is no automatic expiry or automatic repeat authorization.
 
 Only ordinary new slots can resume. The old mint is excluded from candidate selection and blocked again when saving a snapshot; old first-post/recovery capabilities cannot use this authority. Existing run-key uniqueness, model budgets, source quotas, identity/canary checks and independent review remain enforced. A new pending/unknown operation freezes the lane again. Do not invoke this capability without explicit approval, and never represent it as reconciliation or proof that the original call did not run.
+
+### Empty segment and template fidelity
+
+New ordinary source observations may make one unrestricted platform scan after a successful empty market-cap segment. This fallback consumes the existing shared enrichment allowance (ten/day), not another ranking reservation; the total 70/day and rolling provider caps, candle allocation, finalized mint checks and original ranking cohort rules stay unchanged. Errors, rate limits, timeouts and completed/uncertain hourly intents cannot trigger a retry. A second empty result remains private with no model call. Operator recovery paths do not gain this fallback.
+
+The deterministic post template no longer asserts that absent social links are project-supplied. It states only that metadata/links are unverified. The independent reviewer, known rejection holds and numerical evidence checks remain unchanged.

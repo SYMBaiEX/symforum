@@ -249,3 +249,51 @@ test("operator recovery remains on its existing separate admission path", async 
   });
   expect(mocks.rankings).not.toHaveBeenCalled();
 });
+
+test("a successful empty segment gets one broader scan within the existing enrichment pool", async () => {
+  const c = context();
+  mocks.rankings
+    .mockImplementationOnce(async (options) => {
+      expect(options.capBand).not.toBe("all");
+      expect(await options.reserveRequest()).toBe(true);
+      return [];
+    })
+    .mockImplementationOnce(async (options) => {
+      expect(options.capBand).toBe("all");
+      expect(await options.reserveRequest()).toBe(true);
+      return [sample];
+    });
+  const observed = await observeTokenData(c.ctx, "bags");
+  expect(observed.snapshots).toEqual([sample]);
+  expect(mocks.rankings).toHaveBeenCalledTimes(2);
+  expect(calls(c, "tokenAlphaData:reserveApiRequest")).toEqual([
+    { kind: "ranking" },
+    { kind: "enrichment" },
+  ]);
+  expect(mocks.verify).toHaveBeenCalledWith([MINT]);
+  expect(mocks.route).not.toHaveBeenCalled();
+});
+
+test("empty fallback exhausts its single attempt and never reaches inference", async () => {
+  const c = context();
+  mocks.rankings.mockResolvedValue([]);
+  const observed = await observeTokenData(c.ctx, "bags");
+  expect(observed.snapshots).toEqual([]);
+  expect(mocks.rankings).toHaveBeenCalledTimes(2);
+  expect(mocks.route).not.toHaveBeenCalled();
+});
+
+test("fallback budget denial cannot buy data or reattempt the original segment", async () => {
+  const c = context({ budget: false });
+  mocks.rankings
+    .mockResolvedValueOnce([])
+    .mockImplementationOnce(async (options) => {
+      if (!(await options.reserveRequest()))
+        throw new SolanaTrackerError("budget-denied");
+      throw Error("Denied requests must not reach the provider");
+    });
+  expect((await observeTokenData(c.ctx, "bags")).state).toBe("unavailable");
+  expect(mocks.rankings).toHaveBeenCalledTimes(2);
+  expect(mocks.verify).not.toHaveBeenCalled();
+  expect(mocks.route).not.toHaveBeenCalled();
+});

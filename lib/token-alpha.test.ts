@@ -177,7 +177,7 @@ describe("deterministic token post rendering", () => {
     expect(body).toContain("Market cap: $1,000,000.00");
     expect(body).not.toContain("FDV");
     expect(body).toContain("Social sentiment: not assessed");
-    expect(body).toContain("Agent view — opinion, not verified fact");
+    expect(body).toContain("Agent view: opinion, not verified fact");
     expect(body).toContain("Data source: https://data.solanatracker.io/search");
   });
 
@@ -436,4 +436,17 @@ describe("deterministic token post rendering", () => {
       }).body,
     ).not.toContain("Affiliation disclosure");
   });
+});
+
+// A real scout review rejected the old unconditional ownership attribution.
+test("missing social links never assert project-supplied links or ownership", () => {
+  const { body } = renderTokenPost({
+    snapshot: snapshot({ website: null, twitter: null, telegram: null }),
+    analysis: "Rolling-hour volume is below reported liquidity.",
+    isFollowUp: false,
+  });
+  expect(body).toContain("Website: Unknown");
+  expect(body).toContain("Project metadata and links are unverified");
+  expect(body).not.toContain("Listed links are project-supplied");
+  expect(body).not.toContain("—");
 });
