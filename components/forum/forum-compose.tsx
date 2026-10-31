@@ -41,6 +41,7 @@ import {
 import {
   useImperativeHandle,
   useEffect,
+  useLayoutEffect,
   useId,
   useRef,
   useState,
@@ -577,6 +578,43 @@ export function ForumAttachmentDraftPanel({
   useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
   useEffect(() => () => onUploadingChange?.(false), [onUploadingChange]);
   const [error, setError] = useState("");
+  const [remainingFiles, setRemainingFiles] = useState<string[]>([]);
+  const uploadBatch = useRef<{
+    controller: AbortController;
+    cancelled: boolean;
+    expectedIds: string;
+    remaining: string[];
+  } | null>(null);
+  const attachmentIds = attachments.map((file) => file.storageId).join(":");
+  const permissions = runtime.capabilities?.join(":");
+  useLayoutEffect(() => {
+    const batch = uploadBatch.current;
+    if (batch) {
+      batch.cancelled = true;
+      batch.controller.abort();
+      uploadBatch.current = null;
+    }
+    setUploading(false);
+    setRemainingFiles([]);
+    setError("");
+    return () => {
+      if (uploadBatch.current) {
+        uploadBatch.current.cancelled = true;
+        uploadBatch.current.controller.abort();
+        uploadBatch.current = null;
+      }
+    };
+  }, [authToken, runtime.host, runtime.actingAs?.userId, runtime.executionMode, permissions, disabled]);
+  useLayoutEffect(() => {
+    const batch = uploadBatch.current;
+    if (batch && batch.expectedIds !== attachmentIds) {
+      batch.cancelled = true;
+      batch.controller.abort();
+      uploadBatch.current = null;
+      setUploading(false);
+      setRemainingFiles([]);
+    }
+  }, [attachmentIds]);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>(
     {},
   );
@@ -601,7 +639,7 @@ export function ForumAttachmentDraftPanel({
     Math.max(0, reservedAttachmentSlots) + attachments.length;
 
   async function uploadFiles(files: FileList | null) {
-    if (!files || files.length === 0) {
+    if (disabled || uploadBatch.current || !files || files.length === 0) {
       return;
     }
     const nextFiles = Array.from(files);
@@ -609,6 +647,7 @@ export function ForumAttachmentDraftPanel({
       inputRef.current.value = "";
     }
     setError("");
+    setRemainingFiles([]);
 
     if (usedAttachmentSlots + nextFiles.length > MAX_FORUM_ATTACHMENTS) {
       setError(`Attach up to ${MAX_FORUM_ATTACHMENTS} files.`);
@@ -623,22 +662,44 @@ export function ForumAttachmentDraftPanel({
       return;
     }
 
+    const batch = {
+      controller: new AbortController(),
+      cancelled: false,
+      expectedIds: attachmentIds,
+      remaining: nextFiles.map((file) => file.name.slice(0, 160)),
+    };
+    const route = typeof window === "undefined"
+      ? ""
+      : `${window.location.pathname}${window.location.search}`;
+    const current = () => uploadBatch.current === batch && !batch.cancelled &&
+      (typeof window === "undefined" || `${window.location.pathname}${window.location.search}` === route);
+    uploadBatch.current = batch;
     setUploading(true);
+    const uploaded: ForumAttachmentDraft[] = [];
+    const keepConfirmed = (claimed: ForumAttachmentDraft, file: File) => {
+      uploaded.push(claimed);
+      const retained = [...attachments, ...uploaded];
+      batch.expectedIds = retained.map((attachment) => attachment.storageId).join(":");
+      if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(claimed.contentType)) {
+        const url = URL.createObjectURL(file);
+        previewUrls.current.set(claimed.storageId, url);
+        setImagePreviews((previous) => ({ ...previous, [claimed.storageId]: url }));
+      }
+      onAttachmentsChange(retained);
+    };
     try {
       if (runtime.uploadFiles) {
-        const uploaded = await runtime.uploadFiles(nextFiles);
-        for (let index = 0; index < uploaded.length; index++) {
-          const file = nextFiles[index];
-          if (file && file.type.startsWith("image/")) {
-            const url = URL.createObjectURL(file);
-            previewUrls.current.set(uploaded[index].storageId, url);
-            setImagePreviews(previous => ({...previous, [uploaded[index].storageId]: url}));
-          }
+        // The host's owner-approved/idempotent batch protocol stays intact.
+        const confirmed = await runtime.uploadFiles(nextFiles);
+        if (!current()) return;
+        if (confirmed.length !== nextFiles.length) throw new Error("Invalid upload receipt");
+        for (let index = 0; index < confirmed.length; index++) {
+          if (!current()) return;
+          keepConfirmed(confirmed[index], nextFiles[index]);
         }
-        onAttachmentsChange([...attachments, ...uploaded]);
+        batch.remaining = [];
         return;
       }
-      const uploaded: ForumAttachmentDraft[] = [];
       const uploadEndpoint = forumAttachmentUploadEndpoint();
       if (uploadEndpoint === null) {
         throw new Error("Forum attachment uploads are not configured.");
@@ -647,6 +708,7 @@ export function ForumAttachmentDraftPanel({
         throw new Error("Sign in to upload forum attachments.");
       }
       for (const file of nextFiles) {
+        if (!current()) return;
         const contentType = forumAttachmentContentTypeForFile(file);
         if (contentType === null) {
           throw new Error(`${file.name} is not an allowed forum attachment.`);
@@ -659,10 +721,12 @@ export function ForumAttachmentDraftPanel({
             "X-Forum-Attachment-Filename": encodeURIComponent(file.name),
           },
           body: file,
+          signal: batch.controller.signal,
         });
         const payload = (await response
           .json()
           .catch(() => ({}))) as ForumAttachmentUploadResponse;
+        if (!current()) return;
         if (!response.ok) {
           throw new Error(payload.error ?? "Attachment upload failed");
         }
@@ -675,34 +739,23 @@ export function ForumAttachmentDraftPanel({
         ) {
           throw new Error("Attachment upload returned an invalid response.");
         }
-        if (
-          ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
-            contentType,
-          )
-        ) {
-          const url = URL.createObjectURL(file);
-          previewUrls.current.set(claimed.storageId, url);
-          setImagePreviews((previous) => ({
-            ...previous,
-            [claimed.storageId!]: url,
-          }));
-        }
-        uploaded.push({
+        keepConfirmed({
           storageId: claimed.storageId,
           filename: claimed.filename,
           contentType: claimed.contentType,
           size: claimed.size,
-        });
+        }, file);
+        batch.remaining.shift();
       }
-      onAttachmentsChange([...attachments, ...uploaded]);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not upload forum attachment.",
-      );
+    } catch {
+      if (!current()) return;
+      setRemainingFiles(batch.remaining);
+      setError(`Could not confirm ${batch.remaining[0] ?? "the selected files"}. Confirmed attachments have been kept. Choose unconfirmed files again when ready; nothing is retried automatically.${runtime.host === "plugin" ? " Check Agent access for required owner approval first." : ""}`);
     } finally {
-      setUploading(false);
+      if (uploadBatch.current === batch) {
+        uploadBatch.current = null;
+        setUploading(false);
+      }
     }
   }
 
@@ -710,6 +763,17 @@ export function ForumAttachmentDraftPanel({
     onAttachmentsChange(
       attachments.filter((attachment) => attachment.storageId !== storageId),
     );
+  }
+
+  function stopUpload() {
+    const batch = uploadBatch.current;
+    if (!batch) return;
+    batch.cancelled = true;
+    batch.controller.abort();
+    uploadBatch.current = null;
+    setUploading(false);
+    setRemainingFiles(batch.remaining);
+    setError(`Stopped waiting. An in-flight upload may still finish outside this draft. Confirmed attachments are kept; no retry runs automatically.${runtime.host === "plugin" ? " Check Agent access and owner approval before choosing the files again." : ""}`);
   }
 
   return (
@@ -741,9 +805,15 @@ export function ForumAttachmentDraftPanel({
           <Upload className="size-3.5" />
           {uploading ? "Uploading" : "Add files"}
         </Button>
+        {uploading ? (
+          <Button type="button" variant="ghost" className="min-h-11" onClick={stopUpload}>
+            Stop waiting
+          </Button>
+        ) : null}
         <input
           ref={inputRef}
           id={inputId}
+          aria-label="Choose forum attachment files"
           className="sr-only"
           type="file"
           multiple
@@ -769,6 +839,14 @@ export function ForumAttachmentDraftPanel({
         >
           {error}
         </p>
+      ) : null}
+      {remainingFiles.length > 0 ? (
+        <div className="mt-2 text-sm">
+          <p>Not attached: {remainingFiles.join(", ")}</p>
+          <Button type="button" variant="outline" className="mt-2 min-h-11" disabled={disabled || uploading} onClick={() => inputRef.current?.click()}>
+            Choose unconfirmed files
+          </Button>
+        </div>
       ) : null}
       {attachments.length > 0 ? (
         <div className="mt-3 grid gap-2">
