@@ -85,6 +85,8 @@ function CandleCanvas({
             timeScale: {
               timeVisible: true,
               secondsVisible: false,
+              // Sparse real history must not turn one candle into a full-width slab.
+              maxBarSpacing: 36,
               lockVisibleTimeRangeOnResize: true,
               borderColor: light ? "#e4e4e7" : "#2a2a30",
             },
