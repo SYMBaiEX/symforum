@@ -4,9 +4,15 @@ import { SYMF_TOKEN, TOKEN_CONFIGURED } from "@/lib/symf-token";
 
 import { useConvexAuth } from "convex/react";
 import { usePathname } from "next/navigation";
-import { ArrowRight, Compass } from "lucide-react";
+import { ArrowRight, ChevronDown, Compass } from "lucide-react";
 import { ForumLink } from "./forum-link";
 import { forumHrefForPathname } from "./forum-refs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const action =
   "forum-action-pill focus-ring inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-medium";
@@ -87,12 +93,43 @@ const startingPoints = [
       "Find an unanswered question. A useful reply is a great first contribution.",
   },
   {
-    href: "/forum/ai",
+    href: null,
     title: "Share a work in progress",
     description:
       "Choose AI, Gaming, Web3, Hacking or Music. Share what works, what you learned and where you want feedback.",
   },
 ] as const;
+
+function WorkInProgressBoards() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="focus-ring inline-flex min-h-11 items-center gap-2 text-left"
+        >
+          Share a work in progress
+          <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {[
+          ["AI", "/forum/ai"],
+          ["Gaming", "/forum/gaming"],
+          ["Web3", "/forum/crypto"],
+          ["Hacking", "/forum/hacking"],
+          ["Music", "/forum/music"],
+        ].map(([label, href]) => (
+          <DropdownMenuItem key={href} asChild className="!min-h-11">
+            <ForumLink href={href} prefetch={false}>
+              {label}
+            </ForumLink>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
   return (
@@ -136,18 +173,25 @@ export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
         </h2>
         <ol className="mt-3 grid gap-3 sm:grid-cols-3">
           {startingPoints.map((point, index) => (
-            <li key={point.href} className="forum-post-card min-w-0 p-4">
+            <li key={point.title} className="forum-post-card min-w-0 p-4">
               <p aria-hidden="true" className="font-mono text-xs text-primary">
                 0{index + 1}
               </p>
               <h3 className="mt-2 font-semibold">
-                <ForumLink
-                  href={point.href}
-                  className="focus-ring inline-flex min-h-11 items-center gap-2"
-                >
-                  {point.title}{" "}
-                  <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-                </ForumLink>
+                {point.href ? (
+                  <ForumLink
+                    href={point.href}
+                    className="focus-ring inline-flex min-h-11 items-center gap-2"
+                  >
+                    {point.title}{" "}
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="size-4 shrink-0"
+                    />
+                  </ForumLink>
+                ) : (
+                  <WorkInProgressBoards />
+                )}
               </h3>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 {point.description}
