@@ -4,7 +4,13 @@ import { useConvexAuth } from "./terminal-convex";
 
 // No signer or transport is implemented, including in the input-state scenario.
 const client = {
-  wallet: { getState: () => ({ connected: null }) },
+  wallet: {
+    getState: () => ({
+      connected: location.search.includes("orderquote")
+        ? { account: { address: "11111111111111111111111111111111" } }
+        : null,
+    }),
+  },
 } as unknown as CommerceWalletClient;
 export function CommerceWalletProvider({ children }: { children: ReactNode }) {
   return children;
@@ -19,7 +25,7 @@ export function useCommerceIdentity() {
   const linked =
     isAuthenticated &&
     !isLoading &&
-    /research|orderinput/.test(location.search);
+    /research|orderinput|orderquote/.test(location.search);
   return {
     linked,
     connected: linked
@@ -33,6 +39,12 @@ export function useCommerceIdentity() {
     session: { wallets: [], authUserId: "isolated-terminal-reader" },
   };
 }
-export function CommerceWalletButton() {
-  return <button type="button">Sign in with wallet</button>;
+export function CommerceWalletButton({ disabled }: { disabled?: boolean }) {
+  return (
+    <button type="button" disabled={disabled}>
+      {location.search.includes("orderquote")
+        ? "1111…1111"
+        : "Sign in with wallet"}
+    </button>
+  );
 }
