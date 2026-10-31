@@ -95,6 +95,74 @@ const checkRef = makeFunctionReference<
   boolean
 >("forumResearchActions:check");
 
+/** Presentation only: never drives config reads, quotes or payment recovery. */
+function useQuotedIntentClock(prepared: Quote | null, active: boolean) {
+  const intentKey = prepared?.intentKey;
+  const deadline = prepared?.expiresAt;
+  const validDeadline =
+    typeof deadline === "number" &&
+    Number.isFinite(deadline) &&
+    deadline > 0 &&
+    deadline <= 8_640_000_000_000_000;
+  const [tick, setTick] = useState<{
+    intentKey: string;
+    deadline: number;
+    now: number;
+    foreground: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!active || !intentKey || !validDeadline || deadline === undefined)
+      return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("pageshow", sync);
+    };
+    const sync = () => {
+      if (stopped) return;
+      clearTimeout(timer);
+      const current = Date.now();
+      const foreground = document.visibilityState !== "hidden";
+      setTick({ intentKey, deadline, now: current, foreground });
+      if (!foreground) return;
+      if (current >= deadline) {
+        stop();
+        return;
+      }
+      timer = setTimeout(sync, Math.min(1000, deadline - current));
+    };
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("focus", sync);
+    window.addEventListener("pageshow", sync);
+    sync();
+    return stop;
+  }, [active, intentKey, deadline, validDeadline]);
+  const currentTick =
+    active &&
+    tick !== null &&
+    tick.intentKey === intentKey &&
+    tick.deadline === deadline
+      ? tick
+      : null;
+  const current = currentTick?.now ?? Date.now();
+  return {
+    active,
+    expired: deadline !== undefined && deadline <= current,
+    remainingSeconds: validDeadline
+      ? Math.max(0, Math.ceil((deadline! - current) / 1000))
+      : null,
+    dateTime: validDeadline ? new Date(deadline!).toISOString() : null,
+    foreground:
+      currentTick?.foreground ??
+      (typeof document === "undefined" ||
+        document.visibilityState !== "hidden"),
+  };
+}
+
 export function ResearchPurchase({ mint }: { mint: string }) {
   const client = useCommerceWallet();
   return client ? (
@@ -162,9 +230,15 @@ function ResearchPurchaseConnected({
     [error, setError] = useState(""),
     [receiptMessage, setReceiptMessage] = useState("");
   const lock = useRef(false);
+  const reviewTrigger = useRef<HTMLButtonElement>(null);
+  const reviewSurface = useRef<HTMLElement>(null);
   const receipt = useQuery(
     statusRef,
     prepared && isAuthenticated ? { intentKey: prepared.intentKey } : "skip",
+  );
+  const quoteExpiry = useQuotedIntentClock(
+    prepared,
+    open && receipt?.state === "quoted" && !busy,
   );
   const held = history?.find((item) =>
     ["verifying", "settlement_claimed", "unknown"].includes(item.state),
@@ -331,7 +405,9 @@ function ResearchPurchaseConnected({
   };
   return (
     <section
-      className="rounded-xl border bg-card p-4 text-card-foreground"
+      ref={reviewSurface}
+      tabIndex={-1}
+      className="focus-ring rounded-xl border bg-card p-4 text-card-foreground"
       aria-labelledby="research-purchase-heading"
     >
       <div className="flex items-start justify-between gap-4">
@@ -410,6 +486,7 @@ function ResearchPurchaseConnected({
         />
       ) : (
         <Button
+          ref={reviewTrigger}
           onClick={() => void review()}
           disabled={busy || readiness !== "ready" || !!held}
           aria-describedby={readinessId}
@@ -522,6 +599,38 @@ function ResearchPurchaseConnected({
         <DialogContent
           data-surface="forum"
           className="max-h-[85dvh] overflow-y-auto"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const visible = (node: HTMLElement | null) => {
+              if (!node?.isConnected || !node.getClientRects().length)
+                return false;
+              for (
+                let parent: HTMLElement | null = node;
+                parent;
+                parent = parent.parentElement
+              ) {
+                const style = getComputedStyle(parent);
+                if (
+                  style.display === "none" ||
+                  style.visibility !== "visible" ||
+                  Number(style.opacity) === 0
+                )
+                  return false;
+              }
+              const bounds = node.getBoundingClientRect();
+              return (
+                bounds.bottom > 0 &&
+                bounds.top < innerHeight &&
+                bounds.right > 0 &&
+                bounds.left < innerWidth
+              );
+            };
+            const trigger = reviewTrigger.current;
+            if (trigger && !trigger.disabled && visible(trigger))
+              trigger.focus({ preventScroll: true });
+            else if (visible(reviewSurface.current))
+              reviewSurface.current?.focus({ preventScroll: true });
+          }}
         >
           <DialogHeader>
             <DialogTitle>Research export · $0.10 USDC</DialogTitle>
@@ -550,6 +659,29 @@ function ResearchPurchaseConnected({
               </dd>
             </div>
           </dl>
+          {quoteExpiry.active && quoteExpiry.dateTime && (
+            <section
+              aria-label="Quote expiry"
+              className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]"
+            >
+              <p aria-live="off">
+                Original quote deadline:{" "}
+                <time dateTime={quoteExpiry.dateTime}>
+                  {quoteExpiry.dateTime} (UTC)
+                </time>
+              </p>
+              {!quoteExpiry.expired && (
+                <p aria-live="off">
+                  Quote expires in {quoteExpiry.remainingSeconds} seconds.
+                </p>
+              )}
+              <p role="status" aria-live="polite">
+                {quoteExpiry.expired && quoteExpiry.foreground
+                  ? "Quote expired. Close this review to request a fresh quote. Nothing is retried automatically."
+                  : ""}
+              </p>
+            </section>
+          )}
           {receipt?.state === "fulfilled" && receipt.report ? (
             <div>
               <h4 className="mb-2 font-semibold">{receipt.report.title}</h4>
@@ -585,17 +717,18 @@ function ResearchPurchaseConnected({
             </p>
           ) : (
             <Button
+              className="min-h-11"
               onClick={() => void approve()}
               disabled={
                 busy ||
                 !prepared ||
-                prepared.expiresAt <= now ||
+                quoteExpiry.expired ||
                 receipt?.state !== "quoted"
               }
             >
               {busy
                 ? "Verifying purchase…"
-                : prepared && prepared.expiresAt <= now
+                : prepared && quoteExpiry.expired
                   ? "Quote expired · close to refresh"
                   : "Approve $0.10 USDC purchase"}
             </Button>
