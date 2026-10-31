@@ -146,6 +146,7 @@ function nativeRequest(request: Request): IncrementArgs | null {
         (w.value !== null &&
           typeof w.value !== "string" &&
           typeof w.value !== "number") ||
+        (numericFields.has(w.field) && typeof w.value === "string") ||
         (typeof w.value === "number" && !Number.isFinite(w.value)),
     ) ||
     [

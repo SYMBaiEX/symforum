@@ -5,9 +5,57 @@ import { register as registerBetterAuth } from "@convex-dev/better-auth/test";
 import { makeFunctionReference } from "convex/server";
 import schema from "./schema";
 import { createIdentityAuth } from "./identity";
+import { identityComponent } from "./betterAuthClient";
 
 const modules = import.meta.glob("./**/*.ts");
 const NOW = Date.UTC(2026, 9, 31, 12);
+
+test.each([
+  ["count", "eq", "2"],
+  ["count", "lte", "2"],
+  ["count", "gte", "2"],
+  ["count", "eq", " 2 "],
+  ["lastRequest", "eq", String(NOW)],
+  ["lastRequest", "lte", String(NOW)],
+  ["lastRequest", "gte", String(NOW)],
+  ["count", "eq", ""],
+  ["count", "lte", ""],
+  ["count", "gte", ""],
+  ["count", "eq", "not-a-number"],
+  ["count", "lte", "not-a-number"],
+  ["count", "gte", "not-a-number"],
+] as const)(
+  "numeric-string %s %s %j retains the original factory's guard semantics",
+  async (field, operator, value) => {
+    const t = setup();
+    await t.action(async (ctx) => {
+      const auth = await createIdentityAuth(ctx).$context;
+      const adapter = auth.adapter;
+      const original = identityComponent.adapter(ctx)(auth.options);
+      await adapter.create({
+        model: "rateLimit",
+        data: { key: "numeric-string-counter", count: 2, lastRequest: NOW },
+      });
+      const request = {
+        model: "rateLimit",
+        where: [
+          { field: "key", value: "numeric-string-counter" },
+          { field, operator, value },
+        ],
+        increment: { count: 0 },
+      };
+      const expected = await original.incrementOne(request);
+      expect(await adapter.incrementOne(request)).toEqual(expected);
+      expect(
+        await adapter.findOne({
+          model: "rateLimit",
+          where: [{ field: "key", value: "numeric-string-counter" }],
+        }),
+      ).toMatchObject({ count: 2, lastRequest: NOW });
+      return null;
+    });
+  },
+);
 function setup() {
   const t = convexTest(schema, modules);
   registerBetterAuth(t);
