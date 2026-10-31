@@ -11,7 +11,12 @@ import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
 import type { ChartMarketData } from "./price-chart-data";
 import { TokenLogo, type MarketChoice } from "./market-identity";
-import { formatMarketPercent, marketSources } from "./market-explorer-model";
+import {
+  formatMarketPercent,
+  marketObservation,
+  marketSources,
+  rawMarketNumber,
+} from "./market-explorer-model";
 import {
   marketMoney,
   marketQuantity,
@@ -77,25 +82,90 @@ export function TokenDetail({
     now - liveMarket.checkedAt <= 180_000
       ? liveMarket
       : null;
-  const metrics = [
-    ["Price", marketMoney(fresh ? fresh.priceUsd : market?.priceUsd)],
-    [
-      "Market cap",
-      marketMoney(fresh ? fresh.stats?.marketCap : market?.marketCapUsd, true),
-    ],
-    [
-      "Liquidity",
-      marketMoney(fresh ? fresh.stats?.liquidity : market?.liquidityUsd, true),
-    ],
-    ["1h volume", marketMoney(market?.volume1hUsd, true)],
-    ["FDV", marketMoney(fresh ? fresh.stats?.fdv : market?.fdvUsd, true)],
-    ["Holders", marketQuantity(market?.holders)],
-    [
-      "24h volume",
-      marketMoney(fresh ? fresh.stats?.volume24h : market?.volume24hUsd, true),
-    ],
-    ["1h change", formatMarketPercent(market?.priceChange1hPercent)],
+  const sampleSource = {
+    label: marketData
+      ? "Refreshed market sample"
+      : market
+        ? "Indexed market sample"
+        : "Market source unavailable",
+    observation: sources?.market,
+    url: safeExternalUrl(sources?.sourceUrl),
+    unavailable: sources?.unavailable ?? false,
+  };
+  const priceSource = fresh
+    ? {
+        label: "Chart market response (provider not supplied)",
+        observation: marketObservation(fresh.checkedAt, now),
+        url: null,
+        unavailable: false,
+      }
+    : sampleSource;
+  const holderSource = {
+    label: market ? "Original holder sample" : "Holder source unavailable",
+    observation: sources?.holders,
+    url: safeExternalUrl(market?.sourceUrl),
+    unavailable: false,
+  };
+  // The compact display and inspection share these exact selected values.
+  // A checked chart response never replaces holder or one-hour samples.
+  const readings = [
+    {
+      label: "Price",
+      value: fresh ? fresh.priceUsd : market?.priceUsd,
+      unit: "USD",
+      source: priceSource,
+    },
+    {
+      label: "Market cap",
+      value: fresh ? fresh.stats?.marketCap : market?.marketCapUsd,
+      unit: "USD",
+      source: priceSource,
+    },
+    {
+      label: "Liquidity",
+      value: fresh ? fresh.stats?.liquidity : market?.liquidityUsd,
+      unit: "USD",
+      source: priceSource,
+    },
+    {
+      label: "1h volume",
+      value: market?.volume1hUsd,
+      unit: "USD",
+      source: sampleSource,
+    },
+    {
+      label: "FDV",
+      value: fresh ? fresh.stats?.fdv : market?.fdvUsd,
+      unit: "USD",
+      source: priceSource,
+    },
+    {
+      label: "Holders",
+      value: market?.holders,
+      unit: "addresses",
+      source: holderSource,
+    },
+    {
+      label: "24h volume",
+      value: fresh ? fresh.stats?.volume24h : market?.volume24hUsd,
+      unit: "USD",
+      source: priceSource,
+    },
+    {
+      label: "1h change",
+      value: market?.priceChange1hPercent,
+      unit: "%",
+      source: sampleSource,
+    },
   ];
+  const metrics = readings.map(({ label, value, unit }) => [
+    label,
+    unit === "addresses"
+      ? marketQuantity(value)
+      : unit === "%"
+        ? formatMarketPercent(value)
+        : marketMoney(value, label !== "Price"),
+  ]);
   const links = [
     ["Website", market?.website],
     ["X", market?.twitter],
@@ -241,6 +311,62 @@ export function TokenDetail({
               </div>
             ))}
           </dl>
+          <details
+            className={styles.metricGlossary}
+            aria-label="Selected metric inspection"
+          >
+            <summary className="focus-ring">
+              Inspect values &amp; observation times
+            </summary>
+            <p>
+              Unabridged returned values for this mint; no extra precision or
+              estimates added. Observation times belong to each source, not to
+              when this panel was opened. Not an executable quote.
+            </p>
+            <ul className="m-0 grid min-w-0 list-none gap-3 p-0">
+              {readings.map(({ label, value, unit, source }) => {
+                const number = rawMarketNumber(value);
+                const dateTime = source.observation?.dateTime;
+                return (
+                  <li key={label} aria-label={`${label} reading`}>
+                    <strong>{label}</strong>{" "}
+                    <span>
+                      {number === undefined
+                        ? "Unavailable"
+                        : `${number} ${unit}`}
+                    </span>
+                    <p>
+                      {source.label}.{" "}
+                      {dateTime ? (
+                        <time dateTime={dateTime}>{dateTime} (UTC)</time>
+                      ) : (
+                        "Observation time unavailable"
+                      )}
+                      {source.unavailable
+                        ? " · Source data unavailable"
+                        : source.observation?.stale
+                          ? " · Stale sample"
+                          : ""}
+                      {source.url && (
+                        <>
+                          {" "}
+                          ·{" "}
+                          <a
+                            href={source.url}
+                            {...external}
+                            aria-label={`${label} sample source for ${token.mint}`}
+                            className="focus-ring underline"
+                          >
+                            Sample source
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
           <details className={styles.metricGlossary}>
             <summary className="focus-ring">What these metrics mean</summary>
             <dl>
