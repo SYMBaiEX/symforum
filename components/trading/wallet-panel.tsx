@@ -50,12 +50,28 @@ export function WalletPanel({
     let intersecting = false;
     let admitted = false;
     let running = false;
-    const eligible = () =>
-      activeView.current &&
-      intersecting &&
-      document.visibilityState === "visible" &&
-      navigator.onLine &&
-      element.getClientRects().length > 0;
+    const eligible = () => {
+      if (
+        !activeView.current ||
+        !intersecting ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        !element.getClientRects().length
+      )
+        return false;
+      // Observer delivery can lag an online/explicit-refresh event. Recheck
+      // current rendering and viewport bounds at the actual admission point.
+      const visibility = getComputedStyle(element).visibility;
+      const bounds = element.getBoundingClientRect();
+      return (
+        visibility !== "hidden" &&
+        visibility !== "collapse" &&
+        bounds.bottom > 0 &&
+        bounds.right > 0 &&
+        bounds.top < window.innerHeight &&
+        bounds.left < window.innerWidth
+      );
+    };
     const request = (manual = false) => {
       if (cancelled || running || !eligible()) return;
       const current = ++revision.current;

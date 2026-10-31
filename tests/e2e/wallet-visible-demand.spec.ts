@@ -120,7 +120,7 @@ async function harness(
       if (u.pathname === "/")
         return route.fulfill({
           contentType: "text/html",
-          body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css.get(app)}</style><div id="root"></div><script src="/fixture.js"></script>`,
+          body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css.get(app)}${scenario.includes("csshidden") ? "main{visibility:hidden}" : ""}</style><div id="root"></div><script src="/fixture.js"></script>`,
         });
       if (u.pathname === "/fixture.js")
         return route.fulfill({ contentType: "text/javascript", body: script });
@@ -301,6 +301,60 @@ test("real intersection visibility gates an offscreen panel before its first rea
   await refresh(page).dispatchEvent("click");
   expect(await calls(page)).toHaveLength(0);
   await refresh(page).scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await calls(page)).length).toBe(1);
+  await settle(page, 0);
+  await run.check();
+});
+test("current CSS visibility blocks admission even when the observer intersects", async ({
+  page,
+}) => {
+  const run = await harness(page, "parent&csshidden");
+  await frames(page);
+  expect(await calls(page)).toHaveLength(0);
+  const hiddenRefresh = page.getByRole("button", {
+    name: "Refresh wallet balances",
+    exact: true,
+    includeHidden: true,
+  });
+  await hiddenRefresh.dispatchEvent("click");
+  expect(await calls(page)).toHaveLength(0);
+  await page.evaluate(() => {
+    document.querySelector("main")!.style.visibility = "visible";
+    (window as unknown as DemandWindow).setDemandEnvironment(true, true);
+  });
+  await expect.poll(async () => (await calls(page)).length).toBe(1);
+  await settle(page, 0);
+  await run.check();
+});
+test("current viewport bounds reject a synchronous online event before observer catches up", async ({
+  page,
+}) => {
+  const run = await harness(page, "parent", "platform", false, true);
+  await frames(page);
+  expect(await calls(page)).toHaveLength(0);
+  const top = await page.evaluate(() => {
+    const main = document.querySelector("main")!;
+    main.style.transform = "translateY(1800px)";
+    const top = document
+      .querySelector('[aria-labelledby="terminal-wallet-title"]')!
+      .getBoundingClientRect().top;
+    (window as unknown as DemandWindow).setDemandEnvironment(true, true);
+    return top;
+  });
+  expect(top).toBeGreaterThan(900);
+  expect(await calls(page)).toHaveLength(0);
+  await page
+    .getByRole("button", {
+      name: "Refresh wallet balances",
+      exact: true,
+      includeHidden: true,
+    })
+    .dispatchEvent("click");
+  expect(await calls(page)).toHaveLength(0);
+  await page.evaluate(() => {
+    document.querySelector("main")!.style.transform = "";
+    (window as unknown as DemandWindow).setDemandEnvironment(true, true);
+  });
   await expect.poll(async () => (await calls(page)).length).toBe(1);
   await settle(page, 0);
   await run.check();
