@@ -184,7 +184,7 @@
     "evidence": "components/trading/token-detail.tsx:66",
     "acceptance": "An accessible disclosure maps displayed price/cap/liquidity/volume/holders to their actual existing source and check time; chart freshness never refreshes holder age or missing metrics.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/token-detail.tsx",
       "components/trading/token-metric-inspection.ts",
@@ -192,7 +192,8 @@
       "tests/e2e/token-metric-inspection.spec.ts",
       "tests/e2e/fixtures/token-metric-inspection.tsx",
       "tests/e2e/fixtures/token-metric-inspection-state.tsx"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-012",
@@ -259,8 +260,10 @@
     "kind": "feature",
     "evidence": "components/trading/token-detail.tsx:210",
     "acceptance": "An explicit details view shows the existing numeric values at useful precision with units and original timestamps, retains unavailable states, and never substitutes FDV for cap or recomputes a quote.",
-    "dependsOn": ["TRADE-014"],
-    "status": "implemented",
+    "dependsOn": [
+      "TRADE-014"
+    ],
+    "status": "deployed",
     "paths": [
       "components/trading/token-detail.tsx",
       "components/trading/token-metric-inspection.ts",
@@ -268,7 +271,8 @@
       "tests/e2e/token-metric-inspection.spec.ts",
       "tests/e2e/fixtures/token-metric-inspection.tsx",
       "tests/e2e/fixtures/token-metric-inspection-state.tsx"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-016",
@@ -291,8 +295,15 @@
     "evidence": "components/trading/token-detail.tsx:94",
     "acceptance": "Explicit copy/share uses only the validated existing discussion path; absent discussions stay absent, no thread is created, and native-host links retain the existing first-party routing boundary.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/token-discussion-link.ts",
+      "components/trading/token-discussion-link.test.ts",
+      "tests/e2e/token-sharing-facts.spec.ts",
+      "tests/e2e/fixtures/token-sharing-facts.tsx",
+      "tests/e2e/fixtures/token-sharing-facts-state.tsx"
+    ]
   },
   {
     "id": "TRADE-018",
@@ -303,8 +314,15 @@
     "evidence": "components/trading/token-detail.tsx:347",
     "acceptance": "When existing risk data supplies authority addresses, details reveal exact mint/freeze authorities and token program with their original check time; null remains not-set-at-check, never current safety assurance.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/token-discussion-link.ts",
+      "components/trading/token-discussion-link.test.ts",
+      "tests/e2e/token-sharing-facts.spec.ts",
+      "tests/e2e/fixtures/token-sharing-facts.tsx",
+      "tests/e2e/fixtures/token-sharing-facts-state.tsx"
+    ]
   },
   {
     "id": "TRADE-019",
@@ -373,8 +391,10 @@
     "kind": "feature",
     "evidence": "components/trading/price-chart.tsx:169",
     "acceptance": "Optional previous/next reading controls announce one loaded candle's UTC/OHLC/volume without fake ticks, chart-triggered trading, focus trapping or unbounded live announcements.",
-    "dependsOn": ["TRADE-019"],
-    "status": "implemented",
+    "dependsOn": [
+      "TRADE-019"
+    ],
+    "status": "deployed",
     "paths": [
       "components/trading/candle-readings.tsx",
       "components/trading/candle-readings-model.ts",
@@ -384,7 +404,8 @@
       "tests/e2e/fixtures/candle-navigation-state.tsx",
       "tests/e2e/candle-readings.spec.ts",
       "tests/e2e/chart-reading-tools.spec.ts"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-024",
@@ -478,8 +499,11 @@
     "kind": "feature",
     "evidence": "components/trading/price-chart.tsx:451",
     "acceptance": "A local 20/50/all-loaded control slices only the existing bounded payload, announces actual row count, and does not change API limits, retention, interval or transport cadence.",
-    "dependsOn": ["TRADE-019", "TRADE-024"],
-    "status": "implemented",
+    "dependsOn": [
+      "TRADE-019",
+      "TRADE-024"
+    ],
+    "status": "deployed",
     "paths": [
       "components/trading/candle-readings.tsx",
       "components/trading/candle-readings-model.ts",
@@ -489,7 +513,8 @@
       "tests/e2e/fixtures/candle-navigation-state.tsx",
       "tests/e2e/candle-readings.spec.ts",
       "tests/e2e/chart-reading-tools.spec.ts"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-031",
@@ -1415,9 +1440,19 @@
     "kind": "ux",
     "evidence": "components/community/community-hub.tsx:1728",
     "acceptance": "Enhancement: explain why Review tip is unavailable, provide existing account-link entry, and retain editable local amount without preparing a payment.",
-    "dependsOn": ["COMMUNITY-033"],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "dependsOn": [
+      "COMMUNITY-033"
+    ],
+    "status": "implemented",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "components/community/tip-recipient-model.ts",
+      "components/community/tip-recipient-model.test.ts",
+      "tests/e2e/tip-context.spec.ts",
+      "tests/e2e/fixtures/tip-context.tsx",
+      "tests/e2e/fixtures/tip-context-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-035",
@@ -1427,9 +1462,19 @@
     "kind": "ux",
     "evidence": "components/community/community-hub.tsx:1166",
     "acceptance": "Enhancement: selected contributor has profile link and full public opted-in receiving address disclosure; no private linked addresses or extra recipient data are exposed.",
-    "dependsOn": ["COMMUNITY-014"],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "dependsOn": [
+      "COMMUNITY-014"
+    ],
+    "status": "implemented",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "components/community/tip-recipient-model.ts",
+      "components/community/tip-recipient-model.test.ts",
+      "tests/e2e/tip-context.spec.ts",
+      "tests/e2e/fixtures/tip-context.tsx",
+      "tests/e2e/fixtures/tip-context-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-036",
@@ -1440,8 +1485,16 @@
     "evidence": "components/community/community-hub.tsx:1088",
     "acceptance": "Enhancement: filter currently loaded opted-in handles locally, state loaded coverage, preserve exact userId selection and no new queries.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "components/community/tip-recipient-model.ts",
+      "components/community/tip-recipient-model.test.ts",
+      "tests/e2e/tip-context.spec.ts",
+      "tests/e2e/fixtures/tip-context.tsx",
+      "tests/e2e/fixtures/tip-context-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-037",
@@ -1687,7 +1740,7 @@
     "evidence": "components/trading/research-purchase.tsx:468",
     "acceptance": "Enhancement: show a clearly labelled illustrative JSON/schema preview and methodology before payment; no fabricated current metrics, provider fetches or model work.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/research-purchase.tsx",
       "components/trading/research-export-preview.ts",
@@ -1695,7 +1748,8 @@
       "tests/e2e/research-preview-lifecycle.spec.ts",
       "tests/e2e/fixtures/research-preview-lifecycle.tsx",
       "tests/e2e/fixtures/research-preview-lifecycle-state.tsx"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "COMMUNITY-057",
@@ -1730,7 +1784,7 @@
     "evidence": "components/trading/research-purchase.tsx:492",
     "acceptance": "Regression: mocked quoted/expired/verifying/unknown/rejected/fulfilled states preserve explicit approval, exact mint binding, saved export and holds; never real signing, payment or automatic retry.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/research-purchase.tsx",
       "components/trading/research-export-preview.ts",
@@ -1738,7 +1792,8 @@
       "tests/e2e/research-preview-lifecycle.spec.ts",
       "tests/e2e/fixtures/research-preview-lifecycle.tsx",
       "tests/e2e/fixtures/research-preview-lifecycle-state.tsx"
-    ]
+    ],
+    "receipt": "PR #265 normally rebase-merged at 8f9a34ffd14276ac88d22ecb38e19a21ad631e73; exact corrected qualified tree and authors, automatic production and all five original domains verified 2026-10-31 13:02 UTC. Bounded public Feed and Boards-to-Feed restoration passed 13:04 UTC; terminal/research/provider/financial/physical-device/AT behavior remains isolated-test or unverified live acceptance."
   },
   {
     "id": "COMMUNITY-060",
@@ -2442,8 +2497,13 @@
     "evidence": "components/forum/forum-feed-list.tsx:532",
     "acceptance": "Provide an adjacent sign-in explanation/action for the disabled Following choice, with a safe return destination; do not make a disabled control the only way to discover the requirement.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-feed-list.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-feed-list.tsx",
+      "tests/e2e/feed-onboarding.spec.ts",
+      "tests/e2e/fixtures/feed-onboarding.tsx",
+      "tests/e2e/fixtures/feed-onboarding-state.tsx"
+    ]
   },
   {
     "id": "FORUM-052",
@@ -2454,8 +2514,13 @@
     "evidence": "components/forum/forum-feed-list.tsx:582",
     "acceptance": "An authenticated empty Following view offers Choose boards to follow rather than only Browse boards; retain distinct messages for a filtered empty scan and a truly exhausted result set.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-feed-list.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-feed-list.tsx",
+      "tests/e2e/feed-onboarding.spec.ts",
+      "tests/e2e/fixtures/feed-onboarding.tsx",
+      "tests/e2e/fixtures/feed-onboarding-state.tsx"
+    ]
   },
   {
     "id": "FORUM-053",

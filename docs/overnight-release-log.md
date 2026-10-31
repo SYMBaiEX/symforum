@@ -904,3 +904,100 @@ operations, job/hold records and infrastructure binding metadata out of it.
   guards and eighteen browser cases were independently rerun successfully.
   Original failure logs are retained. Every full release gate restarts on the corrected unchanged
   candidate with separate output files before any PR, merge or rollout claim.
+
+## Batch 10 qualified and merged — 13:00 UTC
+
+- Corrected unchanged candidate `7cb16773` passed all 4,369 unit/backend tests,
+  620 browser tests, both type checks, five builds, native parity, three audits
+  and security controls. Lint retains three old warnings and zero errors. The
+  five-commit 3.21 MB redacted scan found no leaks. Prior failed results remain.
+- Independent combined integration review is clean. PR #265 normally rebase-
+  merged at 13:00:07 UTC to `8f9a34ffd14276ac88d22ecb38e19a21ad631e73`.
+  Complete tested and merged trees equal `78fd54ead76e878228850d3e6ef504d7967f41b5`;
+  all five new main authors are exact. Actions remain disabled and protections
+  were read back unchanged. Pending preview builds were not failed checks.
+- Six tasks are merged, not yet deployed. Automatic production/all-domain
+  verification and bounded public shell acceptance are pending. New protected
+  terminal/research behavior remains isolated-fixture tested, not live signing,
+  settlement, provider, physical-device or assistive-technology certification.
+
+## Batch 10 released — 13:05 UTC
+
+- PR #265 exact automatic production READY observed 13:02:41 UTC, all five
+  original aliases matched 13:02:56. Complete main tree matches the qualified
+  candidate. No backend, worker or hosting configuration was changed.
+- One bounded signed-out public Feed session showed twelve main-feed articles
+  at desktop and phone sizes, no overflow and normal viewport/navigation
+  geometry. Ordinary mobile Boards-to-Feed navigation restored twelve articles
+  at both sizes. No observed client errors or provider attempts; browser closed.
+- Exact-release error sample from merge to 13:04:43 UTC returned zero of thirty,
+  uncapped. This is source deployment/public-shell acceptance, not real signing,
+  payment, source refresh or protected-terminal certification. All initial unit
+  failures and corrected full rerun evidence remain retained.
+- Sixty-nine inventory items are source-deployed. Existing fees, budgets,
+  schedules, caps, auth/privacy rules, financial/review gates and holds remain.
+
+## Batch 11 dispatch — 13:06 UTC
+
+- All assignments start at released `8f9a34ff`, with isolated clean worktrees,
+  root dependencies and their own normal forum-ui workspace links. Literal
+  ownership is recorded before dispatch; no shared writers or new backend scope.
+- TRADE-017/018: `/private/tmp/symforum-overnight-token-sharing-facts`, branch
+  `sym/overnight-token-sharing-facts`. Own token detail, optional pure discussion
+  link helper/tests and new token-sharing-facts browser spec/fixture/state.
+  Explicit copy of a validated existing canonical discussion link only; absent
+  discussions stay absent. Reveal only existing checked authority/program
+  addresses with original time and stale context. No refresh, safety assurance,
+  extra queries, new signing path or default order-rail height.
+- COMMUNITY-034/035/036: `/private/tmp/symforum-overnight-tip-context`, branch
+  `sym/overnight-tip-context`. Own community hub/module CSS, optional pure tip
+  recipient model/tests and new tip-context browser spec/fixture/state. Explain
+  guest/unlinked author-tip state, retain local amount, show selected public
+  opted-in profile/address and locally filter loaded recipients by handle.
+  Preserve exact userId selection even when filtering; no auto-recipient or
+  additional query. Financial handlers, payment dialogs and admission gates stay
+  unchanged; private linked addresses must never substitute for public opt-ins.
+- FORUM-051/052: `/private/tmp/symforum-overnight-feed-onboarding`, branch
+  `sym/overnight-feed-onboarding`. Own forum-feed-list and new feed-onboarding
+  browser spec/fixture/state. Accessible adjacent guest sign-in guidance for
+  Following and contextual board-selection recovery for authenticated empty
+  Following. Preserve safe return context, filtered-scan/exhaustion distinctions,
+  auth fingerprint/query/mutation/cache/refresh logic and native-host handoff.
+- Workers retain all old assertions; use normal/failure/race/keyboard and actual
+  forum/platform CSS 320/390 direct bounds, with all provider/wallet/financial
+  work denied except explicit inert test callbacks. No docs/generated/push/PR/
+  deploy work, no new payment or identity authority. Parent final review and
+  full unchanged-candidate qualification remain mandatory before release.
+- Counts: sixty-nine deployed, seven in progress, 146 queued, two blocked and
+  sixteen needing confirmation. The original 15:45 UTC stop time remains.
+
+## Batch 11 integrated for qualification — 13:21 UTC
+
+- Fresh branch `sym/overnight-web3-wave-eleven` starts at released `8f9a34ff`,
+  preserving the two known-owned planning files. Frozen `126abc02`, `0786d841`
+  and `baa41b64` are integrated without source overlap; native output regenerated.
+- Following onboarding independently passed twenty-eight new browser cases.
+  Canonical sign-in returns retain intended Following/view/sort/authors; empty
+  guidance does not infer no follows from an exhausted filtered sample. Existing
+  query/auth/cache/restore/refresh/preference handlers and old tests are unchanged.
+- Discussion sharing and checked addresses independently passed twenty-one
+  browser and six unit cases, with canonical host/path and clipboard race tests.
+  New controls stay inside closed details. Original metric provenance, source
+  links and refresh rules remain. Original stale-risk text count and strict
+  laptop order-layout assertions pass without any test edits.
+- Tip context independently passed seventeen browser and one helper unit case.
+  Parent verified the existing public opt-in projection is a latest-24 sample;
+  missing rows are not proof of opt-out. Exact selected IDs, public-only context
+  and local amounts persist; both submit handlers and the entire PaymentDialog
+  remain byte-identical. No backend, new query or payment authority was added.
+- Retained worker failures: initial feed target checks found four 34px links;
+  new-link-only 44px styling corrected them. Initial tip run passed 82/84; two
+  standalone 40px inherited controls needed a tip-form-only 44px override. Final
+  worker tip run passed 88/88 with all old tests unchanged. A sharing fixture
+  initially overlapped its risk panel; the corrected fixture uses the actual
+  aside context, not a production layout workaround. Independent sandbox browser
+  launch failures were retained separately from successful permitted reruns.
+- Seven tasks are implemented, not released. Parent combined qualification now
+  runs every full gate on this unchanged candidate. Sixty-nine remain deployed;
+  the original stop time and all budget/schedule/cap/privacy/financial/hold gates
+  are unchanged. No production/provider/wallet/payment action was exercised.
