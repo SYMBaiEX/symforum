@@ -14,6 +14,8 @@ export const FORUM_READ_POLICY = {
     rollingDays: 32,
     requestsPerWindow: 5,
     windowMs: 1_000,
+    sendRequestsPerWindow: 1,
+    sendWindowMs: 1_000,
   },
   jupiter: {
     requestsPerWindow: 50,

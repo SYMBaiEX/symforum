@@ -417,3 +417,52 @@ test("post-admission I/O failure is never retried, even after a bounded wait", a
   expect(t.fetcher).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+test("only exact JSON sendTransaction sets the method-specific admission flag", async () => {
+  const t = setup();
+  const init = jsonRpc("sendTransaction");
+  expect(await t.read(RPC, init)).toBe(t.response);
+  expect(t.runMutation.mock.calls[0]?.[1]).toEqual({
+    provider: "helius",
+    credits: 1,
+    sendTransaction: true,
+  });
+  expect(t.fetcher).toHaveBeenCalledExactlyOnceWith(RPC, init);
+  await t.read(RPC, jsonRpc("getTransaction"));
+  expect(t.runMutation.mock.calls[1]?.[1]).toEqual({
+    provider: "helius",
+    credits: 1,
+  });
+  await t.read("https://api.dexscreener.com/sendTransaction");
+  expect(t.runMutation.mock.calls[2]?.[1]).toEqual({
+    provider: "dexscreener",
+    credits: 1,
+  });
+});
+
+test("method-specific burst wait retains the flag and never retries a subsequent I/O failure", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(100000);
+  const t = setup();
+  const init = jsonRpc("sendTransaction");
+  t.runMutation.mockResolvedValueOnce({
+    ok: false,
+    reason: "burst",
+    retryAt: 102000,
+  });
+  t.fetcher.mockRejectedValueOnce(new Error("inert unknown transport outcome"));
+  const work = t.read(RPC, init).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(await work).toMatchObject({
+    message: "inert unknown transport outcome",
+  });
+  expect(t.runMutation).toHaveBeenCalledTimes(2);
+  for (const call of t.runMutation.mock.calls)
+    expect(call[1]).toEqual({
+      provider: "helius",
+      credits: 1,
+      sendTransaction: true,
+    });
+  expect(t.fetcher).toHaveBeenCalledExactlyOnceWith(RPC, init);
+  expect(vi.getTimerCount()).toBe(0);
+});

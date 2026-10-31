@@ -79,12 +79,16 @@ const result = v.union(
  * Shared pre-I/O admission. Only the rate-limiter component owns counters.
  * Two adjacent fixed buckets conservatively cover a rolling request window;
  * 33 UTC day buckets cover every rolling 32-day credit window. Rotating slots
- * keep storage bounded to six request rows plus 33 credit rows. This may defer
+ * keep storage bounded to eight request rows plus 33 credit rows. This may defer
  * earlier than a precise sliding log, never later than the published ceiling.
  * All component reads/consumption share this parent mutation transaction.
  */
 export const admit = internalMutation({
-  args: { provider, credits: v.number() },
+  args: {
+    provider,
+    credits: v.number(),
+    sendTransaction: v.optional(v.literal(true)),
+  },
   returns: result,
   handler: async (ctx, args): Promise<ProviderAdmission> => {
     const now = Date.now();
@@ -94,7 +98,9 @@ export const admit = internalMutation({
       !Number.isSafeInteger(args.credits) ||
       args.credits < 1 ||
       args.credits > FORUM_READ_POLICY.helius.dailyCredits ||
-      (args.provider !== "helius" && args.credits !== 1)
+      (args.provider !== "helius" && args.credits !== 1) ||
+      (args.sendTransaction &&
+        (args.provider !== "helius" || args.credits !== 1))
     )
       throw new Error("Invalid provider admission.");
     const policy = FORUM_READ_POLICY[args.provider];
@@ -128,6 +134,49 @@ export const admit = internalMutation({
       config: WindowConfig;
       count: number;
     } | null = null;
+    let sendArgs: { key: string; config: WindowConfig; count: number } | null =
+      null;
+    if (args.sendTransaction) {
+      const sendPolicy = FORUM_READ_POLICY.helius;
+      const sendBucket = Math.floor(now / sendPolicy.sendWindowMs);
+      const sendSlot = positiveModulo(sendBucket, 2);
+      const sendConfig = windowConfig(
+        sendPolicy.sendRequestsPerWindow,
+        sendPolicy.sendWindowMs,
+        2,
+        sendSlot,
+      );
+      const sendKey = `helius-send:${sendSlot}`;
+      const sendCurrent = await used(
+        ctx,
+        name,
+        sendKey,
+        sendConfig,
+        sendBucket * sendPolicy.sendWindowMs,
+      );
+      const sendPreviousSlot = positiveModulo(sendBucket - 1, 2);
+      const sendPrevious = await used(
+        ctx,
+        name,
+        `helius-send:${sendPreviousSlot}`,
+        windowConfig(
+          sendPolicy.sendRequestsPerWindow,
+          sendPolicy.sendWindowMs,
+          2,
+          sendPreviousSlot,
+        ),
+        (sendBucket - 1) * sendPolicy.sendWindowMs,
+      );
+      if (sendCurrent + sendPrevious + 1 > sendPolicy.sendRequestsPerWindow) {
+        const retryAt =
+          (sendBucket +
+            (sendCurrent + 1 <= sendPolicy.sendRequestsPerWindow ? 1 : 2)) *
+          sendPolicy.sendWindowMs;
+        if (retryAt > (denied?.retryAt ?? 0))
+          denied = { ok: false, reason: "burst", retryAt };
+      }
+      sendArgs = { key: sendKey, config: sendConfig, count: 1 };
+    }
     if (args.provider === "helius") {
       const day = Math.floor(now / DAY);
       const credits = [];
@@ -183,6 +232,11 @@ export const admit = internalMutation({
     if (denied) return denied;
     const burst = await limiter.limit(ctx, name, { key, config, count: 1 });
     if (!burst.ok) throw new Error("Provider allowance changed unexpectedly.");
+    if (sendArgs) {
+      const send = await limiter.limit(ctx, name, sendArgs);
+      if (!send.ok)
+        throw new Error("Provider method allowance changed unexpectedly.");
+    }
     if (creditArgs) {
       const credit = await limiter.limit(
         ctx,
