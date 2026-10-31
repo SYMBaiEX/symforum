@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import type { TradeToken } from "./token-swap";
 import type { DiscoveredToken } from "@/lib/swap-token-discovery";
 import { SYMF_TOKEN } from "@/lib/symf-token";
+import { isSolanaAddress } from "@/lib/forum-commerce";
 
 export function TokenIcon({ token }: { token?: TradeToken }) {
   const [failed, setFailed] = useState(false);
@@ -132,6 +133,7 @@ export function TokenPicker({
           .toLowerCase()
           .includes(search.trim().replace(/^\$/, "").toLowerCase()),
     );
+  const exactMintQuery = isSolanaAddress(search.trim()) ? search.trim() : null;
   async function choose(candidate: TradeToken) {
     if (verifying) return;
     if (tokens.some((t) => t.mint === candidate.mint)) {
@@ -182,7 +184,7 @@ export function TokenPicker({
       </DialogTrigger>
       <DialogContent
         data-surface="forum"
-        className="swap-token-picker"
+        className="swap-token-picker [&>div]:min-w-0"
         overlayClassName="wallet-picker-overlay"
       >
         <DialogHeader>
@@ -209,12 +211,15 @@ export function TokenPicker({
           {tokens.slice(0, 3).map((t) => (
             <button
               type="button"
+              className="min-w-0 flex-1"
               disabled={verifying}
               key={t.mint}
               onClick={() => void choose(t)}
             >
               <TokenIcon token={t} />
-              {t.symbol}
+              <span className="min-w-0 truncate" title={t.symbol}>
+                {t.symbol}
+              </span>
             </button>
           ))}
         </div>
@@ -228,28 +233,58 @@ export function TokenPicker({
           aria-busy={loading || verifying}
         >
           {rows.map((t) => (
-            <button
-              type="button"
+            <div
               key={t.mint}
-              className="swap-token-row focus-ring"
-              disabled={verifying}
-              onClick={() => void choose(t)}
+              className="relative flex min-w-0 flex-wrap items-center"
             >
-              <TokenIcon token={t} />
-              <span>
-                <strong>
-                  {t.symbol}
-                  {t.verified && (
-                    <ShieldCheck aria-label="Verified by Jupiter" />
+              <button
+                type="button"
+                className="swap-token-row focus-ring min-w-0 flex-none"
+                style={{ width: "calc(100% - 52px)" }}
+                disabled={verifying}
+                onClick={() => void choose(t)}
+              >
+                <TokenIcon token={t} />
+                <span>
+                  <strong className="min-w-0">
+                    <span className="min-w-0 truncate" title={t.symbol}>
+                      {t.symbol}
+                    </span>
+                    {t.verified && (
+                      <ShieldCheck aria-label="Verified by Jupiter" />
+                    )}
+                  </strong>
+                  <small>{t.name}</small>
+                  <code title={t.mint}>
+                    {t.mint.slice(0, 6)}…{t.mint.slice(-6)}
+                  </code>
+                  {exactMintQuery === t.mint && (
+                    <span className="text-xs leading-4 text-muted-foreground">
+                      Exact mint match · identity only
+                    </span>
                   )}
-                </strong>
-                <small>{t.name}</small>
-                <code title={t.mint}>
-                  {t.mint.slice(0, 6)}…{t.mint.slice(-6)}
-                </code>
-              </span>
-              {t.mint === token?.mint && <Check aria-label="Selected" />}
-            </button>
+                </span>
+                {t.mint === token?.mint && <Check aria-label="Selected" />}
+              </button>
+              <details className="min-w-0 basis-full">
+                <summary
+                  aria-label={`Inspect mint ${t.mint}`}
+                  className="focus-ring absolute right-1 top-4 grid min-h-11 w-11 cursor-pointer list-none place-items-center rounded-md border border-border text-xs text-muted-foreground"
+                >
+                  Mint
+                </summary>
+                <div className="mx-3 mb-3 min-w-0">
+                  <p>Exact mint · identity only</p>
+                  <code className="block w-full select-all whitespace-normal break-all font-mono text-xs">
+                    {t.mint}
+                  </code>
+                  <p>
+                    Names and symbols are untrusted metadata. An address is not
+                    an endorsement.
+                  </p>
+                </div>
+              </details>
+            </div>
           ))}
           {loading && (
             <p role="status">
