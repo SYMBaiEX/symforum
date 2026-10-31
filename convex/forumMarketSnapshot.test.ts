@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 import { MARKET_QUOTES } from "../lib/terminal-market-source";
 import { marketReadLimiter } from "./forumMarketData";
 import { commerceLimiter } from "./forumCommerce";
@@ -113,7 +114,7 @@ test("chart intervals and overview reuse one exact-mint DEX snapshot with indepe
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 95,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 5,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -121,7 +122,7 @@ test("chart intervals and overview reuse one exact-mint DEX snapshot with indepe
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 96,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 4,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -129,7 +130,7 @@ test("chart intervals and overview reuse one exact-mint DEX snapshot with indepe
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 995,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 5,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -184,7 +185,7 @@ test("200 mixed-interval and overview readers share one source claim without ext
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 98,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 2,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -192,7 +193,7 @@ test("200 mixed-interval and overview readers share one source claim without ext
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 99,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 1,
       }),
     ),
   ).toMatchObject({ ok: false });

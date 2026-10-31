@@ -8,6 +8,7 @@ import schema from "./schema";
 import { api, components, internal } from "./_generated/api";
 import { commerceLimiter } from "./forumCommerce";
 import { IDENTITY_MARKER } from "../lib/identity-config";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 
 const modules = import.meta.glob("./**/*.ts");
 const NOW = Date.UTC(2026, 9, 31, 12);
@@ -239,7 +240,7 @@ test("three generations of the same search key fence ABA completions while the c
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 997,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 3,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -247,7 +248,7 @@ test("three generations of the same search key fence ABA completions while the c
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 998,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 2,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -271,7 +272,7 @@ test("200 concurrent linked readers share one pending provider request and one r
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 999,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 1,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -279,7 +280,7 @@ test("200 concurrent linked readers share one pending provider request and one r
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 1000,
+        count: FORUM_READ_POLICY.commerceDailyUnits,
       }),
     ),
   ).toMatchObject({ ok: false });
