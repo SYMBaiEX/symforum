@@ -235,7 +235,7 @@ function ChartData({
         // Zero is an internal invalidation sentinel, never a displayed check time.
         onMarket?.({
           mint,
-          checkedAt: previous?.checkedAt ?? 0,
+          checkedAt: previous?.marketCheckedAt ?? previous?.checkedAt ?? 0,
           stale: true,
           stats: null,
           priceUsd: null,
@@ -243,7 +243,7 @@ function ChartData({
       } else if (next.stats !== undefined || next.priceUsd !== undefined) {
         onMarket?.({
           mint: next.mint,
-          checkedAt: next.checkedAt,
+          checkedAt: next.marketCheckedAt ?? next.checkedAt,
           stale: next.stale ?? false,
           stats: next.stats ?? null,
           priceUsd: next.priceUsd ?? null,

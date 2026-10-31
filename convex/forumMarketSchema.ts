@@ -54,6 +54,19 @@ export const refreshedMarketValidator = v.object({
 });
 
 export const forumMarketTables = {
+  // Provider observations shared by intervals; never a financial quote/cache.
+  forumDexMarketSnapshots: defineTable({
+    mint: v.string(),
+    payload: v.union(v.string(), v.null()),
+    checkedAt: v.union(v.number(), v.null()),
+    lease: v.string(),
+    leaseUntil: v.number(),
+    lastAttemptAt: v.number(),
+    nextAttemptAt: v.number(),
+    failureCount: v.number(),
+    failureCode: v.optional(marketFailureCodeValidator),
+    cleanupAt: v.number(),
+  }).index("by_mint", ["mint"]),
   // One bounded shared display cache, not financial receipts or scout evidence.
   forumMarketSampleCache: defineTable({
     key: v.literal("markets"),

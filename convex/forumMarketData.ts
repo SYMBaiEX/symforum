@@ -9,6 +9,14 @@ import {
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
+import {
+  claimDexSnapshot,
+  dexSnapshot,
+  freshDexSnapshot,
+  normalizeDexPairs,
+  parseDexSnapshot,
+  completeSnapshotRef,
+} from "./forumMarketSnapshot";
 import { commerceLimiter } from "./forumCommerce";
 import {
   marketFailureCodeValidator,
@@ -86,6 +94,20 @@ const view = v.object({
   stale: v.boolean(),
   cache: cacheStatus,
 });
+const noFetch = {
+  fetch: false,
+  candleProvider: null,
+  marketSnapshot: null,
+  marketCheckedAt: null,
+  fetchSnapshot: false,
+} as const;
+type ClaimedView = MarketCacheView & {
+  fetch: boolean;
+  candleProvider: MarketCandleProvider | null;
+  marketSnapshot: string | null;
+  marketCheckedAt: number | null;
+  fetchSnapshot: boolean;
+};
 const getMarket = makeFunctionReference<
   "query",
   { mint: string; now: number },
@@ -325,23 +347,18 @@ export const claim = internalMutation({
     ...view.fields,
     fetch: v.boolean(),
     candleProvider: v.union(marketCandleProviderValidator, v.null()),
+    marketSnapshot: v.union(v.string(), v.null()),
+    marketCheckedAt: v.union(v.number(), v.null()),
+    fetchSnapshot: v.boolean(),
   }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<
-    MarketCacheView & {
-      fetch: boolean;
-      candleProvider: MarketCandleProvider | null;
-    }
-  > => {
+  handler: async (ctx, args): Promise<ClaimedView> => {
     const now = Date.now();
     if (
       !args.lease.trim() ||
       args.lease.length > 128 ||
       !(await allowed(ctx, args, now))
     )
-      return { ...unsupported(), fetch: false, candleProvider: null };
+      return { ...unsupported(), ...noFetch };
     const key = cacheKey(args);
     const row = await ctx.db
       .query("forumMarketDataCache")
@@ -353,7 +370,28 @@ export const claim = internalMutation({
       (current.cache.nextRetryAt ?? 0) > now ||
       (row?.leaseUntil ?? 0) > now
     )
-      return { ...current, fetch: false, candleProvider: null };
+      return { ...current, ...noFetch };
+    const source = await dexSnapshot(ctx, args.mint);
+    const sourcePayload = freshDexSnapshot(source, now);
+    if (
+      sourcePayload === null &&
+      source &&
+      (source.nextAttemptAt > now || source.leaseUntil > now)
+    )
+      return {
+        ...current,
+        ...noFetch,
+        state: "deferred",
+        cache: {
+          ...current.cache,
+          nextRetryAt: Math.max(source.nextAttemptAt, source.leaseUntil),
+          failureStage: "pool",
+          failureCode:
+            source.leaseUntil > 0
+              ? "incomplete"
+              : (source.failureCode ?? "invalid-response"),
+        },
+      };
     const burst = await limiter.limit(ctx, "terminalMarketBurst", {
       key: "all",
     });
@@ -361,8 +399,7 @@ export const claim = internalMutation({
       return {
         ...current,
         state: "deferred",
-        fetch: false,
-        candleProvider: null,
+        ...noFetch,
         cache: {
           ...current.cache,
           nextRetryAt: now + 1500,
@@ -372,15 +409,17 @@ export const claim = internalMutation({
       };
     const sub = await limiter.limit(ctx, "terminalReadDaily", {
       key: "all",
-      count: 2,
+      count: sourcePayload === null ? 2 : 1,
     });
     const shared =
       sub.ok &&
       (await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 2,
+        count: sourcePayload === null ? 2 : 1,
       }));
     const admitted = Boolean(shared && shared.ok);
+    if (admitted && sourcePayload === null)
+      await claimDexSnapshot(ctx, source, args.mint, args.lease, now);
     const candleProvider: MarketCandleProvider | undefined =
       args.kind === "chart"
         ? args.mint === SYMF_TOKEN.mint &&
@@ -430,6 +469,10 @@ export const claim = internalMutation({
       ...persistedView(persisted, now),
       fetch: admitted,
       candleProvider: admitted ? (candleProvider ?? null) : null,
+      marketSnapshot: admitted ? sourcePayload : null,
+      marketCheckedAt:
+        admitted && sourcePayload !== null ? source!.checkedAt : null,
+      fetchSnapshot: admitted && sourcePayload === null,
     };
   },
 });
@@ -485,6 +528,12 @@ export const save = internalMutation({
         !checkedAt ||
         checkedAt < args.attemptAt ||
         checkedAt > now + 60_000 ||
+        (payload.marketCheckedAt !== undefined &&
+          (!Number.isSafeInteger(payload.marketCheckedAt) ||
+            Number(payload.marketCheckedAt) <= 0 ||
+            Number(payload.marketCheckedAt) > checkedAt ||
+            checkedAt - Number(payload.marketCheckedAt) >=
+              CHART_CACHE_FRESH_MS)) ||
         payload.mint !== request.mint ||
         !isSolanaAddress(String(payload.pool)) ||
         !MARKET_QUOTES.includes(
@@ -595,21 +644,27 @@ export const read = action({
     const interval = args.interval ?? "15m",
       lease = crypto.randomUUID();
     const request = { ...args, interval };
-    const reserved: MarketCacheView & {
-      fetch: boolean;
-      candleProvider: MarketCandleProvider | null;
-    } = await ctx.runMutation(internal.forumMarketData.claim, {
-      ...request,
-      lease,
-    });
+    const reserved: ClaimedView = await ctx.runMutation(
+      internal.forumMarketData.claim,
+      {
+        ...request,
+        lease,
+      },
+    );
     if (!reserved.fetch) {
       const {
         fetch: ignored,
         candleProvider: ignoredProvider,
+        marketSnapshot: ignoredSnapshot,
+        marketCheckedAt: ignoredMarketTime,
+        fetchSnapshot: ignoredSnapshotFetch,
         ...current
       } = reserved;
       void ignored;
       void ignoredProvider;
+      void ignoredSnapshot;
+      void ignoredMarketTime;
+      void ignoredSnapshotFetch;
       return current;
     }
     let payload: string | null = null;
@@ -618,10 +673,65 @@ export const read = action({
       null;
     let diagnosticStage: MarketFailureStage | undefined;
     try {
-      const pairs = await readPublicMarket(
-        `https://api.dexscreener.com/token-pairs/v1/solana/${args.mint}`,
-        200_000,
-      );
+      let sourcePayload = reserved.marketSnapshot;
+      let marketCheckedAt = reserved.marketCheckedAt;
+      if (reserved.fetchSnapshot) {
+        try {
+          const raw = await readPublicMarket(
+            `https://api.dexscreener.com/token-pairs/v1/solana/${args.mint}`,
+            200_000,
+          );
+          const normalized = normalizeDexPairs(raw, args.mint);
+          if (normalized.length === 0) throw Error("market_pool_unavailable");
+          sourcePayload = JSON.stringify(normalized);
+          marketCheckedAt = Date.now();
+          const saved: boolean = await ctx.runMutation(completeSnapshotRef, {
+            mint: args.mint,
+            lease,
+            attemptAt: reserved.cache.lastAttemptAt!,
+            payload: sourcePayload,
+            checkedAt: marketCheckedAt,
+          });
+          if (!saved)
+            throw new PublicMarketSourceError(
+              "incomplete",
+              "market_source_expired",
+            );
+        } catch (error) {
+          const failure = safeFailure(error);
+          await ctx.runMutation(completeSnapshotRef, {
+            mint: args.mint,
+            lease,
+            attemptAt: reserved.cache.lastAttemptAt!,
+            payload: null,
+            checkedAt: Date.now(),
+            failureCode: failure.code,
+            retryAfterAt: failure.retryAfterAt,
+          });
+          throw error;
+        }
+      }
+      if (
+        sourcePayload === null ||
+        marketCheckedAt === null ||
+        Date.now() - marketCheckedAt >= CHART_CACHE_FRESH_MS
+      )
+        throw new PublicMarketSourceError(
+          "incomplete",
+          "market_source_expired",
+        );
+      const sourcePairs = parseDexSnapshot(sourcePayload, args.mint);
+      const pairs = sourcePairs.map((pair) => ({
+        chainId: "solana",
+        pairAddress: pair.pool,
+        baseToken: { address: pair.mint },
+        quoteToken: { address: pair.quote },
+        priceUsd: pair.priceUsd === null ? null : String(pair.priceUsd),
+        marketCap: pair.stats.marketCap,
+        fdv: pair.stats.fdv,
+        liquidity: { usd: pair.stats.liquidity },
+        volume: { h24: pair.stats.volume24h },
+      }));
       const poolCandidates = args.pinnedSymf
         ? Array.isArray(pairs) && pairs.length <= 100
           ? pairs.filter((pair) => record(pair).pairAddress === SYMF_TOKEN.pool)
@@ -676,6 +786,7 @@ export const read = action({
           ...binding,
           interval,
           checkedAt,
+          marketCheckedAt,
           stats: parseMarketStats(pairs, binding),
           priceUsd: marketPrice(pairs, binding),
           candles,
@@ -696,7 +807,13 @@ export const read = action({
           diagnosticStage = "trades";
         }
         // Valid statistics remain independently useful; failed trades are null.
-        payload = JSON.stringify({ ...binding, checkedAt, stats, trades });
+        payload = JSON.stringify({
+          ...binding,
+          checkedAt,
+          marketCheckedAt,
+          stats,
+          trades,
+        });
       }
     } catch (error) {
       diagnostic = safeFailure(error);

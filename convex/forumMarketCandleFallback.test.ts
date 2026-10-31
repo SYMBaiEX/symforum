@@ -400,7 +400,10 @@ test.each(["daily", "rolling", "subcap", "disabled"])(
     const next = await t.action(api.forumMarketData.read, request);
     expect(next.state).toBe("ready");
     expect(JSON.parse(next.payload!).candleSource).toBe("geckoterminal");
-    expect(fetcher).toHaveBeenCalledTimes(3); // first1 + newordinary2, never a third request in one intent
+    expect(fetcher).toHaveBeenCalledTimes(2); // first DEX + ordinary Gecko; fresh source is shared.
+    expect(
+      fetcher.mock.calls.map(([url]) => new URL(String(url)).hostname),
+    ).toEqual(["api.dexscreener.com", "api.geckoterminal.com"]);
     expect(await usage(t)).toEqual(before);
   },
 );
