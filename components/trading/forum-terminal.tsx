@@ -594,6 +594,18 @@ function TerminalWorkspace({
         </button>
         <button
           data-terminal-dock="receipts"
+          data-terminal-dock-mode="desktop"
+          type="button"
+          aria-pressed={drawerOpen && tool === "receipts"}
+          onClick={(event) => openTool("receipts", event.currentTarget)}
+        >
+          <ReceiptText size={17} aria-hidden="true" />
+          Receipts
+        </button>
+        <button
+          className={styles.mobileDock}
+          data-terminal-dock="receipts"
+          data-terminal-dock-mode="mobile"
           type="button"
           aria-pressed={pane === "receipts"}
           onClick={(event) => openTool("receipts", event.currentTarget)}
