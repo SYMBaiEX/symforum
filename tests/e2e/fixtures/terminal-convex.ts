@@ -18,6 +18,41 @@ import type {
 import type { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
+// Freeze only fixture scenario flags, not real URL navigation or mint state.
+// Preserve legacy substring scenarios (e.g. marketrefreshmissing also enables
+// marketrefresh); these values must never become application auth settings.
+export const fixtureFlags = new Set(
+  [
+    "alertackfail",
+    "authloading",
+    "currentcohort",
+    "empty",
+    "guest",
+    "held",
+    "highimpact",
+    "longhistory",
+    "longorder",
+    "marketloading",
+    "marketrefresh",
+    "marketrefreshbudget",
+    "marketrefreshdeferred",
+    "marketrefresherror",
+    "marketrefreshloading",
+    "marketrefreshmissing",
+    "oldsample",
+    "orderinput",
+    "orderquote",
+    "receiptsempty",
+    "receiptsloading",
+    "research",
+    "samplealerts",
+    "settingsloading",
+    "stalerisk",
+    "tipsavailable",
+    "tipsloading",
+  ].filter((flag) => location.search.includes(flag)),
+);
+
 let revision = 0;
 const listeners = new Set<() => void>();
 const subscribe = (fn: () => void) => {
@@ -194,10 +229,10 @@ const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
   }),
 );
 const selectedMarketRows = () =>
-  location.search.includes("currentcohort") ? currentCohort : marketRows;
+  fixtureFlags.has("currentcohort") ? currentCohort : marketRows;
 function displayedMarket(token: TerminalMarket): TerminalMarket {
   if (!refreshedMarketRows || token.mint !== nova.mint) return token;
-  const unavailable = location.search.includes("marketrefreshmissing");
+  const unavailable = fixtureFlags.has("marketrefreshmissing");
   return {
     ...token,
     priceUsd: unavailable ? null : 0.0042,
@@ -219,9 +254,9 @@ export function useConvexAuth() {
   return {
     isAuthenticated:
       !signedOut &&
-      !location.search.includes("guest") &&
-      !location.search.includes("authloading"),
-    isLoading: location.search.includes("authloading"),
+      !fixtureFlags.has("guest") &&
+      !fixtureFlags.has("authloading"),
+    isLoading: fixtureFlags.has("authloading"),
   };
 }
 export function useQuery<Ref extends FunctionReference<"query">>(
@@ -235,22 +270,21 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   queryNames.push(name);
   let result: unknown;
   if (name === "forumCommunity:listProjects")
-    result = location.search.includes("empty") ? [] : projects;
+    result = fixtureFlags.has("empty") ? [] : projects;
   else if (name === "forumCommunity:listBounties")
-    result = (location.search.includes("empty") ? [] : works).filter(
+    result = (fixtureFlags.has("empty") ? [] : works).filter(
       (work) => !input.status || work.status === input.status,
     );
   else if (name === "forumCommunity:listPayments")
-    result = location.search.includes("receiptsloading")
+    result = fixtureFlags.has("receiptsloading")
       ? undefined
-      : location.search.includes("receiptsempty")
+      : fixtureFlags.has("receiptsempty")
         ? []
         : [protectedPayment];
   else if (name === "forumCommunity:getPayment") result = protectedPayment;
   else if (name === "forumCommunity:getMine")
     result =
-      location.search.includes("settingsloading") &&
-      location.search.includes("orderinput")
+      fixtureFlags.has("settingsloading") && fixtureFlags.has("orderinput")
         ? undefined
         : ({
             userId: memberId,
@@ -259,9 +293,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
           } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>);
   else if (name === "forumCommunity:listSubmissions") result = [];
   else if (name === "forumCommunity:listTipRecipients")
-    result = location.search.includes("tipsloading")
+    result = fixtureFlags.has("tipsloading")
       ? undefined
-      : location.search.includes("tipsavailable")
+      : fixtureFlags.has("tipsavailable")
         ? [
             {
               userId: memberId,
@@ -294,10 +328,10 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumTerminal:listMarket") {
-    const rows = (
-      location.search.includes("empty") ? [] : selectedMarketRows()
-    ).map(displayedMarket);
-    result = location.search.includes("marketloading")
+    const rows = (fixtureFlags.has("empty") ? [] : selectedMarketRows()).map(
+      displayedMarket,
+    );
+    result = fixtureFlags.has("marketloading")
       ? undefined
       : {
           markets: rows.filter(
@@ -309,7 +343,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
               (!input.platform || token.platform === input.platform),
           ),
           sampledAt: now,
-          stale: location.search.includes("oldsample"),
+          stale: fixtureFlags.has("oldsample"),
           coverage: "sampled",
           band: input.band ?? "all",
         };
@@ -319,7 +353,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
         .map(displayedMarket)
         .find((token) => token.mint === input.mint) ?? null;
   else if (name === "forumTerminal:getRisk")
-    result = location.search.includes("stalerisk")
+    result = fixtureFlags.has("stalerisk")
       ? {
           mint: input.mint,
           checkedAt: now - 1_200_000,
@@ -332,7 +366,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       : null;
   else if (name === "forumTerminal:listWatchlist") result = watches;
   else if (name === "forumTerminal:listAlerts")
-    result = location.search.includes("samplealerts")
+    result = fixtureFlags.has("samplealerts")
       ? [nova, quiet].map((token, index): TokenAlert => ({
           id: `fixture-alert-${index}`,
           mint: token.mint,
@@ -360,10 +394,10 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     };
   else if (
     name === "forumCommerce:getConfig" &&
-    /orderinput|orderquote/.test(location.search)
+    (fixtureFlags.has("orderinput") || fixtureFlags.has("orderquote"))
   )
     result = {
-      swapsEnabled: location.search.includes("orderquote"),
+      swapsEnabled: fixtureFlags.has("orderquote"),
       signatureFirstEnabled: true,
       managedEnabled: true,
       promotionsEnabled: false,
@@ -380,7 +414,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     } satisfies FunctionReturnType<typeof api.forumCommerce.getConfig>;
   else if (
     name === "forumCommerce:searchTokens" &&
-    /orderinput|orderquote/.test(location.search)
+    (fixtureFlags.has("orderinput") || fixtureFlags.has("orderquote"))
   )
     result = [
       {
@@ -392,9 +426,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       },
     ];
   else if (name === "forumSwaps:listMine")
-    result = location.search.includes("held")
+    result = fixtureFlags.has("held")
       ? Array.from(
-          { length: location.search.includes("longhistory") ? 30 : 1 },
+          { length: fixtureFlags.has("longhistory") ? 30 : 1 },
           (_, index) => ({
             quoteId: `isolated-quote${index ? `-${index}` : ""}`,
             wallet: "11111111111111111111111111111111",
@@ -451,7 +485,7 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
         return null as FunctionReturnType<Ref>;
       }
       if (name === "forumTerminal:acknowledgeAlert") {
-        if (location.search.includes("alertackfail"))
+        if (fixtureFlags.has("alertackfail"))
           throw new Error("Invented alert acknowledgement failure");
         acknowledgedAlerts.add(String(input.id));
         revision++;
@@ -471,7 +505,7 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
       if (name === "forumTerminalRefresh:refresh") {
         marketRefreshArguments.push(_args as Record<string, unknown>);
         if (
-          location.search.includes("marketrefreshdeferred") &&
+          fixtureFlags.has("marketrefreshdeferred") &&
           marketRefreshArguments.length === 1
         )
           return {
@@ -479,14 +513,14 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
             checkedAt: null,
             nextRefreshAt: Date.now() + 1500,
           } as FunctionReturnType<Ref>;
-        if (location.search.includes("marketrefresherror"))
+        if (fixtureFlags.has("marketrefresherror"))
           throw new Error("Invented shared refresh failure");
-        const state = location.search.includes("marketrefreshbudget")
+        const state = fixtureFlags.has("marketrefreshbudget")
           ? "budget"
-          : location.search.includes("marketrefreshloading")
+          : fixtureFlags.has("marketrefreshloading")
             ? "loading"
             : "ready";
-        if (state === "ready" && location.search.includes("marketrefresh")) {
+        if (state === "ready" && fixtureFlags.has("marketrefresh")) {
           marketRefreshAdmissions.push(Date.now());
           refreshedMarketRows = true;
           marketCheckedAt = Date.now();
@@ -499,26 +533,23 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
           nextRefreshAt: Date.now() + (state === "loading" ? 1500 : 600_000),
         } as FunctionReturnType<Ref>;
       }
-      if (/orderinput|orderquote/.test(location.search)) {
+      if (fixtureFlags.has("orderinput") || fixtureFlags.has("orderquote")) {
         if (name === "forumTerminal:getWalletReadState")
           return null as FunctionReturnType<Ref>;
         if (name === "forumCommerce:resolveMint")
           return {
             mint: (_args as { mint: string }).mint,
-            symbol: location.search.includes("longorder")
+            symbol: fixtureFlags.has("longorder")
               ? "LONGCOMMUNITYTOKEN"
               : "SYMF",
-            name: location.search.includes("longorder")
+            name: fixtureFlags.has("longorder")
               ? "Invented unusually long community token name for viewport coverage"
               : "Invented fixture token",
             decimals: 6,
             tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
           } as FunctionReturnType<Ref>;
       }
-      if (
-        name === "forumSwaps:quote" &&
-        location.search.includes("orderquote")
-      ) {
+      if (name === "forumSwaps:quote" && fixtureFlags.has("orderquote")) {
         const request = _args as {
           inputMint: string;
           outputMint: string;
@@ -541,13 +572,13 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
               amountRaw: request.amountRaw,
               swapAmountRaw: request.amountRaw,
               platformFeeRaw: "5000000",
-              outputAmountRaw: location.search.includes("longorder")
+              outputAmountRaw: fixtureFlags.has("longorder")
                 ? "9876543210123456"
                 : "123456789",
-              minimumOutputAmountRaw: location.search.includes("longorder")
+              minimumOutputAmountRaw: fixtureFlags.has("longorder")
                 ? "9827160494072838"
                 : "122839505",
-              priceImpactBps: location.search.includes("highimpact") ? 250 : 25,
+              priceImpactBps: fixtureFlags.has("highimpact") ? 250 : 25,
               platformFeeBps: 50,
               routeLabels: ["Invented geometry route"],
               expiresAt: Date.now() + 30_000,
@@ -561,7 +592,7 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
       }
       if (
         name === "forumResearchActions:check" &&
-        location.search.includes("research")
+        fixtureFlags.has("research")
       ) {
         researchVerified = true;
         revision++;
