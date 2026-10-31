@@ -13,6 +13,7 @@ import { commerceActor } from "./forumCommerceAccess";
 import { commerceConfig } from "../lib/forum-commerce";
 import { inspectSignedSwap } from "../lib/swap-signed-wire";
 import { swapRpc } from "../lib/swap-rpc";
+import { providerFetch } from "./forumProviderFetch";
 import { queueSwapRecovery } from "./forumSwapRecovery";
 import { executeManagedOrder } from "../lib/jupiter-managed";
 import type { SwapRouteQuote } from "../lib/swap-router";
@@ -323,16 +324,21 @@ export const relay = action({
             result.code === 0 &&
             result.signature === signed.signature;
         } else {
-          const result = await swapRpc<string>(c.rpcUrl, "sendTransaction", [
-            args.signedTransactionBase64,
-            {
-              encoding: "base64",
-              skipPreflight: false,
-              maxRetries: 0,
-              preflightCommitment: "confirmed",
-              minContextSlot: row.simulationSlot,
-            },
-          ]);
+          const result = await swapRpc<string>(
+            c.rpcUrl,
+            "sendTransaction",
+            [
+              args.signedTransactionBase64,
+              {
+                encoding: "base64",
+                skipPreflight: false,
+                maxRetries: 0,
+                preflightCommitment: "confirmed",
+                minContextSlot: row.simulationSlot,
+              },
+            ],
+            providerFetch(ctx, { rpcUrls: [c.rpcUrl] }),
+          );
           accepted = result === signed.signature;
         }
       } catch {

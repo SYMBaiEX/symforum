@@ -1,6 +1,7 @@
 import { address } from "@solana/kit";
 import { providerJson, record, rawAmount } from "./swap-router";
 import { SwapRpcError } from "./swap-preparation-errors";
+import { ProviderAdmissionError } from "./provider-admission-error";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -26,7 +27,8 @@ export async function swapRpc<T>(
     let response: Response;
     try {
       response = await fetcher(input, init);
-    } catch {
+    } catch (error) {
+      if (error instanceof ProviderAdmissionError) throw error;
       throw new SwapRpcError("rpc_unavailable");
     }
     if (!response.ok) {
@@ -49,7 +51,11 @@ export async function swapRpc<T>(
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     });
   } catch (error) {
-    if (error instanceof SwapRpcError) throw error;
+    if (
+      error instanceof SwapRpcError ||
+      error instanceof ProviderAdmissionError
+    )
+      throw error;
     throw new SwapRpcError("rpc_unavailable");
   }
   if (response.error && typeof response.error === "object") {

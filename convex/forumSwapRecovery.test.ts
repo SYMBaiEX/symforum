@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { setImmediate } from "node:timers";
 import { convexTest } from "convex-test";
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
 import { register as registerAuth } from "@convex-dev/better-auth/test";
@@ -24,7 +25,14 @@ import { queueSwapRecovery } from "./forumSwapRecovery";
 import { commerceLimiter } from "./forumCommerce";
 
 const modules = import.meta.glob("./**/*.ts");
+const yieldEventLoop = setImmediate;
+// Isolate durable job timers between tests while allowing each admission
+// sleep to advance alongside its asynchronous component mutation.
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
 afterEach(() => {
+  vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -465,12 +473,33 @@ test.each(["late_signature", "lagging_status", "missing_ledger", "budget"])(
 );
 test("new signed pending checks stop at six; old signed checks still stop at three", async () => {
   const f = await fixture({ signature: true, signatureFirst: true });
+  // Advance only this awaited check's bounded admission sleeps. Yield between
+  // steps so async component mutations can install their timers first.
+  const check = async () => {
+    let finished = false;
+    const pending = f.t.action(internal.forumSwapRecovery.check, {
+      quoteId: f.id,
+    });
+    void pending.then(
+      () => {
+        finished = true;
+      },
+      () => {
+        finished = true;
+      },
+    );
+    for (let step = 0; step < 150 && !finished; step++) {
+      await new Promise<void>((resolve) => yieldEventLoop(resolve));
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    await pending;
+  };
   f.data.receipt = null;
   f.data.progress = "processed";
   await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
   for (let i = 0; i < 6; i++) {
     await f.due();
-    await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+    await check();
   }
   expect(await f.job()).toMatchObject({
     state: "review",
@@ -478,9 +507,9 @@ test("new signed pending checks stop at six; old signed checks still stop at thr
     nextCheckAt: 0,
   });
   await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
-  await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
+  await check();
   expect(f.fetcher).toHaveBeenCalledTimes(36);
-});
+}, 20000);
 test("a finalized exact-message chain failure terminates without replay", async () => {
   const f = await fixture({ signature: true });
   (f.data.receipt as { meta: { err: unknown } }).meta.err = {
@@ -513,7 +542,7 @@ test("pending signed receipts stop after three bounded checks and survive re-enr
   await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
   await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });
   expect(f.fetcher).toHaveBeenCalledTimes(12);
-});
+}, 15000);
 test("global free-tier exhaustion defers without any RPC or hold release", async () => {
   const f = await fixture();
   await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
@@ -608,7 +637,9 @@ test("a completed quote never starts a new recovery job", async () => {
   expect(await f.job()).toBeNull();
 });
 test("the durable scheduler settles the swap without a second browser request", async () => {
-  vi.useFakeTimers();
+  // Component mutations settle asynchronously; let their bounded pre-I/O
+  // admission sleeps advance too, without jumping to the recovery watchdog.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   const f = await fixture();
   await f.client.mutation(api.forumSwapRecovery.ensure, { quoteId: f.id });
   // Advance only to the due job. Jumping through every timeout would also
@@ -621,4 +652,4 @@ test("the durable scheduler settles the swap without a second browser request", 
     attempts: 1,
   });
   expect(f.fetcher).toHaveBeenCalledTimes(10);
-});
+}, 15000);

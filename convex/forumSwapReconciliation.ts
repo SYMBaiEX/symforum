@@ -10,6 +10,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceRpc } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 import { commerceConfig, isSolanaAddress, record } from "../lib/forum-commerce";
 import { rpcExpiryProof } from "./forumSwapReconciliationSchema";
 import {
@@ -186,17 +187,20 @@ export async function inspectProvider(
   url: string,
   row: Doc<"forumSwapQuotes">,
   hash: string,
+  fetcher: typeof fetch = fetch,
 ): Promise<RpcExpiryProof> {
   let stage = "genesis";
   try {
-    const genesis = await commerceRpc(url, "getGenesisHash", []);
+    const genesis = await commerceRpc(url, "getGenesisHash", [], fetcher);
     if (genesis !== MAINNET_GENESIS) throw new Error("Wrong cluster.");
     stage = "blockhash_expiry";
     const invalid = record(
-      await commerceRpc(url, "isBlockhashValid", [
-        hash,
-        { commitment: "finalized", minContextSlot: row.simulationSlot },
-      ]),
+      await commerceRpc(
+        url,
+        "isBlockhashValid",
+        [hash, { commitment: "finalized", minContextSlot: row.simulationSlot }],
+        fetcher,
+      ),
     );
     const slot = record(invalid.context).slot;
     if (
@@ -207,14 +211,16 @@ export async function inspectProvider(
       throw new Error("Blockhash expiry not proven.");
     const options = { commitment: "finalized", minContextSlot: slot };
     stage = "finalized_height";
-    const height = await commerceRpc(url, "getBlockHeight", [options]);
+    const height = await commerceRpc(url, "getBlockHeight", [options], fetcher);
     stage = "history_retention";
-    const first = await commerceRpc(url, "getFirstAvailableBlock", []);
+    const first = await commerceRpc(url, "getFirstAvailableBlock", [], fetcher);
     stage = "wallet_history";
-    const history = await commerceRpc(url, "getSignaturesForAddress", [
-      row.wallet,
-      { ...options, limit: 10 },
-    ]);
+    const history = await commerceRpc(
+      url,
+      "getSignaturesForAddress",
+      [row.wallet, { ...options, limit: 10 }],
+      fetcher,
+    );
     stage = "history_coverage";
     const proof: RpcExpiryProof = {
       checkedAt: Date.now(),
@@ -269,13 +275,17 @@ export const reconcileApproved = internalAction({
         throw new Error("Expected configured Helius endpoint.");
       provider = "reservation";
       await ctx.runMutation(internal.forumSwapReconciliation.reserve, {});
+      const fetcher = providerFetch(ctx, {
+        rpcUrls: [url.toString(), "https://api.mainnet-beta.solana.com"],
+      });
       provider = "helius";
-      const helius = await inspectProvider(url.toString(), row, hash);
+      const helius = await inspectProvider(url.toString(), row, hash, fetcher);
       provider = "solana";
       const solana = await inspectProvider(
         "https://api.mainnet-beta.solana.com",
         row,
         hash,
+        fetcher,
       );
       const status = await ctx.runMutation(
         internal.forumSwapReconciliation.settleNotLanded,

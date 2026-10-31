@@ -17,6 +17,7 @@ import {
 import { components, internal } from "./_generated/api";
 import { commerceActor, publicCommerceThread } from "./forumCommerceAccess";
 import { commerceMint } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 import {
   commerceConfig,
   COMMERCE_MINT,
@@ -475,7 +476,11 @@ export const resolveMint = action({
       cost: 1,
     });
     try {
-      const verified = await commerceMint(config.rpcUrl, mint);
+      const verified = await commerceMint(
+        config.rpcUrl,
+        mint,
+        providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+      );
       return await ctx.runMutation(internal.forumCommerce.saveVerifiedMint, {
         wallet,
         token: {
@@ -735,7 +740,11 @@ export const bindToken = action({
       wallet: args.wallet,
       cost: 1,
     });
-    const mint = await commerceMint(config.rpcUrl, args.mint);
+    const mint = await commerceMint(
+      config.rpcUrl,
+      args.mint,
+      providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+    );
     await ctx.runMutation(internal.forumCommerce.saveToken, {
       ...args,
       decimals: mint.decimals,

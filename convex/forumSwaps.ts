@@ -14,6 +14,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { commerceActor } from "./forumCommerceAccess";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceRpc } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 import { commerceConfig, record } from "../lib/forum-commerce";
 import {
   swapPreparationIssue,
@@ -156,16 +157,21 @@ export const quote = action({
         cost: 2,
         jupiter: true,
       });
+      const fetcher = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
       const result = config.managedEnabled
         ? {
-            quotes: [await getManagedOrder(request, config)],
+            quotes: [await getManagedOrder(request, config, fetcher)],
             failures: [],
           }
-        : await collectSwapQuotes(request, {
-            rpcUrl: config.rpcUrl,
-            jupiterApiKey: config.jupiterApiKey,
-            treasury: config.treasury,
-          });
+        : await collectSwapQuotes(
+            request,
+            {
+              rpcUrl: config.rpcUrl,
+              jupiterApiKey: config.jupiterApiKey,
+              treasury: config.treasury,
+            },
+            fetcher,
+          );
       const quotes = await ctx.runMutation(internal.forumSwaps.saveQuotes, {
         wallet: args.wallet,
         quotesJson: JSON.stringify(result.quotes),
@@ -629,7 +635,11 @@ export const rpcHealthCheck = internalAction({
     let verifiedMints = 0;
     try {
       for (const mint of [SOL_MINT, COMMERCE_MINT]) {
-        await verifiedMint(rpcUrl, mint);
+        await verifiedMint(
+          rpcUrl,
+          mint,
+          providerFetch(ctx, { rpcUrls: [rpcUrl] }),
+        );
         verifiedMints++;
       }
       return { ok: true, code: "verified", verifiedMints };
@@ -991,14 +1001,19 @@ export const confirm = action({
         cost: 1,
       });
       const result = record(
-        await commerceRpc(config.rpcUrl, "getTransaction", [
-          args.signature,
-          {
-            encoding: "base64",
-            commitment: "finalized",
-            maxSupportedTransactionVersion: 1,
-          },
-        ]),
+        await commerceRpc(
+          config.rpcUrl,
+          "getTransaction",
+          [
+            args.signature,
+            {
+              encoding: "base64",
+              commitment: "finalized",
+              maxSupportedTransactionVersion: 1,
+            },
+          ],
+          providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+        ),
       );
       const tx = result.transaction;
       if (

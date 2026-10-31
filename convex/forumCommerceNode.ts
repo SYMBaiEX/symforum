@@ -4,6 +4,7 @@ import { ConvexError, v } from "convex/values";
 import { internalAction, env } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getManagedOrder } from "../lib/jupiter-managed";
+import { providerFetch } from "./forumProviderFetch";
 import { commerceConfig, COMMERCE_MINT } from "../lib/forum-commerce";
 import {
   buildSwapTransaction,
@@ -53,12 +54,16 @@ export const buildSwap = internalAction({
         quote.execution === "jupiter-managed"
           ? prepareManagedSwap
           : buildSwapTransaction
-      )(quote, {
-        rpcUrl: config.rpcUrl,
-        treasury,
-        jupiterApiKey: config.jupiterApiKey,
-        referralAccount: config.referralAccount,
-      });
+      )(
+        quote,
+        {
+          rpcUrl: config.rpcUrl,
+          treasury,
+          jupiterApiKey: config.jupiterApiKey,
+          referralAccount: config.referralAccount,
+        },
+        providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+      );
     } catch (error) {
       throw new ConvexError(
         SWAP_PREPARATION_MESSAGES[swapPreparationIssue(error)],
@@ -89,6 +94,7 @@ export const buildPromotion = internalAction({
       intent,
       { rpcUrl: config.rpcUrl, treasury: config.treasury },
       supportsV1,
+      providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
     );
   },
 });
@@ -145,6 +151,7 @@ export const unsignedDiagnostic = internalAction({
       jupiterApiKey: config.jupiterApiKey,
       referralAccount: config.referralAccount,
     };
+    const admittedFetch = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
     const fetcher: typeof fetch = async (input, init) => {
       const method =
         init?.method === "POST"
@@ -152,7 +159,7 @@ export const unsignedDiagnostic = internalAction({
           : undefined;
       stage = typeof method === "string" ? method : "quote";
       if (method === "simulateTransaction") simulations++;
-      return fetch(input, init);
+      return admittedFetch(input, init);
     };
     try {
       const request = {
