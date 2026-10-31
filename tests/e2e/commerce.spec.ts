@@ -280,8 +280,29 @@ async function harness(page: Page, query = "") {
             signature: getBase58Decoder().decode(new Uint8Array(64).fill(1)),
             issue: null,
           };
-    else if (name === "forumPromotions:quotePromotion") result = intent;
-    else if (name === "forumPromotions:prepare")
+    else if (name === "forumPromotions:quotePromotion") {
+      const input = route.request().postDataJSON();
+      const starts = input.selectedStartsAt as number[] | undefined;
+      result = starts
+        ? {
+            ...intent,
+            startsAt: starts[0],
+            endsAt: starts[starts.length - 1] + 86400000,
+            amountRaw: String(BigInt(intent.amountRaw) * BigInt(starts.length)),
+            treasuryAmountRaw: String(
+              BigInt(intent.treasuryAmountRaw) * BigInt(starts.length),
+            ),
+            burnAmountRaw: String(
+              BigInt(intent.burnAmountRaw) * BigInt(starts.length),
+            ),
+            slots: starts.map((startsAt) => ({
+              lane: 0,
+              startsAt,
+              endsAt: startsAt + 86400000,
+            })),
+          }
+        : intent;
+    } else if (name === "forumPromotions:prepare")
       result = { intentId: intent.intentId, ...prepared() };
     else if (name === "forumPromotions:submitPromotion")
       result = { ...intent, status: "scheduled" };
@@ -754,7 +775,8 @@ test("promotion needs a separate explicit irreversible-burn consent", async ({
 }) => {
   const requests = await harness(page, "?promotion");
   await connect(page);
-  await page.getByRole("button", { name: "Check next available slot" }).click();
+  await page.locator(".promotion-calendar-time-grid input").first().check();
+  await page.getByRole("button", { name: "Reserve selected slots" }).click();
   await expect(page.getByText("5,000 SYMF", { exact: true })).toHaveCount(2);
   await page
     .getByRole("button", { name: "Prepare and simulate", exact: true })
@@ -1034,4 +1056,122 @@ test("token page mounts the native SYMF swap beside the chart on desktop and bel
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test.describe("automatic tokens and the multi-slot promotion calendar", () => {
+  test.use({ timezoneId: "America/Chicago", locale: "en-US" });
+  for (const state of ["postchecking", "postverified"])
+    test(`signed-out post token ${state} needs no verification button or wallet action`, async ({
+      page,
+    }) => {
+      const requests = await harness(page, `?promotion&guest&${state}`);
+      if (state === "postchecking")
+        await expect(
+          page.getByText("Checking this token automatically…", { exact: true }),
+        ).toBeVisible();
+      else
+        await expect(
+          page.getByRole("heading", {
+            name: "Token mentioned in this post",
+            exact: true,
+          }),
+        ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Verify token for swaps" }),
+      ).toHaveCount(0);
+      expect(requests).not.toContain("forumCommerce:resolveMint");
+      expect(requests).not.toContain("forumSwaps:quote");
+      await expect(page.locator("#wallet-calls")).toHaveText("0");
+    });
+
+  for (const width of [1280, 390])
+    test(`calendar selects two dates and itemizes one checkout at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.clock.install({ time: new Date("2026-10-31T19:20:00Z") });
+      const requests = await harness(page, "?promotion&authorized");
+      const calendar = page.locator(".promotion-calendar");
+      await expect(calendar).toContainText("October 2026");
+      await calendar
+        .locator(".promotion-calendar-time-grid input")
+        .first()
+        .check();
+      await calendar
+        .getByRole("button", { name: "Next month", exact: true })
+        .click();
+      await calendar
+        .getByRole("button", { name: "Monday, November 2", exact: true })
+        .click();
+      await calendar
+        .locator(".promotion-calendar-time-grid input")
+        .first()
+        .check();
+      await expect(calendar).toContainText("2 selected · 20,000 SYMF total");
+      expect(requests).not.toContain("forumPromotions:quotePromotion");
+      const payload = page.waitForRequest((r) =>
+        r.url().includes("/__commerce/forumPromotions:quotePromotion"),
+      );
+      await calendar
+        .getByRole("button", { name: "Reserve selected slots" })
+        .click();
+      const input = (await payload).postDataJSON();
+      expect(input.selectedStartsAt).toHaveLength(2);
+      expect(input.expectedCategoryId).toBe("board-fixture");
+      expect(
+        input.selectedStartsAt[1] - input.selectedStartsAt[0],
+      ).toBeGreaterThan(86400000);
+      await expect(
+        page.getByText("2 selected placements", { exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".commerce-review")).toContainText(
+        "20,000 SYMF",
+      );
+      await expect(page.locator("#wallet-calls")).toHaveText("0");
+      expect(requests).not.toContain("forumPromotions:prepare");
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: `tmp/forum-render-tests/promotion-calendar-${width}.png`,
+        fullPage: true,
+      });
+    });
+  test("guests can browse times and the repeated DST hour has distinct labels", async ({
+    page,
+  }) => {
+    await page.clock.install({ time: new Date("2026-10-31T19:20:00Z") });
+    const requests = await harness(page, "?promotion&guest");
+    const calendar = page.locator(".promotion-calendar");
+    await calendar
+      .getByRole("button", { name: "Next month", exact: true })
+      .click();
+    await calendar
+      .getByRole("button", { name: "Sunday, November 1", exact: true })
+      .click();
+    await expect(
+      calendar.getByRole("checkbox", { name: /^1:00 AM CDT/ }),
+    ).toHaveCount(1);
+    await expect(
+      calendar.getByRole("checkbox", { name: /^1:00 AM CST/ }),
+    ).toHaveCount(1);
+    await calendar.getByRole("checkbox", { name: /^1:00 AM CDT/ }).check();
+    await expect(
+      calendar.getByRole("checkbox", { name: /^1:00 AM CST/ }),
+    ).toBeDisabled();
+    await expect(
+      calendar.getByRole("button", { name: "Reserve selected slots" }),
+    ).toBeDisabled();
+    expect(requests).not.toContain("forumPromotions:quotePromotion");
+    expect(requests).not.toContain("forumCommerce:resolveMint");
+    await expect(
+      page.getByRole("button", { name: "Verify token for swaps" }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: "tmp/forum-render-tests/promotion-calendar-selection.png",
+      fullPage: true,
+    });
+  });
 });

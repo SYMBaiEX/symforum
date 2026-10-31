@@ -5,6 +5,8 @@ import { register as registerBetterAuth } from "@convex-dev/better-auth/test";
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
 import { getBase58Decoder } from "@solana/kit";
 import schema from "./schema";
+import { queueThreadTokenCheck } from "./forumPostTokens";
+import { postMintCandidate } from "../lib/forum-commerce";
 import { api, components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { commerceBenefit } from "./forumCommerceRpc";
@@ -1497,4 +1499,339 @@ describe("verified token discovery and one-shot swaps", () => {
       }),
     ).rejects.toThrow("unresolved");
   });
+});
+
+describe("automatic public post token checks", () => {
+  test("exact addresses are detected without guessing from tickers or wallet links", () => {
+    const other = key(230);
+    expect(postMintCandidate(`CA: ${COMMERCE_MINT}`)).toBe(COMMERCE_MINT);
+    expect(
+      postMintCandidate(
+        `https://pump.fun/coin/${COMMERCE_MINT} Mint: ${COMMERCE_MINT}`,
+      ),
+    ).toBe(COMMERCE_MINT);
+    expect(
+      postMintCandidate(`$SYMF and https://solscan.io/account/${other}`),
+    ).toBeNull();
+    expect(
+      postMintCandidate(`CA: ${other} https://pump.fun/coin/${COMMERCE_MINT}`),
+    ).toBeNull();
+  });
+  test("an accepted public post is checked once without wallet ownership or a browser action", async () => {
+    vi.useFakeTimers();
+    const t = setup(),
+      a = await actor(t, 220),
+      b = await board(t),
+      id = await thread(
+        t,
+        a.userId,
+        b,
+        220,
+        `https://pump.fun/coin/${COMMERCE_MINT}`,
+      );
+    const fetcher = installBalanceFetch(a.wallet);
+    await t.run((ctx) => queueThreadTokenCheck(ctx, id));
+    await vi.advanceTimersByTimeAsync(1);
+    await t.finishInProgressScheduledFunctions();
+    await t.finishAllScheduledFunctions(() => {
+      vi.advanceTimersToNextTimer();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const tokens = await t.query(api.forumCommerce.resolveThreadTokens, {
+      threadId: id,
+    });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]).toMatchObject({
+      mint: COMMERCE_MINT,
+      decimals: 6,
+      tokenProgram: TOKEN_2022_PROGRAM,
+    });
+    expect(
+      await t.query(api.forumPostTokens.status, { threadId: id }),
+    ).toMatchObject({ status: "verified" });
+    await t.run((ctx) => queueThreadTokenCheck(ctx, id));
+    await t.finishAllScheduledFunctions(() => {
+      vi.advanceTimersToNextTimer();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumTradeTokens").take(2)),
+    ).toHaveLength(0);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(2)),
+    ).toHaveLength(0);
+  });
+  test("private posts and ambiguous addresses never buy a chain read", async () => {
+    vi.useFakeTimers();
+    const t = setup(),
+      a = await actor(t, 221),
+      b = await board(t, "private", "members");
+    const id = await thread(t, a.userId, b, 221, `CA: ${COMMERCE_MINT}`);
+    const fetcher = installBalanceFetch(a.wallet);
+    await t.run((ctx) => queueThreadTokenCheck(ctx, id));
+    await t.finishAllScheduledFunctions(() => {
+      vi.advanceTimersToNextTimer();
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(
+      await t.query(api.forumPostTokens.status, { threadId: id }),
+    ).toBeNull();
+    expect(
+      await t.run((ctx) => ctx.db.query("forumPostTokenChecks").take(2)),
+    ).toHaveLength(0);
+  });
+  test("an edit or block during verification cannot publish stale token metadata", async () => {
+    vi.useFakeTimers();
+    const t = setup(),
+      a = await actor(t, 222),
+      b = await board(t),
+      id = await thread(t, a.userId, b, 222, `CA: ${COMMERCE_MINT}`);
+    const fetcher = installBalanceFetch(a.wallet);
+    await t.run((ctx) => queueThreadTokenCheck(ctx, id));
+    const row = (
+      await t.run((ctx) => ctx.db.query("forumPostTokenChecks").take(2))
+    )[0];
+    expect(
+      await t.mutation(internal.forumPostTokens.claim, {
+        mint: COMMERCE_MINT,
+        generation: row.generation,
+      }),
+    ).toBe(true);
+    await t.run((ctx) =>
+      ctx.db.patch("forumThreads", id, { body: `CA: ${key(229)}` }),
+    );
+    await t.mutation(internal.forumPostTokens.finish, {
+      mint: COMMERCE_MINT,
+      generation: row.generation,
+      token: {
+        mint: COMMERCE_MINT,
+        symbol: "SYMF",
+        name: "SYMF",
+        decimals: 6,
+        tokenProgram: TOKEN_2022_PROGRAM,
+      },
+    });
+    expect(
+      await t.query(api.forumCommerce.resolveThreadTokens, { threadId: id }),
+    ).toEqual([]);
+    await t.finishAllScheduledFunctions(() => {
+      vi.advanceTimersToNextTimer();
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("multi-slot promotion calendar", () => {
+  test("the public calendar reads availability without reserving or requiring a wallet", async () => {
+    const t = setup(),
+      a = await actor(t, 224),
+      b = await board(t),
+      id = await thread(t, a.userId, b);
+    const fetcher = installBalanceFetch(a.wallet);
+    const result = await t.query(api.forumPromotions.calendar, {
+      threadId: id,
+      minute: Math.floor(Date.now() / 60000),
+    });
+    expect(result?.slots.length).toBeGreaterThan(140);
+    expect(result?.slots.every((s) => s.remaining === 5)).toBe(true);
+    expect(
+      await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(2)),
+    ).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+    await t.run((ctx) =>
+      ctx.db.patch("forumCategories", b, { viewAccess: "members" }),
+    );
+    expect(
+      await t.query(api.forumPromotions.calendar, { threadId: id, minute: 1 }),
+    ).toBeNull();
+  });
+  test("one checkout reserves all selected days and charges exactly their combined price", async () => {
+    const t = setup(),
+      a = await actor(t, 225),
+      b = await board(t),
+      id = await thread(t, a.userId, b);
+    const first = Math.ceil((Date.now() + 3600000) / 3600000) * 3600000;
+    const selectedStartsAt = [first, first + 2 * 86400000];
+    const result = await a.client.mutation(internal.forumPromotions.reserve, {
+      wallet: a.wallet,
+      threadId: id,
+      reference: key(226),
+      decimals: 6,
+      tokenProgram: TOKEN_2022_PROGRAM,
+      selectedStartsAt,
+    });
+    expect(result.slots?.map((s) => s.startsAt)).toEqual(selectedStartsAt);
+    expect(result.amountRaw).toBe("20000000000");
+    expect(result.burnAmountRaw).toBe("10000000000");
+    expect(result.treasuryAmountRaw).toBe("10000000000");
+    expect(
+      await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(3)),
+    ).toHaveLength(1);
+    const calendar = await t.query(api.forumPromotions.calendar, {
+      threadId: id,
+      minute: 1,
+    });
+    expect(calendar?.slots.find((s) => s.startsAt === first)?.remaining).toBe(
+      0,
+    );
+    // A selected booking is never advertised during its unpurchased gap.
+    await t.run((ctx) =>
+      ctx.db.patch("forumPromotionIntents", result.intentId, {
+        status: "scheduled",
+      }),
+    );
+    expect(
+      await t.query(api.forumPromotions.listPromoted, {
+        categorySlug: "crypto-test",
+        now: first + 86400000 + 1000,
+      }),
+    ).toEqual([]);
+    expect(
+      await t.query(api.forumPromotions.listPromoted, {
+        categorySlug: "crypto-test",
+        now: first + 1000,
+      }),
+    ).toHaveLength(1);
+  });
+  test("overlapping selection rolls back the entire reservation", async () => {
+    const t = setup(),
+      a = await actor(t, 227),
+      b = await board(t),
+      id = await thread(t, a.userId, b);
+    const first = Math.ceil((Date.now() + 3600000) / 3600000) * 3600000;
+    await expect(
+      a.client.mutation(internal.forumPromotions.reserve, {
+        wallet: a.wallet,
+        threadId: id,
+        reference: key(228),
+        decimals: 6,
+        tokenProgram: TOKEN_2022_PROGRAM,
+        selectedStartsAt: [first, first + 3600000],
+      }),
+    ).rejects.toThrow("overlap");
+    expect(
+      await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(3)),
+    ).toHaveLength(0);
+  });
+});
+
+test("multi-slot funding must cover the full checkout before any inventory is reserved", async () => {
+  const t = setup(),
+    a = await actor(t, 231),
+    b = await board(t),
+    id = await thread(t, a.userId, b);
+  const first = Math.ceil((Date.now() + 3600000) / 3600000) * 3600000;
+  installBalanceFetch(a.wallet, "15000000000");
+  await expect(
+    a.client.action(api.forumPromotions.quotePromotion, {
+      wallet: a.wallet,
+      threadId: id,
+      selectedStartsAt: [first, first + 2 * 86400000],
+    }),
+  ).rejects.toThrow("full promotion amount");
+  expect(
+    await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(2)),
+  ).toEqual([]);
+});
+
+test.each([false, true])(
+  "a combined finalized payment preserves dates or holds a late receipt (late=%s)",
+  async (late) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const t = setup(),
+      a = await actor(t, 232),
+      b = await board(t),
+      id = await thread(t, a.userId, b);
+    const first = Math.ceil((Date.now() + 3600000) / 3600000) * 3600000;
+    const i = await a.client.mutation(internal.forumPromotions.reserve, {
+      wallet: a.wallet,
+      threadId: id,
+      reference: key(233),
+      tokenProgram: TOKEN_2022_PROGRAM,
+      decimals: 6,
+      selectedStartsAt: [first, first + 2 * 86400000],
+    });
+    const signature = key(234, 64);
+    const proof = chainReceipt(i);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ jsonrpc: "2.0", id: 1, result: proof }),
+      ),
+    );
+    if (late) vi.setSystemTime(first + 3600000);
+    const result = await a.client.action(api.forumPromotions.submitPromotion, {
+      intentId: i.intentId,
+      signature,
+    });
+    expect(result.status).toBe(late ? "held" : "scheduled");
+    expect(result.slots?.map((slot) => slot.startsAt)).toEqual([
+      first,
+      first + 2 * 86400000,
+    ]);
+    expect(result.amountRaw).toBe("20000000000");
+    const repeated = await a.client.action(
+      api.forumPromotions.submitPromotion,
+      { intentId: i.intentId, signature },
+    );
+    expect(repeated.status).toBe(result.status);
+    expect(
+      await t.run((ctx) =>
+        ctx.db.query("forumTerminalPromotionReceipts").take(3),
+      ),
+    ).toHaveLength(1);
+  },
+);
+
+test("calendar reservations and wallet handoff remain bound to the selected board", async () => {
+  const t = setup(),
+    a = await actor(t, 235),
+    b = await board(t),
+    other = await board(t, "another-board"),
+    id = await thread(t, a.userId, b);
+  const first = Math.ceil((Date.now() + 3600000) / 3600000) * 3600000;
+  const args = {
+    wallet: a.wallet,
+    threadId: id,
+    reference: key(236),
+    decimals: 6,
+    tokenProgram: TOKEN_2022_PROGRAM,
+    selectedStartsAt: [first],
+    expectedCategoryId: other,
+  };
+  await expect(
+    a.client.mutation(internal.forumPromotions.reserve, args),
+  ).rejects.toThrow("moved");
+  expect(
+    await t.run((ctx) => ctx.db.query("forumPromotionIntents").take(2)),
+  ).toEqual([]);
+  const intent = await a.client.mutation(internal.forumPromotions.reserve, {
+    ...args,
+    expectedCategoryId: b,
+  });
+  await t.run((ctx) =>
+    ctx.db.patch("forumThreads", id, {
+      categoryId: other,
+      categorySlug: "another-board",
+    }),
+  );
+  await expect(
+    a.client.mutation(internal.forumPromotions.consumePreparation, {
+      intentId: intent.intentId,
+    }),
+  ).rejects.toThrow("selected board");
+  await t.run((ctx) =>
+    ctx.db.patch("forumPromotionIntents", intent.intentId, {
+      preparationStartedAt: Date.now(),
+      messageHash: "a".repeat(64),
+    }),
+  );
+  await expect(
+    a.client.mutation(api.forumPromotions.beginWalletRequest, {
+      intentId: intent.intentId,
+    }),
+  ).rejects.toThrow("no longer eligible");
+  expect(
+    await t.run((ctx) => ctx.db.get("forumPromotionIntents", intent.intentId)),
+  ).toMatchObject({ status: "checkout" });
 });

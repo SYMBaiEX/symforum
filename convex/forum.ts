@@ -1,3 +1,4 @@
+import { queueThreadTokenCheck } from "./forumPostTokens";
 
 import { FORUM_SITE_URL } from "../lib/site-urls";
 import {
@@ -4861,6 +4862,7 @@ const createThreadOperation = defineForumMutation({
     await countForumExperience(ctx, user, "thread_published");
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
+    await queueThreadTokenCheck(ctx, threadId);
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -5344,6 +5346,7 @@ const createReplyOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -5699,6 +5702,7 @@ const recordThreadViewOperation = defineForumMutation({
       // compact counters in coarse batches so view sorting remains eventually
       // fresh without invalidating search readers for every page impression.
       await syncForumThreadSearchProjection(ctx, thread._id);
+      await queueThreadTokenCheck(ctx, thread._id);
     }
     return { recorded: true, viewCount: nextViewCount };
   },
@@ -6273,6 +6277,7 @@ const updatePollContentOperation = defineForumMutation({
     });
     await upsertForumThreadEditorialDigest(ctx, { ...thread, updatedAt: now });
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
 
     const updatedPoll = await ctx.db.get("forumPolls", poll._id);
     if (updatedPoll === null) {
@@ -6664,6 +6669,7 @@ const updateThreadContentOperation = defineForumMutation({
     await invalidateResearchQualityForThread(ctx, thread._id);
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     if (
       forumAgentMemorySourceChanged(thread, {
         title,
@@ -6908,6 +6914,7 @@ const deleteThreadOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.runMutation(
       internal.evidenceFirstParty.enqueueForumResearchThread,
       { threadId: thread._id, reason: "visibility_changed" },
@@ -11076,6 +11083,7 @@ export const retractUnsafeForumAgentThread = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.runMutation(
       internal.evidenceFirstParty.enqueueForumResearchThread,
       { threadId: thread._id, reason: "visibility_changed" },
@@ -11682,6 +11690,7 @@ export const publishSukiForumReply = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -12613,6 +12622,7 @@ export const publishSukiForumThread = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
+    await queueThreadTokenCheck(ctx, threadId);
     const assessmentId = await recordAutomatedResearchPublication(
       ctx,
       qualityCandidate,
@@ -12931,6 +12941,7 @@ export const publishForumAgentFollowUp = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -13393,6 +13404,7 @@ export const publishTokenForumContribution = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -13529,6 +13541,7 @@ export const cleanupLegacyAgentPublicationLabels = internalMutation({
         });
         await syncForumThreadEditorialDigest(ctx, thread._id);
         await syncForumThreadSearchProjection(ctx, thread._id);
+        await queueThreadTokenCheck(ctx, thread._id);
         await ctx.runMutation(
           internal.evidenceFirstParty.enqueueForumResearchThread,
           { threadId: thread._id, reason: "content_changed" },
@@ -13552,6 +13565,7 @@ export const cleanupLegacyAgentPublicationLabels = internalMutation({
         await syncForumPostSearchProjection(ctx, post._id);
         await syncForumThreadEditorialDigest(ctx, post.threadId);
         await syncForumThreadSearchProjection(ctx, post.threadId);
+        await queueThreadTokenCheck(ctx, post.threadId);
         changed += 1;
       }
     }
@@ -14463,6 +14477,7 @@ const moveForumThreadOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     if (visible) {
       await enqueueForumAgentMemoryIndex(ctx.scheduler, thread._id);
     }
@@ -14703,7 +14718,9 @@ const moveForumPostsOperation = defineForumMutation({
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, targetThread._id);
     await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await queueThreadTokenCheck(ctx, sourceThread._id);
     await syncForumThreadSearchProjection(ctx, targetThread._id);
+    await queueThreadTokenCheck(ctx, targetThread._id);
 
     if (sourceCategory._id !== targetCategory._id) {
       await ctx.db.patch("forumCategories", sourceCategory._id, {
@@ -14920,6 +14937,7 @@ const splitForumPostsOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, newThreadId);
     await syncForumThreadSearchProjection(ctx, newThreadId);
+    await queueThreadTokenCheck(ctx, newThreadId);
 
     await ctx.db.patch("forumPosts", openerPost._id, {
       status: "deleted",
@@ -14974,7 +14992,9 @@ const splitForumPostsOperation = defineForumMutation({
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, newThreadId);
     await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await queueThreadTokenCheck(ctx, sourceThread._id);
     await syncForumThreadSearchProjection(ctx, newThreadId);
+    await queueThreadTokenCheck(ctx, newThreadId);
     await enqueueForumAgentMemoryIndex(ctx.scheduler, newThreadId);
 
     if (sourceCategory._id === targetCategory._id) {
@@ -15217,7 +15237,9 @@ const mergeForumThreadOperation = defineForumMutation({
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, targetThread._id);
     await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await queueThreadTokenCheck(ctx, sourceThread._id);
     await syncForumThreadSearchProjection(ctx, targetThread._id);
+    await queueThreadTokenCheck(ctx, targetThread._id);
     await ctx.runMutation(
       internal.evidenceFirstParty.enqueueForumResearchThread,
       { threadId: sourceThread._id, reason: "visibility_changed" },
@@ -15404,6 +15426,7 @@ const updateForumThreadModerationOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
     if (nextStatus !== thread.status) {
       await ctx.runMutation(
         internal.evidenceFirstParty.enqueueForumResearchThread,
@@ -18549,6 +18572,7 @@ async function syncThreadsForPrefixUpdate(
       updatedAt,
     });
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await queueThreadTokenCheck(ctx, thread._id);
   }
 
   return {

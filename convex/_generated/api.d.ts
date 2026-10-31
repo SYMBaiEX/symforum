@@ -124,6 +124,7 @@ import type * as forumPluginSchema from "../forumPluginSchema.js";
 import type * as forumPluginToken from "../forumPluginToken.js";
 import type * as forumPluginUiOperations from "../forumPluginUiOperations.js";
 import type * as forumPluginValidation from "../forumPluginValidation.js";
+import type * as forumPostTokens from "../forumPostTokens.js";
 import type * as forumPresenceComponent from "../forumPresenceComponent.js";
 import type * as forumPrivateConversations from "../forumPrivateConversations.js";
 import type * as forumPromotions from "../forumPromotions.js";
@@ -352,6 +353,7 @@ declare const fullApi: ApiFromModules<{
   forumPluginToken: typeof forumPluginToken;
   forumPluginUiOperations: typeof forumPluginUiOperations;
   forumPluginValidation: typeof forumPluginValidation;
+  forumPostTokens: typeof forumPostTokens;
   forumPresenceComponent: typeof forumPresenceComponent;
   forumPrivateConversations: typeof forumPrivateConversations;
   forumPromotions: typeof forumPromotions;
