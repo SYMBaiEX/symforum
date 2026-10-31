@@ -1516,14 +1516,14 @@ for (const width of [390, 1440])
         .locator("dt")
         .filter({ hasText: /^Market cap$/ })
         .locator("..")
-        .locator("dd"),
+        .locator("dd[data-unavailable]"),
     ).toHaveText("Unavailable");
     await expect(
       selectedToken
         .locator("dt")
         .filter({ hasText: /^FDV$/ })
         .locator("..")
-        .locator("dd"),
+        .locator("dd[data-unavailable]"),
     ).toHaveText("$1M");
     for (const label of [
       "Price",
@@ -2693,7 +2693,7 @@ test("a mismatched chart response cannot replace the selected mint's recorded ma
       .locator("dt")
       .filter({ hasText: /^Market cap$/ })
       .locator("..")
-      .locator("dd"),
+      .locator("dd[data-unavailable]"),
   ).toHaveText("$60K");
   expect(chartMints).toHaveLength(1);
   expect(chartMints[0]).not.toBe(NOVA_MINT);
