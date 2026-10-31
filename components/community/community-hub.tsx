@@ -2023,6 +2023,7 @@ function ThreadTipForm({
   recipientId: Id<"users">;
   onPayment: (payment: Payment) => void;
 }) {
+  const preparing = useRef(false);
   const identity = useCommerceIdentity(client, "solana:signTransaction"),
     prepare = useMutation(api.forumCommunity.preparePayment),
     [amount, setAmount] = useState("0.01"),
@@ -2038,7 +2039,8 @@ function ThreadTipForm({
         onSubmit={(event) => {
           event.preventDefault();
           const wallet = identity.connected?.account.address;
-          if (!wallet) return;
+          if (!wallet || !identity.linked || busy || preparing.current) return;
+          preparing.current = true;
           setBusy(true);
           setMessage("");
           try {
@@ -2046,11 +2048,15 @@ function ThreadTipForm({
             void prepare({ wallet, threadId, recipientId, amountLamports })
               .then(onPayment)
               .catch((error) => setMessage(safeMessage(error)))
-              .finally(() => setBusy(false));
+              .finally(() => {
+                preparing.current = false;
+                setBusy(false);
+              });
           } catch (error) {
             setMessage(
               error instanceof Error ? error.message : "Check the amount.",
             );
+            preparing.current = false;
             setBusy(false);
           }
         }}
