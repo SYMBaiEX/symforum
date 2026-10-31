@@ -152,3 +152,103 @@ operations, job/hold records and infrastructure binding metadata out of it.
   submission could reach the mocked preparation action. A narrowly scoped local
   admission guard is being tested; existing backend ownership checks, actual
   author binding, voluntary archive tips and uncertain payment states are unchanged.
+
+## Batch 3 released — 09:27 UTC
+
+- PR #258 merged at `0614df8698ab874def5371570230cf78d1b134cc`, with an exact
+  qualified-to-merged tree match. All five original website domains were verified
+  on that release, followed by signed-out project-directory acceptance at desktop
+  and phone widths. Search clearing retained focus; no overflow or page errors.
+- The public directory currently contains zero projects. Coverage copy, loading
+  completion and search clearing were checked live; populated matching remains
+  isolated-fixture tested. No sample project or affiliation was created.
+- The bounded deployment-error sample was empty; the isolated browser closed.
+  Twenty-one inventory items are now source-deployed, not all utility acceptance.
+
+## Batch 4 integration — not qualified for release
+
+- Primary branch is now `sym/overnight-web3-wave-four`. Source candidate
+  `c60105f4` integrates profile input validation, wallet balance explanations,
+  swap amount/fee/slippage guidance, and the narrowly reviewed author-tip
+  admission guard plus pre-intent rejection regression. The guard's corrected
+  request is deliberate and local to a fake rejected preparation, never a replay
+  of an uncertain operation. Existing payloads and protected paths are unchanged.
+- Parent unit/backend suite passes 4,352 tests. Both type checks, all five builds,
+  generated parity, unsuppressed audits and secret-scanner controls pass; lint
+  retains three existing warnings and zero errors. These are intermediate checks,
+  not qualification of a subsequent corrected runtime tree.
+- Full browser run: 363 passed, two failed. The existing strict laptop tests
+  exposed new help copy wrapping inside a 56px terminal grid column and breaking
+  the adjacent compatibility disclosure layout. Independent composition review
+  found the same issue. No assertions or scroll budgets have been relaxed.
+- Correction is active in `/private/tmp/symforum-overnight-terminal-guidance-layout`,
+  branch `sym/overnight-terminal-guidance-layout`, based on `c60105f4`. Ownership
+  is terminal CSS, presentation-only swap markup if needed, and composition
+  regressions. Integrate its reviewed fix, regenerate parity and rerun the full
+  applicable checks/builds before opening the next PR. No batch 4 PR is open.
+- Known-owned local changes in the primary worktree are deployment-state updates
+  and generated UI from the intermediate candidate. Preserve them; do not discard
+  them or report the candidate as deployed. Last released main remains PR #258.
+
+## Further isolated candidates — 09:31 UTC
+
+- TRADE-001/002/005: `fd365f3d` in
+  `/private/tmp/symforum-overnight-market-controls`, branch
+  `sym/overnight-market-controls`. Exact validated-mint selection, search-only
+  clearing and independent exact-mint copy. Four owned files, 14 focused browser
+  and 34 relevant unit checks pass; independent review is active. Not integrated.
+- COMMUNITY-055: `ebb8d950` in
+  `/private/tmp/symforum-overnight-research-readiness`, branch
+  `sym/overnight-research-readiness`. Public existing x402 readiness before wallet
+  controls; unknown states stay closed, no invented expiry or credit counts.
+  Nine isolated browser and six relevant unit checks pass; independent review is
+  active. Existing prepared-payment gates are unchanged. Not integrated.
+- FORUM-013 is active in `/private/tmp/symforum-overnight-draft-schema`, branch
+  `sym/overnight-draft-schema`. It must retain unsupported/malformed draft bytes
+  across hydration, autosave and successful-post cleanup until explicit current-
+  owner/key/raw-value-checked replacement. No new persistence, token polling,
+  transport, upload path or retention policy is authorized. Await source checks.
+- These candidates remain separate from batch 4. Do not duplicate implementation
+  or mix unqualified source into the current release candidate. Future production
+  backend changes still require fresh exact-target/action approval.
+
+## Additional review handoff — 09:33 UTC
+
+- COMMUNITY-055 readiness candidate `ebb8d950` has a clean independent source
+  review. Its public config does not supply expiry or credit counts, so neither
+  is claimed. Existing prepared/reserved-payment and receipt gates are unchanged.
+  Parent integration and final combined checks remain pending.
+- Market-controls review found a case-sensitive identity edge before integration:
+  the old lowercased sample search can match a different valid-case mint and hide
+  the new explicit exact-mint action. The assigned worker is correcting only
+  valid-address search semantics and adding typed-mint versus sampled-alias
+  regression coverage in its existing worktree. Do not integrate `fd365f3d` alone
+  or count it as qualified. Await its follow-up commit and independent re-review.
+- Neither this issue nor the terminal guidance layout regression was deployed.
+  Preserve both failed cases as qualification evidence and keep all original
+  checks, financial guards, budgets, schedules, caps and holds intact.
+
+## Batch 4 corrected qualification — 09:45 UTC
+
+- Integrated correction `31a6837a` as `45445766`. Long amount/slippage/fee help
+  now uses the existing disclosure while remaining associated and accessible
+  when collapsed. Validation spans the complete amount card. Critical actual
+  fees, minimum received, network/rent caveats, risks, CTA and recovery remain
+  visible and unchanged. Independent corrective review was clean.
+- Both original strict laptop viewport tests now pass unchanged. Final parent
+  full rerun passes 4,352 unit/backend tests and 369 isolated browser cases, both
+  type checks, all five builds, native parity, unsuppressed dependency audits and
+  secret-scanner controls. Lint retains three existing warnings, zero errors.
+- The two earlier failures remain in the qualification history; no scroll budget,
+  assertion or safety gate was relaxed. This corrected candidate is tested, not
+  yet merged or deployed. Batch 4 has eight qualified inventory items.
+- The next market candidate requires both `fd365f3d` and `ebfdce21`; its exact-mint
+  case correction has now passed clean independent re-review. Seventeen focused
+  browser checks and 34 relevant units pass. It remains outside this release.
+- The next draft candidate requires `8f890b84` and `5c673961`. Independent review
+  reproduced a newer unsupported draft being overwritten/deleted after ordinary
+  hydration. The correction rechecks current stored bytes before each ordinary
+  write/delete and success cleanup; six added red-to-green cases bring focused
+  coverage to 21 browser cases. A preexisting unit stub gained only getItem
+  returning null; its assertions are unchanged. Independent re-review is pending.
+  Attachment code and existing storage keys/polling/retention are unchanged.

@@ -8,8 +8,13 @@
     "evidence": "components/trading/market-explorer.tsx:310",
     "acceptance": "A valid pasted mint can explicitly select that exact token through existing onSelect; invalid addresses stay local; no symbol-derived identity, discovery guarantee, extra source path, or automatic trade.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "tests/e2e/market-controls.spec.ts",
+      "tests/e2e/fixtures/market-controls.tsx",
+      "tests/e2e/fixtures/market-controls-state.ts"
+    ]
   },
   {
     "id": "TRADE-002",
@@ -20,8 +25,13 @@
     "evidence": "components/trading/market-explorer.tsx:198",
     "acceptance": "A named clear-search button appears for nonempty search, restores input focus, and leaves market-cap, platform and sort selections unchanged; clearing makes no refresh action.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "tests/e2e/market-controls.spec.ts",
+      "tests/e2e/fixtures/market-controls.tsx",
+      "tests/e2e/fixtures/market-controls-state.ts"
+    ]
   },
   {
     "id": "TRADE-003",
@@ -57,8 +67,13 @@
     "evidence": "components/trading/market-explorer.tsx:454",
     "acceptance": "A separately named clipboard action copies only that row's exact full mint, reports failure accessibly, and neither changes selection nor initializes any provider or wallet request.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/market-explorer.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/market-explorer.tsx",
+      "tests/e2e/market-controls.spec.ts",
+      "tests/e2e/fixtures/market-controls.tsx",
+      "tests/e2e/fixtures/market-controls-state.ts"
+    ]
   },
   {
     "id": "TRADE-006",
@@ -522,7 +537,7 @@
     "evidence": "components/trading/wallet-panel.tsx:140",
     "acceptance": "An accessible explanation distinguishes displayed balance, verified spendable estimate and route-specific fees/rent using only returned fields; it does not invent reserves, fill an amount or relax preparation checks.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/wallet-readings-model.ts",
@@ -541,7 +556,7 @@
     "evidence": "components/trading/wallet-panel.tsx:152",
     "acceptance": "Fixtures distinguish actual raw zero, absent SOL, absent selected token, invalid raw amounts and unsupported decimals; none become fabricated zero or a spendable-Max assertion.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/wallet-readings-model.ts",
@@ -560,14 +575,16 @@
     "evidence": "components/swap/token-swap.tsx:299",
     "acceptance": "Local invalid/over-precision amounts receive associated error/help text and aria-invalid without quoting, silently rounding or changing normalization rules; existing guarded CTA and no-sign behavior remain.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
       "components/swap/swap-guidance.test.ts",
       "tests/e2e/swap-guidance.spec.ts",
       "tests/e2e/fixtures/swap-guidance.tsx",
-      "tests/e2e/fixtures/swap-guidance-boundary.tsx"
+      "tests/e2e/fixtures/swap-guidance-boundary.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/terminal-guidance.spec.ts"
     ]
   },
   {
@@ -591,14 +608,16 @@
     "evidence": "components/swap/token-swap.tsx:803",
     "acceptance": "A compact explanation uses existing feeMint/percentage and prepared network-fee fields only; absent costs remain unknown, Jupiter share remains included as contracted, and no fee formula or rate changes.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
       "components/swap/swap-guidance.test.ts",
       "tests/e2e/swap-guidance.spec.ts",
       "tests/e2e/fixtures/swap-guidance.tsx",
-      "tests/e2e/fixtures/swap-guidance-boundary.tsx"
+      "tests/e2e/fixtures/swap-guidance-boundary.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/terminal-guidance.spec.ts"
     ]
   },
   {
@@ -622,14 +641,16 @@
     "evidence": "components/swap/token-swap.tsx:750",
     "acceptance": "Accessible help explains percentage and existing minimum-received protection; options/default remain exactly unchanged and editing slippage continues to invalidate the old quote safely.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
       "components/swap/swap-guidance.test.ts",
       "tests/e2e/swap-guidance.spec.ts",
       "tests/e2e/fixtures/swap-guidance.tsx",
-      "tests/e2e/fixtures/swap-guidance-boundary.tsx"
+      "tests/e2e/fixtures/swap-guidance-boundary.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/terminal-guidance.spec.ts"
     ]
   },
   {
@@ -899,14 +920,15 @@
     "evidence": "docs/forum-community-utilities.md:111",
     "acceptance": "Enhancement: directory explicitly says recent projects rather than complete registry; empty scoped/global copy remains distinct and no limits increase.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-project-search.spec.ts",
       "tests/e2e/fixtures/community-project-search-mocks.tsx",
       "tests/e2e/fixtures/community-project-search.tsx"
-    ]
+    ],
+    "receipt": "PR #258 merged at 0614df8698ab874def5371570230cf78d1b134cc; all five existing domains and bounded public desktop/phone acceptance verified 2026-10-31 09:27 UTC. Public directory empty; populated matching remains isolated-fixture tested."
   },
   {
     "id": "COMMUNITY-012",
@@ -917,14 +939,15 @@
     "evidence": "components/community/community-hub.tsx:274",
     "acceptance": "Enhancement: search loaded names/symbols/exact mints/roles only; show loaded-match count and clear control; zero new RPC or provider requests.",
     "dependsOn": ["COMMUNITY-011"],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
       "tests/e2e/community-project-search.spec.ts",
       "tests/e2e/fixtures/community-project-search-mocks.tsx",
       "tests/e2e/fixtures/community-project-search.tsx"
-    ]
+    ],
+    "receipt": "PR #258 merged at 0614df8698ab874def5371570230cf78d1b134cc; all five existing domains and bounded public desktop/phone acceptance verified 2026-10-31 09:27 UTC. Public directory empty; populated matching remains isolated-fixture tested."
   },
   {
     "id": "COMMUNITY-013",
@@ -1179,7 +1202,7 @@
     "evidence": "components/swap/forum-commerce.tsx:69",
     "acceptance": "Existing foundation: AuthorTip already mounts inside ForumCommerceFrame. Add regression coverage for unmapped/mapped token threads and read-only archive policy, showing only the opted-in actual author; no auto-payment or nonpublic recipient exposure.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": [
       "components/community/community-hub.tsx",
       "tests/e2e/author-tip-integration.spec.ts",
@@ -1449,8 +1472,13 @@
     "evidence": "components/trading/research-purchase.tsx:339",
     "acceptance": "Enhancement: distinct config-loading/setup-required/free-credit-exhausted states before purchase; wallet linking does not hide disabled payment readiness; no enabling or allowance changes.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/research-purchase.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/research-purchase.tsx",
+      "tests/e2e/research-readiness.spec.ts",
+      "tests/e2e/fixtures/research-readiness.tsx",
+      "tests/e2e/fixtures/research-readiness-state.ts"
+    ]
   },
   {
     "id": "COMMUNITY-056",
@@ -1560,7 +1588,7 @@
     "evidence": "components/forum/forum-control-panel.tsx:642",
     "acceptance": "Avatar and website fields use appropriate URL/input-mode semantics and field-associated invalid/help messages; empty values remain supported and server URL validation is not weakened.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/forum/forum-control-panel.tsx",
       "lib/forum-profile-inputs.ts",
@@ -1578,7 +1606,7 @@
     "evidence": "components/forum/forum-control-panel.tsx:685",
     "acceptance": "Replace placeholder-only date guidance with accessible date entry or equivalent format validation, preserve an empty birthday, reject impossible dates locally and retain backend validation.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/forum/forum-control-panel.tsx",
       "lib/forum-profile-inputs.ts",
@@ -1680,8 +1708,14 @@
     "evidence": "components/forum/forum-compose.tsx:154",
     "acceptance": "Encountering an unsupported saved draft version must not silently overwrite it with an empty/template/current-schema draft. Show recoverable local-only guidance and require explicit consent before replacement.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-compose.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-compose.tsx",
+      "tests/e2e/draft-schema.spec.ts",
+      "tests/e2e/fixtures/draft-schema.tsx",
+      "tests/e2e/fixtures/draft-schema-state.ts",
+      "components/forum/forum-compose.test.tsx"
+    ]
   },
   {
     "id": "FORUM-014",
