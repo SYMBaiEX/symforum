@@ -358,6 +358,86 @@ test("an open order token picker keeps its owner visible across focused-layout r
   expect(errors).toEqual([]);
 });
 
+test("modeled mobile visual viewport keeps the active order and dock usable without changing input state", async ({
+  page,
+}) => {
+  // This models visualViewport events, not a physical device keyboard or pinch.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors } = await harness(page, "orderinput");
+  await openPane(page, "Trade");
+  const amount = page.getByRole("textbox", { name: "You pay", exact: true });
+  await expect(amount).toBeVisible();
+  await amount.fill(".5");
+  await amount.focus();
+  const original = await amount.elementHandle();
+  const workspace = page.locator("[data-terminal-viewport]");
+  const dock = page.getByRole("navigation", {
+    name: "Terminal dock",
+    exact: true,
+  });
+  const resizeVisualViewport = async (height: number, scale = 1) =>
+    page.evaluate(
+      ({ height, scale }) => {
+        if (!window.visualViewport)
+          throw new Error("Visual viewport fixture unavailable");
+        Object.defineProperty(window.visualViewport, "height", {
+          configurable: true,
+          get: () => height,
+        });
+        Object.defineProperty(window.visualViewport, "scale", {
+          configurable: true,
+          get: () => scale,
+        });
+        window.visualViewport.dispatchEvent(new Event("resize"));
+      },
+      { height, scale },
+    );
+  await resizeVisualViewport(480);
+  await expect
+    .poll(async () => (await workspace.boundingBox())!.height)
+    .toBeLessThanOrEqual(424);
+  const dockBox = await dock.boundingBox();
+  expect(dockBox!.y + dockBox!.height).toBeLessThanOrEqual(480);
+  await amount.scrollIntoViewIfNeeded();
+  const inputBox = await amount.boundingBox();
+  const orderBox = await page
+    .getByRole("complementary", { name: "Trade selected token" })
+    .boundingBox();
+  expect(inputBox!.y).toBeGreaterThanOrEqual(orderBox!.y);
+  expect(inputBox!.y + inputBox!.height).toBeLessThanOrEqual(
+    orderBox!.y + orderBox!.height,
+  );
+  await expect(amount).toHaveValue("0.5");
+  expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(
+    page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await resizeVisualViewport(844);
+  await expect
+    .poll(async () => (await workspace.boundingBox())!.height)
+    .toBeGreaterThan(424);
+  expect(
+    (await dock.boundingBox())!.y + (await dock.boundingBox())!.height,
+  ).toBeLessThanOrEqual(844);
+  await resizeVisualViewport(480, 2);
+  await expect
+    .poll(() =>
+      workspace.evaluate((node) =>
+        (node as HTMLElement).style.getPropertyValue(
+          "--terminal-visible-height",
+        ),
+      ),
+    )
+    .toBe("");
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute(
+    "content",
+    /user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\D|$)/i,
+  );
+  await expect(amount).toHaveValue("0.5");
+  await resizeVisualViewport(844);
+  expect(errors).toEqual([]);
+});
+
 test("a protected community receipt stays bounded in the terminal and Escape restores its trigger", async ({
   page,
 }) => {
