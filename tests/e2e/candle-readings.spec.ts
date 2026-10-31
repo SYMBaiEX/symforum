@@ -167,6 +167,17 @@ for (const width of [320, 390]) {
       }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("combobox", {
+        name: "Displayed candle readings",
+        exact: true,
+      }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Next reading", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(scroll).toBeFocused();
     expect(
       await outer.evaluate((node) => getComputedStyle(node).overflowY),
