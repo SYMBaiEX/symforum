@@ -9,6 +9,7 @@ import { SYMF_TOKEN } from "@/lib/symf-token";
 import { ForumLink } from "@/components/forum/forum-link";
 import { terminalApi } from "./terminal-api";
 import { TokenPriceChart } from "./price-chart";
+import { tokenDiscussionLink } from "./token-discussion-link";
 import type { ChartMarketData } from "./price-chart-data";
 import { TokenLogo, type MarketChoice } from "./market-identity";
 import {
@@ -180,6 +181,33 @@ export function TokenDetail({
     (token.mint === SYMF_TOKEN.mint
       ? safeForumThread(SYMF_TOKEN.announcementPath)
       : null);
+  const discussionUrl = tokenDiscussionLink(discussionPath);
+  const [discussionCopy, setDiscussionCopy] = useState<
+    "copied" | "failed" | null
+  >(null);
+  const discussionCopyRevision = useRef({ value: 0 });
+  const discussionCopyId = useId();
+  // Path changes, ABA selection and unmount invalidate feedback, not OS writes.
+  useLayoutEffect(() => {
+    const revision = discussionCopyRevision.current;
+    revision.value++;
+    setDiscussionCopy(null);
+    return () => {
+      revision.value++;
+    };
+  }, [token.mint, discussionUrl]);
+  async function copyDiscussion() {
+    if (!discussionUrl) return;
+    const revision = discussionCopyRevision.current;
+    const attempt = ++revision.value;
+    setDiscussionCopy(null);
+    try {
+      await navigator.clipboard.writeText(discussionUrl);
+      if (attempt === revision.value) setDiscussionCopy("copied");
+    } catch {
+      if (attempt === revision.value) setDiscussionCopy("failed");
+    }
+  }
   return (
     <section
       className={styles.tokenSurface}
@@ -466,6 +494,26 @@ export function TokenDetail({
               </a>
             ))}
           </div>
+          {discussionUrl && (
+            <div className="mt-3 min-w-0">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => void copyDiscussion()}
+                aria-describedby={discussionCopyId}
+              >
+                Copy discussion link
+              </Button>
+              <p id={discussionCopyId} role="status" className={styles.muted}>
+                {discussionCopy === "copied"
+                  ? "Discussion link copied."
+                  : discussionCopy === "failed"
+                    ? "Copy unavailable. Open the token discussion to copy its website address."
+                    : "Copies the existing discussion’s canonical website address."}
+              </p>
+            </div>
+          )}
         </div>
       </details>
       <div className={styles.discussionBar}>
@@ -487,11 +535,14 @@ export function TokenDetail({
 }
 
 function safeForumThread(value: string) {
+  if (/[\\\u0000-\u0020]/.test(value)) return null;
   if (value.startsWith("/") && !value.startsWith("//") && !value.includes("\\"))
     return value;
   try {
     const url = new URL(value);
     return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
       ["forum.symbaiex.com", "www.symbaiex.com"].includes(url.hostname)
       ? `${url.pathname}${url.hash}`
       : null;
@@ -510,6 +561,9 @@ export function RiskPanel({
   now: number;
 }) {
   const risk = useQuery(terminalApi.getRisk, { mint });
+  const checkedDateTime = risk
+    ? marketObservation(risk.checkedAt, now).dateTime
+    : null;
   const refresh = useAction(terminalApi.refreshRisk);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -569,6 +623,48 @@ export function RiskPanel({
               </code>
               . Checked {new Date(risk.checkedAt).toLocaleString()}.
             </p>
+            <details
+              className="mt-3 min-w-0 [overflow-wrap:anywhere]"
+              aria-label="Recorded authority addresses"
+            >
+              <summary className="focus-ring min-h-11 content-center cursor-pointer">
+                Inspect recorded addresses
+              </summary>
+              <p className={`${styles.muted} mt-2`}>
+                Recorded for mint <code>{risk.mint}</code>.{" "}
+                {checkedDateTime ? (
+                  <time dateTime={checkedDateTime}>
+                    {checkedDateTime} (UTC)
+                  </time>
+                ) : (
+                  "Check time unavailable"
+                )}
+                {riskIsStale(risk.checkedAt, now)
+                  ? " · Stale recorded check."
+                  : " · Recorded check, not a current-state guarantee."}
+              </p>
+              <ul className="m-0 grid min-w-0 list-none gap-3 p-0">
+                {[
+                  ["Mint authority", risk.mintAuthority],
+                  ["Freeze authority", risk.freezeAuthority],
+                  ["Token program", risk.tokenProgram],
+                ].map(([label, value]) => (
+                  <li key={label} aria-label={`${label} recorded address`}>
+                    <strong>{label}</strong>{" "}
+                    <code>
+                      {value === null
+                        ? "No authority set at this check"
+                        : (value ?? "Unknown at check")}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+              <p className={`${styles.muted} mt-2`}>
+                These are source-returned addresses at the recorded check, not a
+                safety audit or endorsement. No new check is requested by
+                opening this disclosure.
+              </p>
+            </details>
             {risk.unsupportedExtensions.length > 0 && (
               <p className={styles.warning}>
                 Unsupported transfer-changing extensions:{" "}
