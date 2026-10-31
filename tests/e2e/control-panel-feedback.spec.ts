@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
 
-let script: string, css: string;
+let script: string, css: string, forumCss: string;
 test.beforeAll(() => {
   css =
     FORUM_SHARED_THEME_CSS +
@@ -16,6 +16,17 @@ test.beforeAll(() => {
       ],
       { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
     );
+  forumCss =
+    FORUM_SHARED_THEME_CSS +
+    readFileSync("styles/forum-shared.css", "utf8") +
+    execFileSync(
+      "bun",
+      [
+        "-e",
+        `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("apps/forum/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
+      ],
+      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+    );
   script = execFileSync(
     "bun",
     [
@@ -25,7 +36,7 @@ test.beforeAll(() => {
     { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
   );
 });
-async function harness(page: Page) {
+async function harness(page: Page, standaloneForum = false) {
   const errors: string[] = [],
     unexpected: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -34,7 +45,7 @@ async function harness(page: Page) {
     if (url.origin === "http://127.0.0.1:43239" && url.pathname === "/")
       return route.fulfill({
         contentType: "text/html",
-        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script src="/fixture.js"></script>`,
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${standaloneForum ? forumCss : css}</style><div id="root"></div><script src="/fixture.js"></script>`,
       });
     if (
       url.origin === "http://127.0.0.1:43239" &&
@@ -266,5 +277,56 @@ for (const width of [320, 390])
       expect(box!.width).toBeGreaterThanOrEqual(44);
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
+    check();
+  });
+
+for (const surface of ["platform", "standalone forum"])
+  test(`long unbroken failed username wraps without document overflow at 320px (${surface})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+    const check = await harness(page, surface === "standalone forum");
+    const attemptedUsername = "unbroken".repeat(25);
+    await username(page).fill(attemptedUsername);
+    await page.getByRole("button", { name: "Add buddy", exact: true }).click();
+    expect(await calls(page)).toEqual([
+      {
+        owner: "member-a",
+        payload: { username: attemptedUsername, kind: "buddy", enabled: true },
+      },
+    ]);
+    await page.evaluate(() => window.controlPanelFeedback.settle(0, true));
+    const message = `Could not add ${attemptedUsername}. Fixture member-list failure`;
+    await expect(page.getByRole("alert")).toHaveText(message);
+    await expect(username(page)).toHaveValue(attemptedUsername);
+    await expect(username(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(username(page)).toHaveAccessibleDescription(message);
+    const dimensions = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+    for (const element of [
+      page.locator("#ucp-lists"),
+      page.getByRole("alert"),
+    ]) {
+      const bounds = await element.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+        dimensions.viewport,
+      );
+    }
+    const errorDimensions = await page.getByRole("alert").evaluate((node) => ({
+      width: node.clientWidth,
+      scrollWidth: node.scrollWidth,
+      height: node.clientHeight,
+      scrollHeight: node.scrollHeight,
+    }));
+    expect(errorDimensions.scrollWidth).toBeLessThanOrEqual(
+      errorDimensions.width,
+    );
+    expect(errorDimensions.scrollHeight).toBeLessThanOrEqual(
+      errorDimensions.height,
+    );
     check();
   });

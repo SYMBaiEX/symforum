@@ -1158,7 +1158,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
           <p
             id={relationshipErrorId}
             role="alert"
-            className="rounded-xl bg-card p-4 text-sm text-muted-foreground"
+            className="min-w-0 rounded-xl bg-card p-4 text-sm text-muted-foreground [overflow-wrap:anywhere]"
           >
             {error}
           </p>
