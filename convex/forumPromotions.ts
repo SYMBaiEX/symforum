@@ -18,6 +18,8 @@ import {
 } from "./forumCommerceAccess";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceMint, commerceRpc } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
+import { ProviderAdmissionError } from "../lib/provider-admission-error";
 import {
   allocatePromotionLane,
   CHECKOUT_TTL_MS,
@@ -150,7 +152,8 @@ export const quotePromotion = action({
       wallet: args.wallet,
       cost: 2,
     });
-    const mint = await commerceMint(config.rpcUrl, COMMERCE_MINT);
+    const fetcher = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
+    const mint = await commerceMint(config.rpcUrl, COMMERCE_MINT, fetcher);
     try {
       await walletTokenAccount(
         config.rpcUrl,
@@ -161,8 +164,10 @@ export const quotePromotion = action({
           tokenProgram: mint.tokenProgram,
         },
         amount,
+        fetcher,
       );
-    } catch {
+    } catch (error) {
+      if (error instanceof ProviderAdmissionError) throw error;
       throw new ConvexError(
         "Fund this wallet with the full promotion amount in one eligible SYMF token account before reserving inventory.",
       );
@@ -739,14 +744,19 @@ export const submitPromotion = action({
         wallet: intent.wallet,
         cost: 1,
       });
-      const result = await commerceRpc(config.rpcUrl, "getTransaction", [
-        args.signature,
-        {
-          encoding: "jsonParsed",
-          commitment: "finalized",
-          maxSupportedTransactionVersion: 1,
-        },
-      ]);
+      const result = await commerceRpc(
+        config.rpcUrl,
+        "getTransaction",
+        [
+          args.signature,
+          {
+            encoding: "jsonParsed",
+            commitment: "finalized",
+            maxSupportedTransactionVersion: 1,
+          },
+        ],
+        providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+      );
       if (result !== null) {
         const proof = verifyPromotionReceipt(result, intent);
         verified = proof.valid;

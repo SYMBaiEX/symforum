@@ -14,6 +14,7 @@ import {
 import { commerceConfig, record, unsignedRaw } from "../lib/forum-commerce";
 import { commerceRpc } from "./forumCommerceRpc";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { providerFetch } from "./forumProviderFetch";
 
 /** Read-only RPC; never receives a signer, transaction, private key or send method. */
 export async function readTerminalWallet(
@@ -32,11 +33,14 @@ export async function readTerminalWallet(
       ? claim.state
       : null;
   try {
+    const fetcher = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
     const balance = record(
-      await commerceRpc(config.rpcUrl, "getBalance", [
-        args.wallet,
-        { commitment: "finalized" },
-      ]),
+      await commerceRpc(
+        config.rpcUrl,
+        "getBalance",
+        [args.wallet, { commitment: "finalized" }],
+        fetcher,
+      ),
     );
     if (!Number.isSafeInteger(balance.value) || Number(balance.value) < 0)
       throw new Error("Unverified SOL balance.");
@@ -53,14 +57,19 @@ export async function readTerminalWallet(
       ),
     )) {
       const result = record(
-        await commerceRpc(config.rpcUrl, "getAccountInfo", [
-          mint,
-          {
-            encoding: "jsonParsed",
-            commitment: "finalized",
-            minContextSlot: Number(slot),
-          },
-        ]),
+        await commerceRpc(
+          config.rpcUrl,
+          "getAccountInfo",
+          [
+            mint,
+            {
+              encoding: "jsonParsed",
+              commitment: "finalized",
+              minContextSlot: Number(slot),
+            },
+          ],
+          fetcher,
+        ),
       );
       const info = parseTerminalMint(result.value, mint, Date.now());
       const accounts = await commerceRpc(
@@ -75,6 +84,7 @@ export async function readTerminalWallet(
             minContextSlot: Number(slot),
           },
         ],
+        fetcher,
       );
       const accountSlot = record(record(accounts).context).slot;
       if (
@@ -140,11 +150,14 @@ export async function readTerminalRisk(
       ? claim.risk
       : null;
   try {
+    const fetcher = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
     const result = record(
-      await commerceRpc(config.rpcUrl, "getAccountInfo", [
-        args.mint,
-        { encoding: "jsonParsed", commitment: "finalized" },
-      ]),
+      await commerceRpc(
+        config.rpcUrl,
+        "getAccountInfo",
+        [args.mint, { encoding: "jsonParsed", commitment: "finalized" }],
+        fetcher,
+      ),
     );
     const risk = parseTerminalMint(result.value, args.mint, Date.now()).risk;
     await ctx.runMutation(internal.forumTerminalData.saveRiskRead, {

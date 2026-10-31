@@ -11,6 +11,7 @@ import {
   unsignedRaw,
 } from "../lib/forum-commerce";
 import { verifyCommunityReceipt } from "../lib/forum-community";
+import { providerFetch } from "./forumProviderFetch";
 
 /** Read-only receipt verification. This action never signs, sends or rebroadcasts. */
 export const verifyPayment = action({
@@ -38,14 +39,19 @@ export const verifyPayment = action({
         wallet: claim.payment.wallet,
         cost: 1,
       });
-      const tx = await commerceRpc(config.rpcUrl, "getTransaction", [
-        args.signature,
-        {
-          commitment: "finalized",
-          encoding: "jsonParsed",
-          maxSupportedTransactionVersion: 1,
-        },
-      ]);
+      const tx = await commerceRpc(
+        config.rpcUrl,
+        "getTransaction",
+        [
+          args.signature,
+          {
+            commitment: "finalized",
+            encoding: "jsonParsed",
+            maxSupportedTransactionVersion: 1,
+          },
+        ],
+        providerFetch(ctx, { rpcUrls: [config.rpcUrl] }),
+      );
       result = verifyCommunityReceipt(tx, claim.payment, args.signature);
     } catch {
       /* Failure is an unresolved outcome, never proof that no payment landed. */
@@ -103,13 +109,19 @@ export const refreshSupporter = action({
         wallet,
         cost: 2,
       });
-      const mint = await commerceMint(config.rpcUrl, COMMERCE_MINT);
+      const fetcher = providerFetch(ctx, { rpcUrls: [config.rpcUrl] });
+      const mint = await commerceMint(config.rpcUrl, COMMERCE_MINT, fetcher);
       const response = record(
-        await commerceRpc(config.rpcUrl, "getTokenAccountsByOwner", [
-          wallet,
-          { mint: COMMERCE_MINT },
-          { encoding: "jsonParsed", commitment: "finalized" },
-        ]),
+        await commerceRpc(
+          config.rpcUrl,
+          "getTokenAccountsByOwner",
+          [
+            wallet,
+            { mint: COMMERCE_MINT },
+            { encoding: "jsonParsed", commitment: "finalized" },
+          ],
+          fetcher,
+        ),
       );
       const context = record(response.context);
       if (!Number.isSafeInteger(context.slot) || (context.slot as number) <= 0)

@@ -13,6 +13,7 @@ import { commerceActor } from "./forumCommerceAccess";
 import { commerceLimiter } from "./forumCommerce";
 import { commerceConfig } from "../lib/forum-commerce";
 import { commerceRpc } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 import { inspectProvider, ExpiryCheckError } from "./forumSwapReconciliation";
 import {
   rpcExpiryProof,
@@ -505,26 +506,34 @@ async function signatureExpiry(
   url: string,
   row: Doc<"forumSwapQuotes">,
   hash: string,
+  fetcher: typeof fetch,
 ): Promise<SignatureExpiryProof> {
-  const invalid = (await commerceRpc(url, "isBlockhashValid", [
-    hash,
-    { commitment: "finalized", minContextSlot: row.simulationSlot },
-  ])) as { context: { slot: number }; value: boolean };
+  const invalid = (await commerceRpc(
+    url,
+    "isBlockhashValid",
+    [hash, { commitment: "finalized", minContextSlot: row.simulationSlot }],
+    fetcher,
+  )) as { context: { slot: number }; value: boolean };
   if (invalid.value !== false || !Number.isSafeInteger(invalid.context?.slot))
     throw Error("Expiry not proven");
-  const height = await commerceRpc(url, "getBlockHeight", [
-    { commitment: "finalized", minContextSlot: invalid.context.slot },
-  ]);
-  const first = await commerceRpc(url, "getFirstAvailableBlock", []);
+  const height = await commerceRpc(
+    url,
+    "getBlockHeight",
+    [{ commitment: "finalized", minContextSlot: invalid.context.slot }],
+    fetcher,
+  );
+  const first = await commerceRpc(url, "getFirstAvailableBlock", [], fetcher);
   if (typeof height !== "number" || typeof first !== "number")
     throw Error("Incomplete expiry metadata");
   // Re-read absence AFTER finalized expiry. A status observed before expiry
   // cannot rule out a transaction landing between those two observations.
   const status = signatureStatus(
-    await commerceRpc(url, "getSignatureStatuses", [
-      [row.signature],
-      { searchTransactionHistory: true },
-    ]),
+    await commerceRpc(
+      url,
+      "getSignatureStatuses",
+      [[row.signature], { searchTransactionHistory: true }],
+      fetcher,
+    ),
     row.simulationSlot!,
   );
   if (!status.missing) throw Error("Signature exists; expiry is not absence");
@@ -582,27 +591,33 @@ export const check = internalAction({
       )
         throw Error("RPC unavailable");
       const providers = [url.toString(), "https://api.mainnet-beta.solana.com"];
+      const fetcher = providerFetch(ctx, { rpcUrls: providers });
       if (row.signature && row.messageHash && row.simulationSlot) {
         const results = [];
         for (const [i, provider] of providers.entries()) {
           providerName = i === 0 ? "helius" : "solana";
           diagnostic = `${providerName}_genesis`;
           if (
-            (await commerceRpc(provider, "getGenesisHash", [])) !==
+            (await commerceRpc(provider, "getGenesisHash", [], fetcher)) !==
             MAINNET_GENESIS
           )
             throw Error("Wrong chain");
           diagnostic = `${providerName}_receipt`;
           results.push(
             await inspectSwapReceipt(
-              await commerceRpc(provider, "getTransaction", [
-                row.signature,
-                {
-                  encoding: "base64",
-                  commitment: "finalized",
-                  maxSupportedTransactionVersion: 1,
-                },
-              ]),
+              await commerceRpc(
+                provider,
+                "getTransaction",
+                [
+                  row.signature,
+                  {
+                    encoding: "base64",
+                    commitment: "finalized",
+                    maxSupportedTransactionVersion: 1,
+                  },
+                ],
+                fetcher,
+              ),
               {
                 wallet: row.wallet,
                 signature: row.signature,
@@ -625,10 +640,12 @@ export const check = internalAction({
             diagnostic = `${i === 0 ? "helius" : "solana"}_signature_status`;
             statuses.push(
               signatureStatus(
-                await commerceRpc(provider, "getSignatureStatuses", [
-                  [row.signature],
-                  { searchTransactionHistory: true },
-                ]),
+                await commerceRpc(
+                  provider,
+                  "getSignatureStatuses",
+                  [[row.signature], { searchTransactionHistory: true }],
+                  fetcher,
+                ),
                 row.simulationSlot,
               ),
             );
@@ -657,9 +674,19 @@ export const check = internalAction({
             ) {
               const hash = await preparedBlockhash(row);
               diagnostic = "helius_signature_expiry";
-              const helius = await signatureExpiry(providers[0], row, hash);
+              const helius = await signatureExpiry(
+                providers[0],
+                row,
+                hash,
+                fetcher,
+              );
               diagnostic = "solana_signature_expiry";
-              const solana = await signatureExpiry(providers[1], row, hash);
+              const solana = await signatureExpiry(
+                providers[1],
+                row,
+                hash,
+                fetcher,
+              );
               evidence = { kind: "signature_expired", helius, solana };
             } else diagnostic = "expiry_budget_unavailable";
           } else
@@ -671,12 +698,12 @@ export const check = internalAction({
         requireExpiredUnsignedHold(row, Date.now());
         const hash = await preparedBlockhash(row);
         providerName = "helius";
-        const helius = await inspectProvider(providers[0], row, hash);
+        const helius = await inspectProvider(providers[0], row, hash, fetcher);
         providerName = "solana";
         evidence = {
           kind: "expired",
           helius,
-          solana: await inspectProvider(providers[1], row, hash),
+          solana: await inspectProvider(providers[1], row, hash, fetcher),
         };
       }
     } catch (error) {

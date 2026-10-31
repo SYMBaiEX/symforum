@@ -37,6 +37,7 @@ import {
 import { researchRateWithinReserve } from "../lib/forum-research-readiness";
 import { providerJson } from "../lib/swap-router";
 import { commerceRpc } from "./forumCommerceRpc";
+import { providerFetch } from "./forumProviderFetch";
 
 type Intent = Doc<"forumResearchIntents">;
 const readIntentRef = makeFunctionReference<
@@ -81,17 +82,26 @@ function rpcUrl() {
   return url;
 }
 const signatureValid = researchSignatureValid;
-async function finalized(row: Intent, signature: string) {
+async function finalized(
+  row: Intent,
+  signature: string,
+  fetcher: typeof fetch,
+) {
   if (!signatureValid(signature)) return false;
   const result = record(
-    await commerceRpc(rpcUrl(), "getTransaction", [
-      signature,
-      {
-        encoding: "base64",
-        commitment: "finalized",
-        maxSupportedTransactionVersion: 1,
-      },
-    ]),
+    await commerceRpc(
+      rpcUrl(),
+      "getTransaction",
+      [
+        signature,
+        {
+          encoding: "base64",
+          commitment: "finalized",
+          maxSupportedTransactionVersion: 1,
+        },
+      ],
+      fetcher,
+    ),
   );
   const meta = record(result.meta),
     wire = result.transaction;
@@ -145,7 +155,14 @@ export const sdkRead = action({
       args.method === "getAccountInfo"
         ? [RESEARCH_ASSET, { encoding: "base64", commitment: "confirmed" }]
         : [{ commitment: "confirmed" }];
-    return JSON.stringify(await commerceRpc(rpcUrl(), args.method, params));
+    return JSON.stringify(
+      await commerceRpc(
+        rpcUrl(),
+        args.method,
+        params,
+        providerFetch(ctx, { rpcUrls: [rpcUrl()] }),
+      ),
+    );
   },
 });
 /** Exact instruction binding + simulation precede the one explicit wallet signature. */
@@ -168,15 +185,20 @@ export const simulate = action({
       cost: 1,
     });
     const result = record(
-      await commerceRpc(rpcUrl(), "simulateTransaction", [
-        getBase64EncodedWireTransaction(checked.transaction),
-        {
-          encoding: "base64",
-          sigVerify: false,
-          replaceRecentBlockhash: false,
-          commitment: "confirmed",
-        },
-      ]),
+      await commerceRpc(
+        rpcUrl(),
+        "simulateTransaction",
+        [
+          getBase64EncodedWireTransaction(checked.transaction),
+          {
+            encoding: "base64",
+            sigVerify: false,
+            replaceRecentBlockhash: false,
+            commitment: "confirmed",
+          },
+        ],
+        providerFetch(ctx, { rpcUrls: [rpcUrl()] }),
+      ),
     );
     const value = record(result.value);
     if (
@@ -302,7 +324,11 @@ export const pay = action({
           (result.payer === undefined || result.payer === row.wallet) &&
           (result.amount === undefined ||
             result.amount === row.requirements.amount) &&
-          (await finalized(row, signature))
+          (await finalized(
+            row,
+            signature,
+            providerFetch(ctx, { rpcUrls: [rpcUrl()] }),
+          ))
         ) {
           await ctx.runMutation(finishRef, {
             intentKey: args.intentKey,
@@ -340,7 +366,13 @@ export const check = action({
       cost: 1,
     });
     try {
-      if (await finalized(row, row.signature)) {
+      if (
+        await finalized(
+          row,
+          row.signature,
+          providerFetch(ctx, { rpcUrls: [rpcUrl()] }),
+        )
+      ) {
         await ctx.runMutation(finishRef, {
           ...args,
           payloadHash: row.payloadHash,
@@ -425,10 +457,12 @@ async function verifySetup(
     tokenProgram: address(TOKEN_PROGRAM),
   });
   const result = record(
-    await commerceRpc(rpcUrl(), "getAccountInfo", [
-      recipientAta,
-      { encoding: "jsonParsed", commitment: "finalized" },
-    ]),
+    await commerceRpc(
+      rpcUrl(),
+      "getAccountInfo",
+      [recipientAta, { encoding: "jsonParsed", commitment: "finalized" }],
+      providerFetch(ctx, { rpcUrls: [rpcUrl()] }),
+    ),
   );
   const account = record(result.value),
     parsed = record(record(account.data).parsed),
