@@ -329,7 +329,7 @@
  .forum-app-shell [data-terminal-tools][data-expanded=true] { flex-basis: 0; }
  .forum-app-shell [data-terminal-resize] { display: none; }
  .forum-app-shell [data-terminal-dock-nav] { padding-bottom: env(safe-area-inset-bottom); }
- .forum-app-shell [data-terminal-dock-mode=mobile] { display: inline-flex; }
+ .forum-app-shell [data-terminal-viewport] [data-terminal-dock-mode=mobile] { display: inline-flex; }
  .forum-app-shell [data-terminal-dock-mode=desktop] { display: none; }
  .forum-app-shell [data-terminal-dock-nav] button { flex: 1 1 20%; flex-direction: column; gap: 2px; padding: 5px 4px; min-height: 52px; font-size: 11px; }
 }
