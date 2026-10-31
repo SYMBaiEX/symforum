@@ -169,15 +169,17 @@ export function MarketExplorer({
     now,
     limit: 60,
   });
+  const exactMint = isSolanaAddress(search.trim()) ? search.trim() : null;
   const markets = sortMarketRows(
-    searchMarkets(data?.markets ?? [], search),
+    exactMint
+      ? (data?.markets ?? []).filter((market) => market.mint === exactMint)
+      : searchMarkets(data?.markets ?? [], search),
     sort.key,
     sort.direction,
   );
   const filtered =
     search.trim().length > 0 || band !== "all" || platform !== "all";
   const empty = data === undefined || markets.length === 0;
-  const exactMint = isSolanaAddress(search.trim()) ? search.trim() : null;
   function clearSearch() {
     setSearch("");
     searchInput.current?.focus();

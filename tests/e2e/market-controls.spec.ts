@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
+import { address, getAddressEncoder } from "@solana/kit";
 let script: string;
 let css: string;
 const origin = "http://127.0.0.1:43225";
@@ -113,6 +114,67 @@ test("invalid base58 and valid-looking wrong-byte-length inputs never offer exac
     ).toHaveCount(0);
   }
   expect((await state(page)).selected).toEqual([]);
+});
+test("valid case-distinct mint cannot alias a sampled address or its symbol", async ({
+  page,
+}) => {
+  const caseDistinctMint = `${mint.slice(0, -1)}V`;
+  for (const value of [mint, caseDistinctMint])
+    expect(getAddressEncoder().encode(address(value))).toHaveLength(32);
+  await harness(page);
+  await page
+    .getByRole("textbox", { name: "Search sampled tokens" })
+    .fill(caseDistinctMint);
+  await expect(
+    page.getByRole("button", { name: /^View SAME, mint / }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("table", { name: "Sampled markets" }),
+  ).toBeHidden();
+  const open = page.getByRole("button", {
+    name: "View exact mint",
+    exact: true,
+  });
+  await expect(open).toBeVisible();
+  expect((await state(page)).selected).toEqual([]);
+  await open.click();
+  expect((await state(page)).selected).toEqual([
+    { mint: caseDistinctMint, symbol: "TOKEN", name: "Selected Solana token" },
+  ]);
+  expect((await state(page)).queries).toHaveLength(1);
+});
+test("an exact-case sampled mint still selects its original row", async ({
+  page,
+}) => {
+  await harness(page);
+  await page.getByRole("textbox", { name: "Search sampled tokens" }).fill(mint);
+  await expect(
+    page.getByRole("button", { name: "View exact mint", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: /^View SAME, mint / }).click();
+  expect((await state(page)).selected).toHaveLength(1);
+  expect((await state(page)).selected[0]).toMatchObject({
+    mint,
+    symbol: "SAME",
+    name: "Invented token, not live data",
+  });
+});
+test("non-address names and symbols keep existing case-insensitive matching", async ({
+  page,
+}) => {
+  await harness(page);
+  const input = page.getByRole("textbox", { name: "Search sampled tokens" });
+  for (const text of ["same", "SaMe", "INVENTED TOKEN"]) {
+    await input.fill(text);
+    await expect(
+      page.getByRole("button", { name: /^View SAME, mint / }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "View exact mint", exact: true }),
+    ).toHaveCount(0);
+  }
+  expect((await state(page)).selected).toEqual([]);
+  expect((await state(page)).queries).toHaveLength(1);
 });
 test("clear search is available with matching rows and retains filter and sort choices", async ({
   page,
