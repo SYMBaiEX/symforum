@@ -1,24 +1,75 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { SymfCandle } from "@/lib/symf-market-data";
 import {
   candleReadingTime,
   candleReadings,
   sourceVolumeLabel,
 } from "./candle-readings-model";
+import {
+  candleCheckTime,
+  candleReadingText,
+  type CandleEvidence,
+} from "./candle-reading-text";
 
 export function CandleReadings({
   candles,
   compact,
   formatPrice,
+  evidence,
 }: {
   candles: readonly SymfCandle[];
   compact?: boolean;
   formatPrice: (value: number) => string;
+  evidence?: CandleEvidence;
 }) {
   const id = useId();
   const readings = candleReadings(candles);
+  const text = evidence
+    ? candleReadingText(readings.rows, evidence, formatPrice)
+    : null;
+  const checked = evidence ? candleCheckTime(evidence.checkedAt) : null;
+  const attempt = useRef(0);
+  const [feedback, setFeedback] = useState<{
+    snapshot: string;
+    pending: boolean;
+    message: string;
+  } | null>(null);
+  const currentFeedback = feedback?.snapshot === text ? feedback : null;
+  useEffect(
+    () => () => {
+      attempt.current++;
+    },
+    [],
+  );
+  async function copyReadings() {
+    if (!text || currentFeedback?.pending) return;
+    const run = ++attempt.current;
+    const snapshot = text;
+    setFeedback({
+      snapshot,
+      pending: true,
+      message: "Copying displayed readings…",
+    });
+    try {
+      await navigator.clipboard.writeText(snapshot);
+      if (run === attempt.current)
+        setFeedback({
+          snapshot,
+          pending: false,
+          message: "Displayed readings copied.",
+        });
+    } catch {
+      if (run === attempt.current)
+        setFeedback({
+          snapshot,
+          pending: false,
+          message:
+            "Copy unavailable. Select the readings below and copy them manually.",
+        });
+    }
+  }
   return (
     <div
       className={
@@ -31,6 +82,33 @@ export function CandleReadings({
       aria-label="Recent candle data"
       aria-describedby={`${id}-count ${id}-context`}
     >
+      {evidence && checked && (
+        <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <p className="min-w-0 break-words">
+            Source <strong>{evidence.sourceLabel}</strong>
+            <br />
+            Checked <time dateTime={checked.iso}>{checked.label}</time>
+          </p>
+          <button
+            type="button"
+            className="focus-ring min-h-11 min-w-11 rounded-md border border-border px-3 py-2"
+            disabled={Boolean(currentFeedback?.pending)}
+            aria-describedby={`${id}-count ${id}-context`}
+            onClick={() => void copyReadings()}
+          >
+            Copy displayed readings
+          </button>
+          <p
+            role="status"
+            aria-live="polite"
+            className={
+              currentFeedback?.message ? "w-full break-words" : "sr-only"
+            }
+          >
+            {currentFeedback?.message ?? ""}
+          </p>
+        </div>
+      )}
       <p id={`${id}-count`} className="mb-1">
         Loaded {readings.count} {readings.count === 1 ? "bar" : "bars"}
         {readings.count > readings.rows.length

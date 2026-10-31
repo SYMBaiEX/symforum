@@ -160,6 +160,13 @@ for (const width of [320, 390]) {
     await page.keyboard.press("Tab");
     await expect(outer).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", {
+        name: "Copy displayed readings",
+        exact: true,
+      }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(scroll).toBeFocused();
     expect(
       await outer.evaluate((node) => getComputedStyle(node).overflowY),
