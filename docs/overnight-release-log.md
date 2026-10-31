@@ -1001,3 +1001,106 @@ operations, job/hold records and infrastructure binding metadata out of it.
   runs every full gate on this unchanged candidate. Sixty-nine remain deployed;
   the original stop time and all budget/schedule/cap/privacy/financial/hold gates
   are unchanged. No production/provider/wallet/payment action was exercised.
+
+## Batch 11 qualified and merged — 13:31 UTC
+
+- Unchanged candidate `43aa2544` passed all 4,372 unit/backend and 686 browser
+  tests, both type checks, five app builds, native parity, three unsuppressed
+  audits and security controls. Lint retains three old warnings, zero errors.
+  Four-commit 3.21 MB redacted scan found no leaks. Every old test file is intact.
+- Independent combined review is clean. PR #266 normally rebase-merged at
+  13:30:55 UTC to `15fab1630da34b6ac2e8f2a5241b4094d1498136`; complete tested and
+  merged trees equal `f8a8198804c9ee690fdc8dd3f7ecf64d1ba632c9`. All four new main
+  authors are exact. Actions remain disabled and protections unchanged.
+- Seven tasks are merged, not yet deployed. Automatic exact-commit/all-domain
+  rollout and bounded public Following guidance acceptance remain pending.
+  New protected tip/sharing/authority behavior remains fixture-tested, not live
+  signing, payment, OS clipboard, physical-device or AT certification.
+
+## Batch 11 released — 13:36 UTC
+
+- PR #266 exact automatic production READY observed 13:32:40 UTC; all five
+  original aliases matched 13:32:51. Complete tree and all authors were verified.
+- One signed-out public Feed session showed twelve main articles on desktop
+  and phone, no overflow, disabled guest Following and the new explanation.
+  The keyboard-reachable sign-in link measured 44px, used the canonical forum
+  origin and preserved safe intended Following context. It was not clicked.
+- Ordinary mobile Boards-to-Feed navigation restored twelve articles at both
+  sizes. Viewport/header/nav geometry was normal; own browser closed after the
+  13:34:02 UTC check. Bounded exact-release logs through 13:34:19 returned zero
+  of thirty errors, uncapped. No protected/provider/financial demo was made.
+- Seventy-six items are source-deployed. No new backend/worker/configuration,
+  budget, schedule, cap, review/payment gate or uncertain-hold operation occurred.
+
+## Batch 12 dispatch — 13:39 UTC
+
+- Clean isolated worktrees start at released `15fab163`, with root dependencies
+  and each worktree's own normal forum-ui link. Paths are assigned before work;
+  source owners do not overlap. Preserve the two primary planning files.
+- TRADE-021/022: `/private/tmp/symforum-overnight-chart-workspace-controls`,
+  branch `sym/overnight-chart-workspace-controls`. Own price-chart, terminal
+  module CSS and new chart-workspace-controls browser spec/fixture/state.
+  Explicit expand/restore and reset-view must reuse the same chart/data/order
+  state, retain focus/attribution and perform no extra fetch. Default density,
+  strict laptop CTA budgets and mobile controls stay intact. Do not animate
+  prices or block task completion; prefer immediate chart geometry over layout
+  tweens, and reduced-motion-safe control feedback. No portal remount or hidden
+  protected controls. Existing fetching/parser/cache/backoff contracts unchanged.
+- TRADE-007/040: `/private/tmp/symforum-overnight-terminal-data-regressions`,
+  branch `sym/overnight-terminal-data-regressions`. Own wallet-panel and market
+  model only for any proven narrowly scoped UI defect; new comparator unit file
+  and wallet-read-isolation browser spec/fixture/state. Deterministic fixtures
+  cover every actual sort key/direction/ties/nonfinite/tiny/large values without
+  mutation. Deferred reads, manual failures and wallet/mint/unmount switches must
+  not bind old balances/errors to a new identity. Report red evidence first;
+  no speculative rewrite, new reads/RPC/SDK, changed TTL/cap or receipt controller.
+- COMMUNITY-024/031: `/private/tmp/symforum-overnight-work-brief-guidance`,
+  branch `sym/overnight-work-brief-guidance`. Own community hub/module CSS,
+  optional pure work-brief model/tests and new work-brief-guidance spec/fixtures.
+  Explicit editable build/research brief templates use actual bounty/research
+  kinds, do not silently overwrite authored text or alter pledge/mint/payment
+  fields, and preserve original form reset/publish behavior. Delivery URL help
+  reuses existing validation, displays destination host/privacy context without
+  fetching or claiming safety. Existing submission/conflict/auth/financial
+  handlers and unfunded/no-escrow warnings remain unchanged. No model calls.
+- Workers use both actual app styles, direct component bounds, keyboard,
+  reduced-motion and failure/race regressions with external/provider/wallet/
+  financial work denied. Every old assertion remains; new tests use inert
+  callbacks only. Frozen focused checks are not parent release qualification.
+- Counts: seventy-six deployed, six in progress, 140 queued, two blocked and
+  sixteen needing confirmation. Original 15:45 UTC stop is unchanged; no late
+  substantial batch or backend deployment is authorized by this dispatch.
+
+## Batch 12 integrated candidate — 13:56 UTC
+
+- Integrated three frozen candidates into a fresh latest-main branch. Six
+  items are implemented, not yet parent-qualified, merged or deployed.
+- TRADE-007/040 is tests-only: fourteen deterministic comparator-law cases and
+  eighteen browser cases execute the real keyed account parent. No production
+  defect was reproduced and no wallet/model/receipt source was changed. Worker
+  checks passed 67 browser and 29 unit cases; independent reruns passed all
+  fourteen new units and eighteen new browsers. Loading represents actual
+  unauthenticated loading, not an invented additional auth guard.
+- COMMUNITY-024/031 adds explicit non-destructive native brief append and local
+  destination-host help using existing URL validation. Original Bounty submit,
+  Submission conflict/save synchronization and PaymentDialog remain unchanged.
+  Worker checks passed 153 browser and 60 unit cases; independent reruns passed
+  nineteen new browsers and eighteen new units. Initial four mobile target
+  checks sampled Radix entry scaling before its final 44px geometry; web-first
+  polling retains the exact target requirement without changing animation.
+- TRADE-021/022 adds one compact Chart tools menu, same-instance expansion and
+  fit-to-loaded-data reset. Transport, cache/backoff, provider attribution and
+  protected order/receipt state stay unchanged. Worker checks passed 44 browser
+  and sixteen unit cases, including both original strict laptop CTA budgets.
+  Retained harness corrections cover renderer-frame timing, the app's actual
+  reduced-motion duration, an allowlisted local logo and the real inline-size
+  container. Pointer center-hit checks now accompany keyboard/bounds coverage.
+  A review hypothesis about removed API reuse was disproved by the existing
+  keyed canvas and a delayed real-renderer import/theme-ABA regression; no
+  speculative lifecycle patch was added.
+- Root inspected all combined source and fixture seams. The renderer is real;
+  provider/account/financial responses are inert and all external traffic is
+  denied. Focused worker checks are not the final parent release gate. No live
+  provider, wallet, payment, public publishing or assistive-technology claim.
+- Counts: seventy-six deployed, six implemented, 140 queued, two blocked and
+  sixteen needing confirmation. Full unchanged-candidate qualification follows.
