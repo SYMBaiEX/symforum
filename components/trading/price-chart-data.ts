@@ -10,6 +10,7 @@ import {
 
 export type ChartCacheState = MarketCacheView["state"];
 export type CheckedChartData = SymfChartData & {
+  marketCheckedAt?: number;
   stale?: boolean;
   priceUsd?: ChartMarketData["priceUsd"];
   stats?: ChartMarketData["stats"];
@@ -164,6 +165,7 @@ const chartShape = z.object({
   pool: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/),
   interval: z.enum(["1m", "5m", "15m", "1h", "4h"]),
   checkedAt: positive,
+  marketCheckedAt: positive.int().optional(),
   stale: z.boolean().optional(),
   candleSource: z.enum(["geckoterminal", "solana-tracker"]).optional(),
   priceUsd: z.number().finite().nonnegative().nullable().optional(),
@@ -202,7 +204,10 @@ export function readChartData(
   if (
     parsed.mint !== mint ||
     parsed.interval !== interval ||
-    parsed.checkedAt > now + 60_000
+    parsed.checkedAt > now + 60_000 ||
+    (parsed.marketCheckedAt !== undefined &&
+      (parsed.marketCheckedAt > parsed.checkedAt ||
+        parsed.checkedAt - parsed.marketCheckedAt >= CHART_CACHE_FRESH_MS))
   )
     throw new Error("chart_identity");
   let previous = 0;

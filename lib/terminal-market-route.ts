@@ -84,6 +84,12 @@ export async function terminalMarketResponse(
         !Number.isSafeInteger(data.checkedAt) ||
         data.checkedAt <= 0 ||
         data.checkedAt > Date.now() + 60_000 ||
+        (data.marketCheckedAt !== undefined &&
+          (!Number.isSafeInteger(data.marketCheckedAt) ||
+            Number(data.marketCheckedAt) <= 0 ||
+            Number(data.marketCheckedAt) > data.checkedAt ||
+            data.checkedAt - Number(data.marketCheckedAt) >=
+              CHART_CACHE_FRESH_MS)) ||
         Date.now() - data.checkedAt >= CHART_CACHE_RETENTION_MS
       )
         throw Error("wrong_market_response");

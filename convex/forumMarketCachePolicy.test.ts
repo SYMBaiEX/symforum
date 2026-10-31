@@ -461,6 +461,16 @@ test("pinned SYMF charts never fall back to a different high-liquidity pool or c
   expect(JSON.parse(generic.payload!).pool).toBe(otherPool);
   includePinned = true;
   vi.setSystemTime(NOW + 60_001);
+  const stillMissing = await t.action(api.forumMarketData.read, {
+    ...request,
+    pinnedSymf: true,
+  });
+  expect(stillMissing.payload).toBeNull();
+  expect(stillMissing.cache.failureCode).toBe("pool-unavailable");
+  // The complete source observation is still fresh; a changed provider mock
+  // cannot silently replace its missing official pool before normal expiry.
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  vi.setSystemTime(NOW + CHART_CACHE_FRESH_MS + 1);
   const pinned = await t.action(api.forumMarketData.read, {
     ...request,
     pinnedSymf: true,
