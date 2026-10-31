@@ -7,6 +7,57 @@
   color: hsl(var(--foreground));
   background: hsl(var(--card));
 }
+.explorer [hidden] {
+  display: none;
+}
+.context {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-height: 40px;
+  padding: 2px 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 12px;
+}
+.context p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+}
+.context strong {
+  font-weight: 550;
+}
+.context p > span {
+  color: hsl(var(--muted-foreground));
+}
+.sortControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: hsl(var(--muted-foreground));
+}
+.sortControl select {
+  min-width: 0;
+  min-height: 36px;
+  max-width: 210px;
+  padding: 4px 24px 4px 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font: inherit;
+}
+.scrollHint {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 12px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
 .toolbar {
   flex: 0 0 auto;
   display: flex;
@@ -224,6 +275,13 @@
   font-family: var(--font-geist-mono), monospace;
   font-size: 11px;
 }
+.mintLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
 .number {
   font-family: var(--font-geist-mono), monospace;
   font-variant-numeric: tabular-nums;
@@ -243,7 +301,7 @@
 }
 .observation {
   min-width: 140px;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .observation > div {
@@ -283,10 +341,25 @@
   margin-inline-start: 10px;
 }
 .scroll .empty {
-  height: 104px;
+  width: 100%;
+  min-height: 104px;
   padding: 12px;
   text-align: left;
   color: hsl(var(--muted-foreground));
+}
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.emptyActions button {
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  color: hsl(var(--foreground));
+  font-size: 12px;
 }
 .empty p {
   margin: 0 0 6px;
@@ -304,7 +377,7 @@
   padding: 6px 12px;
   border-top: 1px solid hsl(var(--border));
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .explorer :is(button, input, select, a):focus-visible,
@@ -313,6 +386,25 @@
   outline-offset: -2px;
 }
 @media (max-width: 600px) {
+  .context {
+    gap: 0 8px;
+  }
+  .context p {
+    flex-direction: column;
+    gap: 0;
+    padding-block: 4px;
+  }
+  .sortControl {
+    flex: 1 1 auto;
+    justify-content: end;
+  }
+  .sortControl > span {
+    display: none;
+  }
+  .sortControl select {
+    width: min(100%, 210px);
+    min-height: 44px;
+  }
   .toolbar {
     gap: 8px;
     padding: 8px 12px;
@@ -352,6 +444,7 @@
   }
 }
 @media (max-width: 767px), (pointer: coarse) {
+  .sortControl select,
   .toolbar select,
   .toolbar .search input,
   .pinned button,

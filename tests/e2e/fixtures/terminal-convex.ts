@@ -28,7 +28,11 @@ let watches: WatchToken[] = [];
 let researchVerified = false;
 let signedOut = false;
 const queryNames: string[] = [];
-Object.assign(window, { __terminalFixtureQueries: queryNames });
+const operationCalls: string[] = [];
+Object.assign(window, {
+  __terminalFixtureQueries: queryNames,
+  __terminalFixtureCalls: operationCalls,
+});
 window.addEventListener("terminal-fixture:signout", () => {
   signedOut = true;
   revision++;
@@ -184,8 +188,11 @@ const selectedMarketRows = () =>
 export function useConvexAuth() {
   useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
-    isAuthenticated: !signedOut && !location.search.includes("guest"),
-    isLoading: false,
+    isAuthenticated:
+      !signedOut &&
+      !location.search.includes("guest") &&
+      !location.search.includes("authloading"),
+    isLoading: location.search.includes("authloading"),
   };
 }
 export function useQuery<Ref extends FunctionReference<"query">>(
@@ -204,19 +211,36 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     result = (location.search.includes("empty") ? [] : works).filter(
       (work) => !input.status || work.status === input.status,
     );
-  else if (name === "forumCommunity:listPayments") result = [protectedPayment];
+  else if (name === "forumCommunity:listPayments")
+    result = location.search.includes("receiptsloading")
+      ? undefined
+      : location.search.includes("receiptsempty")
+        ? []
+        : [protectedPayment];
   else if (name === "forumCommunity:getPayment") result = protectedPayment;
   else if (name === "forumCommunity:getMine")
-    result = {
-      userId: memberId,
-      recipient: null,
-      supporter: null,
-    } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>;
-  else if (
-    name === "forumCommunity:listSubmissions" ||
-    name === "forumCommunity:listTipRecipients"
-  )
-    result = [];
+    result =
+      location.search.includes("settingsloading") &&
+      location.search.includes("orderinput")
+        ? undefined
+        : ({
+            userId: memberId,
+            recipient: null,
+            supporter: null,
+          } satisfies FunctionReturnType<typeof api.forumCommunity.getMine>);
+  else if (name === "forumCommunity:listSubmissions") result = [];
+  else if (name === "forumCommunity:listTipRecipients")
+    result = location.search.includes("tipsloading")
+      ? undefined
+      : location.search.includes("tipsavailable")
+        ? [
+            {
+              userId: memberId,
+              username: "fixture_author",
+              wallet: "11111111111111111111111111111111",
+            },
+          ]
+        : [];
   else if (name === "forumResearch:getConfig")
     result = {
       enabled: true,
@@ -242,20 +266,22 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     ];
   else if (name === "forumTerminal:listMarket") {
     const rows = location.search.includes("empty") ? [] : selectedMarketRows();
-    result = {
-      markets: rows.filter(
-        (token) =>
-          matchesMarketCap(
-            token.marketCapUsd,
-            (input.band ?? "all") as MarketCapBand,
-          ) &&
-          (!input.platform || token.platform === input.platform),
-      ),
-      sampledAt: now,
-      stale: false,
-      coverage: "sampled",
-      band: input.band ?? "all",
-    };
+    result = location.search.includes("marketloading")
+      ? undefined
+      : {
+          markets: rows.filter(
+            (token) =>
+              matchesMarketCap(
+                token.marketCapUsd,
+                (input.band ?? "all") as MarketCapBand,
+              ) &&
+              (!input.platform || token.platform === input.platform),
+          ),
+          sampledAt: now,
+          stale: location.search.includes("oldsample"),
+          coverage: "sampled",
+          band: input.band ?? "all",
+        };
   } else if (name === "forumTerminal:getMarket")
     result =
       selectedMarketRows().find((token) => token.mint === input.mint) ?? null;
@@ -346,6 +372,7 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
   const name = getFunctionName(ref);
   return useCallback(
     async (args: FunctionArgs<Ref>) => {
+      operationCalls.push(`mutation:${name}`);
       const input = args as Record<string, unknown>;
       if (name === "forumTerminal:setWatchlist") {
         watches = watches.filter((entry) => entry.mint !== input.mint);
@@ -370,6 +397,7 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
   const name = getFunctionName(ref);
   return useCallback(
     async (_args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> => {
+      operationCalls.push(`action:${name}`);
       if (location.search.includes("orderinput")) {
         if (name === "forumTerminal:getWalletReadState")
           return null as FunctionReturnType<Ref>;

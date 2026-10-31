@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -149,6 +149,20 @@ async function expectViewportBounded(page: Page) {
   }));
   expect(dimensions.width).toBeLessThanOrEqual(viewport.width);
   expect(dimensions.height).toBeLessThanOrEqual(viewport.height);
+}
+
+async function expectInsideWidth(page: Page, locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+}
+
+async function recordedOperations(page: Page) {
+  return page.evaluate(() => [
+    ...(window as typeof window & { __terminalFixtureCalls: string[] })
+      .__terminalFixtureCalls,
+  ]);
 }
 
 for (const viewport of [
@@ -473,6 +487,99 @@ test("a protected community receipt stays bounded in the terminal and Escape res
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("tools expose named groups, visible back navigation and safe nonmodal Escape", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors } = await harness(page, "held");
+  const tools = page
+    .getByRole("navigation", { name: "Terminal dock", exact: true })
+    .getByRole("button", { name: "Tools", exact: true });
+  await tools.click();
+  await expect(page.locator("#terminal-tool-title")).toBeFocused();
+  const content = page.getByRole("region", {
+    name: "Active terminal tool",
+    exact: true,
+  });
+  await expect(content.getByRole("listitem")).toHaveCount(5);
+  for (const label of [
+    "Wallet & watches",
+    "Swap receipts",
+    "Research",
+    "Community",
+    "Treasury & burns",
+  ])
+    await expect(
+      content.getByRole("button", { name: label, exact: true }),
+    ).toBeVisible();
+  await content.getByRole("button", { name: "Research", exact: true }).click();
+  await expect(page.locator("#terminal-tool-title")).toBeFocused();
+  const back = page.getByRole("button", { name: "All tools", exact: true });
+  await expect(back).toHaveText("All tools");
+  await back.click();
+  await expect(content.getByRole("listitem")).toHaveCount(5);
+  await content.getByRole("button", { name: "Community", exact: true }).click();
+  await expect(page.locator("#terminal-tool-title")).toBeFocused();
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  const protectedReceipt = page.getByRole("button", {
+    name: "Check protected receipt",
+    exact: true,
+  });
+  const original = await protectedReceipt.elementHandle();
+  await protectedReceipt.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Review reward payment",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(protectedReceipt).toBeFocused();
+  await expect(
+    page.getByRole("region", { name: "Terminal tools", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("region", { name: "Terminal tools", exact: true }),
+  ).toBeHidden();
+  await expect(tools).toBeFocused();
+  expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(
+    page.getByRole("status", {
+      name: "Known protected operations",
+      exact: true,
+    }),
+  ).toContainText("Community");
+  expect(await recordedOperations(page)).toEqual([]);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("guest swap receipts provide their own sign-in route without confusing wallet controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const { errors } = await harness(page, "guest");
+  await openPane(page, "Receipts");
+  await expect(page.locator("#terminal-tool-title")).toHaveText(
+    "Swap receipts",
+  );
+  const signIn = page.getByRole("link", {
+    name: "Sign in to view swap receipts",
+    exact: true,
+  });
+  await expect(signIn).toBeVisible();
+  await expectInsideWidth(page, signIn);
+  const href = new URL((await signIn.getAttribute("href"))!, page.url());
+  expect(href.pathname).toBe("/signin");
+  expect(href.searchParams.get("redirectTo")).toMatch(/\/trade$/);
+  expect(await recordedOperations(page)).toEqual([]);
   await expectViewportBounded(page);
   expect(errors).toEqual([]);
 });
@@ -838,6 +945,133 @@ test("market search text clears its search icon and empty filters remain honest"
   expect(errors).toEqual([]);
 });
 
+for (const width of [320, 390])
+  test(`sample order and row freshness stay visible at ${width}px without horizontal panning`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const { errors, chartMints } = await harness(page, "guest");
+    await openPane(page, "Markets");
+    const context = page.getByRole("group", {
+      name: "Sample context",
+      exact: true,
+    });
+    await expect(context).toContainText("4 tokens");
+    await expect(context).toContainText("Sampled data");
+    const sort = context.getByRole("combobox", {
+      name: "Sort sampled tokens",
+      exact: true,
+    });
+    await expect(sort).toHaveValue("volume1h:desc");
+    await expectInsideWidth(page, sort);
+    await sort.selectOption("marketCap:asc");
+    expect(await sampleSymbols(page)).toEqual([
+      "SYMF",
+      "QUIET",
+      "NOVA",
+      "UNKNOWN",
+    ]);
+    await expect(sort).toHaveValue("marketCap:asc");
+    await expect(sort.locator("option:checked")).toContainText(
+      /Market cap.*ascending/i,
+    );
+    const region = page.getByRole("region", {
+      name: "Market data",
+      exact: true,
+    });
+    await expect(region).toHaveAccessibleDescription(/Scroll for more metrics/);
+    expect(await region.evaluate((node) => node.scrollLeft)).toBe(0);
+    const nova = page
+      .getByRole("table", { name: "Sampled markets", exact: true })
+      .getByRole("row")
+      .filter({ has: page.getByRole("button", { name: /^View NOVA,/ }) });
+    const identityStale = nova
+      .getByRole("cell")
+      .first()
+      .getByText("Stale", { exact: true });
+    await expect(identityStale).toBeVisible();
+    await expectInsideWidth(page, identityStale);
+    await expect(nova.locator("time")).toHaveAttribute("datetime", /T.*Z$/);
+    const symf = page
+      .getByRole("table", { name: "Sampled markets", exact: true })
+      .getByRole("row")
+      .filter({ has: page.getByRole("button", { name: /^View SYMF,/ }) });
+    await expect(
+      symf.getByRole("cell").first().getByText("Stale", { exact: true }),
+    ).toHaveCount(0);
+    expect(await recordedOperations(page)).toEqual([]);
+    expect(chartMints).toHaveLength(1);
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
+
+test("filtered market empty states reset only local view controls and remain in the visible pane", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const { errors, chartMints } = await harness(page, "guest");
+  await openPane(page, "Markets");
+  const search = page.getByLabel("Search sampled tokens");
+  await search.fill("no invented token matches");
+  const clear = page.getByRole("button", { name: "Clear search", exact: true });
+  await expect(clear).toBeVisible();
+  await expectInsideWidth(page, clear);
+  await expect(
+    page.getByRole("group", { name: "Sample context", exact: true }),
+  ).toContainText("0 tokens");
+  await clear.click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  expect(await sampleSymbols(page)).toHaveLength(4);
+  const band = page.getByRole("combobox", { name: "Market cap", exact: true });
+  const platform = page.getByRole("combobox", {
+    name: "Platform",
+    exact: true,
+  });
+  await band.selectOption("50k100k");
+  await platform.selectOption("bags");
+  const reset = page.getByRole("button", {
+    name: "Reset filters",
+    exact: true,
+  });
+  await expect(reset).toBeVisible();
+  await expectInsideWidth(page, reset);
+  await reset.click();
+  await expect(band).toHaveValue("all");
+  await expect(platform).toHaveValue("all");
+  expect(await sampleSymbols(page)).toHaveLength(4);
+  await expect(page.getByRole("button", { name: /^View / })).toHaveCount(4);
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(chartMints).toHaveLength(1);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("loading and truly empty market coverage do not suggest filters can fetch new data", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const scenario of ["guest&marketloading", "guest&empty"]) {
+    const { errors } = await harness(page, scenario);
+    await openPane(page, "Markets");
+    await expect(
+      page.getByText(
+        scenario.includes("marketloading")
+          ? "Loading the latest sampled tokens…"
+          : "No recent tokens match this sample.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Clear search|Reset filters/ }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^View / })).toHaveCount(0);
+    expect(await recordedOperations(page)).toEqual([]);
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  }
+});
+
 test("sample table sorts real market metrics and keeps unknown values last in both directions", async ({
   page,
 }) => {
@@ -934,7 +1168,7 @@ test("sample source links reject unsafe metadata and keep stale observations exp
   const nova = table
     .getByRole("row")
     .filter({ has: page.getByRole("button", { name: /^View NOVA,/ }) });
-  await expect(nova.getByText("Stale", { exact: true })).toBeVisible();
+  await expect(nova.getByText("Stale", { exact: true }).first()).toBeVisible();
   await expect(nova.locator("time")).toHaveAttribute("datetime", /T.*Z$/);
   const sourceTime = await nova.locator("time").getAttribute("datetime");
   expect(Date.now() - Date.parse(sourceTime!)).toBeGreaterThanOrEqual(
@@ -1269,16 +1503,12 @@ test("an empty market sample keeps the forum token shortcut without invented tra
   await expect(
     page.getByText("No recent tokens match this sample.", { exact: true }),
   ).toBeVisible();
-  const emptyRow = await page
-    .getByRole("table", { name: "Sampled markets", exact: true })
-    .getByRole("cell")
-    .boundingBox();
-  expect(emptyRow!.height).toBeLessThan(200);
-  await expect(
-    page
-      .getByRole("table", { name: "Sampled markets", exact: true })
-      .getByRole("button", { name: /^View / }),
-  ).toHaveCount(0);
+  const emptyMessage = page.getByText("No recent tokens match this sample.", {
+    exact: true,
+  });
+  expect((await emptyMessage.boundingBox())!.height).toBeLessThan(200);
+  await expectInsideWidth(page, emptyMessage);
+  await expect(page.getByRole("button", { name: /^View / })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Show SYMF market", exact: true }),
   ).toBeVisible();
@@ -1468,7 +1698,7 @@ test("community section buttons expose their controlled region with keyboard nav
   const { errors } = await harness(page, "community");
   for (const label of [
     "Bounties & research",
-    "Tips & holder profile",
+    "Tips & profile",
     "Your receipts",
     "Project hubs",
   ]) {
@@ -1484,6 +1714,260 @@ test("community section buttons expose their controlled region with keyboard nav
       await region.getAttribute("id"),
     );
   }
+  expect(errors).toEqual([]);
+});
+
+for (const width of [320, 390])
+  test(`all community sections remain visible after selecting receipts and resizing to ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { errors } = await harness(page, "community&guest");
+    const nav = page.getByRole("navigation", {
+      name: "Community utilities",
+      exact: true,
+    });
+    await nav
+      .getByRole("button", { name: "Your receipts", exact: true })
+      .click();
+    await page.setViewportSize({ width, height: 844 });
+    for (const name of [
+      "Project hubs",
+      "Bounties & research",
+      "Tips & profile",
+      "Your receipts",
+    ]) {
+      const button = nav.getByRole("button", { name, exact: true });
+      await expect(button).toBeVisible();
+      await expectInsideWidth(page, button);
+      const box = await button.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(
+      nav.getByRole("button", { name: "Your receipts", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await nav
+      .getByRole("button", { name: "Project hubs", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Open your receipts", exact: true })
+      .click();
+    await expect(
+      nav.getByRole("button", { name: "Your receipts", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expectInsideWidth(
+      page,
+      nav.getByRole("button", { name: "Your receipts", exact: true }),
+    );
+    const heading = page.getByRole("heading", {
+      name: "Sign in to view your receipts",
+      exact: true,
+    });
+    const signIn = page
+      .getByRole("region", { name: "Your receipts", exact: true })
+      .getByRole("link", { name: "Sign in", exact: true });
+    await expect(heading).toBeVisible();
+    await expect(signIn).toBeVisible();
+    expect(
+      (await signIn.boundingBox())!.y - (await heading.boundingBox())!.y,
+    ).toBeLessThan(120);
+    await expectInsideWidth(page, signIn);
+    const href = new URL((await signIn.getAttribute("href"))!, page.url());
+    expect(href.pathname).toBe("/signin");
+    expect(href.searchParams.get("redirectTo")).toMatch(/\/community$/);
+    await expect(
+      page.getByText("Protected outcome", { exact: true }),
+    ).toHaveCount(0);
+    expect(await recordedOperations(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+test("community receipt loading and authenticated-empty states remain distinct without payment actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const scenario of [
+    "community&receiptsloading",
+    "community&receiptsempty",
+  ]) {
+    const { errors } = await harness(page, scenario);
+    await page
+      .getByRole("button", { name: "Your receipts", exact: true })
+      .click();
+    const region = page.getByRole("region", {
+      name: "Your receipts",
+      exact: true,
+    });
+    if (scenario.includes("receiptsloading")) {
+      await expect(region.getByRole("status")).toContainText(
+        "Loading private receipts…",
+      );
+      await expect(
+        region.getByRole("heading", {
+          name: "No tips or reward payments yet",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    } else {
+      await expect(
+        region.getByRole("heading", {
+          name: "No tips or reward payments yet",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        region.getByText("Loading private receipts…", { exact: true }),
+      ).toHaveCount(0);
+    }
+    await expect(
+      region.getByRole("link", { name: "Sign in", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      region.getByText("Protected outcome", { exact: true }),
+    ).toHaveCount(0);
+    await expect(region.getByText(/do not pay again/i)).toBeVisible();
+    expect(await recordedOperations(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  }
+});
+
+test("pending identity checks do not flash sign-in or expose editable payment fields", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let result = await harness(page, "community&authloading");
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  const receipts = page.getByRole("region", {
+    name: "Your receipts",
+    exact: true,
+  });
+  await expect(receipts.getByRole("status")).toContainText(
+    "Loading private receipts…",
+  );
+  await expect(
+    receipts.getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    receipts.getByText("Protected outcome", { exact: true }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      (
+        window as typeof window & { __terminalFixtureQueries: string[] }
+      ).__terminalFixtureQueries.includes("forumCommunity:listPayments"),
+    ),
+  ).toBe(false);
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(result.errors).toEqual([]);
+  result = await harness(page, "community&tipsavailable&authloading");
+  await page
+    .getByRole("button", { name: "Tips & profile", exact: true })
+    .click();
+  const support = page.getByRole("region", {
+    name: "Tips & profile",
+    exact: true,
+  });
+  await expect(
+    support
+      .getByText("Checking your community wallet…", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    support.getByRole("heading", {
+      name: "Sign in to support a contributor",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(support.getByLabel("Tip amount (SOL)")).toBeHidden();
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
+test("tip loading, no-recipient and signed-out states do not offer an unusable payment form", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  for (const scenario of [
+    "community&tipsloading",
+    "community&guest",
+    "community&tipsavailable&guest",
+  ]) {
+    const { errors } = await harness(page, scenario);
+    await page
+      .getByRole("button", { name: "Tips & profile", exact: true })
+      .click();
+    const region = page.getByRole("region", {
+      name: "Tips & profile",
+      exact: true,
+    });
+    if (scenario.includes("tipsloading"))
+      await expect(region.getByRole("status")).toContainText(
+        "Loading contributors who accept tips…",
+      );
+    else if (scenario.includes("tipsavailable"))
+      await expect(
+        region.getByRole("heading", {
+          name: "Sign in to support a contributor",
+          exact: true,
+        }),
+      ).toBeVisible();
+    else {
+      await expect(
+        region.getByRole("heading", {
+          name: "No contributors accept tips yet",
+          exact: true,
+        }),
+      ).toBeVisible();
+      const profile = region.getByRole("button", {
+        name: "View contributor profile",
+        exact: true,
+      });
+      await profile.click();
+      await expect(
+        region.getByRole("region", {
+          name: "Your contributor profile",
+          exact: true,
+        }),
+      ).toBeFocused();
+    }
+    await expect(region.getByLabel("Tip amount (SOL)")).toBeHidden();
+    await expect(
+      region.getByRole("button", { name: "Review one-time tip", exact: true }),
+    ).toBeHidden();
+    await expect(
+      region.getByRole("heading", {
+        name: "Your contributor profile",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Sign in with wallet", exact: true }),
+    ).toHaveCount(1);
+    expect(await recordedOperations(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  }
+});
+
+test("an available contributor keeps the linked-wallet tip form but does not submit on navigation", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "community&tipsavailable&orderinput");
+  await page
+    .getByRole("button", { name: "Tips & profile", exact: true })
+    .click();
+  const amount = page.getByLabel("Tip amount (SOL)");
+  await expect(amount).toBeVisible();
+  await amount.fill("0.01");
+  await page
+    .getByRole("combobox", { name: "Contributor", exact: true })
+    .selectOption("fixture-member");
+  await expect(
+    page.getByRole("button", { name: "Review one-time tip", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await recordedOperations(page)).toEqual([]);
   expect(errors).toEqual([]);
 });
 
@@ -1570,3 +2054,47 @@ for (const width of [390, 1440])
       expect(errors).toEqual([]);
     }
   });
+
+test("pending contributor settings do not imply tips are disabled or holder proof is absent", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors } = await harness(
+    page,
+    "community&tipsavailable&orderinput&settingsloading",
+  );
+  await page
+    .getByRole("button", { name: "Tips & profile", exact: true })
+    .click();
+  const profile = page.getByRole("region", {
+    name: "Your contributor profile",
+    exact: true,
+  });
+  await expect(profile).toBeVisible();
+  await expect(profile.getByRole("status")).toContainText(
+    "Loading your contributor settings…",
+  );
+  await expect(
+    profile.getByRole("button", {
+      name: /Enable public tips|Disable public tips|Check holder proof|Show holder badge|Hide holder badge/,
+    }),
+  ).toBeHidden();
+  await expect(
+    profile.getByText("No current verified holder proof.", { exact: true }),
+  ).toBeHidden();
+  await expect(
+    profile.getByText("Holder proof verified", { exact: true }),
+  ).toBeHidden();
+  await expect(page.getByLabel("Tip amount (SOL)")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.includes("forumCommunity:getMine"),
+      ),
+    )
+    .toBe(true);
+  expect(await recordedOperations(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});
