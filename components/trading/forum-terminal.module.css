@@ -418,6 +418,14 @@
   margin: 0;
   font-size: 11px;
 }
+.historyNote,
+.chartWorkspace .chartQuote .historyNote {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: hsl(var(--muted-foreground));
+}
 .chartWorkspace .chartFrame {
   grid-column: 1 / -1;
   min-width: 0;

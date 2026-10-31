@@ -65,7 +65,9 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
         },
         candles: [
           {
-            time: Math.floor(now / 1000) - 60,
+            time:
+              Math.floor(now / 1000) -
+              (scenario.includes("historicalbars") ? 2 * 86_400 : 60),
             open: 0.001,
             high: 0.002,
             low: 0.0005,
@@ -317,6 +319,37 @@ test("compact chart credits the actual candle provider beside the original check
   await expectViewportBounded(page);
   expect(errors).toEqual([]);
 });
+
+for (const width of [320, 1440]) {
+  test(`historical source bars show their real date without aging fresh market stats at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+    const { errors } = await harness(
+      page,
+      "guest&solanacandles&historicalbars&dark",
+    );
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/^Historical bars · latest .* UTC$/),
+    ).toBeVisible();
+    const instrument = page.locator(
+      'section[aria-labelledby="terminal-token-title"]',
+    );
+    await expect(instrument.locator('p[title^="Checked "]')).toContainText(
+      "Solana Tracker",
+    );
+    await expect(
+      instrument.getByText("Checked market data · 1h sampled. Not a quote.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
+}
 
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 390, 1440])

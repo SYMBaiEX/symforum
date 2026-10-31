@@ -68,6 +68,14 @@ existing retention and backoff rules.
 The server validates the exact controlled request path, optional returned identity
 echoes, USD selection, bounded timestamps/row counts, finite OHLCV, price ranges
 and duplicates. It does not synthesize inactive intervals or reverse price ratios.
+Tracker latest-history requests omit the optional time bounds: a fixed number of
+contiguous buckets incorrectly rejects legitimate sparse historical bars. Every
+source row (at most 2,000 within the unchanged byte ceiling) is validated before
+retaining the latest 120. Explicit-range mode still rejects out-of-range rows
+when bounds are actually requested. No malformed row is discarded by truncation.
+The UI separately dates historical bars; a fresh fetch timestamp never claims
+that a historic bar represents a recent trade. Fresh Dexscreener metrics remain
+independent of the historical close.
 `candleSource` uses a closed provider enum. The UI displays its fixed provider
 credit with the original check time, and legacy records retain Gecko attribution.
 

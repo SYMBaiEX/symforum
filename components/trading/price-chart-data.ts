@@ -23,6 +23,22 @@ export function chartSourceLabel(data: CheckedChartData) {
     : "GeckoTerminal";
 }
 
+/** A recent fetch must never imply that an old observed bar is a recent trade. */
+export function chartHistoryLabel(data: CheckedChartData, now: number) {
+  const last = data.candles.at(-1);
+  const duration =
+    parseInt(data.interval, 10) *
+    (data.interval.endsWith("h") ? 3_600_000 : 60_000);
+  if (
+    !last ||
+    !Number.isSafeInteger(last.time) ||
+    !Number.isFinite(now) ||
+    now - last.time * 1000 <= Math.max(15 * 60_000, 2 * duration)
+  )
+    return null;
+  return `Historical bars · latest ${new Date(last.time * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
 /** Display retention is independent of whether another network attempt is due. */
 export function retainedChartData(
   data: CheckedChartData,

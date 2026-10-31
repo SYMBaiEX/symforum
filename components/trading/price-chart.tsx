@@ -17,6 +17,7 @@ import {
   chartResponsePolicy,
   chartStateMessage,
   chartSourceLabel,
+  chartHistoryLabel,
   type CheckedChartData,
   type ChartCacheState,
   type ChartMarketData,
@@ -337,6 +338,7 @@ function ChartData({
       window.removeEventListener("offline", demand);
     };
   }, [endpoint, mint, interval, demandRoot, host, showData, ageData]);
+  const historyLabel = data ? chartHistoryLabel(data, data.checkedAt) : null;
   if (!data)
     return (
       <div
@@ -402,6 +404,11 @@ function ChartData({
         >
           {chartSourceLabel(data)} ·{" "}
           {`Checked ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+          {historyLabel && (
+            <span className={terminalStyles.historyNote} role="status">
+              {historyLabel}
+            </span>
+          )}
           {(data.stale || offline) && (
             <span role="status">
               {" "}
