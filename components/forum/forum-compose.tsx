@@ -273,6 +273,29 @@ export function ForumCompose({
     onDraftDataChange,
   ]);
 
+  const canWriteStoredDraft = useCallback(() => {
+    if (
+      !draftKey ||
+      activeDraft.current.scope !== draftScope ||
+      protectedDraftRef.current?.scope === draftScope
+    )
+      return false;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (raw !== null) {
+        const parsed = readForumDraft(raw);
+        if (parsed.kind !== "ready") {
+          protectDraft(raw, parsed.kind);
+          return false;
+        }
+      }
+      return true;
+    } catch {
+      protectDraft(null, "unavailable");
+      return false;
+    }
+  }, [draftKey, draftScope, protectDraft]);
+
   useEffect(() => {
     if (
       !draftKey ||
@@ -281,6 +304,9 @@ export function ForumCompose({
     ) {
       return;
     }
+    // A different tab may have saved a newer schema after initial hydration.
+    // Check immediately before either ordinary autosave write/removal.
+    if (!canWriteStoredDraft()) return;
     try {
       if (
         body.trim().length === 0 &&
@@ -313,6 +339,7 @@ export function ForumCompose({
     title,
     titleEnabled,
     draftData,
+    canWriteStoredDraft,
   ]);
 
   function currentProtectedDraft() {
@@ -393,6 +420,7 @@ export function ForumCompose({
       activeDraft.current.scope === draftScope &&
       protectedDraftRef.current?.scope !== draftScope
     ) {
+      if (!canWriteStoredDraft()) return;
       try {
         window.localStorage.removeItem(draftKey);
       } catch {

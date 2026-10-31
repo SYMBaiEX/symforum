@@ -152,7 +152,7 @@ test.each([false, true])(
   "draft cleanup requires a successful publication receipt (success %s)",
   async (published) => {
     const removeItem = vi.fn();
-    vi.stubGlobal("window", { localStorage: { removeItem } });
+    vi.stubGlobal("window", { localStorage: { getItem: () => null, removeItem } });
     const onSubmit = vi.fn(async () => (published ? true : undefined));
     renderToStaticMarkup(
       <ForumCompose

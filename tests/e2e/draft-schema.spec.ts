@@ -296,3 +296,120 @@ test("owner route acting-profile and token remount fences keep backups isolated"
   expect(await stored(page, otherKey)).toBe(other);
   check();
 });
+
+for (const initial of [
+  null,
+  JSON.stringify({ version: 1, body: "Known initial draft" }),
+])
+  test(`later unsupported schema is protected before typing autosave (${initial ? "known" : "blank"} hydration)`, async ({
+    page,
+  }) => {
+    const check = await harness(page, initial);
+    if (initial) await expect(body(page)).toHaveValue("Known initial draft");
+    await page.evaluate(
+      ({ key, unknown }) => localStorage.setItem(key, unknown),
+      { key, unknown },
+    );
+    await body(page).fill("Edited text after external update");
+    expect(await stored(page)).toBe(unknown);
+    await expect(
+      page.getByRole("heading", { name: "Saved draft protected", exact: true }),
+    ).toBeVisible();
+    check();
+  });
+
+test("later unsupported schema is protected before empty-editor autosave removal", async ({
+  page,
+}) => {
+  const check = await harness(
+    page,
+    JSON.stringify({ version: 1, body: "Known initial draft" }),
+  );
+  await expect(body(page)).toHaveValue("Known initial draft");
+  await page.evaluate(
+    ({ key, unknown }) => localStorage.setItem(key, unknown),
+    { key, unknown },
+  );
+  await body(page).fill("");
+  expect(await stored(page)).toBe(unknown);
+  await expect(
+    page.getByRole("heading", { name: "Saved draft protected", exact: true }),
+  ).toBeVisible();
+  check();
+});
+
+test("later unsupported schema is protected before pending fake-post success cleanup", async ({
+  page,
+}) => {
+  const check = await harness(
+    page,
+    JSON.stringify({ version: 1, body: "Known initial draft" }),
+  );
+  await expect(body(page)).toHaveValue("Known initial draft");
+  await page.getByRole("button", { name: "Post fixture", exact: true }).click();
+  await page.evaluate(
+    ({ key, unknown }) => {
+      localStorage.setItem(key, unknown);
+      window.draftSchemaFinishSubmit(true);
+    },
+    { key, unknown },
+  );
+  expect(await stored(page)).toBe(unknown);
+  await expect(
+    page.getByRole("heading", { name: "Saved draft protected", exact: true }),
+  ).toBeVisible();
+  check();
+});
+
+test("later malformed bytes are protected before normal autosave", async ({
+  page,
+}) => {
+  const check = await harness(
+    page,
+    JSON.stringify({ version: 1, body: "Known initial draft" }),
+  );
+  await expect(body(page)).toHaveValue("Known initial draft");
+  const malformed = "{unrecognized local update";
+  await page.evaluate(
+    ({ key, malformed }) => localStorage.setItem(key, malformed),
+    { key, malformed },
+  );
+  await body(page).fill("New editor text");
+  expect(await stored(page)).toBe(malformed);
+  await expect(
+    page.getByRole("heading", { name: "Saved draft protected", exact: true }),
+  ).toBeVisible();
+  check();
+});
+
+test("later local read failure refuses autosave and keeps the original bytes", async ({
+  page,
+}) => {
+  const original = JSON.stringify({ version: 1, body: "Known initial draft" });
+  const check = await harness(page, original);
+  await expect(body(page)).toHaveValue("Known initial draft");
+  const before = await stored(page);
+  await page.evaluate((key) => {
+    const getItem = Storage.prototype.getItem;
+    Object.assign(window, {
+      restoreDraftStorageRead: () => {
+        Storage.prototype.getItem = getItem;
+      },
+    });
+    Storage.prototype.getItem = function (requested) {
+      if (requested === key) throw new Error("Invented local read failure");
+      return getItem.call(this, requested);
+    };
+  }, key);
+  await body(page).fill("Editor text after read failure");
+  await expect(
+    page.getByRole("heading", { name: "Saved draft protected", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    (
+      window as unknown as { restoreDraftStorageRead(): void }
+    ).restoreDraftStorageRead(),
+  );
+  expect(await stored(page)).toBe(before);
+  check();
+});
