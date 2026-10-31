@@ -8,7 +8,7 @@
     "evidence": "components/trading/market-explorer.tsx:310",
     "acceptance": "A valid pasted mint can explicitly select that exact token through existing onSelect; invalid addresses stay local; no symbol-derived identity, discovery guarantee, extra source path, or automatic trade.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
@@ -25,7 +25,7 @@
     "evidence": "components/trading/market-explorer.tsx:198",
     "acceptance": "A named clear-search button appears for nonempty search, restores input focus, and leaves market-cap, platform and sort selections unchanged; clearing makes no refresh action.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
@@ -67,7 +67,7 @@
     "evidence": "components/trading/market-explorer.tsx:454",
     "acceptance": "A separately named clipboard action copies only that row's exact full mint, reports failure accessibly, and neither changes selection nor initializes any provider or wallet request.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
@@ -537,7 +537,7 @@
     "evidence": "components/trading/wallet-panel.tsx:140",
     "acceptance": "An accessible explanation distinguishes displayed balance, verified spendable estimate and route-specific fees/rent using only returned fields; it does not invent reserves, fill an amount or relax preparation checks.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/wallet-readings-model.ts",
@@ -545,7 +545,8 @@
       "tests/e2e/wallet-readability.spec.ts",
       "tests/e2e/fixtures/wallet-readability.tsx",
       "tests/e2e/fixtures/wallet-readability-state.ts"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "TRADE-044",
@@ -556,7 +557,7 @@
     "evidence": "components/trading/wallet-panel.tsx:152",
     "acceptance": "Fixtures distinguish actual raw zero, absent SOL, absent selected token, invalid raw amounts and unsupported decimals; none become fabricated zero or a spendable-Max assertion.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/wallet-readings-model.ts",
@@ -564,7 +565,8 @@
       "tests/e2e/wallet-readability.spec.ts",
       "tests/e2e/fixtures/wallet-readability.tsx",
       "tests/e2e/fixtures/wallet-readability-state.ts"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "TRADE-045",
@@ -575,7 +577,7 @@
     "evidence": "components/swap/token-swap.tsx:299",
     "acceptance": "Local invalid/over-precision amounts receive associated error/help text and aria-invalid without quoting, silently rounding or changing normalization rules; existing guarded CTA and no-sign behavior remain.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
@@ -585,7 +587,8 @@
       "tests/e2e/fixtures/swap-guidance-boundary.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/terminal-guidance.spec.ts"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "TRADE-046",
@@ -608,7 +611,7 @@
     "evidence": "components/swap/token-swap.tsx:803",
     "acceptance": "A compact explanation uses existing feeMint/percentage and prepared network-fee fields only; absent costs remain unknown, Jupiter share remains included as contracted, and no fee formula or rate changes.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
@@ -618,7 +621,8 @@
       "tests/e2e/fixtures/swap-guidance-boundary.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/terminal-guidance.spec.ts"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "TRADE-048",
@@ -641,7 +645,7 @@
     "evidence": "components/swap/token-swap.tsx:750",
     "acceptance": "Accessible help explains percentage and existing minimum-received protection; options/default remain exactly unchanged and editing slippage continues to invalidate the old quote safely.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/swap/token-swap.tsx",
       "components/swap/swap-guidance.ts",
@@ -651,7 +655,8 @@
       "tests/e2e/fixtures/swap-guidance-boundary.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/terminal-guidance.spec.ts"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "TRADE-050",
@@ -1202,13 +1207,14 @@
     "evidence": "components/swap/forum-commerce.tsx:69",
     "acceptance": "Existing foundation: AuthorTip already mounts inside ForumCommerceFrame. Add regression coverage for unmapped/mapped token threads and read-only archive policy, showing only the opted-in actual author; no auto-payment or nonpublic recipient exposure.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "tests/e2e/author-tip-integration.spec.ts",
       "tests/e2e/fixtures/author-tip-integration.tsx",
       "tests/e2e/fixtures/author-tip-integration-mocks.tsx"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "COMMUNITY-034",
@@ -1472,7 +1478,7 @@
     "evidence": "components/trading/research-purchase.tsx:339",
     "acceptance": "Enhancement: distinct config-loading/setup-required/free-credit-exhausted states before purchase; wallet linking does not hide disabled payment readiness; no enabling or allowance changes.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/trading/research-purchase.tsx",
       "tests/e2e/research-readiness.spec.ts",
@@ -1588,14 +1594,15 @@
     "evidence": "components/forum/forum-control-panel.tsx:642",
     "acceptance": "Avatar and website fields use appropriate URL/input-mode semantics and field-associated invalid/help messages; empty values remain supported and server URL validation is not weakened.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-control-panel.tsx",
       "lib/forum-profile-inputs.ts",
       "lib/forum-profile-inputs.test.ts",
       "tests/e2e/profile-inputs.spec.ts",
       "tests/e2e/fixtures/profile-inputs.tsx"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "FORUM-005",
@@ -1606,14 +1613,15 @@
     "evidence": "components/forum/forum-control-panel.tsx:685",
     "acceptance": "Replace placeholder-only date guidance with accessible date entry or equivalent format validation, preserve an empty birthday, reject impossible dates locally and retain backend validation.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-control-panel.tsx",
       "lib/forum-profile-inputs.ts",
       "lib/forum-profile-inputs.test.ts",
       "tests/e2e/profile-inputs.spec.ts",
       "tests/e2e/fixtures/profile-inputs.tsx"
-    ]
+    ],
+    "receipt": "PR #259 merged at 8ffe233d387239d63707c5a0ac6b1034e2d3fbef; exact tested tree, all five original domains and bounded signed-out gates verified 2026-10-31 09:53 UTC. Protected flows are isolated-test evidence, not real payment acceptance; mobile capture and control-panel error-counter limitations recorded."
   },
   {
     "id": "FORUM-006",
@@ -1708,7 +1716,7 @@
     "evidence": "components/forum/forum-compose.tsx:154",
     "acceptance": "Encountering an unsupported saved draft version must not silently overwrite it with an empty/template/current-schema draft. Show recoverable local-only guidance and require explicit consent before replacement.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "tested",
     "paths": [
       "components/forum/forum-compose.tsx",
       "tests/e2e/draft-schema.spec.ts",

@@ -252,3 +252,69 @@ operations, job/hold records and infrastructure binding metadata out of it.
   coverage to 21 browser cases. A preexisting unit stub gained only getItem
   returning null; its assertions are unchanged. Independent re-review is pending.
   Attachment code and existing storage keys/polling/retention are unchanged.
+
+## Batch 4 released — 09:53 UTC
+
+- PR #259 merged at `8ffe233d387239d63707c5a0ac6b1034e2d3fbef`; its complete
+  tree exactly matches qualified `ca35decf`. The automatic production deployment
+  and all five original domains were verified on this exact commit.
+- Bounded signed-out receipt and control-panel gates remained intact at desktop
+  and phone widths, with no document overflow and no editable private profile
+  fields exposed. Receipt sign-in retains the exact local section return URL.
+  Receipt checks measured zero client errors; the control-panel counter was not
+  returned after a test selector mismatch, so no complete counter is claimed there.
+- Mobile full-page captures showed a repeated lower paint strip despite one DOM
+  title; retain this capture/compositor limitation, not a pixel-perfect mobile
+  certification. Protected wallet/profile flows remain isolated-test evidence,
+  not live signing, settlement or authenticated account-editing acceptance.
+- One bounded exact-deployment server-error sample was empty; the isolated browser
+  closed. Twenty-nine inventory items are now source-deployed. No backend/worker
+  deployment, settings change, payment, model call, replay or hold change occurred.
+
+## Next-loop handoff — after batch 4
+
+- Primary worktree remains `/private/tmp/symforum-overnight-20261031`, branch
+  `sym/overnight-web3-wave-four`, HEAD `ca35decf`. Runtime source matches released
+  main `8ffe233d`; local known-owned changes after this entry are the backlog and
+  release log's truthful deployment states. Preserve them for the next feature PR.
+- Finish the three existing frozen candidates before selecting another batch:
+  market controls `fd365f3d` plus `ebfdce21`, readiness `ebb8d950`, and draft
+  protection `8f890b84` plus `5c673961`. Worktree paths and scopes appear above.
+  All now have clean independent reviews; they remain unintegrated, not deployed.
+- The draft correction's 21 browser and 15 composer unit cases were independently
+  rerun successfully. Its original post-hydration overwrite/delete defect is
+  closed. localStorage read/write is not an atomic multi-tab transaction; valid-v1
+  concurrent-editor conflict resolution remains outside that narrow fix.
+- Create a fresh integration branch from latest main, preserve these two local
+  planning files, integrate the exact candidate chains, inspect the merged source
+  and run all final combined parent gates. Do not duplicate their implementation
+  or infer a final release from worker checks. No next-batch PR is open yet.
+- Inventory: 29 source-deployed, five implemented awaiting parent qualification,
+  188 queued, two blocked and sixteen needing confirmation. The original deadline
+  remains 15:45 UTC; all existing budgets, schedules, fees, limits and holds remain.
+
+## Batch 5 qualification — 10:04 UTC
+
+- Integrated both market-control commits, public research readiness, and both
+  draft-protection commits on fresh released main. Runtime candidate `74a9bf0f`
+  preserves exact address case, supports explicit address selection and separate
+  copy controls, and leaves ordinary name/ticker search unchanged.
+- Research readiness is derived only from existing public config. Loading,
+  setup, exhausted allowance and inconsistent/unavailable states remain distinct;
+  existing prepared/reserved approvals and receipt recovery remain unchanged.
+- Unsupported, malformed and unreadable local drafts are protected before every
+  ordinary write/delete and successful publication cleanup. Explicit neutral
+  local backup/replacement checks current owner-bound scope and exact saved bytes.
+  Existing supported/legacy drafts, attachments, storage keys and polling remain.
+  Read/compare is not an atomic cross-tab transaction; no stronger claim is made.
+- Independent combined source review was clean. Final parent gates pass 4,352
+  unit/backend tests, 410 isolated browser checks, both type checks, all five app
+  builds, generated/native parity, unsuppressed dependency audits and secret-scan
+  controls. Lint retains three existing warnings, zero errors.
+- No backend/worker change, wallet/payment/model/provider action, schedule/budget
+  change or hold transition occurred. Five inventory items are tested, not yet
+  merged/deployed; the previous twenty-nine remain the only deployed items.
+- Read-only triage proposed three later independent groups: COMMUNITY-014/015/027
+  project/member/work links; TRADE-012/013/014 selected-token copy/trust/glossary;
+  FORUM-038/039/040 stable gallery identity/focus/announcements. None is dispatched
+  or claimed complete here. Finish this release before starting those groups.
