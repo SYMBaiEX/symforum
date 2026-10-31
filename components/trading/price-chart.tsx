@@ -30,6 +30,12 @@ import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { formatChartAxisPrice } from "./chart-axis-format";
 import { Button } from "@/components/ui/button";
 import { CandleReadings } from "./candle-readings";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -47,11 +53,13 @@ function CandleCanvas({
   light,
   symbol,
   compact,
+  onChartApi,
 }: {
   candles: SymfCandle[];
   light: boolean;
   symbol: string;
   compact?: boolean;
+  onChartApi: (chart: IChartApi | null) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const fitted = useRef(false);
@@ -162,6 +170,11 @@ function CandleCanvas({
     }
   }, [api, candles]);
 
+  useEffect(() => {
+    onChartApi(api?.chart ?? null);
+    return () => onChartApi(null);
+  }, [api, onChartApi]);
+
   return (
     <div className={`relative ${compact ? terminalStyles.chartFrame : ""}`}>
       <div
@@ -194,6 +207,7 @@ function ChartData({
   compact,
   demandRoot,
   onBrowseMarkets,
+  onChartApi,
 }: {
   interval: SymfChartInterval;
   light: boolean;
@@ -204,6 +218,7 @@ function ChartData({
   compact?: boolean;
   demandRoot: RefObject<HTMLDivElement | null>;
   onBrowseMarkets?: () => void;
+  onChartApi: (chart: IChartApi | null) => void;
 }) {
   const { host } = useForumRuntime();
   const [data, setData] = useState<CheckedChartData | null>(null);
@@ -424,6 +439,7 @@ function ChartData({
         candles={data.candles}
         light={light}
         symbol={symbol}
+        onChartApi={onChartApi}
       />
       <details
         className={`border-t border-border px-4 py-3 text-xs text-muted-foreground ${compact ? terminalStyles.chartDataDisclosure : ""}`}
@@ -466,10 +482,52 @@ export function TokenPriceChart({
 }) {
   const demandRoot = useRef<HTMLDivElement>(null);
   const [interval, setInterval] = useState<SymfChartInterval>("15m");
+  const context = `${mint}:${interval}:${light ? "light" : "dark"}`;
+  const [viewport, setViewport] = useState<{
+    context: string;
+    chart: IChartApi;
+  } | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const toolsTrigger = useRef<HTMLButtonElement>(null);
+  const [feedback, setFeedback] = useState<{
+    context: string;
+    text: string;
+  } | null>(null);
+  const onChartApi = useCallback(
+    (chart: IChartApi | null) => {
+      setViewport((current) =>
+        chart
+          ? { context, chart }
+          : current?.context === context
+            ? null
+            : current,
+      );
+    },
+    [context],
+  );
+  const chart = viewport?.context === context ? viewport.chart : null;
+  const restore = () => {
+    setExpanded(false);
+    setFeedback({ context, text: "Chart size restored." });
+    toolsTrigger.current?.focus();
+  };
   return (
     <div
       ref={demandRoot}
-      className={compact ? terminalStyles.chartLayout : undefined}
+      className={`${terminalStyles.chartContainer} ${compact ? terminalStyles.chartLayout : ""}`}
+      data-chart-expanded={expanded || undefined}
+      onKeyDown={(event) => {
+        if (
+          event.key !== "Escape" ||
+          !expanded ||
+          event.defaultPrevented ||
+          (event.target instanceof Element &&
+            event.target.closest('[role="menu"], [role="dialog"]'))
+        )
+          return;
+        event.preventDefault();
+        restore();
+      }}
     >
       <div
         className={`${styles.chartControls} ${compact ? terminalStyles.chartControls : ""}`}
@@ -487,8 +545,59 @@ export function TokenPriceChart({
             {value}
           </button>
         ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              ref={toolsTrigger}
+              type="button"
+              className={`focus-ring ${terminalStyles.chartTools}`}
+              aria-label="Chart tools"
+            >
+              <span aria-hidden="true">•••</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="motion-reduce:animate-none"
+          >
+            <DropdownMenuItem
+              className="!min-h-11"
+              disabled={!chart && !expanded}
+              onSelect={() => {
+                if (expanded) restore();
+                else {
+                  setExpanded(true);
+                  setFeedback({
+                    context,
+                    text: "Chart expanded within the workspace.",
+                  });
+                }
+              }}
+            >
+              {expanded ? "Restore chart size" : "Expand chart"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="!min-h-11"
+              disabled={!chart}
+              onSelect={() => {
+                if (!chart) return;
+                chart.timeScale().fitContent();
+                chart.priceScale("right").applyOptions({ autoScale: true });
+                setFeedback({
+                  context,
+                  text: "Chart view reset to loaded candles.",
+                });
+              }}
+            >
+              Reset chart view
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {!compact && <span>USD candles · UTC</span>}
       </div>
+      <p className="sr-only" aria-live="polite">
+        {feedback?.context === context ? feedback.text : ""}
+      </p>
       <ChartData
         demandRoot={demandRoot}
         compact={compact}
@@ -500,6 +609,7 @@ export function TokenPriceChart({
         endpoint={endpoint}
         onMarket={onMarket}
         onBrowseMarkets={onBrowseMarkets}
+        onChartApi={onChartApi}
       />
     </div>
   );
