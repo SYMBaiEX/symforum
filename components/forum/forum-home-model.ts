@@ -64,3 +64,29 @@ export async function refreshLoadedFeed<
   }
   return result;
 }
+
+/** Initial restoration publishes authorized pages without hiding earlier success. */
+export async function restoreLoadedFeed<
+  T extends { _id: string },
+  P extends { page: T[]; isDone: boolean; continueCursor: string },
+>(
+  query: (cursor: string | null) => Promise<P>,
+  loadedPageCount: number,
+  publish: (page: P, completedPages: number) => void,
+  isCurrent: () => boolean,
+): Promise<P | undefined> {
+  // Match the existing session reading-place bound; never expand provider work.
+  const target = Math.max(1, Math.min(20, Math.floor(loadedPageCount) || 1));
+  let result: P | undefined;
+  for (let page = 0; page < target; page += 1) {
+    if (!isCurrent()) return undefined;
+    const next = await query(result?.continueCursor ?? null);
+    if (!isCurrent()) return undefined;
+    result = result
+      ? { ...next, page: mergeFeedItems(result.page, next.page) }
+      : next;
+    publish(result, page + 1);
+    if (result.isDone) break;
+  }
+  return result;
+}

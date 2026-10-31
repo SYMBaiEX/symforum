@@ -1,0 +1,164 @@
+diff --git a/lib/rules/extensions.js b/lib/rules/extensions.js
+index 54e60e1094fd3e6dcae5d789f502984b76248e79..ab0e826e5c3642573e7ad4084c1debafd69230a1 100644
+--- a/lib/rules/extensions.js
++++ b/lib/rules/extensions.js
+@@ -1,6 +1,6 @@
+ 'use strict';var _path = require('path');var _path2 = _interopRequireDefault(_path);
+ 
+-var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++var _minimatch = require('minimatch');
+ var _resolve = require('eslint-module-utils/resolve');var _resolve2 = _interopRequireDefault(_resolve);
+ var _importType = require('../core/importType');
+ var _moduleVisitor = require('eslint-module-utils/moduleVisitor');var _moduleVisitor2 = _interopRequireDefault(_moduleVisitor);
+@@ -171,7 +171,7 @@ module.exports = {
+       function computeOverrideAction(pathGroupOverrides, path) {
+         for (var i = 0, l = pathGroupOverrides.length; i < l; i++) {var _pathGroupOverrides$i =
+           pathGroupOverrides[i],pattern = _pathGroupOverrides$i.pattern,patternOptions = _pathGroupOverrides$i.patternOptions,action = _pathGroupOverrides$i.action;
+-          if ((0, _minimatch2['default'])(path, pattern, patternOptions || { nocomment: true })) {
++          if ((0, _minimatch.minimatch)(path, pattern, patternOptions || { nocomment: true })) {
+             return action;
+           }
+         }
+diff --git a/lib/rules/no-extraneous-dependencies.js b/lib/rules/no-extraneous-dependencies.js
+index 0dcf9d0544610dcdfa04409d438e2f82b3b4b718..956b481d3b57d7006c433068388d8c088e37d3f3 100644
+--- a/lib/rules/no-extraneous-dependencies.js
++++ b/lib/rules/no-extraneous-dependencies.js
+@@ -1,6 +1,6 @@
+ 'use strict';var _slicedToArray = function () {function sliceIterator(arr, i) {var _arr = [];var _n = true;var _d = false;var _e = undefined;try {for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) {_arr.push(_s.value);if (i && _arr.length === i) break;}} catch (err) {_d = true;_e = err;} finally {try {if (!_n && _i["return"]) _i["return"]();} finally {if (_d) throw _e;}}return _arr;}return function (arr, i) {if (Array.isArray(arr)) {return arr;} else if (Symbol.iterator in Object(arr)) {return sliceIterator(arr, i);} else {throw new TypeError("Invalid attempt to destructure non-iterable instance");}};}();var _path = require('path');var _path2 = _interopRequireDefault(_path);
+ var _fs = require('fs');var _fs2 = _interopRequireDefault(_fs);
+-var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++var _minimatch = require('minimatch');
+ var _contextCompat = require('eslint-module-utils/contextCompat');
+ var _pkgUp = require('eslint-module-utils/pkgUp');var _pkgUp2 = _interopRequireDefault(_pkgUp);
+ var _resolve = require('eslint-module-utils/resolve');var _resolve2 = _interopRequireDefault(_resolve);
+@@ -252,8 +252,8 @@ function testConfig(config, filename) {
+     return config;
+   }
+   // Array of globs.
+-  return config.some(function (c) {return (0, _minimatch2['default'])(filename, c) ||
+-    (0, _minimatch2['default'])(filename, _path2['default'].join(process.cwd(), c));});
++  return config.some(function (c) {return (0, _minimatch.minimatch)(filename, c) ||
++    (0, _minimatch.minimatch)(filename, _path2['default'].join(process.cwd(), c));});
+ 
+ }
+ 
+diff --git a/lib/rules/no-import-module-exports.js b/lib/rules/no-import-module-exports.js
+index c54dddeb5421c164b480883f3227760c4a33291d..708b9bf3152b7114c968d72f830d15f3df0afdc3 100644
+--- a/lib/rules/no-import-module-exports.js
++++ b/lib/rules/no-import-module-exports.js
+@@ -1,4 +1,4 @@
+-'use strict';var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++'use strict';var _minimatch = require('minimatch');
+ var _path = require('path');var _path2 = _interopRequireDefault(_path);
+ var _contextCompat = require('eslint-module-utils/contextCompat');
+ var _pkgUp = require('eslint-module-utils/pkgUp');var _pkgUp2 = _interopRequireDefault(_pkgUp);function _interopRequireDefault(obj) {return obj && obj.__esModule ? obj : { 'default': obj };}
+@@ -59,7 +59,7 @@ module.exports = {
+         var variableDefinition = objectScope && findDefinition(objectScope, node.object.name);
+         var isImportBinding = variableDefinition && variableDefinition.type === 'ImportBinding';
+         var hasCJSExportReference = hasKeywords && (!objectScope || objectScope.type === 'module');
+-        var isException = !!options.exceptions && options.exceptions.some(function (glob) {return (0, _minimatch2['default'])(fileName, glob);});
++        var isException = !!options.exceptions && options.exceptions.some(function (glob) {return (0, _minimatch.minimatch)(fileName, glob);});
+ 
+         if (isIdentifier && hasCJSExportReference && !isEntryPoint && !isException && !isImportBinding) {
+           importDeclarations.forEach(function (importDeclaration) {
+diff --git a/lib/rules/no-internal-modules.js b/lib/rules/no-internal-modules.js
+index 3b20616a24314b815c11561faeaa6a32ea629e4e..3e165c528938571ea6fad610027a7d943582b234 100644
+--- a/lib/rules/no-internal-modules.js
++++ b/lib/rules/no-internal-modules.js
+@@ -1,4 +1,4 @@
+-'use strict';var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++'use strict';var _minimatch = require('minimatch');
+ 
+ var _resolve = require('eslint-module-utils/resolve');var _resolve2 = _interopRequireDefault(_resolve);
+ var _importType = require('../core/importType');var _importType2 = _interopRequireDefault(_importType);
+@@ -48,8 +48,8 @@ module.exports = {
+ 
+   create: function () {function noReachingInside(context) {
+       var options = context.options[0] || {};
+-      var allowRegexps = (options.allow || []).map(function (p) {return _minimatch2['default'].makeRe(p);});
+-      var forbidRegexps = (options.forbid || []).map(function (p) {return _minimatch2['default'].makeRe(p);});
++      var allowMatchers = (options.allow || []).map(function (p) {return new _minimatch.Minimatch(p);});
++      var forbidMatchers = (options.forbid || []).map(function (p) {return new _minimatch.Minimatch(p);});
+ 
+       // minimatch patterns are expected to use / path separators, like import
+       // statements, so normalize paths to use the same
+@@ -71,12 +71,12 @@ module.exports = {
+ 
+       // test if reaching to this destination is allowed
+       function reachingAllowed(importPath) {
+-        return allowRegexps.some(function (re) {return re.test(importPath);});
++        return allowMatchers.some(function (matcher) {return matcher.match(importPath);});
+       }
+ 
+       // test if reaching to this destination is forbidden
+       function reachingForbidden(importPath) {
+-        return forbidRegexps.some(function (re) {return re.test(importPath);});
++        return forbidMatchers.some(function (matcher) {return matcher.match(importPath);});
+       }
+ 
+       function isAllowViolation(importPath) {
+diff --git a/lib/rules/no-namespace.js b/lib/rules/no-namespace.js
+index c858db0c0c3a84d1712b8f61cc69998e4c6275c2..31eb8a7a2c3bb5d0dcda49425a6c1983935b5d92 100644
+--- a/lib/rules/no-namespace.js
++++ b/lib/rules/no-namespace.js
+@@ -3,7 +3,7 @@
+ 
+ 
+ 
+-var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++var _minimatch = require('minimatch');
+ var _contextCompat = require('eslint-module-utils/contextCompat');
+ 
+ var _docsUrl = require('../docsUrl');var _docsUrl2 = _interopRequireDefault(_docsUrl);function _interopRequireDefault(obj) {return obj && obj.__esModule ? obj : { 'default': obj };}
+@@ -106,7 +106,7 @@ module.exports = {
+ 
+       return {
+         ImportNamespaceSpecifier: function () {function ImportNamespaceSpecifier(node) {
+-            if (ignoreGlobs && ignoreGlobs.find(function (glob) {return (0, _minimatch2['default'])(node.parent.source.value, glob, { matchBase: true });})) {
++            if (ignoreGlobs && ignoreGlobs.find(function (glob) {return (0, _minimatch.minimatch)(node.parent.source.value, glob, { matchBase: true });})) {
+               return;
+             }
+ 
+diff --git a/lib/rules/no-unassigned-import.js b/lib/rules/no-unassigned-import.js
+index 121d5110923ca474a7eed915051146ff92f8879b..c21522234a4dffe75f51bdc955e9d585ac6e6686 100644
+--- a/lib/rules/no-unassigned-import.js
++++ b/lib/rules/no-unassigned-import.js
+@@ -1,5 +1,5 @@
+ 'use strict';var _path = require('path');var _path2 = _interopRequireDefault(_path);
+-var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++var _minimatch = require('minimatch');
+ var _contextCompat = require('eslint-module-utils/contextCompat');
+ 
+ var _staticRequire = require('../core/staticRequire');var _staticRequire2 = _interopRequireDefault(_staticRequire);
+@@ -25,8 +25,8 @@ function testIsAllow(globs, filename, source) {
+     filePath = _path2['default'].resolve(_path2['default'].dirname(filename), source); // get source absolute path
+   }
+ 
+-  return globs.find(function (glob) {return (0, _minimatch2['default'])(filePath, glob) ||
+-    (0, _minimatch2['default'])(filePath, _path2['default'].join(process.cwd(), glob));}) !==
++  return globs.find(function (glob) {return (0, _minimatch.minimatch)(filePath, glob) ||
++    (0, _minimatch.minimatch)(filePath, _path2['default'].join(process.cwd(), glob));}) !==
+   undefined;
+ }
+ 
+diff --git a/lib/rules/order.js b/lib/rules/order.js
+index 578709bf0b90c1c794ed7f8c046d9b3edaf0ff0a..9ab0c30f6b296dab1eec1521ef8c831353f05b67 100644
+--- a/lib/rules/order.js
++++ b/lib/rules/order.js
+@@ -1,6 +1,6 @@
+ 'use strict';var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) {return typeof obj;} : function (obj) {return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;};var _slicedToArray = function () {function sliceIterator(arr, i) {var _arr = [];var _n = true;var _d = false;var _e = undefined;try {for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) {_arr.push(_s.value);if (i && _arr.length === i) break;}} catch (err) {_d = true;_e = err;} finally {try {if (!_n && _i["return"]) _i["return"]();} finally {if (_d) throw _e;}}return _arr;}return function (arr, i) {if (Array.isArray(arr)) {return arr;} else if (Symbol.iterator in Object(arr)) {return sliceIterator(arr, i);} else {throw new TypeError("Invalid attempt to destructure non-iterable instance");}};}();
+ 
+-var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++var _minimatch = require('minimatch');
+ var _arrayIncludes = require('array-includes');var _arrayIncludes2 = _interopRequireDefault(_arrayIncludes);
+ var _object = require('object.groupby');var _object2 = _interopRequireDefault(_object);
+ var _contextCompat = require('eslint-module-utils/contextCompat');
+@@ -507,7 +507,7 @@ function mutateRanksToAlphabetize(imported, alphabetizeOptions) {
+ function computePathRank(ranks, pathGroups, path, maxPosition) {
+   for (var i = 0, l = pathGroups.length; i < l; i++) {var _pathGroups$i =
+     pathGroups[i],pattern = _pathGroups$i.pattern,patternOptions = _pathGroups$i.patternOptions,group = _pathGroups$i.group,_pathGroups$i$positio = _pathGroups$i.position,position = _pathGroups$i$positio === undefined ? 1 : _pathGroups$i$positio;
+-    if ((0, _minimatch2['default'])(path, pattern, patternOptions || { nocomment: true })) {
++    if ((0, _minimatch.minimatch)(path, pattern, patternOptions || { nocomment: true })) {
+       return ranks[group] + position / maxPosition;
+     }
+   }

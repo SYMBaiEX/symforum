@@ -167,6 +167,9 @@
     "vitest": "4.1.12"
   },
   "overrides": {
+    "glob@>=13 <14": "14.0.3",
+    "minimatch@>=3 <4": "11.0.3",
+    "minimatch@>=10 <11": "11.0.3",
     "@react-email/render": "2.2.0",
     "qs": "6.17.1",
     "body-parser": "2.4.0",
@@ -188,6 +191,11 @@
     "zod@>=4 <5": "4.6.7"
   },
   "patchedDependencies": {
-    "@convex-dev/better-auth@0.12.6": "patches/@convex-dev%2Fbetter-auth@0.12.6.patch"
+    "@convex-dev/better-auth@0.12.6": "patches/@convex-dev%2Fbetter-auth@0.12.6.patch",
+    "eslint-plugin-import@2.32.0": "patches/eslint-plugin-import@2.32.0.patch",
+    "eslint-plugin-react@7.37.5": "patches/eslint-plugin-react@7.37.5.patch",
+    "eslint-plugin-jsx-a11y@6.10.2": "patches/eslint-plugin-jsx-a11y@6.10.2.patch",
+    "@eslint/config-array@0.21.2": "patches/@eslint%2Fconfig-array@0.21.2.patch",
+    "@eslint/eslintrc@3.3.6": "patches/@eslint%2Feslintrc@3.3.6.patch"
   }
 }

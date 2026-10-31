@@ -1,0 +1,57 @@
+diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
+index f1a387de4266b34d517798498140b747900a8573..3f50137fc16c5d8632bd7388d412e1846461a6a8 100644
+--- a/dist/cjs/index.d.cts
++++ b/dist/cjs/index.d.cts
+@@ -2,8 +2,8 @@ export { ObjectSchema } from "@eslint/object-schema";
+ export type PropertyDefinition = $eslintobjectschema.PropertyDefinition;
+ export type ObjectDefinition = $eslintobjectschema.ObjectDefinition;
+ export type ConfigObject = $typests.ConfigObject;
+-export type IMinimatchStatic = minimatch.IMinimatchStatic;
+-export type IMinimatch = minimatch.IMinimatch;
++export type IMinimatchStatic = typeof minimatch;
++export type IMinimatch = minimatch.Minimatch;
+ export type ObjectSchemaInstance = ObjectSchema;
+ /**
+  * Represents an array of config objects and provides method for working with
+@@ -141,5 +141,5 @@ export namespace ConfigArraySymbol {
+ }
+ import type * as $eslintobjectschema from "@eslint/object-schema";
+ import type * as $typests from "./types.cts";
+-import minimatch from 'minimatch';
++import * as minimatch from 'minimatch';
+ import { ObjectSchema } from '@eslint/object-schema';
+diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
+index f40e6a9f7a18a88aad6173da41a11f5fe45ff9bd..24026c1d0496ce54e88eef129402a6283326b7bb 100644
+--- a/dist/esm/index.d.ts
++++ b/dist/esm/index.d.ts
+@@ -2,8 +2,8 @@ export { ObjectSchema } from "@eslint/object-schema";
+ export type PropertyDefinition = $eslintobjectschema.PropertyDefinition;
+ export type ObjectDefinition = $eslintobjectschema.ObjectDefinition;
+ export type ConfigObject = $typests.ConfigObject;
+-export type IMinimatchStatic = minimatch.IMinimatchStatic;
+-export type IMinimatch = minimatch.IMinimatch;
++export type IMinimatchStatic = typeof minimatch;
++export type IMinimatch = minimatch.Minimatch;
+ export type ObjectSchemaInstance = ObjectSchema;
+ /**
+  * Represents an array of config objects and provides method for working with
+@@ -141,5 +141,5 @@ export namespace ConfigArraySymbol {
+ }
+ import type * as $eslintobjectschema from "@eslint/object-schema";
+ import type * as $typests from "./types.ts";
+-import minimatch from 'minimatch';
++import * as minimatch from 'minimatch';
+ import { ObjectSchema } from '@eslint/object-schema';
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index 52db07de381a181a069ba39b648d3a0158ef4bc6..5c3758b7fa83baf568aeb6299ed882e194b002f0 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -1,7 +1,7 @@
+ // @ts-self-types="./index.d.ts"
+ import * as posixPath from './std__path/posix.js';
+ import * as windowsPath from './std__path/windows.js';
+-import minimatch from 'minimatch';
++import * as minimatch from 'minimatch';
+ import createDebug from 'debug';
+ import { ObjectSchema } from '@eslint/object-schema';
+ export { ObjectSchema } from '@eslint/object-schema';
