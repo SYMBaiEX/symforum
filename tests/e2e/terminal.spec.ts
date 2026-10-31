@@ -461,6 +461,10 @@ for (const viewport of [
     ).toBeLessThanOrEqual(width.available);
     await receive.scrollIntoViewIfNeeded();
     await expectUnobscured(receive);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/fixture-normal-quote-mobile-${viewport.width}x${viewport.height}-estimate.png`,
+      animations: "disabled",
+    });
     const primary = order.getByRole("button", {
       name: "Buy SYMF",
       exact: true,
