@@ -204,8 +204,8 @@
   grid-template-columns: minmax(160px, 0.75fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 64px;
-  padding: 8px 16px;
+  min-height: 56px;
+  padding: 8px 12px;
 }
 .identity {
   display: flex;
@@ -343,7 +343,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px 16px;
   margin: 0;
-  padding: 0 16px 8px;
+  padding: 0 12px 4px;
 }
 .topMetrics > div {
   min-width: 0;
@@ -374,7 +374,7 @@
 }
 .marketStatus {
   margin: 0;
-  padding: 0 16px 8px;
+  padding: 0 12px 4px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
   line-height: 16px;
@@ -615,22 +615,142 @@
 .orderSurface {
   min-width: 0;
 }
+.orderSurface > .panelHead {
+  min-height: 32px;
+}
+.orderSurface > .panelHead > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.orderSurface > .body {
+  padding: 4px 12px 8px;
+}
 .aside :global(.commerce-panel) {
   margin: 0;
 }
 .aside .body :global(.token-swap) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
+.aside .body :global(.token-swap > *) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+/* Trade + selected mint already titles the rail. Keep the network and linked
+   wallet together in DOM reading order, without a second market-order title. */
+.aside .body :global(.token-swap > .commerce-heading) {
+  grid-column: 1;
+  align-self: center;
+  padding: 0;
+}
+.aside .body :global(.token-swap > .commerce-heading > h2) {
+  display: none;
+}
+.aside .body :global(.token-swap > .commerce-heading + button) {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  min-width: 44px;
+  min-height: 44px;
+}
 .aside .body :global(.token-swap .commerce-amount) {
   border-radius: var(--terminal-control-radius);
-  padding: 12px;
+  padding: 8px 12px;
+  gap: 4px;
+}
+.aside .body :global(.token-swap .commerce-amount input),
+.aside .body :global(.token-swap .swap-receive) {
+  height: 44px;
+  font-size: 28px !important;
+  line-height: 1.2;
+}
+.aside .body :global(.token-swap .commerce-amount code) {
+  font-size: 12px;
+  line-height: 16px;
+}
+.aside .body :global(.token-swap .commerce-reverse) {
+  justify-self: center;
+  width: 44px;
+  height: 44px;
+  margin-block: -16px;
+  border-width: 1px;
+}
+.aside .body :global(.token-swap .commerce-inline) {
+  gap: 8px;
+  padding: 0;
+}
+.aside .body :global(.token-swap .commerce-inline select) {
+  min-height: 44px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.aside .body :global(.token-swap > .commerce-inline) {
+  grid-column: 1;
+  align-self: center;
+}
+.aside
+  .body
+  :global(.token-swap > .commerce-inline + .commerce-details:not([open])) {
+  display: block;
+  grid-column: 2;
+  padding: 0;
+  border: 0;
+}
+.aside
+  .body
+  :global(.token-swap > .commerce-inline + .commerce-details > summary) {
+  padding: 0;
+}
+.aside .body :global(.token-swap .commerce-details) {
+  padding-top: 0;
+}
+.aside .body :global(.token-swap .commerce-details > summary) {
+  min-height: 44px;
 }
 .aside .body :global(.token-swap .swap-preview) {
+  gap: 4px;
+  padding: 8px;
   border-radius: var(--terminal-control-radius);
+}
+.aside .body :global(.token-swap .swap-preview dl) {
+  gap: 4px;
+}
+.aside .body :global(.token-swap .swap-preview dl > div:nth-child(2)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.aside .body :global(.token-swap .swap-preview dl > div:nth-child(2) > dd) {
+  text-align: start;
+}
+.aside .body :global(.token-swap .swap-preview p),
+.aside .body :global(.token-swap .swap-preview > .commerce-inline) {
+  font-size: 12px;
+  line-height: 16px;
+}
+.aside .body :global(.token-swap .swap-primary) {
+  min-height: 44px;
+  border-radius: var(--terminal-control-radius);
+}
+@container (min-width: 841px) {
+  .aside .body :global(.token-swap .commerce-amount) {
+    grid-template-columns: 56px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+  .aside .body :global(.token-swap .commerce-amount > label) {
+    align-self: center;
+  }
+  .aside .body :global(.token-swap .commerce-amount > code) {
+    grid-column: 1 / -1;
+  }
 }
 .executionDetails,
 .riskDisclosure {
@@ -1340,6 +1460,9 @@
   }
   .aside :global(.commerce-amount input) {
     font-size: max(16px, 1em);
+  }
+  .aside .body :global(.token-swap .commerce-details > summary) {
+    min-height: 44px;
   }
 }
 @container (max-width: 360px) {
