@@ -20,6 +20,8 @@ import { tokenPlatformValidator } from "./tokenAlphaSchema";
 import { terminalReadLimiter } from "./forumTerminalData";
 import { readTerminalRisk, readTerminalWallet } from "./forumTerminalWallet";
 import { FORUM_SITE_URL } from "../lib/site-urls";
+import { matchesMarketCap } from "../lib/forum-market-cap";
+import { withRefreshedMarket } from "../lib/terminal-market-refresh-source";
 
 async function marketView(
   ctx: QueryCtx,
@@ -66,52 +68,67 @@ export const listMarket = query({
       throw new ConvexError("Invalid terminal window.");
     const floor = now - TERMINAL_RETENTION_MS;
     const query = ctx.db.query("forumTerminalMarkets");
+    // The original scout band is not necessarily the current display band.
+    // Merge a bounded retained cohort first, then filter actual displayed cap.
     const rows = platform
-      ? band === "all"
-        ? await query
-            .withIndex("by_platform_and_observedAt", (q) =>
-              q
-                .eq("platform", platform)
-                .gte("observedAt", floor)
-                .lte("observedAt", now + 60_000),
-            )
-            .order("desc")
-            .take(limit)
-        : await query
-            .withIndex("by_platform_and_band_and_observedAt", (q) =>
-              q
-                .eq("platform", platform)
-                .eq("band", band)
-                .gte("observedAt", floor)
-                .lte("observedAt", now + 60_000),
-            )
-            .order("desc")
-            .take(limit)
-      : band === "all"
-        ? await query
-            .withIndex("by_observedAt", (q) =>
-              q.gte("observedAt", floor).lte("observedAt", now + 60_000),
-            )
-            .order("desc")
-            .take(limit)
-        : await query
-            .withIndex("by_band_and_observedAt", (q) =>
-              q
-                .eq("band", band)
-                .gte("observedAt", floor)
-                .lte("observedAt", now + 60_000),
-            )
-            .order("desc")
-            .take(limit);
-    const sampledAt = rows.length
-      ? Math.max(...rows.map((row) => row.snapshot.observedAt))
+      ? await query
+          .withIndex("by_platform_and_observedAt", (q) =>
+            q
+              .eq("platform", platform)
+              .gte("observedAt", floor)
+              .lte("observedAt", now + 60_000),
+          )
+          .order("desc")
+          .take(60)
+      : await query
+          .withIndex("by_observedAt", (q) =>
+            q.gte("observedAt", floor).lte("observedAt", now + 60_000),
+          )
+          .order("desc")
+          .take(60);
+    const cache = await ctx.db
+      .query("forumMarketSampleCache")
+      .withIndex("by_key", (q) => q.eq("key", "markets"))
+      .unique();
+    const overlays = new Map(cache?.quotes.map((quote) => [quote.mint, quote]));
+    const displayed = rows
+      .map((row) => ({
+        row,
+        market: withRefreshedMarket(
+          snapshotToTerminal(row.snapshot),
+          overlays.get(row.mint),
+          now,
+        ),
+      }))
+      .filter(({ market }) => matchesMarketCap(market.marketCapUsd, band))
+      .slice(0, limit);
+    // Only hydrate public discussion links for the returned, filtered rows.
+    const markets = await Promise.all(
+      displayed.map(async ({ row, market }) => {
+        const publicView = await marketView(ctx, row);
+        return {
+          ...market,
+          threadId: publicView.threadId,
+          threadUrl: publicView.threadUrl,
+        };
+      }),
+    );
+    const sampledAt = markets.length
+      ? Math.max(...markets.map((market) => market.observedAt))
       : null;
     return {
-      markets: await Promise.all(rows.map((row) => marketView(ctx, row))),
+      markets,
       band,
       coverage: "sampled" as const,
       sampledAt,
-      stale: sampledAt === null || now - sampledAt > TERMINAL_FRESH_MS,
+      stale:
+        markets.length === 0 ||
+        markets.every((market) =>
+          market.marketData
+            ? market.marketData.state !== "available" ||
+              now - market.marketData.checkedAt > TERMINAL_FRESH_MS
+            : now - market.metricsAsOf > TERMINAL_FRESH_MS,
+        ),
     };
   },
 });
