@@ -256,8 +256,22 @@ test("one real order input persists through internal tools and viewport changes 
   await expect(amount).toBeHidden();
   await openTool(page, "Research");
   await expect(
-    page.getByRole("button", { name: "Review research export", exact: true }),
+    page.getByRole("button", {
+      name: "Payment receipt protected",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/A previous payment is awaiting verified settlement/),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: "Verify saved receipt", exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Review research export", exact: true }),
+  ).toHaveCount(0);
   await openTool(page, "Community");
   await expect(
     page.getByRole("heading", { name: /Fixture research collective/ }),
