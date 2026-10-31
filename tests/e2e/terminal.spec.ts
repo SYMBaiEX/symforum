@@ -930,6 +930,72 @@ test("failed alert acknowledgement retains the unread alert and exact-mint actio
   expect(errors).toEqual([]);
 });
 
+for (const pause of ["visible", "hidden", "offline"] as const) {
+  test(`pre-I/O Markets deferral retries once after the shared window: ${pause}`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const { errors } = await harness(page, "guest&marketrefreshdeferred");
+    const counts = () =>
+      page.evaluate(() => {
+        const fixture = window as typeof window & {
+          __terminalFixtureMarketRefreshArgs: Record<string, unknown>[];
+          __terminalFixtureMarketRefreshAdmissions: number[];
+        };
+        return {
+          actions: fixture.__terminalFixtureMarketRefreshArgs.length,
+          admissions: fixture.__terminalFixtureMarketRefreshAdmissions.length,
+        };
+      });
+    await openPane(page, "Markets");
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Waiting for shared data window" }),
+    ).toBeVisible();
+    expect(await counts()).toEqual({ actions: 1, admissions: 0 });
+    if (pause === "hidden") await openPane(page, "Chart");
+    if (pause === "offline") await page.context().setOffline(true);
+    await page.clock.runFor(2000);
+    if (pause !== "visible") {
+      expect(await counts()).toEqual({ actions: 1, admissions: 0 });
+      if (pause === "hidden") await openPane(page, "Markets");
+      else await page.context().setOffline(false);
+    }
+    await expect.poll(counts).toEqual({ actions: 2, admissions: 1 });
+    await page.clock.fastForward(30_000);
+    expect(await counts()).toEqual({ actions: 2, admissions: 1 });
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const scenario of ["marketrefreshloading", "marketrefresherror"]) {
+  test(`Markets does not shorten the admitted or ambiguous cooldown: ${scenario}`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const { errors } = await harness(page, `guest&${scenario}`);
+    await openPane(page, "Markets");
+    await expect(
+      page
+        .getByRole("status")
+        .filter({
+          hasText:
+            scenario === "marketrefreshloading"
+              ? "Shared refresh in progress"
+              : "Refresh unavailable · retained rows",
+        }),
+    ).toBeVisible();
+    await page.clock.fastForward(30_000);
+    expect(
+      (await recordedOperations(page)).filter(
+        (name) => name === "action:forumTerminalRefresh:refresh",
+      ),
+    ).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+}
+
 test("Markets refresh is visible demand only and pauses offline, backgrounded and unmounted", async ({
   page,
 }) => {

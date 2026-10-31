@@ -4,6 +4,7 @@ import {
   formatMarketPercent,
   marketObservation,
   marketSources,
+  marketRefreshRetryAt,
   rawMarketNumber,
   sortMarketRows,
 } from "./market-explorer-model";
@@ -41,6 +42,42 @@ function market(
 }
 
 describe("sampled-market display contracts", () => {
+  it("only honors bounded future pre-I/O deferred retries before the normal cooldown", () => {
+    const now = 1_800_000_000_000;
+    const normal = now + 600_000;
+    const deferred = {
+      state: "deferred" as const,
+      checkedAt: null,
+      nextRefreshAt: now + 1500,
+    };
+    expect(marketRefreshRetryAt(deferred, now, normal)).toBe(now + 1500);
+    expect(
+      marketRefreshRetryAt(
+        { ...deferred, nextRefreshAt: now + 1 },
+        now,
+        normal,
+      ),
+    ).toBe(now + 1000);
+    for (const retry of [null, NaN, Infinity, now - 1, now, now + 60_001])
+      expect(
+        marketRefreshRetryAt(
+          { ...deferred, nextRefreshAt: retry },
+          now,
+          normal,
+        ),
+      ).toBe(normal);
+    for (const state of ["ready", "loading", "budget", "unavailable"] as const)
+      expect(marketRefreshRetryAt({ ...deferred, state }, now, normal)).toBe(
+        normal,
+      );
+    expect(
+      marketRefreshRetryAt(
+        { ...deferred, state: "budget", nextRefreshAt: now + 86_400_000 },
+        now,
+        normal,
+      ),
+    ).toBe(now + 86_400_000);
+  });
   it("dates refreshed market fields independently from the original holder sample", () => {
     const now = 1_800_000_000_000;
     const value = market("exact-mint", {

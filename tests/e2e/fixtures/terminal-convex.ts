@@ -33,6 +33,7 @@ let researchVerified = false;
 let refreshedMarketRows = false;
 let marketCheckedAt: number | null = null;
 const marketRefreshArguments: Record<string, unknown>[] = [];
+const marketRefreshAdmissions: number[] = [];
 let signedOut = false;
 const queryNames: string[] = [];
 const operationCalls: string[] = [];
@@ -40,6 +41,7 @@ Object.assign(window, {
   __terminalFixtureQueries: queryNames,
   __terminalFixtureCalls: operationCalls,
   __terminalFixtureMarketRefreshArgs: marketRefreshArguments,
+  __terminalFixtureMarketRefreshAdmissions: marketRefreshAdmissions,
 });
 window.addEventListener("terminal-fixture:signout", () => {
   signedOut = true;
@@ -451,6 +453,15 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
       operationCalls.push(`action:${name}`);
       if (name === "forumTerminalRefresh:refresh") {
         marketRefreshArguments.push(_args as Record<string, unknown>);
+        if (
+          location.search.includes("marketrefreshdeferred") &&
+          marketRefreshArguments.length === 1
+        )
+          return {
+            state: "deferred",
+            checkedAt: null,
+            nextRefreshAt: Date.now() + 1500,
+          } as FunctionReturnType<Ref>;
         if (location.search.includes("marketrefresherror"))
           throw new Error("Invented shared refresh failure");
         const state = location.search.includes("marketrefreshbudget")
@@ -459,6 +470,7 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
             ? "loading"
             : "ready";
         if (state === "ready" && location.search.includes("marketrefresh")) {
+          marketRefreshAdmissions.push(Date.now());
           refreshedMarketRows = true;
           marketCheckedAt = Date.now();
           revision++;
@@ -467,7 +479,7 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
         return {
           state,
           checkedAt: marketCheckedAt,
-          nextRefreshAt: Date.now() + 600_000,
+          nextRefreshAt: Date.now() + (state === "loading" ? 1500 : 600_000),
         } as FunctionReturnType<Ref>;
       }
       if (location.search.includes("orderinput")) {

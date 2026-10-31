@@ -31,6 +31,8 @@ import {
 } from "./terminal-format";
 import {
   formatMarketPercent,
+  MARKET_REFRESH_INTERVAL_MS,
+  marketRefreshRetryAt,
   marketSources,
   rawMarketNumber,
   sortMarketRows,
@@ -48,8 +50,6 @@ const columns = [
   ["volume24h", "24h volume"],
   ["holders", "Holders"],
 ] as const;
-
-const MARKET_REFRESH_INTERVAL_MS = 10 * 60_000;
 
 /** Demand only: the server owns batch membership, lease and all quota checks. */
 function useVisibleMarketRefresh(root: RefObject<HTMLElement | null>) {
@@ -95,14 +95,11 @@ function useVisibleMarketRefresh(root: RefObject<HTMLElement | null>) {
       void refresh({})
         .then((value) => {
           if (disposed) return;
-          if (
-            value.nextRefreshAt != null &&
-            Number.isFinite(value.nextRefreshAt)
-          )
-            nextAttemptAt.current = Math.max(
-              nextAttemptAt.current,
-              value.nextRefreshAt,
-            );
+          nextAttemptAt.current = marketRefreshRetryAt(
+            value,
+            Date.now(),
+            nextAttemptAt.current,
+          );
           setResult(value);
         })
         .catch(() => {
@@ -394,9 +391,11 @@ export function MarketExplorer({
                 ? "Free-data allowance reached · retained rows"
                 : refresh.result?.state === "unavailable"
                   ? "Refresh unavailable · retained rows"
-                  : refresh.result?.state === "loading"
-                    ? "Shared refresh in progress"
-                    : "Shared cache · up to 30 mints"}
+                  : refresh.result?.state === "deferred"
+                    ? "Waiting for shared data window"
+                    : refresh.result?.state === "loading"
+                      ? "Shared refresh in progress"
+                      : "Shared cache · up to 30 mints"}
         </p>
         <details className={styles.coverageDetails}>
           <summary>Coverage &amp; sources</summary>

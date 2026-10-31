@@ -1,4 +1,27 @@
-import type { TerminalMarket } from "@/lib/forum-terminal-model";
+import type {
+  TerminalMarket,
+  TerminalMarketRefreshResult,
+} from "@/lib/forum-terminal-model";
+
+export const MARKET_REFRESH_INTERVAL_MS = 10 * 60_000;
+
+/** Only known pre-I/O deferral can shorten the admitted-attempt cooldown. */
+export function marketRefreshRetryAt(
+  result: TerminalMarketRefreshResult,
+  now: number,
+  attemptNotBefore: number,
+) {
+  const retryAt = result.nextRefreshAt;
+  if (result.state === "deferred") {
+    const delay = typeof retryAt === "number" ? retryAt - now : NaN;
+    return Number.isFinite(delay) && delay > 0 && delay <= 60_000
+      ? now + Math.max(1000, delay)
+      : attemptNotBefore;
+  }
+  return retryAt != null && Number.isFinite(retryAt)
+    ? Math.max(attemptNotBefore, retryAt)
+    : attemptNotBefore;
+}
 
 export type MarketSortKey =
   | "price"
