@@ -1119,3 +1119,97 @@ operations, job/hold records and infrastructure binding metadata out of it.
   loop over every button plus all other layout/controller assertions unchanged.
   This is not a release qualification yet; retain failed logs and rerun all
   final gates against the corrected frozen candidate after independent review.
+
+## Batch 12 released — 14:14 UTC
+
+- PR #267 normally rebase-merged at 14:09:29 UTC. Corrected candidate and main
+  have an exactly equal complete tree; all five new main authors are exact.
+- Every corrected parent gate passed on the unchanged candidate: 4,404 unit/
+  backend and 739 isolated browser cases, both types, all five builds, native
+  parity, all three unsuppressed audits and security controls. Lint retains
+  three existing warnings and zero errors; five-commit redacted scan is clean.
+  Independent review and four real-frame/strict-laptop reruns also passed.
+- Exact automatic production READY observed 14:12:13 UTC; all five original
+  aliases matched 14:12:27. One signed-out Community Work visit at desktop and
+  phone sizes accepted the honest empty directory, no-escrow/finalized-receipt
+  safeguards and horizontal bounds, without opening creation or signing in.
+  Phone content is vertically scrollable, not claimed entirely above the fold.
+- Own isolated browser closed after 14:13:05 acceptance. Bounded exact-release
+  server-error sample through 14:13:27 was zero of thirty, uncapped. No further
+  production polling is needed. Protected templates, chart controls, real
+  wallet/RPC/auth/payment and AT remain fixture/source validated, not live
+  financial certification. Private operational receipt is kept outside the PR.
+- Counts: eighty-two source-deployed, 140 queued, two blocked and sixteen
+  needing confirmation. No backend, worker, configuration, dependency, budget,
+  schedule, fee, limit, safety-gate or uncertain-hold changes occurred.
+
+## Batch 13 dispatch — 14:16 UTC
+
+- Three clean isolated worktrees start at verified main `7d0e3dd0`, with root
+  dependencies and each worktree's own normal app-local forum-ui link. Literal
+  ownership is recorded in the backlog before source dispatch. No shared writer.
+- TRADE-054/060, `/private/tmp/symforum-overnight-swap-pair-transparency`, branch
+  `sym/overnight-swap-pair-transparency`: new swap-pair-isolation browser spec/
+  fixtures execute actual TokenSwap with deferred inert quote callbacks; all
+  financial actions remain denied. Test reverse/change/ABA/old failure binding,
+  exact quote counts and unchanged account/hold gates. No swap-controller edit
+  is authorized; report any real red before expansion. Separately own only
+  transparency-panel and new transparency-window spec/fixtures for explicit
+  up-to-ten visible receipt coverage, distinct from returned totals and actual
+  historyComplete. No new query, metric, signature, link or proof policy.
+- FORUM-058, `/private/tmp/symforum-overnight-start-here-pillars`, branch
+  `sym/overnight-start-here-pillars`: own start-here component and new pillar
+  browser spec/fixtures. Replace the work-in-progress action's AI-only route
+  with explicit accessible choices for the five already-linked active pillars.
+  Reuse actual host-aware destinations; no archive inclusion, draft creation,
+  navigation on opening, queries or auth-action changes.
+- FORUM-059, `/private/tmp/symforum-overnight-catch-up-collections`, branch
+  `sym/overnight-catch-up-collections`: own catch-up component and new collection
+  browser spec/fixtures. Distinguish unresolved board options from an empty
+  loaded collection. Preserve selection/followed/busy states, exact query/event
+  counts and every original save/mute/follow handler; no automatic following.
+- Workers use actual SurfaceScope and both real app styles at 320/390px, direct
+  intrinsic bounds and 44px targets, keyboard and normal/failure/race cases.
+  External/provider/wallet/financial traffic denied; quote/save/follow callbacks
+  may only be explicit inert payload-test mocks. No old test edits without
+  separately recorded scope, skips, weakened assertions, generated/shared docs,
+  global CSS, push, PR or deployment. Exact-author clean frozen commits only.
+- Counts: eighty-two deployed, four in progress, 136 queued, two blocked and
+  sixteen needing confirmation. Finish this batch's focused checks, independent
+  review and every full parent gate before a normal reviewed release. Original
+  15:45 UTC stop and all operating safeguards remain unchanged.
+
+## Batch 13 integrated candidate — 14:30 UTC
+
+- Three frozen source chains are integrated from verified latest main. Four
+  items are implemented, not yet parent-qualified, merged or deployed.
+- FORUM-058 offers the five exact active pillar destinations through existing
+  host-aware links. Join/auth actions are unchanged; the new menu does not
+  navigate, prefetch, write or add queries when opened. Worker fifteen-browser
+  and 39-unit checks passed; independent fifteen-browser and ten-unit reruns
+  passed. Initial two new tests assumed a custom Radix menu name; tests now
+  assert its real trigger-derived accessible name, without old-test edits.
+- FORUM-059 adds eighteen collection-specific render-only lines for unresolved
+  and loaded-empty options. Every original query, event, selection, checkbox,
+  save and mute handler is unchanged. Worker twelve new plus 48 unchanged
+  browser cases, three units and types/lint passed; independent twelve-browser
+  and three-unit reruns passed. A missing fixture export compilation issue was
+  corrected; no behavioral failure was claimed for that harness issue.
+- TRADE-054 is tests-only: actual TokenSwap/TokenPicker reverse, pair change and
+  ABA with deferred old success/failure verify original revision guards. No
+  controller defect was reproduced. The held fixture explicitly denies and
+  rejects the existing automatic recovery attempt once; it never fulfils a
+  recovery or server call, and every financial operation remains blocked.
+- TRADE-060 makes the visible up-to-ten receipt window distinct from totals
+  and historical completeness, corrects global-sounding empty text, and grows
+  the owned explorer links from actual 36px to 44px. Query, values, signatures,
+  hrefs and slice are unchanged. Concrete window/target baseline failures are
+  retained separately from new-test picker-locator/closed-history assumptions.
+  Worker 56-browser matrix and final 28-case check plus 31 units/types/lint
+  passed; independent 27 new browsers and 28 relevant units passed.
+- Root reviewed all combined source and fixtures; all existing test files are
+  unchanged. Both app styles at 320/390px, direct intrinsic bounds, keyboard,
+  failures and inert callbacks are covered. Source/focused checks do not
+  certify production auth, signing, quotes, recovery, settlement, devices or AT.
+- Counts: eighty-two deployed, four implemented, 136 queued, two blocked and
+  sixteen needing confirmation. Full unchanged-candidate gates follow.

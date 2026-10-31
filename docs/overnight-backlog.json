@@ -117,7 +117,7 @@
     "evidence": "components/trading/market-explorer-model.ts:56",
     "acceptance": "Property-style fixtures exercise all seven sort keys, both directions, nonfinite/missing values and equal metrics; order is deterministic by mint, transitive, and does not mutate input.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/market-explorer-model.ts",
@@ -125,7 +125,8 @@
       "tests/e2e/wallet-read-isolation.spec.ts",
       "tests/e2e/fixtures/wallet-read-isolation.tsx",
       "tests/e2e/fixtures/wallet-read-isolation-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-008",
@@ -377,7 +378,7 @@
     "evidence": "components/trading/price-chart.tsx:420",
     "acceptance": "An explicit expand/restore control resizes the same chart instance, restores focus, keeps order/protected state mounted and reachable, and never remounts transport or requests extra bars.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/price-chart.tsx",
       "components/trading/forum-terminal.module.css",
@@ -385,7 +386,8 @@
       "tests/e2e/terminal.spec.ts",
       "tests/e2e/fixtures/chart-workspace-controls.tsx",
       "tests/e2e/fixtures/chart-workspace-controls-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-022",
@@ -396,7 +398,7 @@
     "evidence": "components/trading/price-chart.tsx:55",
     "acceptance": "A named reset-view action calls the existing chart viewport API on already-loaded candles; it is keyboard accessible, leaves interval/data unchanged, and performs no fetch.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/price-chart.tsx",
       "components/trading/forum-terminal.module.css",
@@ -404,7 +406,8 @@
       "tests/e2e/terminal.spec.ts",
       "tests/e2e/fixtures/chart-workspace-controls.tsx",
       "tests/e2e/fixtures/chart-workspace-controls-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-023",
@@ -685,7 +688,7 @@
     "evidence": "components/trading/wallet-panel.tsx:31",
     "acceptance": "Resolve an old wallet's delayed read after switching wallets/mints and assert old balances/errors never render under the new identity; test manual-refresh failure and unmount without real RPC.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/wallet-panel.tsx",
       "components/trading/market-explorer-model.ts",
@@ -693,7 +696,8 @@
       "tests/e2e/wallet-read-isolation.spec.ts",
       "tests/e2e/fixtures/wallet-read-isolation.tsx",
       "tests/e2e/fixtures/wallet-read-isolation-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "TRADE-041",
@@ -907,8 +911,12 @@
     "evidence": "components/swap/token-swap.tsx:712",
     "acceptance": "With a delayed quote in flight, reverse or change the exact pair and then resolve the old quote; old amounts/minimum/fee never bind to the new pair and no wallet operation occurs.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/swap/token-swap.tsx"]
+    "status": "implemented",
+    "paths": [
+      "tests/e2e/swap-pair-isolation.spec.ts",
+      "tests/e2e/fixtures/swap-pair-isolation.tsx",
+      "tests/e2e/fixtures/swap-pair-isolation-state.tsx"
+    ]
   },
   {
     "id": "TRADE-055",
@@ -1000,8 +1008,13 @@
     "evidence": "components/trading/transparency-panel.tsx:79",
     "acceptance": "The panel identifies its up-to-ten displayed verified receipts separately from cumulative totals and historyComplete status; pending payments, estimated revenue and unverified swap fees remain excluded.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/transparency-panel.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/trading/transparency-panel.tsx",
+      "tests/e2e/transparency-window.spec.ts",
+      "tests/e2e/fixtures/transparency-window.tsx",
+      "tests/e2e/fixtures/transparency-window-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-001",
@@ -1337,7 +1350,7 @@
     "evidence": "components/community/community-hub.tsx:729",
     "acceptance": "Enhancement: explicit template choice fills editable deliverable/sources/deadline/acceptance guidance only; no generated model calls and no automatic publishing.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
@@ -1346,7 +1359,8 @@
       "tests/e2e/work-brief-guidance.spec.ts",
       "tests/e2e/fixtures/work-brief-guidance.tsx",
       "tests/e2e/fixtures/work-brief-guidance-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "COMMUNITY-025",
@@ -1436,7 +1450,7 @@
     "evidence": "components/community/community-hub.tsx:893",
     "acceptance": "Enhancement: show parsed public destination host before save and explain external-link privacy; preserve existing HTTPS/server URL validation and no URL fetching.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/community/community-hub.tsx",
       "components/community/community-hub.module.css",
@@ -1445,7 +1459,8 @@
       "tests/e2e/work-brief-guidance.spec.ts",
       "tests/e2e/fixtures/work-brief-guidance.tsx",
       "tests/e2e/fixtures/work-brief-guidance-state.tsx"
-    ]
+    ],
+    "receipt": "PR #267 normally rebase-merged at 7d0e3dd012729edb70f690c19f9691ea139782e6; corrected complete 4404-unit/backend and739-browser qualification, exact tree/authors, automatic production and all five original aliases verified2026-10-31 14:12UTC. One public signed-out Community Work desktop/phone acceptance passed14:13UTC; empty directory, no create/sign-in actions. Chart controls, protected templates/delivery submission, wallet/RPC/financial flows, OS clipboard, physical devices and AT remain isolated-test or unverified live acceptance."
   },
   {
     "id": "COMMUNITY-032",
@@ -2643,8 +2658,13 @@
     "evidence": "components/forum/forum-start-here.tsx:90",
     "acceptance": "The Share a work in progress action offers the active AI/Gaming/Web3/Hacking/Music destinations described in its copy instead of always routing to AI; preserve host-aware links and archive restrictions.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-start-here.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-start-here.tsx",
+      "tests/e2e/start-here-pillars.spec.ts",
+      "tests/e2e/fixtures/start-here-pillars.tsx",
+      "tests/e2e/fixtures/start-here-pillars-state.tsx"
+    ]
   },
   {
     "id": "FORUM-059",
@@ -2655,8 +2675,13 @@
     "evidence": "components/forum/forum-catch-up.tsx:232",
     "acceptance": "Interest fieldsets show loading status while board options are unresolved and an honest empty state if a configured collection has no available boards; do not display an unexplained blank fieldset or auto-follow anything.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-catch-up.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-catch-up.tsx",
+      "tests/e2e/catch-up-collections.spec.ts",
+      "tests/e2e/fixtures/catch-up-collections.tsx",
+      "tests/e2e/fixtures/catch-up-collections-state.tsx"
+    ]
   },
   {
     "id": "FORUM-060",
