@@ -178,7 +178,8 @@ for (const viewport of [
     const rail = page.locator(".forum-left-rail");
     if (viewport.width >= 768) await expect(rail).toBeVisible();
     else await expect(rail).toBeHidden();
-    const contentLeft = viewport.width >= 768 ? 192 : 0;
+    const contentLeft =
+      viewport.width >= 1024 ? 192 : viewport.width >= 768 ? 64 : 0;
     const main = await page.locator("main.forum-main").boundingBox();
     const workspace = await page
       .locator("[data-terminal-viewport]")
