@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { RefreshCw, ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -12,6 +12,7 @@ import { shortMint } from "./terminal-format";
 import { walletAmountLabel, walletSolReadings } from "./wallet-readings-model";
 import { useTerminalAttention } from "./terminal-attention";
 import styles from "./forum-terminal.module.css";
+import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 
 const SOL = "So11111111111111111111111111111111111111112";
 
@@ -19,70 +20,124 @@ export function WalletPanel({
   wallet,
   selectedMint,
   selectedSymbol,
+  active = true,
 }: {
   wallet: string;
   selectedMint: string;
   selectedSymbol: string;
+  active?: boolean;
 }) {
   const balanceContextId = useId();
   const read = useAction(terminalApi.getWalletReadState);
   const [data, setData] = useState<TerminalWalletReadState | null>(null);
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [canRead, setCanRead] = useState(false);
   const [error, setError] = useState("");
   const revision = useRef(0);
+  const root = useRef<HTMLElement>(null);
+  const activeView = useRef(active);
+  const checkDemand = useRef<(() => void) | null>(null);
+  const requestRefresh = useRef<(() => void) | null>(null);
+  const { host } = useForumRuntime();
+  useLayoutEffect(() => {
+    activeView.current = active;
+    checkDemand.current?.();
+  }, [active]);
   useEffect(() => {
-    const current = ++revision.current;
+    const element = root.current;
+    if (host !== "website" || !element) return;
     let cancelled = false;
-    void read({ wallet, selectedMint })
-      .then((result) => {
-        if (!cancelled && current === revision.current) {
-          setData(result);
-          if (!result)
+    let intersecting = false;
+    let admitted = false;
+    let running = false;
+    const eligible = () => {
+      if (
+        !activeView.current ||
+        !intersecting ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        !element.getClientRects().length
+      )
+        return false;
+      // Observer delivery can lag an online/explicit-refresh event. Recheck
+      // current rendering and viewport bounds at the actual admission point.
+      const visibility = getComputedStyle(element).visibility;
+      const bounds = element.getBoundingClientRect();
+      return (
+        visibility !== "hidden" &&
+        visibility !== "collapse" &&
+        bounds.bottom > 0 &&
+        bounds.right > 0 &&
+        bounds.top < window.innerHeight &&
+        bounds.left < window.innerWidth
+      );
+    };
+    const request = (manual = false) => {
+      if (cancelled || running || !eligible()) return;
+      const current = ++revision.current;
+      admitted = true;
+      running = true;
+      setBusy(true);
+      setError("");
+      void read({ wallet, selectedMint })
+        .then((result) => {
+          if (!cancelled && current === revision.current) {
+            setData(result);
+            if (!result)
+              setError(
+                "Balance data is unavailable or the shared request allowance is busy. Try later.",
+              );
+          }
+        })
+        .catch(() => {
+          if (!cancelled && current === revision.current)
             setError(
-              "Balance data is unavailable or the shared request allowance is busy. Try later.",
+              manual
+                ? "Balances could not be refreshed. No payment request was made."
+                : "Balances are unavailable. Wallet transactions remain separate.",
             );
-        }
-      })
-      .catch(() => {
-        if (!cancelled && current === revision.current)
-          setError(
-            "Balances are unavailable. Wallet transactions remain separate.",
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setBusy(false);
-      });
+        })
+        .finally(() => {
+          if (!cancelled && current === revision.current) {
+            running = false;
+            setBusy(false);
+          }
+        });
+    };
+    const demand = () => {
+      if (cancelled) return;
+      setCanRead(eligible());
+      if (!admitted) request();
+    };
+    const refresh = () => request(true);
+    checkDemand.current = demand;
+    requestRefresh.current = refresh;
+    const observer = new IntersectionObserver(([entry]) => {
+      intersecting = entry.isIntersecting;
+      demand();
+    });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", demand);
+    window.addEventListener("online", demand);
+    window.addEventListener("offline", demand);
     return () => {
       cancelled = true;
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", demand);
+      window.removeEventListener("online", demand);
+      window.removeEventListener("offline", demand);
+      if (checkDemand.current === demand) checkDemand.current = null;
+      if (requestRefresh.current === refresh) requestRefresh.current = null;
     };
-  }, [wallet, selectedMint, read]);
-  async function refresh() {
-    if (busy) return;
-    const current = ++revision.current;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await read({ wallet, selectedMint });
-      if (current === revision.current) {
-        setData(result);
-        if (!result)
-          setError(
-            "Balance data is unavailable or the shared request allowance is busy. Try later.",
-          );
-      }
-    } catch {
-      if (current === revision.current)
-        setError(
-          "Balances could not be refreshed. No payment request was made.",
-        );
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [wallet, selectedMint, read, host]);
   const current = data?.wallet === wallet ? data : null;
   const solReadings = current ? walletSolReadings(current) : null;
   return (
-    <section className={styles.panel} aria-labelledby="terminal-wallet-title">
+    <section
+      ref={root}
+      className={styles.panel}
+      aria-labelledby="terminal-wallet-title"
+    >
       <header className={styles.panelHead}>
         <div>
           <h2 id="terminal-wallet-title">Your wallet</h2>
@@ -91,9 +146,10 @@ export function WalletPanel({
         <Button
           variant="ghost"
           size="icon"
-          disabled={busy}
+          className="!min-h-11 !min-w-11"
+          disabled={busy || !canRead}
           aria-label="Refresh wallet balances"
-          onClick={() => void refresh()}
+          onClick={() => requestRefresh.current?.()}
         >
           <RefreshCw
             className={`size-4 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`}
@@ -134,7 +190,10 @@ export function WalletPanel({
           </ul>
         ) : (
           <p role="status" className={styles.muted}>
-            {error || "Loading SOL and selected token balances…"}
+            {error ||
+              (busy
+                ? "Loading SOL and selected token balances…"
+                : "Balance reads wait until this panel is visible, online and in the foreground.")}
           </p>
         )}
         {current && (
