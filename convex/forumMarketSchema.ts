@@ -19,8 +19,16 @@ export const marketFailureCodeValidator = v.union(
   v.literal("timeout"),
   v.literal("network"),
   v.literal("invalid-response"),
+  v.literal("empty-candles"),
+  v.literal("candle-schema"),
+  v.literal("candle-identity"),
+  v.literal("candle-numeric"),
   v.literal("pool-unavailable"),
   v.literal("unsupported"),
+);
+export const marketCandleProviderValidator = v.union(
+  v.literal("geckoterminal"),
+  v.literal("solana-tracker"),
 );
 export const refreshedMarketValidator = v.object({
   mint: v.string(),
@@ -68,6 +76,8 @@ export const forumMarketTables = {
     failureCount: v.optional(v.number()),
     failureStage: v.optional(marketFailureStageValidator),
     failureCode: v.optional(marketFailureCodeValidator),
+    failureProvider: v.optional(marketCandleProviderValidator),
+    attemptProvider: v.optional(marketCandleProviderValidator),
     cleanupAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
 };
