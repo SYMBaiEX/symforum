@@ -24,6 +24,7 @@ import {
   marketCandleProviderValidator,
 } from "./forumMarketSchema";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 import { isSolanaAddress, record } from "../lib/forum-commerce";
 import type { TerminalMarket } from "../lib/forum-terminal-model";
 import {
@@ -58,7 +59,7 @@ import {
 const limiter = new RateLimiter(components.rateLimiter, {
   terminalReadDaily: {
     kind: "fixed window",
-    rate: 100,
+    rate: FORUM_READ_POLICY.terminalDailyUnits,
     period: 86_400_000,
     start: 0,
   },

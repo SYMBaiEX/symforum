@@ -406,7 +406,7 @@ test("an exhausted daily budget cannot claim or send a relay; unattempted cancel
   await x.t.run((ctx) =>
     commerceLimiter.limit(ctx, "commerceNetworkDaily", {
       key: "all",
-      count: 1000,
+      count: 20_000,
     }),
   );
   const fetcher = vi.fn();

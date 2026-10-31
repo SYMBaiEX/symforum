@@ -439,11 +439,11 @@ test.each(["terminal", "shared"])(
       cap === "terminal"
         ? marketReadLimiter.limit(ctx, "terminalReadDaily", {
             key: "all",
-            count: 100,
+            count: 6_000,
           })
         : commerceLimiter.limit(ctx, "commerceNetworkDaily", {
             key: "all",
-            count: 1000,
+            count: 20_000,
           }),
     );
     const fetcher = vi.fn();

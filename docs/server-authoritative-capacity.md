@@ -91,12 +91,19 @@ out. For example, the conditional Solana Tracker candle path also reserves its
 existing provider allowance through `tokenAlphaData.reserveApiRequest`; available
 terminal units alone do not guarantee an admitted candle request.
 
-## Approved read policy and activation prerequisite
+## Approved read policy and enforcement
 
 `lib/forum-read-policy.ts` defines the approved application ceilings below.
-The policy-only change does **not** activate them: the baseline limits must not
-be lifted until every relevant provider call is subject to shared, atomic
-admission. Importing constants is not enforcement or evidence of a live rollout.
+The integrated change uses them in the existing feature limiters and wraps the
+known Convex RPC, DEX and Gecko transports with atomic provider admission. The
+legacy SYMF overview now uses that same durable cache instead of direct website
+provider fetches. Importing constants alone is not enforcement or evidence that
+the backend and website releases are live.
+
+Existing fixed-window counters store remaining allowance. An already exhausted
+counter stays exhausted for its current UTC day; changing its configured maximum
+does not refill it. The full larger allowance becomes usable at the next natural
+UTC reset. No existing counter is reset, credited, migrated or refunded.
 
 | Application ceiling          | Approved value                                                    | Required scope                                                              |
 | ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -106,25 +113,34 @@ admission. Importing constants is not enforcement or evidence of a live rollout.
 | Helius credits               | 10,000/day and 300,000 rolling 32 days                            | Both weighted limits must pass; all known users of the configured account   |
 | Helius request window        | 5 per strict rolling second                                       | Not five per caller or five at each fixed-second boundary                   |
 | Jupiter main/keyless windows | 50/25 per rolling minute                                          | Preserve conservative existing pacing across the shared organisation/egress |
-| DEX Screener window          | 60 per strict rolling minute                                      | All known pair/token/batch callers together                                 |
+| DEX Screener window          | 60 per strict rolling minute                                      | Known Convex pair/token/batch callers; broadcast allocation below            |
 | GeckoTerminal window         | 8 per strict rolling minute                                       | All known pool, candle and trade callers together                           |
 | Tracker                      | 70/day; 12 candles/day; 10 enrichments/day; 2,300 rolling 32 days | Unchanged shared provider allowance, including scheduled rankings           |
 
-Admission must count each actual request before transport, including failures
-and bounded alternate routes. JSON-RPC batches cost the sum of their allowed
-methods, not one unit merely because they use one HTTP request. Unknown methods
-must fail closed, not default to one credit. A cache hit must not consume new
-upstream units. Denial must not create a new provider fallback or retry loop.
+Admission counts each actual request before transport, including failures.
+The wrapper rejects JSON-RPC batches and unknown methods instead of guessing a
+cost. A shared fresh cache hit consumes no upstream units. Internal Gecko
+admission denial does not activate the Tracker fallback. Existing provider-failure
+circuits and their bounded fallback remain unchanged.
 
 Integration must use the existing rate-limiter component, not a parallel custom
-quota counter. The planned conservative enforcement checks overlapping component
+quota counter. Conservative enforcement checks overlapping component
 buckets covering twice each short window, and both current and previous buckets.
 Credit accounting uses thirty-three rotating UTC day buckets with a thirty-three-day
 component period, conservatively covering the intended thirty-two-day period.
 This overcoverage can deny requests sooner and yield lower sustained throughput
 than the nominal limits. A strict rolling **ceiling** does not mean exact sliding
-window utilization. These are integration requirements, not enforcement activated
-by the policy-only module.
+window utilization. Thirty-nine rotating component keys bound the new ledger's
+storage. Each Helius admission reads two burst and thirty-three credit counters;
+this is bounded work, not a production latency or cost benchmark.
+
+Only Helius burst denial may wait before I/O: at most two additional admission
+checks, with a total scheduled-wait allowance of 2.5 seconds. This permits existing
+multi-read preparation/proof workflows without raising provider limits. It does
+not bound total request latency. Original abort signals and business deadlines
+remain authoritative. Daily/rolling denial returns immediately; transport errors,
+timeouts and HTTP failures are never retried by this wrapper. Each wrapper call
+performs at most one actual fetch, including the existing one-shot relay path.
 
 The explicit RPC cost allowlist covers the existing standard methods:
 `getAccountInfo`, `getBalance`, `getBlockHeight`, `getFeeForMessage`,
@@ -188,29 +204,36 @@ additional API key or account rotation is authorized.
 | Additional 200 one-call risk checks                            |                     200 |
 | Total, before other activity                                   |                   4,224 |
 
-This arithmetic fits the proposed 6,000-unit terminal ceiling, not necessarily
+This arithmetic fits the approved 6,000-unit terminal ceiling, not necessarily
 every provider allowance. Hundreds of concurrent readers of a shared key are
 different from hundreds of cold instruments or active trading wallets.
 
-The baseline also has callers outside the commerce counters that must be
-accounted for before claiming provider-global enforcement:
+The following coverage boundaries remain important:
 
 - `convex/telegramTradeFeedPoll.ts` can make one pool-discovery request plus up
   to six Gecko trade requests per admitted minute: up to 10,080/day if enabled.
   Its cron, delivery rules, feature gates and uncertainty handling stay unchanged.
-- `apps/platform/app/api/token/symf/market/route.ts` directly fetches one DEX and
-  one Gecko response with sixty-second revalidation. One warm cache lane would
-  use up to 2,880 requests/day; revalidation is not a global cross-region lease.
+  Its reads now share Gecko admission with charts; sending code is unchanged.
+- `apps/platform/app/api/token/symf/market/route.ts` previously fetched one DEX
+  and one Gecko response with sixty-second revalidation. It now delegates to a
+  distinct, official-pool-pinned shared market cache, preserving partial results.
+  Reused statistics retain their original `marketCheckedAt`, distinct from new
+  candle/trade observations. Generic market and pinned chart keys stay separate.
 - `workers/broadcast/worker.mjs` and `apps/forum/public/broadcast/token.js` use
   a three-minute DEX lane (480 primary requests/day), with one bounded eligible
   alternate request. The worker's different egress does not make its usage free
-  or create permission to bypass a shared provider allowance.
+  or create permission to bypass a shared provider allowance. This unchanged
+  worker is outside the new Convex bucket: its ordinary primary-plus-alternate
+  demand is bounded to 960/day at the three-minute cadence, with at most two
+  requests per ordinary run. The application bucket plus this separate lane is
+  below the published 300/minute DEX pair/token limit; no account-global guarantee
+  is made for unknown external callers or independently operated deployments.
 - The configured RPC is used through both `commerceRpc` and `swapRpc`, including
   terminal, holder-proof, research, promotion, preparation, receipt, recovery and
   reconciliation paths. Existing ownership and financial gates precede network
   work; accounting must not bypass or replay them.
 
-The maximum Telegram Gecko demand plus one warm overview lane plus five chart
+The baseline maximum Telegram Gecko demand plus one warm overview lane plus five chart
 intervals is 10,080 + 1,440 + 1,440 = **12,960 Gecko requests/day**, exceeding
 the eight/minute policy's 11,520/day theoretical maximum. Global admission must
 therefore sometimes return busy/stale/unavailable; no continuous-freshness promise
@@ -225,29 +248,27 @@ allocation. New constants alone cannot close these accounting holes.
 
 The model budget remains two/day, the fee remains fifty basis points, and agent
 schedules, Tracker allowances, freshness/retention rules, holds, receipt recovery,
-signing and submission authority are unchanged by this policy-only change.
+signing and submission authority are unchanged. Only the explicitly approved
+application data ceilings change; provider free-tier limits are not increased.
 
 ## Remaining work before a high-activity trading launch
 
-- Share the repeated exact-mint DEX pair response across chart intervals and
-  market overview requests. Preserve a separate original market observation
-  timestamp: reusing pool/stats data must not relabel it with a new candle time.
-- Review provider-specific pacing and workload allocation together before any
-  quota change. A global daily counter alone does not enforce each upstream's
-  short-window policy. Do not add an unmetered fallback or increase provider,
-  application or free-tier limits implicitly.
+- Measure the integrated exact-mint DEX reuse and provider admission under real
+  demand before claiming production throughput. Mocked tests cover concurrent
+  bursts, lease/ABA races, original timestamps and bounded pacing, not provider
+  reliability or capacity for hundreds of distinct continuous traders.
 - Reduce the bounded recent-activity scan if live profiling shows it is hot.
   It currently considers up to 500 active and 500 locked digests before some
   per-viewer work. Preserve unread, visibility and pagination semantics rather
   than replacing it with an incomplete first page.
 - Consider suspending pure display subscriptions in hidden terminal panes;
   retain protected order/receipt controllers and attention-producing state.
-- Benchmark authentication separately with mocked same-IP, distinct-IP,
-  missing/multi-hop-header and concurrent-session requests. The installed auth
-  adapter uses a read/conditional-update fallback for database rate counters,
-  while signed-in clients poll sessions. Verify trusted proxy boundaries and
-  exact throttle/revocation behavior before choosing an optimization. Do not
-  disable throttling, accept spoofable identity headers or cache authorization
+- Measure authentication separately under live demand. The supported database
+  rate-counter operation now runs in one parent transaction; unsupported guards
+  and every other model retain the original adapter fallback. Mocked same-IP and
+  distinct-key tests preserve the original throttle thresholds. Proxy/IP trust,
+  session polling and revocation policies remain unchanged. Do not disable
+  throttling, accept spoofable identity headers or cache authorization
   results past their existing validity to reduce writes.
 - Run a bounded staged workload with providers replaced by deterministic mocks:
   same-key bursts, distinct-key bursts, slow/failing providers, expired leases,

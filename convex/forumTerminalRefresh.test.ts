@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { register as registerLimiter } from "@convex-dev/rate-limiter/test";
+import { RateLimiter } from "@convex-dev/rate-limiter";
 import { getBase58Decoder } from "@solana/kit";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -13,7 +14,8 @@ import {
   type RefreshedMarket,
 } from "../lib/terminal-market-refresh-source";
 import { SYMF_TOKEN } from "../lib/symf-token";
-import { api } from "./_generated/api";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
+import { api, components } from "./_generated/api";
 import { commerceLimiter } from "./forumCommerce";
 import { marketReadLimiter } from "./forumMarketData";
 import schema from "./schema";
@@ -125,7 +127,7 @@ test("200 concurrent viewers admit one shared transport and reserve exactly one 
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 99,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 1,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -133,7 +135,7 @@ test("200 concurrent viewers admit one shared transport and reserve exactly one 
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 100,
+        count: FORUM_READ_POLICY.terminalDailyUnits,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -141,7 +143,7 @@ test("200 concurrent viewers admit one shared transport and reserve exactly one 
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 999,
+        count: FORUM_READ_POLICY.commerceDailyUnits - 1,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -149,7 +151,7 @@ test("200 concurrent viewers admit one shared transport and reserve exactly one 
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 1000,
+        count: FORUM_READ_POLICY.commerceDailyUnits,
       }),
     ),
   ).toMatchObject({ ok: false });
@@ -175,7 +177,7 @@ test("known pre-I/O burst deferral spends no daily units and can later admit onc
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 100,
+        count: FORUM_READ_POLICY.terminalDailyUnits,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -183,7 +185,7 @@ test("known pre-I/O burst deferral spends no daily units and can later admit onc
     await t.run((ctx) =>
       commerceLimiter.check(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: 1000,
+        count: FORUM_READ_POLICY.commerceDailyUnits,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -277,11 +279,11 @@ test.each(["terminal", "shared"] as const)(
       kind === "terminal"
         ? marketReadLimiter.limit(ctx, "terminalReadDaily", {
             key: "all",
-            count: 100,
+            count: FORUM_READ_POLICY.terminalDailyUnits,
           })
         : commerceLimiter.limit(ctx, "commerceNetworkDaily", {
             key: "all",
-            count: 1000,
+            count: FORUM_READ_POLICY.commerceDailyUnits,
           }),
     );
     const fetcher = vi.fn();
@@ -292,7 +294,7 @@ test.each(["terminal", "shared"] as const)(
   },
 );
 
-test("the stricter refresh-only ceiling leaves original terminal capacity untouched beyond its 48 units", async () => {
+test("48 spaced refreshes consume exactly 48 units of the enlarged shared allowance", async () => {
   const t = setup();
   await seed(t);
   for (let index = 0; index < 48; index++) {
@@ -302,15 +304,15 @@ test("the stricter refresh-only ceiling leaves original terminal capacity untouc
     );
   }
   vi.setSystemTime(NOW + 48 * MARKET_REFRESH_WINDOW_MS);
-  expect(await t.mutation(claim, { lease: "no-more-refresh" })).toMatchObject({
-    fetch: false,
-    state: "budget",
+  // The old 48/day restriction must no longer stop the same ten-minute cadence.
+  expect(await t.mutation(claim, { lease: "next-refresh" })).toMatchObject({
+    fetch: true,
   });
   expect(
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 52,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 49,
       }),
     ),
   ).toMatchObject({ ok: true });
@@ -318,10 +320,48 @@ test("the stricter refresh-only ceiling leaves original terminal capacity untouc
     await t.run((ctx) =>
       marketReadLimiter.check(ctx, "terminalReadDaily", {
         key: "all",
-        count: 53,
+        count: FORUM_READ_POLICY.terminalDailyUnits - 48,
       }),
     ),
   ).toMatchObject({ ok: false });
+});
+
+test("the approved 144-refresh sub-budget denies before consuming terminal or shared units", async () => {
+  const t = setup();
+  await seed(t);
+  const refreshBudget = new RateLimiter(components.rateLimiter, {
+    terminalSampleRefreshDaily: {
+      kind: "fixed window",
+      rate: FORUM_READ_POLICY.marketSampleDailyRefreshes,
+      period: 86_400_000,
+      start: 0,
+    },
+  });
+  await t.run((ctx) =>
+    refreshBudget.limit(ctx, "terminalSampleRefreshDaily", {
+      key: "all",
+      count: FORUM_READ_POLICY.marketSampleDailyRefreshes,
+    }),
+  );
+  expect(
+    await t.mutation(claim, { lease: "full-refresh-budget" }),
+  ).toMatchObject({ fetch: false, state: "budget" });
+  expect(
+    await t.run((ctx) =>
+      marketReadLimiter.check(ctx, "terminalReadDaily", {
+        key: "all",
+        count: FORUM_READ_POLICY.terminalDailyUnits,
+      }),
+    ),
+  ).toMatchObject({ ok: true });
+  expect(
+    await t.run((ctx) =>
+      commerceLimiter.check(ctx, "commerceNetworkDaily", {
+        key: "all",
+        count: FORUM_READ_POLICY.commerceDailyUnits,
+      }),
+    ),
+  ).toMatchObject({ ok: true });
 });
 
 test("fair source interleaving keeps an older eligible Bags token among at most thirty mints", async () => {

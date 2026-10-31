@@ -521,7 +521,7 @@ test("global free-tier exhaustion defers without any RPC or hold release", async
   await f.t.run((ctx) =>
     commerceLimiter.limit(ctx, "commerceNetworkDaily", {
       key: "all",
-      count: 1000,
+      count: 20_000,
     }),
   );
   await f.t.action(internal.forumSwapRecovery.check, { quoteId: f.id });

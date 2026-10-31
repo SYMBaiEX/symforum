@@ -1,5 +1,6 @@
 import { postTokenCandidate } from "./forumPostTokens";
 import { SYMF_TOKEN } from "../lib/symf-token";
+import { FORUM_READ_POLICY } from "../lib/forum-read-policy";
 
 import { FORUM_SITE_URL } from "../lib/site-urls";
 import { ConvexError, v } from "convex/values";
@@ -38,7 +39,7 @@ export const commerceLimiter = new RateLimiter(components.rateLimiter, {
     period: 86_400_000,
     start: 0,
   },
-  // Recovery shares the existing 1,000/day cap, with a tighter sub-budget.
+  // Recovery retains its tighter sub-budget inside the shared network ceiling.
   commerceRecoveryDaily: {
     kind: "fixed window",
     rate: 100,
@@ -66,7 +67,7 @@ export const commerceLimiter = new RateLimiter(components.rateLimiter, {
   },
   commerceNetworkDaily: {
     kind: "fixed window",
-    rate: 1000,
+    rate: FORUM_READ_POLICY.commerceDailyUnits,
     period: 86_400_000,
     start: 0,
   },
