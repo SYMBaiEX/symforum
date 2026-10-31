@@ -85,6 +85,87 @@
   gap: 16px;
   min-width: 0;
 }
+.taskGuide {
+  min-width: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 14px;
+}
+.taskGuide > summary {
+  display: list-item;
+  min-height: 44px;
+  padding: 10px 8px;
+  list-style-position: inside;
+  cursor: pointer;
+  color: hsl(var(--muted-foreground));
+}
+.taskGuide nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.taskGuide a {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.taskGuide a:hover {
+  background: hsl(var(--muted) / 0.35);
+}
+.taskGuide a:focus-visible,
+.scopeNotice a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.taskGuide a span {
+  color: hsl(var(--muted-foreground));
+}
+.scopeNotice {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.scopeNotice code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.scopeNotice p {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+.scopeNotice a {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+}
+.compact .taskGuide nav {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 760px) {
+  .taskGuide nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
