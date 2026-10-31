@@ -1233,6 +1233,7 @@ function PaymentDialog({
   onClose: () => void;
 }) {
   const { isAuthenticated } = useConvexAuth();
+  const returnFocus = useRef<HTMLElement | null>(null);
   const live = useQuery(
       api.forumCommunity.getPayment,
       payment ? { intentId: payment.intentId } : "skip",
@@ -1262,7 +1263,33 @@ function PaymentDialog({
         if (!value && !busy) onClose();
       }}
     >
-      <DialogContent data-surface="forum" className={styles.paymentDialog}>
+      <DialogContent
+        data-surface="forum"
+        className={styles.paymentDialog}
+        onOpenAutoFocus={() => {
+          // This controlled dialog has several launch buttons rather than a
+          // single Radix Trigger. Capture the real launcher before autofocus.
+          const active = document.activeElement;
+          returnFocus.current =
+            active instanceof HTMLElement && active !== document.body
+              ? active
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          const launcher = returnFocus.current;
+          returnFocus.current = null;
+          if (
+            launcher?.isConnected &&
+            launcher.getClientRects().length > 0 &&
+            !launcher.matches(":disabled") &&
+            !launcher.closest("[inert]") &&
+            getComputedStyle(launcher).visibility === "visible"
+          ) {
+            event.preventDefault();
+            launcher.focus({ preventScroll: true });
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {row?.purpose === "reward"
