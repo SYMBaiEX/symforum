@@ -17,10 +17,12 @@ export function tokenChartReading(
     !Number.isSafeInteger(now) ||
     !Number.isSafeInteger(snapshot.checkedAt) ||
     snapshot.checkedAt <= 0 ||
-    snapshot.checkedAt > now
+    // The query clock is minute-bucketed; retain the chart parser's bounded
+    // one-minute skew allowance without claiming a negative observation age.
+    snapshot.checkedAt > now + 60_000
   )
     return null;
-  const age = now - snapshot.checkedAt;
+  const age = Math.max(0, now - snapshot.checkedAt);
   const stale = snapshot.stale || age >= CHART_CACHE_FRESH_MS;
   if (age >= CHART_CACHE_RETENTION_MS || (stale && !indexAbsent)) return null;
   return { data: snapshot, stale };
