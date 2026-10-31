@@ -476,9 +476,16 @@
     "kind": "ux",
     "evidence": "components/trading/price-chart.tsx:412",
     "acceptance": "Retained-data status exposes the validated server retry deadline on demand, distinguishes quota from source failure, and does not imply a guaranteed refresh or bypass backoff.",
-    "dependsOn": ["TRADE-025"],
-    "status": "queued",
-    "paths": ["components/trading/price-chart.tsx"]
+    "dependsOn": [
+      "TRADE-025"
+    ],
+    "status": "implemented",
+    "paths": [
+      "components/trading/price-chart.tsx",
+      "tests/e2e/chart-retry-guidance.spec.ts",
+      "tests/e2e/fixtures/chart-retry-guidance.tsx",
+      "tests/e2e/fixtures/chart-retry-guidance-state.tsx"
+    ]
   },
   {
     "id": "TRADE-027",
@@ -911,12 +918,13 @@
     "evidence": "components/swap/token-swap.tsx:712",
     "acceptance": "With a delayed quote in flight, reverse or change the exact pair and then resolve the old quote; old amounts/minimum/fee never bind to the new pair and no wallet operation occurs.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "tests/e2e/swap-pair-isolation.spec.ts",
       "tests/e2e/fixtures/swap-pair-isolation.tsx",
       "tests/e2e/fixtures/swap-pair-isolation-state.tsx"
-    ]
+    ],
+    "receipt": "PR #268 normally rebase-merged at6ac6fb68b6bfce9a01378c871167bb1edee3dfdf; exact qualified complete tree/authors,4404unit/backend+793browser gates, automatic production/allfive original aliases verified2026-10-31 14:42UTC. One signed-out Start Here desktop/phone acceptance verified settled44px menu/keyboard/5exact links and one Gaming-to-Back restoration by14:44UTC. Console0errors/2unused-preloadwarnings classified from retained artifacts only; no universal error-free claim. Private collections, actual Treasury/quote/recovery/payments, physical devices and AT remain fixture/source or unverified live acceptance."
   },
   {
     "id": "TRADE-055",
@@ -1008,13 +1016,14 @@
     "evidence": "components/trading/transparency-panel.tsx:79",
     "acceptance": "The panel identifies its up-to-ten displayed verified receipts separately from cumulative totals and historyComplete status; pending payments, estimated revenue and unverified swap fees remain excluded.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/trading/transparency-panel.tsx",
       "tests/e2e/transparency-window.spec.ts",
       "tests/e2e/fixtures/transparency-window.tsx",
       "tests/e2e/fixtures/transparency-window-state.tsx"
-    ]
+    ],
+    "receipt": "PR #268 normally rebase-merged at6ac6fb68b6bfce9a01378c871167bb1edee3dfdf; exact qualified complete tree/authors,4404unit/backend+793browser gates, automatic production/allfive original aliases verified2026-10-31 14:42UTC. One signed-out Start Here desktop/phone acceptance verified settled44px menu/keyboard/5exact links and one Gaming-to-Back restoration by14:44UTC. Console0errors/2unused-preloadwarnings classified from retained artifacts only; no universal error-free claim. Private collections, actual Treasury/quote/recovery/payments, physical devices and AT remain fixture/source or unverified live acceptance."
   },
   {
     "id": "COMMUNITY-001",
@@ -1666,8 +1675,13 @@
     "evidence": "components/community/community-hub.tsx:1326",
     "acceptance": "Enhancement: concise helper states the check is optional, free of payment and bounded by existing allowance; no claim of permanent eligibility or fee waiver.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "tests/e2e/holder-check-guidance.spec.ts",
+      "tests/e2e/fixtures/holder-check-guidance.tsx",
+      "tests/e2e/fixtures/holder-check-guidance-state.tsx"
+    ]
   },
   {
     "id": "COMMUNITY-046",
@@ -2465,8 +2479,13 @@
     "evidence": "components/forum/forum-search-page.tsx:101",
     "acceptance": "A one-character search receives visible, field-associated guidance about the existing two-character minimum and author-only alternative; do not run a wider backend search or change limits.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-search-page.tsx"]
+    "status": "implemented",
+    "paths": [
+      "components/forum/forum-search-page.tsx",
+      "tests/e2e/search-guidance.spec.ts",
+      "tests/e2e/fixtures/search-guidance.tsx",
+      "tests/e2e/fixtures/search-guidance-state.tsx"
+    ]
   },
   {
     "id": "FORUM-046",
@@ -2658,13 +2677,14 @@
     "evidence": "components/forum/forum-start-here.tsx:90",
     "acceptance": "The Share a work in progress action offers the active AI/Gaming/Web3/Hacking/Music destinations described in its copy instead of always routing to AI; preserve host-aware links and archive restrictions.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-start-here.tsx",
       "tests/e2e/start-here-pillars.spec.ts",
       "tests/e2e/fixtures/start-here-pillars.tsx",
       "tests/e2e/fixtures/start-here-pillars-state.tsx"
-    ]
+    ],
+    "receipt": "PR #268 normally rebase-merged at6ac6fb68b6bfce9a01378c871167bb1edee3dfdf; exact qualified complete tree/authors,4404unit/backend+793browser gates, automatic production/allfive original aliases verified2026-10-31 14:42UTC. One signed-out Start Here desktop/phone acceptance verified settled44px menu/keyboard/5exact links and one Gaming-to-Back restoration by14:44UTC. Console0errors/2unused-preloadwarnings classified from retained artifacts only; no universal error-free claim. Private collections, actual Treasury/quote/recovery/payments, physical devices and AT remain fixture/source or unverified live acceptance."
   },
   {
     "id": "FORUM-059",
@@ -2675,13 +2695,14 @@
     "evidence": "components/forum/forum-catch-up.tsx:232",
     "acceptance": "Interest fieldsets show loading status while board options are unresolved and an honest empty state if a configured collection has no available boards; do not display an unexplained blank fieldset or auto-follow anything.",
     "dependsOn": [],
-    "status": "implemented",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-catch-up.tsx",
       "tests/e2e/catch-up-collections.spec.ts",
       "tests/e2e/fixtures/catch-up-collections.tsx",
       "tests/e2e/fixtures/catch-up-collections-state.tsx"
-    ]
+    ],
+    "receipt": "PR #268 normally rebase-merged at6ac6fb68b6bfce9a01378c871167bb1edee3dfdf; exact qualified complete tree/authors,4404unit/backend+793browser gates, automatic production/allfive original aliases verified2026-10-31 14:42UTC. One signed-out Start Here desktop/phone acceptance verified settled44px menu/keyboard/5exact links and one Gaming-to-Back restoration by14:44UTC. Console0errors/2unused-preloadwarnings classified from retained artifacts only; no universal error-free claim. Private collections, actual Treasury/quote/recovery/payments, physical devices and AT remain fixture/source or unverified live acceptance."
   },
   {
     "id": "FORUM-060",

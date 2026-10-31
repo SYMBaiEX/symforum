@@ -1213,3 +1213,111 @@ operations, job/hold records and infrastructure binding metadata out of it.
   certify production auth, signing, quotes, recovery, settlement, devices or AT.
 - Counts: eighty-two deployed, four implemented, 136 queued, two blocked and
   sixteen needing confirmation. Full unchanged-candidate gates follow.
+
+## Batch 13 released — 14:45 UTC
+
+- PR #268 normally rebase-merged 14:38:45 UTC. Exact complete tested/main tree
+  match and all four new main authors verified, with retained protections and
+  Actions disabled. First full unchanged parent run passed 4,404 unit/backend
+  and 793 isolated browser cases, both types, five builds, parity, three audits
+  and security controls; lint three existing warnings, zero errors. Four-commit
+  redacted scan clean. All existing test files are unchanged.
+- Exact automatic production READY observed 14:41:47 UTC; all five original
+  aliases matched 14:42:00. One signed-out Start Here session verified five
+  exact links, final 44px menu items, keyboard/Escape/opener focus and desktop/
+  phone bounds. Initial measurements during menu animation were not defects;
+  settled measurements completed in the same session without a source patch.
+- One deliberate Gaming choice succeeded and normal Back restored Start Here
+  by 14:44:05 UTC. No other board, account, follow, creation or financial action.
+  Own browser closed before the one exact-release server-error query through
+  14:44:15: zero of thirty records, uncapped. Console counter zero errors and
+  two initially uninspected warnings remains disclosed. Existing retained logs
+  later classified both as unused-preload warnings, without another browser
+  visit or network request; not a warning-free guarantee.
+- Private collections, Treasury/quote/recovery/payment flows, native hardware
+  and AT remain source/fixture acceptance only. No production backend, worker,
+  settings, fee, budget, schedule, cap, safety or uncertain-hold operation.
+- Counts: eighty-six deployed, 136 queued, two blocked and sixteen needing
+  confirmation. Private operational receipt remains outside public PR text.
+
+## Batch 14 dispatch — 14:48 UTC
+
+- Three clean isolated worktrees start at verified `6ac6fb68`, with root
+  dependencies and each own app-local forum-ui link. Literal ownership is
+  recorded before dispatch; no shared source writer. This is a narrow guidance
+  batch, not authority for backend, wallet or payment behavior changes.
+- FORUM-045, `/private/tmp/symforum-overnight-search-field-guidance`, branch
+  `sym/overnight-search-field-guidance`: own forum-search-page and new search-
+  guidance spec/fixtures. Associate the existing two-character requirement and
+  blank-keyword author alternative with Keywords, including derived trimmed
+  one-character feedback. Preserve submit handler, query/URL arguments, effects,
+  native minLength and every search cap. No wider or automatic search.
+- TRADE-026, `/private/tmp/symforum-overnight-chart-retry-guidance`, branch
+  `sym/overnight-chart-retry-guidance`: own price-chart and new retry-guidance
+  spec/fixtures. Reveal existing validated retry eligibility in the already
+  closed candle-data disclosure for retained failures. Distinguish quota and
+  source failure with existing state messages, preserve original checked time
+  and label actual UTC eligibility without promising a refresh. No new timer,
+  API, button, transport/cache/backoff change, chart remount or default height.
+- COMMUNITY-045, `/private/tmp/symforum-overnight-holder-check-guidance`, branch
+  `sym/overnight-holder-check-guidance`: own only SupporterSettings helper
+  markup in community-hub and new holder-check-guidance spec/fixtures. Explain
+  optional, no-payment checking within existing allowances and explicit refresh.
+  No invented quota, permanent proof, fee waiver, badge entitlement, new query,
+  permission/visibility change or altered check/toggle/payment handler.
+- Both real app styles, SurfaceScope, 320/390px intrinsic bounds, keyboard,
+  guest/loading/current-data/failure cases and unchanged relevant regressions
+  required. All provider/wallet/financial/external traffic denied; only explicit
+  inert read-state fixtures, never live checks or signing. Original tests remain
+  unchanged unless root records exact new ownership; no skips or weakening.
+  No shared docs/generated/global CSS/dependency/push/PR/deploy writes. Exact
+  author, no coauthors, skip-ci markers and clean frozen commits with truthful
+  checks/failure history. Aim frozen by 15:00 UTC and report any scope issue.
+- Counts: eighty-six deployed, three in progress, 133 queued, two blocked and
+  sixteen needing confirmation. All full parent gates, reviewed normal merge
+  and exact automatic web acceptance remain required before deployment claims.
+  Original 15:45 UTC stop is unchanged; no deadline extension or late risky batch.
+
+## Batch 14 narrow search-target follow-up — 14:53 UTC
+
+- The Keywords helper's missing association was reproduced. New standalone
+  mobile checks also retained genuine existing 40px Search/Reset target
+  failures under the forum-only important minimum-height rule.
+- Root reviewed the original rule and both buttons, then authorized only local
+  render-class minimum 44px changes to those two existing controls in the
+  already-owned search component. No fixed height, shared/global CSS, form
+  handler, native minLength, query or cap change; keep the original 44px checks
+  and add explicit Reset measurement. Record helper and target failures
+  separately. This is not a deployment or final qualification claim.
+
+## Batch 14 integrated candidate — 14:59 UTC
+
+- Three frozen chains integrated from verified latest main. Three items are
+  implemented, not yet parent-qualified, merged or deployed.
+- FORUM-045 adds associated, derived Keywords guidance while preserving native
+  minimum length, trimmed admission, submit/reset, URL/effects and query limits.
+  Only Search/Reset receive the separately approved local important 44px
+  minimums. Worker 51 browsers (eleven new, forty unchanged), four existing
+  units/types/lint passed; independent eleven-browser/four-unit reruns passed.
+  Missing-helper association and pre-existing 40px target failures are retained
+  separately; no validation or geometry assertion was weakened.
+- TRADE-026 adds guarded UTC retry eligibility and existing failure context
+  inside the closed candle disclosure, explicitly not a refresh guarantee.
+  Original source/check time, canvas/API, effects/keys, demand, transport,
+  policy/backoff and controls are unchanged. Worker 52 browsers (eight new,
+  44 unchanged including strict laptop budgets), sixteen units/types/lint
+  passed; independent eight-browser/26-policy-unit reruns passed. The narrow
+  missing-note baseline was reproduced with owned JSX temporarily removed by
+  apply_patch, then the exact candidate restored and all new cases rerun green.
+- COMMUNITY-045 adds only thirteen native closed helper-markup lines. Removing
+  that addition reproduces the complete original component byte-for-byte,
+  preserving proof checks, queries, identity/private gates, public tips,
+  expiry, toggles and PaymentDialog. Worker 31 browsers (eleven new, twenty
+  unchanged), nineteen units/types/lint passed; independent eleven-browser and
+  42-existing-unit reruns passed. No initial runtime failure or action call.
+- Root reviewed all source and fixture seams. Both actual app styles at phone
+  widths, intrinsic bounds, keyboard and read-only/failure cases are covered;
+  every external/provider/wallet/financial operation is denied or inert. No
+  existing test file, dependency, global CSS, backend or account gate changed.
+- Counts: eighty-six deployed, three implemented, 133 queued, two blocked and
+  sixteen needing confirmation. Full unchanged-candidate qualification follows.
