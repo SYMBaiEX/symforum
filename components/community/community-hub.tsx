@@ -588,7 +588,7 @@ function WorkBoard({
           </Button>
         </div>
         <div className={styles.filters} aria-label="Filter community work">
-          {(["open", "selected", "paid"] as const).map((s) => (
+          {(["open", "selected", "paid", "cancelled"] as const).map((s) => (
             <Button
               key={s}
               variant={status === s ? "secondary" : "ghost"}
@@ -599,7 +599,9 @@ function WorkBoard({
                 ? "Awaiting payment"
                 : s === "paid"
                   ? "Paid"
-                  : "Open"}
+                  : s === "cancelled"
+                    ? "Cancelled"
+                    : "Open"}
             </Button>
           ))}
         </div>
@@ -615,7 +617,9 @@ function WorkBoard({
                   ? "Awaiting payment"
                   : status === "paid"
                     ? "Verified payments"
-                    : "Open briefs"}
+                    : status === "cancelled"
+                      ? "Cancelled pledges"
+                      : "Open briefs"}
               </span>
               <h3>
                 No {status === "selected" ? "selected" : status} pledges here.
@@ -625,7 +629,9 @@ function WorkBoard({
                   ? "Completed rewards appear here only after their finalized payment is verified."
                   : status === "selected"
                     ? "A sponsor-selected deliverable appears here until its reward is verified."
-                    : "Commission a specific task with useful sources, a clear deliverable and acceptance criteria."}
+                    : status === "cancelled"
+                      ? "Cancelled pledges no longer accept deliverables. Existing payment receipts remain separate."
+                      : "Commission a specific task with useful sources, a clear deliverable and acceptance criteria."}
               </p>
               {status === "open" && (
                 <Button variant="outline" onClick={openCreation}>
@@ -799,7 +805,9 @@ function WorkItem({
           <span className={styles.badge}>
             {work.status === "paid"
               ? "Finalized payment verified"
-              : "Unfunded sponsor pledge"}
+              : work.status === "cancelled"
+                ? "Cancelled pledge"
+                : "Unfunded sponsor pledge"}
           </span>
         </div>
       </div>

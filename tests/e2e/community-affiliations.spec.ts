@@ -72,6 +72,17 @@ async function identity(page: Page, actor: string, loading = false) {
   );
 }
 const editName = "Edit your affiliation for Fixture project";
+async function queriedWorkStatuses(page: Page) {
+  return page.evaluate(() => [
+    ...new Set(
+      (
+        window as typeof window & {
+          __communityFixtureWorkStatuses: string[];
+        }
+      ).__communityFixtureWorkStatuses,
+    ),
+  ]);
+}
 
 for (const width of [390, 1440])
   test(`owner affiliation editing keeps exact mint, draft and focus at ${width}px`, async ({
@@ -275,3 +286,130 @@ test("adding a project remains a blank, editable-mint flow after closing an edit
   expect(await calls(page)).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+for (const width of [320, 1440])
+  test(`cancelled work is read-only history with an explicit bounded filter at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const errors = await harness(page);
+    expect(await queriedWorkStatuses(page)).toEqual([]);
+    await page
+      .getByRole("button", { name: "Bounties & research", exact: true })
+      .click();
+    const open = page.getByRole("button", { name: "Open", exact: true });
+    const cancelled = page.getByRole("button", {
+      name: "Cancelled",
+      exact: true,
+    });
+    await expect(open).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("heading", { name: "Open fixture brief", exact: true }),
+    ).toBeVisible();
+    expect(await queriedWorkStatuses(page)).toEqual(["open"]);
+    await cancelled.focus();
+    await page.keyboard.press("Space");
+    await expect(cancelled).toBeFocused();
+    await expect(cancelled).toHaveAttribute("aria-pressed", "true");
+    await expect(open).toHaveAttribute("aria-pressed", "false");
+    const record = page
+      .getByRole("article")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "Cancelled fixture brief",
+          exact: true,
+        }),
+      });
+    await expect(record).toBeVisible();
+    await expect(
+      record.getByText("Cancelled pledge", { exact: true }),
+    ).toBeVisible();
+    await expect(record.getByRole("button")).toHaveCount(0);
+    await expect(record.locator("details")).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Open fixture brief", exact: true }),
+    ).toHaveCount(0);
+    expect(await queriedWorkStatuses(page)).toEqual(["open", "cancelled"]);
+    expect(await calls(page)).toEqual([]);
+    expect(
+      await page.locator("html").evaluate((element) => element.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await open.click();
+    await expect(
+      page.getByRole("heading", { name: "Open fixture brief", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Cancelled fixture brief",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    expect(await calls(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+test("public cancelled work remains readable without signing in or opening private deliverables", async ({
+  page,
+}) => {
+  const errors = await harness(page, "guest");
+  await page
+    .getByRole("button", { name: "Bounties & research", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Cancelled", exact: true }).click();
+  const record = page.getByRole("article");
+  await expect(
+    record.getByRole("heading", {
+      name: "Cancelled fixture brief",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(record.getByRole("button")).toHaveCount(0);
+  await expect(record.locator("details")).toHaveCount(0);
+  expect(await queriedWorkStatuses(page)).toEqual(["open", "cancelled"]);
+  expect(await calls(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+for (const scenario of ["workloading", "workempty"])
+  test(`cancelled work distinguishes ${scenario} without another query status or payment action`, async ({
+    page,
+  }) => {
+    const errors = await harness(page, scenario);
+    await page
+      .getByRole("button", { name: "Bounties & research", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Cancelled", exact: true }).click();
+    if (scenario === "workloading") {
+      await expect(page.getByRole("status")).toHaveText(
+        "Loading community work…",
+      );
+      await expect(
+        page.getByRole("heading", {
+          name: "No cancelled pledges here.",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    } else {
+      await expect(
+        page.getByRole("heading", {
+          name: "No cancelled pledges here.",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "Cancelled pledges no longer accept deliverables. Existing payment receipts remain separate.",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: "Create a community brief",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    }
+    await expect(page.getByRole("article")).toHaveCount(0);
+    expect(await queriedWorkStatuses(page)).toEqual(["open", "cancelled"]);
+    expect(await calls(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });

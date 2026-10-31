@@ -29,6 +29,12 @@ private submissions and a sponsor-selected deliverable. There is no escrow and
 no automatic payout. Publication of a pledge transfers no funds. Once a sponsor
 selects a submission, its recipient and amount cannot be substituted.
 
+The work board starts with Open and queries only the selected status. Its
+Cancelled filter exposes existing public cancelled-pledge history, with distinct
+loading and empty states. Cancelled rows have no submission, selection, reward
+or cancellation controls. The filter does not cancel work, clear a hold, change
+payment status or imply a payment outcome; existing receipts remain separate.
+
 Tips require the recipient to opt in to publication of a server-linked receiving
 wallet. A thread tip must go to that public thread's actual author. The payer
 must use a wallet linked to their own signed-in identity. Old intents retain
@@ -100,9 +106,6 @@ release constraints still apply. The utility contract above and
 
 Remaining source/operating limitations, not implemented by this bounded edit pass:
 
-- Cancelled pledges are supported by the existing query/status model, but the
-  work-board filters expose only Open, Awaiting payment and Paid. A cancelled
-  work-history view is still absent.
 - An author can update an open-pledge submission through the existing upsert,
   but the submission form does not prefill their saved link and summary.
 - The public directory is deliberately bounded to 24 recent hubs and 12 claims
@@ -118,4 +121,6 @@ records, fake identity changes and blocked external traffic. It covers owner,
 other-owner, signed-out and loading states; phone/desktop form interaction;
 locked mint and exact upsert arguments; draft retention after reactive updates
 and errors; pending-validation identity changes; and keyboard focus return.
+It also checks cancelled-work history, loading/empty distinctions, keyboard
+filtering, guest access and selected-status-only queries without payment actions.
 These are local UI checks, not live backend or wallet acceptance receipts.

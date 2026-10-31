@@ -10,6 +10,21 @@ let actor = parameters.has("guest") ? "guest" : "author";
 let loading = parameters.has("identityloading");
 const listeners = new Set<() => void>();
 const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+const workStatuses: string[] = [];
+const works = ["open", "cancelled"].map((status) => ({
+  workId: `fixture-work-${status}`,
+  sponsorId: "fixture-author",
+  sponsor: "fixture_author",
+  mint: null,
+  kind: "research",
+  title: `${status === "open" ? "Open" : "Cancelled"} fixture brief`,
+  brief:
+    "An invented brief with a bounded deliverable and clear acceptance criteria.",
+  amountLamports: "10000000",
+  status,
+  selectedSubmissionId: null,
+  updatedAt: 1,
+}));
 let finishResolve: (() => void) | undefined;
 let project = {
   projectId: "fixture-project",
@@ -57,7 +72,10 @@ window.addEventListener("community-fixture:updated-claim", () => {
   };
   changed();
 });
-Object.assign(window, { __communityFixtureCalls: calls });
+Object.assign(window, {
+  __communityFixtureCalls: calls,
+  __communityFixtureWorkStatuses: workStatuses,
+});
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -73,6 +91,15 @@ export function useQuery(reference: FunctionReference<"query">, args: unknown) {
   if (args === "skip") return undefined;
   const name = getFunctionName(reference);
   if (name === "forumCommunity:listProjects") return [project];
+  if (name === "forumCommunity:listBounties") {
+    const status = (args as { status: string }).status;
+    workStatuses.push(status);
+    if (status === "cancelled" && parameters.has("workloading"))
+      return undefined;
+    if (status === "cancelled" && parameters.has("workempty")) return [];
+    return works.filter((work) => work.status === status);
+  }
+  if (name === "forumCommunity:listSubmissions") return [];
   if (name === "forumCommunity:getMine")
     return parameters.has("mineloading")
       ? undefined
