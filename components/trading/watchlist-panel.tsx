@@ -10,6 +10,10 @@ import { marketMoney, shortMint } from "./terminal-format";
 import { rawMarketNumber } from "./market-explorer-model";
 import type { MarketChoice } from "./market-identity";
 import styles from "./forum-terminal.module.css";
+import {
+  loadedAlertInbox,
+  type AlertDirectionFilter,
+} from "./alert-inbox-model";
 
 function thresholdLabel(value: number | null) {
   if (value === null) return "not set";
@@ -45,6 +49,9 @@ export function WatchlistPanel({
   const belowInput = useRef<HTMLInputElement>(null);
   const formId = useId();
   const [message, setMessage] = useState("");
+  const [alertDirection, setAlertDirection] =
+    useState<AlertDirectionFilter>("all");
+  const inbox = loadedAlertInbox(alerts, alertDirection);
   const saved = watches?.find((watch) => watch.mint === selected.mint);
   async function update(enabled: boolean) {
     if (admission.current || watches === undefined) return;
@@ -363,39 +370,143 @@ export function WatchlistPanel({
           <Bell className="size-4" aria-hidden="true" />
           Sample alerts
         </h3>
-        {alerts === undefined ? (
+        <div
+          role="group"
+          aria-label="Unread alert direction"
+          className={`${styles.toolbar} mb-2`}
+        >
+          {(
+            [
+              ["all", "All"],
+              ["above", "Above"],
+              ["below", "Below"],
+            ] as const
+          ).map(([direction, label]) => (
+            <Button
+              key={direction}
+              type="button"
+              variant={alertDirection === direction ? "secondary" : "ghost"}
+              className="min-h-11"
+              disabled={inbox === null}
+              aria-pressed={alertDirection === direction}
+              onClick={() => setAlertDirection(direction)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {inbox && (
+          <p className={`${styles.muted} mb-2`} role="status">
+            Loaded {inbox.loadedCount} recent alert records:{" "}
+            {inbox.unread.length} unread, {inbox.read.length} read. Showing{" "}
+            {inbox.visibleUnread.length} of {inbox.unread.length} loaded unread
+            alerts. Filters do not fetch more records.
+          </p>
+        )}
+        {inbox === null ? (
           <p className={styles.muted}>Loading alerts…</p>
-        ) : !alerts.some((alert) => !alert.acknowledged) ? (
+        ) : inbox.unread.length === 0 ? (
           <p className={styles.muted}>
             No unread alerts. This does not imply the market has stayed inside
             your thresholds.
           </p>
+        ) : inbox.visibleUnread.length === 0 ? (
+          <p className={styles.muted}>
+            No loaded unread alerts match this direction. Choose All to see the
+            other loaded unread alerts.
+          </p>
         ) : (
-          <ul className={styles.rows}>
-            {alerts
-              .filter((alert) => !alert.acknowledged)
-              .map((alert) => (
-                <li key={alert.id}>
-                  <span>
-                    <strong>
-                      {alert.symbol ?? shortMint(alert.mint)} {alert.direction}{" "}
-                      {marketMoney(alert.thresholdUsd)}
-                    </strong>
-                    <small>
-                      Sample {marketMoney(alert.priceUsd)} at{" "}
-                      {new Date(alert.observedAt).toLocaleString()}
-                    </small>
-                    <small>
-                      Mint{" "}
-                      <code title={alert.mint}>{shortMint(alert.mint)}</code>
-                    </small>
-                  </span>
-                  <div className={styles.toolbar}>
+          <ul
+            className={styles.rows}
+            aria-label="Unread alerts from loaded sample"
+          >
+            {inbox.visibleUnread.map((alert) => (
+              <li key={alert.id}>
+                <span>
+                  <strong>
+                    {alert.symbol ?? shortMint(alert.mint)} {alert.direction}{" "}
+                    {marketMoney(alert.thresholdUsd)}
+                  </strong>
+                  <small>
+                    Sample {marketMoney(alert.priceUsd)} at{" "}
+                    {new Date(alert.observedAt).toLocaleString()}
+                  </small>
+                  <small>
+                    Mint <code title={alert.mint}>{shortMint(alert.mint)}</code>
+                  </small>
+                </span>
+                <div className={styles.toolbar}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy || alert.mint === selected.mint}
+                    aria-label={`${alert.mint === selected.mint ? "Selected token" : "View token"} for alert, mint ${alert.mint}`}
+                    onClick={() =>
+                      onSelect({
+                        mint: alert.mint,
+                        symbol: alert.symbol ?? shortMint(alert.mint),
+                        name: "Alerted Solana token",
+                      })
+                    }
+                  >
+                    {alert.mint === selected.mint ? "Selected" : "View token"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void dismiss(alert)}
+                  >
+                    {pending?.kind === "acknowledge" && pending.id === alert.id
+                      ? "Marking read…"
+                      : "Mark read"}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {inbox && (
+          <details className="mt-3">
+            <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center">
+              Read alerts in loaded sample ({inbox.read.length})
+            </summary>
+            <p className={`${styles.muted} mb-2`}>
+              Only read records already in this loaded sample are shown. This is
+              not your complete alert history; earlier records may exist outside
+              the sample.
+            </p>
+            {inbox.read.length === 0 ? (
+              <p className={styles.muted}>
+                No read alerts in the current loaded sample.
+              </p>
+            ) : (
+              <ul
+                className={styles.rows}
+                aria-label="Read alerts from loaded sample"
+              >
+                {inbox.read.map((alert) => (
+                  <li key={alert.id}>
+                    <span>
+                      <strong>
+                        {alert.symbol ?? shortMint(alert.mint)}{" "}
+                        {alert.direction} {marketMoney(alert.thresholdUsd)}
+                      </strong>
+                      <small>
+                        Read · sample {marketMoney(alert.priceUsd)} at{" "}
+                        {new Date(alert.observedAt).toLocaleString()}
+                      </small>
+                      <small>
+                        Mint{" "}
+                        <code title={alert.mint}>{shortMint(alert.mint)}</code>
+                      </small>
+                    </span>
                     <Button
                       type="button"
                       variant="ghost"
+                      className="min-h-11"
                       disabled={busy || alert.mint === selected.mint}
-                      aria-label={`${alert.mint === selected.mint ? "Selected token" : "View token"} for alert, mint ${alert.mint}`}
+                      aria-label={`${alert.mint === selected.mint ? "Selected token" : "View token"} for read alert, mint ${alert.mint}`}
                       onClick={() =>
                         onSelect({
                           mint: alert.mint,
@@ -406,21 +517,11 @@ export function WatchlistPanel({
                     >
                       {alert.mint === selected.mint ? "Selected" : "View token"}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => void dismiss(alert)}
-                    >
-                      {pending?.kind === "acknowledge" &&
-                      pending.id === alert.id
-                        ? "Marking read…"
-                        : "Mark read"}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-          </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
         )}
       </div>
     </section>
