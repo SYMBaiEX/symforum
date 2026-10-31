@@ -1163,6 +1163,7 @@
 @container (max-width: 360px) {
   .chartLayout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(80px, 1fr) auto;
   }
   .chartWorkspace .chartQuote {
     justify-content: space-between;

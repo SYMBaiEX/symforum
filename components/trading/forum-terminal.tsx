@@ -127,6 +127,27 @@ function TerminalWorkspace({
   const attention = useTerminalAttentionSnapshot();
   const chartTab = useRef<HTMLButtonElement>(null);
   const marketsTab = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const root = workspace.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    let wasWide = root.clientWidth > 840;
+    const observer = new ResizeObserver(([entry]) => {
+      const wide = entry.contentRect.width > 840;
+      if (wasWide && !wide) {
+        const order = root.querySelector<HTMLElement>("[data-terminal-order]");
+        // A portalled picker stays open across CSS breakpoints. Keep its
+        // original trigger visible so closing it can restore keyboard focus.
+        if (
+          order?.querySelector('[aria-haspopup="dialog"][data-state="open"]') ||
+          order?.contains(document.activeElement)
+        )
+          setPane("trade");
+      }
+      wasWide = wide;
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
   function focusPane(id: string) {
     requestAnimationFrame(() =>
       document.getElementById(id)?.focus({ preventScroll: true }),
