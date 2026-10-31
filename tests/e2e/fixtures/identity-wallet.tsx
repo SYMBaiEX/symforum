@@ -180,7 +180,14 @@ function Fixture() {
   return (
     <>
       <IdentityBootstrap>
-        <IdentityProviders onComplete={() => setDone(true)} />
+        <IdentityProviders
+          purpose={
+            new URLSearchParams(window.location.search).has("link")
+              ? "link"
+              : "login"
+          }
+          onComplete={() => setDone(true)}
+        />
       </IdentityBootstrap>
       <output aria-label="Session state">
         {session.isPending
