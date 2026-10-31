@@ -1114,6 +1114,13 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
         <p role="status" className={styles.localState}>
           Checking your community wallet…
         </p>
+      ) : !busy &&
+        identity.isAuthenticated &&
+        identity.linked &&
+        mine === undefined ? (
+        <p role="status" className={styles.localState}>
+          Loading your contributor settings…
+        </p>
       ) : !busy && (!identity.isAuthenticated || !identity.linked) ? (
         <div className={styles.localState}>
           <p>
@@ -1126,7 +1133,10 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
       ) : null}
       <div
         className={styles.details}
-        hidden={!busy && (!identity.isAuthenticated || !identity.linked)}
+        hidden={
+          !busy &&
+          (!identity.isAuthenticated || !identity.linked || mine === undefined)
+        }
       >
         <h3>Receiving address</h3>
         <p className={styles.muted}>
@@ -1162,7 +1172,10 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
       </div>
       <div
         className={styles.details}
-        hidden={!busy && (!identity.isAuthenticated || !identity.linked)}
+        hidden={
+          !busy &&
+          (!identity.isAuthenticated || !identity.linked || mine === undefined)
+        }
       >
         <h3>Optional SYMF holder profile</h3>
         <p className={styles.muted}>
