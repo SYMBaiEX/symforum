@@ -105,6 +105,7 @@ export function WalletPanel({
         <p className={styles.muted}>
           Linked wallet <code title={wallet}>{shortMint(wallet)}</code>
         </p>
+        <LinkedWalletIdentity key={wallet} wallet={wallet} />
         {current ? (
           <ul
             className={styles.rows}
@@ -190,6 +191,69 @@ export function WalletPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function LinkedWalletIdentity({ wallet }: { wallet: string }) {
+  const addressId = useId();
+  const active = useRef(true);
+  const copying = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<"copied" | "failed" | null>(null);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  async function copyAddress() {
+    if (copying.current) return;
+    copying.current = true;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await navigator.clipboard.writeText(wallet);
+      if (active.current) setFeedback("copied");
+    } catch {
+      if (active.current) setFeedback("failed");
+    } finally {
+      copying.current = false;
+      if (active.current) setBusy(false);
+    }
+  }
+  return (
+    <details className="mt-3 min-w-0">
+      <summary className="focus-ring min-h-11 cursor-pointer content-center text-sm">
+        Full linked wallet address
+      </summary>
+      <code
+        id={addressId}
+        className="block min-w-0 break-all text-sm leading-6"
+      >
+        {wallet}
+      </code>
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-2 min-h-11"
+        aria-label="Copy linked wallet address"
+        aria-describedby={addressId}
+        disabled={busy}
+        onClick={() => void copyAddress()}
+      >
+        {busy ? "Copying…" : "Copy address"}
+      </Button>
+      {feedback && (
+        <p
+          role={feedback === "failed" ? "alert" : "status"}
+          className="mt-2 min-w-0 text-sm [overflow-wrap:anywhere]"
+        >
+          {feedback === "copied"
+            ? "Linked wallet address copied."
+            : "Could not copy. Select the full address above and copy it manually."}
+        </p>
+      )}
+    </details>
   );
 }
 
@@ -291,7 +355,8 @@ export function SwapHistory() {
                         href={`https://solscan.io/tx/${encodeURIComponent(entry.signature)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex min-h-9 items-center gap-1"
+                        aria-label={`View ${entry.inputMint === SOL ? "SOL" : shortMint(entry.inputMint)} / ${entry.outputMint === SYMF_TOKEN.mint ? SYMF_TOKEN.symbol : entry.outputMint === SOL ? "SOL" : shortMint(entry.outputMint)} swap from ${new Date(entry.createdAt).toISOString()} on Solscan, signature ${entry.signature}`}
+                        className="inline-flex min-h-11 items-center gap-1"
                       >
                         Explorer
                         <ArrowUpRight className="size-3" aria-hidden="true" />

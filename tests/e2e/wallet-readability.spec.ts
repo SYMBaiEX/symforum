@@ -143,6 +143,10 @@ for (const width of [320, 390])
     const summary = page.getByText("Balance & spendable SOL", { exact: true });
     await page.getByRole("button", { name: "Refresh wallet balances" }).focus();
     await page.keyboard.press("Tab");
+    const identitySummary = page.getByText("Full linked wallet address", { exact: true });
+    await expect(identitySummary).toBeFocused();
+    expect((await identitySummary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.keyboard.press("Tab");
     await expect(summary).toBeFocused();
     expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.keyboard.press("Enter");
