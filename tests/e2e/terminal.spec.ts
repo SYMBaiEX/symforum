@@ -50,7 +50,7 @@ test.beforeAll(() => {
     "bun",
     [
       "-e",
-      `const result=await Bun.build({entrypoints:["tests/e2e/fixtures/terminal.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"isolated-terminal",setup(build){build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/terminal-convex.ts"}));build.onResolve({filter:/^next\\/navigation$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));build.onResolve({filter:/commerce-wallet$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/terminal-wallet.tsx"}));}}]});if(!result.success)throw new Error(result.logs.join("\\n"));for(const file of result.outputs){if(file.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await file.text())+"}));");else if(file.path.endsWith(".js"))process.stdout.write(await file.text());}`,
+      `const result=await Bun.build({entrypoints:["tests/e2e/fixtures/terminal.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"isolated-terminal",setup(build){build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/terminal-convex.ts"}));build.onResolve({filter:/^next\\/navigation$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/identity-navigation.ts"}));build.onResolve({filter:/^@\\/lib\\/commerce-wallet-client$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/terminal-wallet-client.ts"}));build.onResolve({filter:/commerce-wallet$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/terminal-wallet.tsx"}));}}]});if(!result.success)throw new Error(result.logs.join("\\n"));for(const file of result.outputs){if(file.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await file.text())+"}));");else if(file.path.endsWith(".js"))process.stdout.write(await file.text());}`,
     ],
     { encoding: "utf8", maxBuffer: 6 * 1024 * 1024 },
   );
@@ -58,12 +58,16 @@ test.beforeAll(() => {
 
 async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
   const errors: string[] = [];
+  const externalRequests: string[] = [];
   const chartMints: string[] = [];
   const chartPayloads = new Map<string, Record<string, unknown>>();
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
-    if (url.origin !== "http://127.0.0.1:43211") return route.abort();
+    if (url.origin !== "http://127.0.0.1:43211") {
+      externalRequests.push(url.origin);
+      return route.abort();
+    }
     if (url.pathname === "/")
       return route.fulfill({
         contentType: "text/html",
@@ -173,7 +177,7 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
     return route.abort();
   });
   await page.goto(`http://127.0.0.1:43211/?${scenario}`);
-  return { errors, chartMints };
+  return { errors, chartMints, externalRequests };
 }
 
 async function sampleSymbols(page: Page) {
@@ -262,6 +266,44 @@ async function recordedOperations(page: Page) {
     ...(window as typeof window & { __terminalFixtureCalls: string[] })
       .__terminalFixtureCalls,
   ]);
+}
+
+async function expectUnobscured(control: Locator) {
+  await expect(control).toBeVisible();
+  await expect
+    .poll(() =>
+      control.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        if (
+          box.left < 0 ||
+          box.top < 0 ||
+          box.right > innerWidth + 1 ||
+          box.bottom > innerHeight + 1
+        )
+          return false;
+        // Visibility alone does not catch dock overlap or clipping by a scrollport.
+        for (const [x, y] of [
+          [box.left + box.width / 2, box.top + 2],
+          [box.left + box.width / 2, box.bottom - 2],
+          [box.left + box.width / 2, box.top + box.height / 2],
+        ]) {
+          const hit = document.elementFromPoint(x, y);
+          if (!hit || !element.contains(hit)) return false;
+        }
+        return true;
+      }),
+    )
+    .toBe(true);
+}
+
+async function expectNoSwapExecution(page: Page) {
+  expect(
+    (await recordedOperations(page)).filter((name) =>
+      /forumSwaps:(prepare|confirm|beginWalletRequest|markUnknown)|forumSwapSubmission:/.test(
+        name,
+      ),
+    ),
+  ).toEqual([]);
 }
 
 for (const theme of ["light", "dark"] as const) {
@@ -652,6 +694,234 @@ test("terminal frame overrides do not hide ordinary forum chrome", async ({
   expect(chartMints).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+])
+  test(`fresh signed-in quote keeps its primary CTA reachable in the laptop rail at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const { errors, externalRequests } = await harness(page, "orderquote");
+    const order = page.getByRole("complementary", {
+      name: "Trade selected token",
+    });
+    const amount = order.getByRole("textbox", { name: "You pay", exact: true });
+    await amount.fill("1");
+    await expect(
+      order.getByText("Minimum received", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      order.getByText("Jupiter managed · verified Metis route", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      order.getByText(
+        "0.5% integrator fee (Jupiter share included) · collected in SYMF",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const primary = order.getByRole("button", {
+      name: "Buy SYMF",
+      exact: true,
+    });
+    await expect(primary).toBeEnabled();
+    expect(await order.evaluate((node) => node.scrollTop)).toBe(0);
+    const rail = await order.boundingBox();
+    const cta = await primary.boundingBox();
+    expect(cta!.y).toBeGreaterThanOrEqual(rail!.y);
+    if (viewport.height >= 768) {
+      // Normal laptop quotes keep the primary action above the fold.
+      expect(cta!.y + cta!.height).toBeLessThanOrEqual(rail!.y + rail!.height);
+    } else {
+      // A shorter laptop uses a small, bounded rail scroll, never document scroll.
+      const needed = Math.max(0, cta!.y + cta!.height - rail!.y - rail!.height);
+      expect(needed).toBeLessThanOrEqual(80);
+      await order.evaluate(
+        (node, distance) =>
+          node.scrollBy({ top: distance, behavior: "instant" }),
+        needed,
+      );
+      expect(
+        await order.evaluate((node) => node.scrollTop),
+      ).toBeLessThanOrEqual(80);
+    }
+    await expectUnobscured(primary);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/fixture-quote-${viewport.width}x${viewport.height}.png`,
+      animations: "disabled",
+    });
+    await expectViewportBounded(page);
+    expect(
+      (await recordedOperations(page)).filter(
+        (name) => name === "action:forumSwaps:quote",
+      ),
+    ).toHaveLength(1);
+    await expectNoSwapExecution(page);
+    expect(externalRequests).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+  { width: 1024, height: 768 },
+  { width: 640, height: 450 }, // 1280px desktop reflow space at 200% zoom
+])
+  test(`large quoted order remains reachable in its own scrollport at ${viewport.width}x${viewport.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ viewport, hasTouch: true });
+    try {
+      const page = await context.newPage();
+      const { errors, externalRequests } = await harness(
+        page,
+        "orderquote&longorder&highimpact",
+      );
+      await openPane(page, "Trade");
+      const order = page.getByRole("complementary", {
+        name: "Trade selected token",
+      });
+      const amount = order.getByRole("textbox", {
+        name: "You pay",
+        exact: true,
+      });
+      await amount.fill("123456789.123456789");
+      const original = await amount.elementHandle();
+      await expect(
+        order.getByText("Minimum received", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        order.getByText("Jupiter managed · verified Metis route", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        order.getByText(
+          "0.5% integrator fee (Jupiter share included) · collected in LONGCOMMUNITYTOKEN",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      const controls = [
+        amount,
+        order.getByRole("button", { name: "Pay token", exact: true }),
+        order.getByRole("button", { name: "Receive token", exact: true }),
+        order.getByRole("button", { name: "Reverse token pair", exact: true }),
+        order.getByLabel("Slippage limit", { exact: true }),
+        order.getByText("Wallet compatibility", { exact: true }),
+        order.getByRole("button", {
+          name: "Buy LONGCOMMUNITYTOKEN",
+          exact: true,
+        }),
+      ];
+      for (const control of controls) {
+        await test.step(`Reach ${(await control.getAttribute("aria-label")) ?? (await control.textContent()) ?? "order input"}`, async () => {
+          await control.scrollIntoViewIfNeeded();
+          await expectUnobscured(control);
+          const box = await control.boundingBox();
+          expect(box!.height).toBeGreaterThanOrEqual(44);
+          expect(box!.width).toBeGreaterThanOrEqual(44);
+        });
+      }
+      if ([320, 390, 844].includes(viewport.width))
+        await page.screenshot({
+          path: `tmp/forum-render-tests/fixture-quote-coarse-${viewport.width}x${viewport.height}.png`,
+          animations: "disabled",
+        });
+      const impact = order.getByText(/High price impact: this trade may move/);
+      await impact.scrollIntoViewIfNeeded();
+      await expectUnobscured(impact);
+      const safety = order.getByText("Before you approve", { exact: true });
+      await safety.focus();
+      await page.keyboard.press("Enter");
+      const warning = order.getByText(
+        /Review fees, slippage and minimum received before signing/,
+      );
+      await warning.scrollIntoViewIfNeeded();
+      await expectUnobscured(warning);
+      const receipts = order.getByRole("button", {
+        name: "Receipts & protected attempts",
+        exact: true,
+      });
+      await receipts.scrollIntoViewIfNeeded();
+      await receipts.focus();
+      await expect(receipts).toBeFocused();
+      await expectUnobscured(receipts);
+      expect(
+        await order.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBe(true);
+      await expectViewportBounded(page);
+      await openPane(page, "Chart");
+      await openPane(page, "Trade");
+      await expect(amount).toHaveValue("123456789.123456789");
+      expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+      await expectNoSwapExecution(page);
+      expect(externalRequests).toEqual([]);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 844, height: 390 },
+])
+  test(`protected order notices remain keyboard reachable without requoting at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.clock.install();
+    const { errors, externalRequests } = await harness(page, "orderquote&held");
+    await openPane(page, "Trade");
+    const order = page.getByRole("complementary", {
+      name: "Trade selected token",
+    });
+    const status = order.getByRole("button", {
+      name: "View swap status",
+      exact: true,
+    });
+    await status.scrollIntoViewIfNeeded();
+    await expectUnobscured(status);
+    await status.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      order.getByText("Recent operations", { exact: true }),
+    ).toBeFocused();
+    const warning = order.getByText(
+      /A previous wallet request needs verification/,
+    );
+    await warning.scrollIntoViewIfNeeded();
+    await expectUnobscured(warning);
+    const signature = order.getByRole("textbox", {
+      name: "Receipt signature for isolated-quote",
+      exact: true,
+    });
+    await signature.focus();
+    await expect(signature).toBeFocused();
+    await expectUnobscured(signature);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/fixture-protected-${viewport.width}x${viewport.height}.png`,
+      animations: "disabled",
+    });
+    await order
+      .getByRole("textbox", { name: "You pay", exact: true })
+      .fill("1");
+    await page.clock.runFor(1500);
+    await expect(status).toHaveText("View swap status");
+    expect(
+      (await recordedOperations(page)).filter(
+        (name) => name === "action:forumSwaps:quote",
+      ),
+    ).toEqual([]);
+    await expectNoSwapExecution(page);
+    expect(externalRequests).toEqual([]);
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
 
 test("one real order input persists through internal tools and viewport changes without enabling payment", async ({
   page,

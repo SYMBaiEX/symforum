@@ -360,10 +360,10 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     };
   else if (
     name === "forumCommerce:getConfig" &&
-    location.search.includes("orderinput")
+    /orderinput|orderquote/.test(location.search)
   )
     result = {
-      swapsEnabled: false,
+      swapsEnabled: location.search.includes("orderquote"),
       signatureFirstEnabled: true,
       managedEnabled: true,
       promotionsEnabled: false,
@@ -380,7 +380,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
     } satisfies FunctionReturnType<typeof api.forumCommerce.getConfig>;
   else if (
     name === "forumCommerce:searchTokens" &&
-    location.search.includes("orderinput")
+    /orderinput|orderquote/.test(location.search)
   )
     result = [
       {
@@ -482,17 +482,65 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
           nextRefreshAt: Date.now() + (state === "loading" ? 1500 : 600_000),
         } as FunctionReturnType<Ref>;
       }
-      if (location.search.includes("orderinput")) {
+      if (/orderinput|orderquote/.test(location.search)) {
         if (name === "forumTerminal:getWalletReadState")
           return null as FunctionReturnType<Ref>;
         if (name === "forumCommerce:resolveMint")
           return {
             mint: (_args as { mint: string }).mint,
-            symbol: "SYMF",
-            name: "Invented fixture token",
+            symbol: location.search.includes("longorder")
+              ? "LONGCOMMUNITYTOKEN"
+              : "SYMF",
+            name: location.search.includes("longorder")
+              ? "Invented unusually long community token name for viewport coverage"
+              : "Invented fixture token",
             decimals: 6,
             tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
           } as FunctionReturnType<Ref>;
+      }
+      if (
+        name === "forumSwaps:quote" &&
+        location.search.includes("orderquote")
+      ) {
+        const request = _args as {
+          inputMint: string;
+          outputMint: string;
+          amountRaw: string;
+        };
+        return {
+          quotes: [
+            {
+              quoteId: "fixture-geometry-quote" as Id<"forumSwapQuotes">,
+              provider: "jupiter",
+              execution: "jupiter-managed",
+              fees: {
+                feeMint: request.outputMint,
+                totalFeeBps: 50,
+                integratorFeeBps: 50,
+                jupiterFeeBps: 0,
+              },
+              inputMint: request.inputMint,
+              outputMint: request.outputMint,
+              amountRaw: request.amountRaw,
+              swapAmountRaw: request.amountRaw,
+              platformFeeRaw: "5000000",
+              outputAmountRaw: location.search.includes("longorder")
+                ? "9876543210123456"
+                : "123456789",
+              minimumOutputAmountRaw: location.search.includes("longorder")
+                ? "9827160494072838"
+                : "122839505",
+              priceImpactBps: location.search.includes("highimpact") ? 250 : 25,
+              platformFeeBps: 50,
+              routeLabels: ["Invented geometry route"],
+              expiresAt: Date.now() + 30_000,
+            },
+          ],
+          failures: [],
+          benefitEligible: false,
+          benefitStatus: "unavailable",
+          platformFeeBps: 50,
+        } as FunctionReturnType<Ref>;
       }
       if (
         name === "forumResearchActions:check" &&
