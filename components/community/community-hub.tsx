@@ -306,6 +306,21 @@ function Projects({
   const authorId = isAuthenticated && !isLoading ? mine?.userId : undefined;
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AffiliationDraft | null>(null);
+  const [search, setSearch] = useState("");
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const searchDescription = useId();
+  const term = search.trim();
+  const publicTerm = term.toLowerCase();
+  const matches = projects?.filter(
+    (project) =>
+      !term ||
+      project.mint.includes(term) ||
+      [
+        project.name,
+        project.symbol,
+        ...project.claims.flatMap((claim) => [claim.username, claim.role]),
+      ].some((value) => value.toLowerCase().includes(publicTerm)),
+  );
   const creationTrigger = useRef<HTMLButtonElement | null>(null);
   const addProjectTrigger = useRef<HTMLButtonElement | null>(null);
   function openCreation(event: MouseEvent<HTMLButtonElement>) {
@@ -320,13 +335,63 @@ function Projects({
           <div>
             <h2>Project hubs</h2>
             <p className={styles.muted}>
-              An exact-mint directory of projects and their contributors.
+              {mint
+                ? "A hub for this exact mint, with up to 12 public affiliations."
+                : "A recent sample of up to 24 hubs and 12 public affiliations per hub, not a complete directory."}
             </p>
           </div>
           <Button ref={addProjectTrigger} onClick={openCreation}>
             <Plus aria-hidden="true" /> Add project
           </Button>
         </div>
+        <div className={styles.projectSearch}>
+          <Field label="Search loaded projects">
+            <Input
+              ref={searchInput}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              disabled={projects === undefined}
+              aria-describedby={searchDescription}
+              placeholder="Name, symbol, exact mint or contributor"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={256}
+            />
+          </Field>
+          {search.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSearch("");
+                searchInput.current?.focus();
+              }}
+            >
+              Clear search
+            </Button>
+          )}
+        </div>
+        <p id={searchDescription} className={styles.muted}>
+          Filters only loaded hubs and their public contributor roles and
+          handles. Mint matching is case-sensitive. No additional data is
+          fetched.
+        </p>
+        {projects !== undefined && (
+          <p
+            className={styles.projectCount}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {matches?.length ?? 0} of {projects.length} loaded{" "}
+            {projects.length === 1 ? "project" : "projects"}
+            {term
+              ? matches?.length === 1
+                ? " matches this search."
+                : " match this search."
+              : " shown."}
+          </p>
+        )}
         <div className={styles.list}>
           {projects === undefined ? (
             <p className={styles.empty} role="status">
@@ -348,8 +413,16 @@ function Projects({
                 Add the first affiliation <ArrowUpRight aria-hidden="true" />
               </Button>
             </div>
+          ) : matches?.length === 0 ? (
+            <div className={styles.empty}>
+              <h3>No loaded projects match</h3>
+              <p>
+                Try another term or clear this local search. Other projects may
+                exist outside this recent sample.
+              </p>
+            </div>
           ) : (
-            projects.map((project) => (
+            matches?.map((project) => (
               <article className={styles.item} key={project.projectId}>
                 <div className={styles.rowHeading}>
                   <h3>
