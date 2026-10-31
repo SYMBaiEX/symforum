@@ -11,6 +11,16 @@ existing verified-mint cache and a server-linked wallet. A claim is a member's
 endorsement. Public claims never expose the privately recorded linked wallet.
 The author may update only their own claim. External links require public HTTPS.
 
+The directory exposes **Edit your affiliation** only after the signed-in author's
+identity resolves. It opens the existing affiliation form with the saved public
+fields; the exact mint is read-only and remains the mutation target even if a
+browser field is modified. The same verified-mint action, author-scoped upsert,
+linked-wallet requirement and write limits apply. The UI never supplies an
+author ID as mutation authority. A live query update does not replace a draft;
+account/wallet changes prevent saving another author's retained edit. Closing the
+dialog returns focus to its edit trigger, or to Add project if that trigger is
+no longer present.
+
 ## Work and payments
 
 The two work types are bounties and human/agent-readable research requests. Each
@@ -72,3 +82,40 @@ discount, paid posting, moderation power or token-weighted reputation returns.
 
 References: [Solana transfer requests](https://solana.com/docs/tools/solana-pay/quickstart/transfer-requests)
 and [Solana Pay specification](https://docs.solanapay.com/spec).
+
+## Source completeness audit — 2026-10-30
+
+`platform-build-roadmap.md` remains a platform acceptance queue, not a detailed
+community utility checklist. Its free-community, authorization and paid-product
+release constraints still apply. The utility contract above and
+`forum-native-terminal-plan.md` define this surface's existing scope.
+
+| Existing utility                               | Source evidence                                                                                                                                    | Completion boundary                                                                                                             |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Exact-mint hubs and self-declared affiliations | `Projects` / `ProjectForm` in `components/community/community-hub.tsx`; `listProjects` / `createProjectClaim` in `convex/forumCommunity.ts`        | Create and owner-only edit paths exist; no ownership or safety certification is implied.                                        |
+| Bounties and research requests                 | `WorkBoard`, `BountyForm`, `SubmissionForm`, `SubmissionList`, `RewardButton`; `createBounty`, `claimBounty`, `selectSubmission`, `preparePayment` | Unfunded publication, private submissions, sponsor selection and explicit reward review exist; payment finality stays separate. |
+| Optional author tips                           | `Tips`, `SupporterSettings`, `AuthorTip`; `setTipRecipient`, `listTipRecipients`, `getThreadRecipient`                                             | Public recipient opt-in and actual-thread-author binding remain required.                                                       |
+| Private receipts and protected attempts        | `Receipts`, `PaymentDialog`; `listPayments`, `markPaymentOpened`, `verifyPayment`                                                                  | Existing-attempt checks and holds remain authoritative; a missing receipt is never permission to pay again.                     |
+| Optional holder profile                        | `SupporterSettings`, `CommunityHolderBadge`; `refreshSupporter`, `getPublicSupporter`                                                              | Explicit finalized proof, expiry and public opt-in exist; no balance disclosure or token-based privileges are added.            |
+
+Remaining source/operating limitations, not implemented by this bounded edit pass:
+
+- Cancelled pledges are supported by the existing query/status model, but the
+  work-board filters expose only Open, Awaiting payment and Paid. A cancelled
+  work-history view is still absent.
+- An author can update an open-pledge submission through the existing upsert,
+  but the submission form does not prefill their saved link and summary.
+- The public directory is deliberately bounded to 24 recent hubs and 12 claims
+  per hub. Exact-mint terminal embeds provide a scoped view; there is no
+  complete personal-affiliation index or paginated directory. Do not describe
+  the recent listing as exhaustive.
+- Real user-controlled Solana Pay handler acceptance, transaction finality and
+  production authenticated edit behavior require separate operating evidence.
+  Local fixtures cannot certify these outcomes.
+
+`tests/e2e/community-affiliations.spec.ts` exercises the edit path using invented
+records, fake identity changes and blocked external traffic. It covers owner,
+other-owner, signed-out and loading states; phone/desktop form interaction;
+locked mint and exact upsert arguments; draft retention after reactive updates
+and errors; pending-validation identity changes; and keyboard focus return.
+These are local UI checks, not live backend or wallet acceptance receipts.
