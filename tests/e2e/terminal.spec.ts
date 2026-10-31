@@ -190,6 +190,11 @@ for (const viewport of [
     ).toHaveCount(0);
     await openTool(page, "Wallet & watches");
     await expect(page.getByLabel("Alert above, USD")).toBeVisible();
+    // Desktop keeps an intentionally open drawer alongside the primary chart.
+    // Closing it, rather than changing chart tabs, must remove its focus targets.
+    await page
+      .getByRole("button", { name: "Close tools panel", exact: true })
+      .click();
     await openPane(page, "Chart");
     await expect(page.getByLabel("Alert above, USD")).toBeHidden();
     await expect(page.getByLabel("Search sampled tokens")).toBeHidden();
@@ -351,7 +356,7 @@ async function expectCompactChart(page: Page, narrow: boolean) {
   expect(quoteStyle.size).toBeLessThanOrEqual(12);
   expect(quoteStyle.weight).toBeLessThanOrEqual(500);
   const tabs = await page
-    .getByRole("tablist", { name: "Terminal views" })
+    .locator('[role="tablist"][aria-label="Terminal views"]')
     .boundingBox();
   const heading = await page
     .getByRole("heading", { name: "Trading terminal", exact: true })
