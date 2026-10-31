@@ -23,7 +23,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 
@@ -76,6 +78,7 @@ function ForumMemberTable() {
   const pageSize = parseMemberPageSize(searchParams.get("perPage"));
   const page = parseMemberPage(searchParams.get("page"));
   const [draftQuery, setDraftQuery] = useState(query);
+  const searchInput = useRef<HTMLInputElement>(null);
   const updateMemberParams = useCallback(
     (
       patch: {
@@ -151,6 +154,7 @@ function ForumMemberTable() {
           <label className="min-w-0 flex-1">
             <span className="sr-only">Search members</span>
             <input
+              ref={searchInput}
               autoComplete="off"
               className="focus-ring min-h-11 w-full rounded-xl border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
@@ -189,11 +193,14 @@ function ForumMemberTable() {
               ? "Loading members…"
               : `${matchedCount} member${matchedCount === 1 ? "" : "s"}${pageCount > 1 ? ` · Page ${currentPage} of ${pageCount}` : ""}`}
           </p>
-          <details className="relative shrink-0">
-            <summary className="focus-ring cursor-pointer py-1">
+          <details
+            className="relative shrink-0"
+            onKeyDown={dismissMemberPageSize}
+          >
+            <summary className="focus-ring min-h-11 cursor-pointer py-3">
               {pageSize} per page
             </summary>
-            <label className="forum-inline-menu absolute right-0 z-20 mt-2 grid w-40 gap-2 rounded-xl border border-row-border bg-card p-3 shadow-sm">
+            <label className="forum-inline-menu absolute right-0 z-20 mt-2 grid max-h-[60dvh] w-40 max-w-[calc(100vw-2rem)] gap-2 overflow-y-auto rounded-xl border border-row-border bg-card p-3 shadow-sm">
               <span>Members per page</span>
               <select
                 className="focus-ring min-h-11 rounded-xl border border-row-border bg-background px-2 text-sm"
@@ -233,6 +240,21 @@ function ForumMemberTable() {
               query.trim()
                 ? "No forum members match the current search and sort controls."
                 : "No forum profiles have posted yet. Members appear here after forum activity or profile setup."
+            }
+            action={
+              query.trim() ? (
+                <button
+                  type="button"
+                  className="forum-action-pill focus-ring min-h-11 px-3 text-sm text-foreground"
+                  onClick={() => {
+                    setDraftQuery("");
+                    updateMemberParams({ page: 1, query: "" });
+                    searchInput.current?.focus();
+                  }}
+                >
+                  Clear search
+                </button>
+              ) : undefined
             }
           />
         </div>
@@ -307,7 +329,11 @@ function ForumMemberTable() {
                         : ""}
                     </p>
                   </div>
-                  <ForumLink href={`/forum/messages?compose=1&recipient=${encodeURIComponent(member.username)}`} className="focus-ring forum-action-chip shrink-0 text-xs" aria-label={`Message ${member.displayName}`}>
+                  <ForumLink
+                    href={`/forum/messages?compose=1&recipient=${encodeURIComponent(member.username)}`}
+                    className="focus-ring forum-action-chip shrink-0 text-xs"
+                    aria-label={`Message ${member.displayName}`}
+                  >
                     Message
                   </ForumLink>
                 </div>
@@ -332,6 +358,21 @@ function ForumMemberTable() {
       ) : null}
     </div>
   );
+}
+
+function dismissMemberPageSize(event: KeyboardEvent<HTMLDetailsElement>) {
+  const details = event.currentTarget;
+  if (event.key !== "Escape" || event.defaultPrevented || !details.open) return;
+  event.preventDefault();
+  event.stopPropagation();
+  details.open = false;
+  const summary = details.querySelector("summary");
+  if (
+    summary?.isConnected &&
+    summary.getClientRects().length &&
+    getComputedStyle(summary).visibility === "visible"
+  )
+    summary.focus({ preventScroll: true });
 }
 
 function parseMemberSortKey(value: string | null): ForumMemberSortKey {
