@@ -27,9 +27,8 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-
 
 export function ForumSavedThreads({ enabled }: { enabled: boolean }) {
   if (!enabled) {
@@ -49,6 +48,7 @@ function LiveForumSavedThreads() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
   const [filterQuery, setFilterQuery] = useState("");
+  const filterInput = useRef<HTMLInputElement>(null);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const bookmarks = useQuery(
@@ -122,9 +122,41 @@ function LiveForumSavedThreads() {
     );
   }
 
+  const trimmedFilter = filterQuery.trim();
+  const normalizedFilter = trimmedFilter.toLowerCase();
+  const visibleThreads = bookmarks.threads.filter((thread) =>
+    `${thread.title} ${thread.categorySlug}`
+      .toLowerCase()
+      .includes(normalizedFilter),
+  );
+
   return (
     <div className="forum-account-library space-y-3">
-      <label className="forum-library-search"><span>Find in saved threads</span><input className="focus-ring" type="search" placeholder="Search title or board…" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} /></label>
+      <div className="forum-library-search">
+        <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span>Find in saved threads</span>
+          <input
+            ref={filterInput}
+            className="focus-ring text-base"
+            type="search"
+            placeholder="Search title or board…"
+            value={filterQuery}
+            onChange={(event) => setFilterQuery(event.target.value)}
+          />
+        </label>
+        {filterQuery.length > 0 && (
+          <button
+            className="focus-ring min-h-11 min-w-11 rounded-md border border-border px-3 py-2"
+            type="button"
+            onClick={() => {
+              setFilterQuery("");
+              filterInput.current?.focus();
+            }}
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
       {actionError ? (
         <p
           className="border border-row-border px-3 py-2.5 text-sm text-muted-foreground"
@@ -151,14 +183,33 @@ function LiveForumSavedThreads() {
       ) : (
         <section className="forum-panel min-w-0">
           <div className="px-4 py-3">
-            <h2 className="text-sm font-semibold">Reading list <span className="forum-count-badge">{bookmarks.threads.length}</span></h2>
+            <h2 className="text-sm font-semibold">
+              Reading list{" "}
+              <span className="forum-count-badge">
+                {bookmarks.threads.length} loaded
+              </span>
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               A private reading list. Saving does not turn on reply alerts.
             </p>
+            <p
+              className="mt-1 text-sm text-muted-foreground"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {normalizedFilter
+                ? `${visibleThreads.length} of ${bookmarks.threads.length} loaded saved threads match.`
+                : `${bookmarks.threads.length} loaded saved threads.`}
+            </p>
           </div>
-          {filterQuery && !bookmarks.threads.some((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase())) ? <p className="px-4 py-5 text-sm text-muted-foreground" role="status">No saved threads match “{filterQuery}”.</p> : null}
+          {normalizedFilter && visibleThreads.length === 0 ? (
+            <p className="px-4 py-5 text-sm text-muted-foreground">
+              No saved threads match “{trimmedFilter}”.
+            </p>
+          ) : null}
           <div className="space-y-0">
-            {bookmarks.threads.filter((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase())).map((thread) => {
+            {visibleThreads.map((thread) => {
               const threadId = thread._id;
               return (
                 <SavedThreadRow
