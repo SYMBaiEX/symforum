@@ -221,6 +221,16 @@ export function ForumMediaGallery({
                     </button>
                   </div>
                 )}
+                <a
+                  href={image.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
+                  aria-label={`Open original image: ${image.altText || image.filename}`}
+                  className="focus-ring inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-foreground underline underline-offset-4"
+                >
+                  Open original
+                </a>
               </div>
             </>
           )}
