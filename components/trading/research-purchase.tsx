@@ -32,6 +32,7 @@ import {
   researchPaymentRequired,
 } from "@/lib/forum-research";
 import type { ResearchReport, ResearchState } from "@/lib/forum-research";
+import { useTerminalAttention } from "./terminal-attention";
 
 type Quote = {
   intentKey: string;
@@ -137,6 +138,22 @@ function ResearchPurchaseConnected({
   const held = history?.find((item) =>
     ["verifying", "settlement_claimed", "unknown"].includes(item.state),
   );
+  const protectedIntents = new Set(
+    isAuthenticated
+      ? history
+          ?.filter((item) =>
+            ["verifying", "settlement_claimed", "unknown"].includes(item.state),
+          )
+          .map((item) => item.intentKey)
+      : [],
+  );
+  if (
+    isAuthenticated &&
+    receipt &&
+    ["verifying", "settlement_claimed", "unknown"].includes(receipt.state)
+  )
+    protectedIntents.add(receipt.intentKey);
+  useTerminalAttention("research", protectedIntents.size);
   useEffect(() => {
     const timer = setInterval(
       () => setNow(Math.floor(Date.now() / 60_000) * 60_000),

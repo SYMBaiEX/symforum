@@ -40,6 +40,7 @@ import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 import { lamportsToSol, solToLamports } from "@/lib/forum-community";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { forumSiteUrl } from "@/lib/site-urls";
+import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
 
 type Payment = FunctionReturnType<typeof api.forumCommunity.preparePayment>;
@@ -1135,6 +1136,13 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
       api.forumCommunity.listPayments,
       isAuthenticated ? {} : "skip",
     );
+  useTerminalAttention(
+    "community",
+    isAuthenticated
+      ? (rows?.filter((row) => row.status === "held" || row.status === "opened")
+          .length ?? 0)
+      : 0,
+  );
   return (
     <section className={styles.panel}>
       <div className={styles.sectionHeading}>
@@ -1211,6 +1219,7 @@ function PaymentDialog({
   payment: Payment | null;
   onClose: () => void;
 }) {
+  const { isAuthenticated } = useConvexAuth();
   const live = useQuery(
       api.forumCommunity.getPayment,
       payment ? { intentId: payment.intentId } : "skip",
@@ -1222,6 +1231,12 @@ function PaymentDialog({
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const row = live ?? payment;
+  useTerminalAttention(
+    "community",
+    isAuthenticated && row && (row.status === "held" || row.status === "opened")
+      ? 1
+      : 0,
+  );
   useEffect(() => {
     setSignature("");
     setMessage("");
@@ -1234,7 +1249,7 @@ function PaymentDialog({
         if (!value && !busy) onClose();
       }}
     >
-      <DialogContent data-surface="forum">
+      <DialogContent data-surface="forum" className={styles.paymentDialog}>
         <DialogHeader>
           <DialogTitle>
             {row?.purpose === "reward"

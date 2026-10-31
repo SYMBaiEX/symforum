@@ -9,6 +9,7 @@ import { SYMF_TOKEN } from "@/lib/symf-token";
 import type { TerminalWalletReadState } from "@/lib/forum-terminal-model";
 import { terminalApi } from "./terminal-api";
 import { balanceLabel, shortMint } from "./terminal-format";
+import { useTerminalAttention } from "./terminal-attention";
 import styles from "./forum-terminal.module.css";
 
 const SOL = "So11111111111111111111111111111111111111112";
@@ -181,6 +182,7 @@ export function SwapHistory() {
     history?.filter(
       (entry) => entry.status === "held" || entry.status === "submitted",
     ).length ?? 0;
+  useTerminalAttention("receipts", protectedCount);
   return (
     <section className={styles.panel} aria-labelledby="terminal-history-title">
       <header className={styles.panelHead}>
