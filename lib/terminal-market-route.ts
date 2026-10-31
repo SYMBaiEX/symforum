@@ -112,7 +112,7 @@ export async function terminalMarketResponse(
       {
         error:
           value.state === "budget"
-            ? "Free-tier market allowance reached. Cached forum coverage remains available."
+            ? "Platform market-data allowance reached. Cached forum coverage remains available."
             : "No current chart is available for this indexed token.",
         state: value.state,
         cache: value.cache,
