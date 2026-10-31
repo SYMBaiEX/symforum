@@ -1121,7 +1121,7 @@ function SupporterSettings({ client }: { client: CommerceWalletClient }) {
               ? "Select a wallet linked to your account to manage public tips and your optional holder profile."
               : "Sign in and link a community wallet to manage your receiving address and optional holder profile."}
           </p>
-          <p>Receiving tips is opt-in. Your holder balance stays private.</p>
+          <p>Receiving tips is opt-in. A holder badge is optional.</p>
         </div>
       ) : null}
       <div
