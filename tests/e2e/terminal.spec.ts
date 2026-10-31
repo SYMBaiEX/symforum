@@ -1926,7 +1926,7 @@ test("tip loading, no-recipient and signed-out states do not offer an unusable p
       });
       await profile.click();
       await expect(
-        region.getByRole("heading", {
+        region.getByRole("region", {
           name: "Your contributor profile",
           exact: true,
         }),
