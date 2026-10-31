@@ -438,6 +438,14 @@
   padding-right: 24px;
   text-align: left;
 }
+.paymentDialog {
+  max-height: calc(
+    100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 16px;
+}
 .payment {
   display: grid;
   gap: 16px;

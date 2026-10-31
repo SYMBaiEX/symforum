@@ -10,6 +10,7 @@ import type {
 import styles from "@/components/forum/forum-symf.module.css";
 import terminalStyles from "./forum-terminal.module.css";
 import { readChartData, type ChartMarketData } from "./price-chart-data";
+import { formatChartAxisPrice } from "./chart-axis-format";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -35,6 +36,7 @@ function CandleCanvas({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const fitted = useRef(false);
+  const axisStep = useRef(0.000000001);
   const [api, setApi] = useState<ChartApi | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -70,7 +72,8 @@ function CandleCanvas({
               borderColor: light ? "#e4e4e7" : "#2a2a30",
             },
             localization: {
-              priceFormatter: (value: number) => priceFormat.format(value),
+              priceFormatter: (value: number) =>
+                formatChartAxisPrice(value, axisStep.current),
             },
           });
           const series = chart.addSeries(CandlestickSeries, {
@@ -82,7 +85,8 @@ function CandleCanvas({
             priceFormat: {
               type: "custom",
               minMove: 0.000000001,
-              formatter: (value: number) => priceFormat.format(value),
+              formatter: (value: number) =>
+                formatChartAxisPrice(value, axisStep.current),
             },
           });
           const volume = chart.addSeries(HistogramSeries, {
@@ -109,14 +113,16 @@ function CandleCanvas({
   useEffect(() => {
     if (!api) return;
     const minimum = Math.min(...candles.map((c) => c.low));
+    axisStep.current = Math.max(
+      Number.MIN_VALUE,
+      10 ** (Math.floor(Math.log10(minimum)) - 4),
+    );
     api.series.applyOptions({
       priceFormat: {
         type: "custom",
-        minMove: Math.max(
-          Number.MIN_VALUE,
-          10 ** (Math.floor(Math.log10(minimum)) - 4),
-        ),
-        formatter: (value: number) => priceFormat.format(value),
+        minMove: axisStep.current,
+        formatter: (value: number) =>
+          formatChartAxisPrice(value, axisStep.current),
       },
     });
     api.series.setData(

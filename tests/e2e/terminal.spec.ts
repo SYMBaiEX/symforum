@@ -91,12 +91,485 @@ async function sampleSymbols(page: Page) {
     );
 }
 
+async function openPane(
+  page: Page,
+  name: "Chart" | "Markets" | "Trade" | "Receipts",
+) {
+  if (
+    name === "Trade" &&
+    (await page
+      .getByRole("complementary", { name: "Trade selected token" })
+      .isVisible())
+  )
+    return;
+  const dock = page.getByRole("navigation", {
+    name: "Terminal dock",
+    exact: true,
+  });
+  const button = dock.getByRole("button", { name, exact: true });
+  if (await button.isVisible()) {
+    await button.click();
+    // Dock navigation deliberately moves focus on its next animation frame.
+    // Observe that handoff before a caller focuses a nested scroll region.
+    const destination =
+      name === "Receipts"
+        ? "terminal-tool-title"
+        : name === "Trade"
+          ? "terminal-order"
+          : `terminal-${name.toLowerCase()}`;
+    await expect(page.locator(`#${destination}`)).toBeFocused();
+  } else await page.getByRole("tab", { name, exact: true }).click();
+}
+
+async function openTool(
+  page: Page,
+  name: "Wallet & watches" | "Research" | "Community" | "Treasury & burns",
+) {
+  const dock = page.getByRole("navigation", {
+    name: "Terminal dock",
+    exact: true,
+  });
+  const direct = dock.getByRole("button", {
+    name: name === "Treasury & burns" ? "Treasury" : name,
+    exact: true,
+  });
+  if (await direct.isVisible()) await direct.click();
+  else {
+    await dock.getByRole("button", { name: "Tools", exact: true }).click();
+    await page.getByRole("button", { name, exact: true }).first().click();
+  }
+  await expect(page.locator("#terminal-tool-title")).toBeFocused();
+}
+
+async function expectViewportBounded(page: Page) {
+  const viewport = page.viewportSize()!;
+  const dimensions = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    height: document.documentElement.scrollHeight,
+  }));
+  expect(dimensions.width).toBeLessThanOrEqual(viewport.width);
+  expect(dimensions.height).toBeLessThanOrEqual(viewport.height);
+}
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1366, height: 768 },
+  { width: 1024, height: 768 },
+  { width: 768, height: 768 },
+  { width: 640, height: 450 }, // reflow space of a 1280px view at 200% zoom
+  { width: 390, height: 844 },
+  { width: 320, height: 568 },
+  { width: 844, height: 390 },
+])
+  test(`terminal owns one bounded viewport at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const { errors, chartMints } = await harness(page, "held&frame");
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    if (viewport.width === 320) {
+      const chart = await page
+        .getByRole("img", { name: /SYMF USD candlestick chart/ })
+        .boundingBox();
+      expect(chart!.height).toBeGreaterThanOrEqual(180);
+    }
+    await expect(page.locator("[data-terminal-viewport]")).toHaveCount(1);
+    const rail = page.locator(".forum-left-rail");
+    if (viewport.width >= 768) await expect(rail).toBeVisible();
+    else await expect(rail).toBeHidden();
+    const contentLeft =
+      viewport.width >= 1024 ? 192 : viewport.width >= 768 ? 64 : 0;
+    const main = await page.locator("main.forum-main").boundingBox();
+    const workspace = await page
+      .locator("[data-terminal-viewport]")
+      .boundingBox();
+    expect(main!.x).toBeCloseTo(contentLeft, 0);
+    expect(main!.width).toBeCloseTo(viewport.width - contentLeft, 0);
+    expect(workspace!.x).toBeCloseTo(contentLeft, 0);
+    expect(workspace!.width).toBeCloseTo(viewport.width - contentLeft, 0);
+    await expect(
+      page.getByRole("navigation", { name: "Forum navigation", exact: true }),
+    ).toBeHidden();
+    await expect(
+      page.getByText("Normal forum footer", { exact: true }),
+    ).toBeHidden();
+    await expectViewportBounded(page);
+    await openPane(page, "Markets");
+    const marketData = page.getByRole("region", {
+      name: "Market data",
+      exact: true,
+    });
+    await marketData.focus();
+    await expect(marketData).toBeFocused();
+    await expectViewportBounded(page);
+    expect(chartMints).toHaveLength(1);
+    await openPane(page, "Receipts");
+    await expect(
+      page.getByText("Outcome protected", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("No signature recorded", { exact: true }),
+    ).toBeVisible();
+    const receipt = await page
+      .getByText("Outcome protected", { exact: true })
+      .elementHandle();
+    await expect(
+      page.getByRole("button", { name: /repeat|replay|resend/i }),
+    ).toHaveCount(0);
+    await openTool(page, "Wallet & watches");
+    await expect(page.getByLabel("Alert above, USD")).toBeVisible();
+    // Desktop keeps an intentionally open drawer alongside the primary chart.
+    // Closing it, rather than changing chart tabs, must remove its focus targets.
+    await page
+      .getByRole("button", { name: "Close tools panel", exact: true })
+      .click();
+    await openPane(page, "Chart");
+    await expect(page.getByLabel("Alert above, USD")).toBeHidden();
+    await expect(page.getByLabel("Search sampled tokens")).toBeHidden();
+    expect(await receipt?.evaluate((node) => node.isConnected)).toBe(true);
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
+
+test("terminal frame overrides do not hide ordinary forum chrome", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors, chartMints } = await harness(page, "shellcontrol");
+  await expect(
+    page.getByRole("heading", { name: "Ordinary forum page" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Forum navigation", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Normal forum footer", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("[data-terminal-viewport]")).toHaveCount(0);
+  expect(chartMints).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("one real order input persists through internal tools and viewport changes without enabling payment", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { errors } = await harness(page, "orderinput");
+  const amount = page.getByRole("textbox", { name: "You pay", exact: true });
+  await expect(amount).toBeVisible();
+  await amount.fill(".5");
+  await expect(amount).toHaveValue("0.5");
+  await page.getByText("Before you approve", { exact: true }).click();
+  await expect(
+    page.getByText(/Review fees, slippage and minimum received before signing/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Swaps are not yet enabled. No payments can be made here.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const original = await amount.elementHandle();
+  await openPane(page, "Markets");
+  await expect(amount).toHaveValue("0.5");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPane(page, "Trade");
+  await expect(amount).toHaveValue("0.5");
+  await openPane(page, "Receipts");
+  await expect(amount).toBeHidden();
+  await openTool(page, "Research");
+  await expect(
+    page.getByRole("button", {
+      name: "Payment receipt protected",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/A previous payment is awaiting verified settlement/),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: "Verify saved receipt", exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Review research export", exact: true }),
+  ).toHaveCount(0);
+  await openTool(page, "Community");
+  await expect(
+    page.getByRole("heading", { name: /Fixture research collective/ }),
+  ).toBeVisible();
+  await openTool(page, "Treasury & burns");
+  await expect(
+    page.getByText("Confirmed promotion receipts only", { exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openPane(page, "Chart");
+  await expect(amount).toHaveValue("0.5");
+  expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(
+    page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("an open order token picker keeps its owner visible across focused-layout resize", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { errors } = await harness(page, "orderinput");
+  const amount = page.getByRole("textbox", { name: "You pay", exact: true });
+  await expect(amount).toBeVisible();
+  await amount.fill(".5");
+  await expect(amount).toHaveValue("0.5");
+  const originalAmount = await amount.elementHandle();
+  const trigger = page.getByRole("button", { name: "Pay token", exact: true });
+  const originalTrigger = await trigger.elementHandle();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Select a token",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("[data-terminal-viewport]")).toHaveAttribute(
+    "data-pane",
+    "trade",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(amount).toBeVisible();
+  await expect(amount).toHaveValue("0.5");
+  expect(await originalAmount?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await originalTrigger?.evaluate((node) => node.isConnected)).toBe(
+    true,
+  );
+  await expect(
+    page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Pay token", exact: true }),
+  ).toHaveCount(1);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("modeled mobile visual viewport keeps the active order and dock usable without changing input state", async ({
+  page,
+}) => {
+  // This models visualViewport events, not a physical device keyboard or pinch.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { errors } = await harness(page, "orderinput");
+  await openPane(page, "Trade");
+  const amount = page.getByRole("textbox", { name: "You pay", exact: true });
+  await expect(amount).toBeVisible();
+  await amount.fill(".5");
+  await amount.focus();
+  const original = await amount.elementHandle();
+  const workspace = page.locator("[data-terminal-viewport]");
+  const dock = page.getByRole("navigation", {
+    name: "Terminal dock",
+    exact: true,
+  });
+  const resizeVisualViewport = async (height: number, scale = 1) =>
+    page.evaluate(
+      ({ height, scale }) => {
+        if (!window.visualViewport)
+          throw new Error("Visual viewport fixture unavailable");
+        Object.defineProperty(window.visualViewport, "height", {
+          configurable: true,
+          get: () => height,
+        });
+        Object.defineProperty(window.visualViewport, "scale", {
+          configurable: true,
+          get: () => scale,
+        });
+        window.visualViewport.dispatchEvent(new Event("resize"));
+      },
+      { height, scale },
+    );
+  await resizeVisualViewport(480);
+  await expect
+    .poll(async () => (await workspace.boundingBox())!.height)
+    .toBeLessThanOrEqual(424);
+  const dockBox = await dock.boundingBox();
+  expect(dockBox!.y + dockBox!.height).toBeLessThanOrEqual(480);
+  await amount.scrollIntoViewIfNeeded();
+  const inputBox = await amount.boundingBox();
+  const orderBox = await page
+    .getByRole("complementary", { name: "Trade selected token" })
+    .boundingBox();
+  expect(inputBox!.y).toBeGreaterThanOrEqual(orderBox!.y);
+  expect(inputBox!.y + inputBox!.height).toBeLessThanOrEqual(
+    orderBox!.y + orderBox!.height,
+  );
+  await expect(amount).toHaveValue("0.5");
+  expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(
+    page.getByRole("textbox", { name: "You pay", exact: true }),
+  ).toHaveCount(1);
+  await resizeVisualViewport(844);
+  await expect
+    .poll(async () => (await workspace.boundingBox())!.height)
+    .toBeGreaterThan(424);
+  expect(
+    (await dock.boundingBox())!.y + (await dock.boundingBox())!.height,
+  ).toBeLessThanOrEqual(844);
+  await resizeVisualViewport(480, 2);
+  await expect
+    .poll(() =>
+      workspace.evaluate((node) =>
+        (node as HTMLElement).style.getPropertyValue(
+          "--terminal-visible-height",
+        ),
+      ),
+    )
+    .toBe("");
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute(
+    "content",
+    /user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\D|$)/i,
+  );
+  await expect(amount).toHaveValue("0.5");
+  await resizeVisualViewport(844);
+  expect(errors).toEqual([]);
+});
+
+test("a protected community receipt stays bounded in the terminal and Escape restores its trigger", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const { errors } = await harness(page, "held");
+  await openTool(page, "Community");
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  const trigger = page.getByRole("button", {
+    name: "Check protected receipt",
+    exact: true,
+  });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Review reward payment" });
+  await expect(
+    dialog.getByText("Protected uncertain outcome", { exact: true }),
+  ).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(568);
+  await expect(
+    dialog.getByRole("button", { name: "Verify saved payment" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", {
+      name: /Open exact payment|repeat|replay|resend/i,
+    }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+test("known private outcomes survive hidden community views and clear on fixture sign-out", async ({
+  page,
+}) => {
+  const { errors } = await harness(page, "held");
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const paymentQueryCount = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as { __terminalFixtureQueries: string[] }
+        ).__terminalFixtureQueries.filter(
+          (name) => name === "forumCommunity:listPayments",
+        ).length,
+    );
+  expect(await paymentQueryCount()).toBe(0);
+  await openTool(page, "Community");
+  expect(await paymentQueryCount()).toBe(0);
+  await page
+    .getByRole("button", { name: "Your receipts", exact: true })
+    .click();
+  await expect(
+    page.getByText("Protected outcome", { exact: true }),
+  ).toBeVisible();
+  expect(await paymentQueryCount()).toBeGreaterThan(0);
+  const attention = page.getByRole("status", {
+    name: "Known protected operations",
+    exact: true,
+  });
+  const community = attention.getByRole("button", {
+    name: /^Community.*1 protected/,
+  });
+  await expect(community).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Community utilities", exact: true })
+    .getByRole("button", { name: "Project hubs", exact: true })
+    .click();
+  await expect(
+    page.getByText("Protected outcome", { exact: true }),
+  ).toBeHidden();
+  await expect(community).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close tools panel", exact: true })
+    .click();
+  await openPane(page, "Chart");
+  await expect(community).toBeVisible();
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("terminal-fixture:signout")),
+  );
+  await expect(attention).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test("long protected receipt histories scroll inside the active tool rather than the document", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 568 });
+  const { errors } = await harness(page, "held&longhistory");
+  await openPane(page, "Receipts");
+  const history = page.getByRole("region", {
+    name: "Your swap operation history",
+    exact: true,
+  });
+  await expect(history.getByRole("row")).toHaveCount(31);
+  const content = page.getByRole("region", {
+    name: "Active terminal tool",
+    exact: true,
+  });
+  await content.focus();
+  await expect(content).toBeFocused();
+  const previous = await content.evaluate((node) => node.scrollTop);
+  await page.keyboard.press("End");
+  await expect
+    .poll(() => content.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(previous);
+  await expect(
+    page.getByRole("button", { name: /repeat|replay|resend/i }),
+  ).toHaveCount(0);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
 async function expectCompactChart(page: Page, narrow: boolean) {
   const canvas = page.getByRole("img", { name: /SYMF USD candlestick chart/ });
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
-  expect(box!.height).toBeGreaterThanOrEqual(narrow ? 256 : 380);
-  expect(box!.height).toBeLessThanOrEqual(narrow ? 280 : 420);
+  const viewport = page.viewportSize()!;
+  // The chart flexes inside the viewport desk, not a fixed-height page stack.
+  expect(box!.height).toBeGreaterThanOrEqual(
+    viewport.height < 500 ? 72 : narrow ? 180 : 240,
+  );
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height - 44);
   const close = page
     .locator("#terminal-chart p")
     .filter({ hasText: /^Close / });
@@ -109,16 +582,17 @@ async function expectCompactChart(page: Page, narrow: boolean) {
   expect(quoteStyle.size).toBeLessThanOrEqual(12);
   expect(quoteStyle.weight).toBeLessThanOrEqual(500);
   const tabs = await page
-    .getByRole("tablist", { name: "Terminal views" })
+    .locator('[role="tablist"][aria-label="Terminal views"]')
     .boundingBox();
   const heading = await page
     .getByRole("heading", { name: "Trading terminal", exact: true })
     .boundingBox();
-  expect(tabs).not.toBeNull();
-  expect(heading!.y + heading!.height / 2).toBeGreaterThanOrEqual(tabs!.y);
-  expect(heading!.y + heading!.height / 2).toBeLessThanOrEqual(
-    tabs!.y + tabs!.height,
-  );
+  if (tabs) {
+    expect(heading!.y + heading!.height / 2).toBeGreaterThanOrEqual(tabs.y);
+    expect(heading!.y + heading!.height / 2).toBeLessThanOrEqual(
+      tabs.y + tabs.height,
+    );
+  }
   if (!narrow) {
     const intervals = await page
       .getByRole("group", { name: "Candle interval" })
@@ -183,7 +657,7 @@ for (const width of [390, 1440])
     await page.screenshot({
       path: `tmp/forum-render-tests/terminal-workspace-${width}.png`,
     });
-    await page.getByRole("tab", { name: "Markets", exact: true }).click();
+    await openPane(page, "Markets");
     await page
       .getByRole("combobox", { name: "Market cap", exact: true })
       .selectOption("500k1m");
@@ -205,9 +679,9 @@ for (const width of [390, 1440])
     ).toBeVisible();
     await page.getByText("Market details & sources", { exact: true }).click();
     await expect(page.getByText(/Stale sampled metrics\./)).toBeVisible();
-    const selectedToken = page.getByRole("region").filter({
-      has: page.getByRole("heading", { name: "$NOVA", exact: true }),
-    });
+    const selectedToken = page.locator(
+      "section[aria-labelledby=terminal-token-title]",
+    );
     await expect(
       selectedToken
         .locator("dt")
@@ -252,12 +726,14 @@ test("private watch updates preserve saved thresholds and protected swaps stay p
   page,
 }) => {
   const { errors } = await harness(page, "held");
+  await openTool(page, "Wallet & watches");
   await page.getByLabel("Alert above, USD").fill(".5");
   await page.getByRole("button", { name: "Watch token", exact: true }).click();
   await expect(page.getByText(/Saved thresholds: above \$0.50/)).toBeVisible();
   await page.getByLabel("Alert above, USD").fill("");
   await page.getByRole("button", { name: "Update watch", exact: true }).click();
   await expect(page.getByText(/Saved thresholds: above \$0.50/)).toBeVisible();
+  await openPane(page, "Receipts");
   await expect(
     page.getByText("Outcome protected", { exact: true }),
   ).toBeVisible();
@@ -288,6 +764,7 @@ test("old mint facts remain explicitly dated rather than current safety claims",
   page,
 }) => {
   const { errors } = await harness(page, "guest&stalerisk");
+  await openPane(page, "Trade");
   await page.locator("summary").filter({ hasText: "Mint facts" }).click();
   await expect(
     page.getByText("These mint facts are stale.", { exact: false }),
@@ -304,27 +781,30 @@ test("mobile markets is an accessible view and trade remains one tap away", asyn
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const { errors } = await harness(page, "guest");
-  const markets = page.getByRole("tab", { name: "Markets", exact: true });
-  const chart = page.getByRole("tab", { name: "Chart", exact: true });
-  await expect(markets).toHaveAttribute("aria-selected", "false");
+  const dock = page.getByRole("navigation", {
+    name: "Terminal dock",
+    exact: true,
+  });
+  const markets = dock.getByRole("button", { name: "Markets", exact: true });
+  const chart = dock.getByRole("button", { name: "Chart", exact: true });
+  await expect(markets).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByLabel("Search sampled tokens")).toBeHidden();
-  const trade = page.getByRole("link", { name: /^Trade/ });
-  await expect(trade).toHaveAttribute("href", "#terminal-order");
+  const trade = dock.getByRole("button", { name: "Trade", exact: true });
   const box = await trade.boundingBox();
   expect(box?.y).toBeLessThan(844);
   await trade.click();
   const order = page.getByRole("complementary", {
     name: "Trade selected token",
   });
+  await expect(order).toBeVisible();
   await expect(order).toBeFocused();
   expect((await order.boundingBox())?.y).toBeLessThan(844);
   await markets.focus();
   await page.keyboard.press("Enter");
-  await expect(markets).toHaveAttribute("aria-selected", "true");
+  await expect(markets).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByLabel("Search sampled tokens")).toBeVisible();
-  await page.keyboard.press("ArrowLeft");
-  await expect(markets).toHaveAttribute("aria-selected", "false");
-  await expect(chart).toBeFocused();
+  await chart.click();
+  await expect(markets).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByLabel("Search sampled tokens")).toBeHidden();
   expect(errors).toEqual([]);
 });
@@ -333,7 +813,7 @@ test("market search text clears its search icon and empty filters remain honest"
   page,
 }) => {
   const { errors } = await harness(page, "guest");
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   const search = page.getByLabel("Search sampled tokens");
   const geometry = await search.evaluate((input) => {
     const bounds = input.getBoundingClientRect();
@@ -351,7 +831,7 @@ test("market search text clears its search icon and empty filters remain honest"
   );
   await search.fill("no invented token matches this query");
   await expect(page.getByRole("button", { name: /^View / })).toHaveCount(0);
-  await page.getByRole("tab", { name: "Chart", exact: true }).click();
+  await openPane(page, "Chart");
   await expect(
     page.getByRole("heading", { name: "$SYMF", exact: true }),
   ).toBeVisible();
@@ -363,7 +843,7 @@ test("sample table sorts real market metrics and keeps unknown values last in bo
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const { errors } = await harness(page, "guest");
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   const table = page.getByRole("table", {
     name: "Sampled markets",
     exact: true,
@@ -424,7 +904,7 @@ test("market-cap filters never substitute diluted value or invent a platform ran
   page,
 }) => {
   const { errors } = await harness(page, "guest");
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   await page
     .getByRole("combobox", { name: "Market cap", exact: true })
     .selectOption("50k100k");
@@ -446,7 +926,7 @@ test("sample source links reject unsafe metadata and keep stale observations exp
   page,
 }) => {
   const { errors } = await harness(page, "guest");
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   const table = page.getByRole("table", {
     name: "Sampled markets",
     exact: true,
@@ -505,7 +985,7 @@ test("a current bounded cohort keeps source timestamps and selects only the exac
   const order = await page
     .getByRole("complementary", { name: "Trade selected token" })
     .elementHandle();
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   const table = page.getByRole("table", {
     name: "Sampled markets",
     exact: true,
@@ -583,34 +1063,34 @@ test("compact touch controls retain 44px targets and original protected receipts
     await expectCompactChart(page, true);
     const targets = [
       ...(await page
-        .getByRole("tablist", { name: "Terminal views" })
-        .getByRole("tab")
+        .getByRole("navigation", { name: "Terminal dock", exact: true })
+        .getByRole("button")
         .all()),
       ...(await page
         .getByRole("group", { name: "Candle interval" })
         .getByRole("button")
         .all()),
-      page.getByRole("link", { name: "Receipts", exact: true }),
-      page.getByRole("link", { name: "Trade", exact: true }),
     ];
     for (const target of targets) {
       const box = await target.boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(box!.width).toBeGreaterThanOrEqual(44);
     }
+    await openPane(page, "Receipts");
     const receipt = page.getByText("Outcome protected", { exact: true });
     await expect(receipt).toBeVisible();
     const original = await receipt.elementHandle();
-    await page.getByRole("tab", { name: "Markets", exact: true }).click();
+    await openPane(page, "Markets");
     for (const control of [
       page.getByRole("textbox", { name: "Search sampled tokens" }),
       page.getByRole("combobox", { name: "Market cap", exact: true }),
       page.getByRole("combobox", { name: "Platform", exact: true }),
     ])
       expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await expect(receipt).toBeVisible();
-    await page.getByRole("tab", { name: "Chart", exact: true }).click();
+    await expect(receipt).toBeHidden();
+    await openPane(page, "Chart");
     expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+    await openPane(page, "Receipts");
     await expect(
       page.getByText("No signature recorded", { exact: true }),
     ).toBeVisible();
@@ -642,6 +1122,19 @@ test("keyboard view changes keep the chart, order node and protected receipts mo
   await expect(chartImage).toBeVisible();
   const originalOrder = await order.elementHandle();
   const originalChart = await chartImage.elementHandle();
+  await openPane(page, "Receipts");
+  const originalReceipt = await page
+    .getByText("Outcome protected", { exact: true })
+    .elementHandle();
+  await expect(
+    page.getByText("No signature recorded", { exact: true }),
+  ).toBeVisible();
+  await openPane(page, "Chart");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Terminal dock", exact: true })
+      .getByRole("button", { name: "Receipts", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await chart.focus();
   await page.keyboard.press("ArrowRight");
   await expect(markets).toBeFocused();
@@ -650,14 +1143,20 @@ test("keyboard view changes keep the chart, order node and protected receipts mo
     page.getByRole("tabpanel", { name: "Markets", exact: true }),
   ).toBeVisible();
   await expect(order).toBeVisible();
+  expect(await originalReceipt?.evaluate((node) => node.isConnected)).toBe(
+    true,
+  );
+  expect(await originalOrder?.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await originalChart?.evaluate((node) => node.isConnected)).toBe(true);
+  await openPane(page, "Receipts");
   await expect(
     page.getByText("Outcome protected", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("No signature recorded", { exact: true }),
   ).toBeVisible();
-  expect(await originalOrder?.evaluate((node) => node.isConnected)).toBe(true);
-  expect(await originalChart?.evaluate((node) => node.isConnected)).toBe(true);
+  await openPane(page, "Markets");
+  await markets.focus();
   await page.keyboard.press("Home");
   await expect(chart).toBeFocused();
   await expect(chartImage).toBeVisible();
@@ -684,9 +1183,9 @@ test("a mismatched chart response cannot replace the selected mint's recorded ma
   await expect(
     page.getByRole("img", { name: /USD candlestick chart/ }),
   ).toHaveCount(0);
-  const selected = page
-    .getByRole("region")
-    .filter({ has: page.getByRole("heading", { name: "$SYMF", exact: true }) });
+  const selected = page.locator(
+    "section[aria-labelledby=terminal-token-title]",
+  );
   await expect(
     selected
       .locator("dt")
@@ -746,7 +1245,7 @@ for (const width of [640, 1024])
         bounds!.y + bounds!.height + 1,
       );
     }
-    await page.getByRole("tab", { name: "Markets", exact: true }).click();
+    await openPane(page, "Markets");
     const tableRegion = page.getByRole("region", {
       name: "Market data",
       exact: true,
@@ -756,7 +1255,7 @@ for (const width of [640, 1024])
     expect(
       await page.locator("html").evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);
-    await page.getByRole("tab", { name: "Chart", exact: true }).click();
+    await openPane(page, "Chart");
     await expect(image).toBeVisible();
     expect((await image.boundingBox())?.width).toBeGreaterThan(280);
     expect(errors).toEqual([]);
@@ -766,14 +1265,15 @@ test("an empty market sample keeps the forum token shortcut without invented tra
   page,
 }) => {
   const { errors } = await harness(page, "guest&empty");
-  await page.getByRole("tab", { name: "Markets", exact: true }).click();
+  await openPane(page, "Markets");
   await expect(
     page.getByText("No recent tokens match this sample.", { exact: true }),
   ).toBeVisible();
-  const emptyPanel = await page
-    .getByRole("tabpanel", { name: "Markets", exact: true })
+  const emptyRow = await page
+    .getByRole("table", { name: "Sampled markets", exact: true })
+    .getByRole("cell")
     .boundingBox();
-  expect(emptyPanel!.height).toBeLessThan(420);
+  expect(emptyRow!.height).toBeLessThan(200);
   await expect(
     page
       .getByRole("table", { name: "Sampled markets", exact: true })
@@ -813,12 +1313,10 @@ for (const width of [1024, 1440])
     const chart = page.getByRole("img", { name: /SYMF USD candlestick chart/ });
     await expect(chart).toBeVisible();
     await expectCompactChart(page, width === 1024);
-    if (width === 1440) {
-      const workspace = await page
-        .getByRole("heading", { name: "Your workspace", exact: true })
-        .boundingBox();
-      expect(workspace!.y).toBeLessThanOrEqual(730);
-    }
+    const dock = await page
+      .getByRole("navigation", { name: "Terminal dock", exact: true })
+      .boundingBox();
+    expect(dock!.y + dock!.height).toBeLessThanOrEqual(1000);
     expect((await chart.boundingBox())?.y).toBeLessThanOrEqual(300);
     if (width === 1440)
       expect((await chart.boundingBox())?.width).toBeGreaterThan(800);
@@ -843,19 +1341,20 @@ for (const width of [1024, 1440])
     const order = page.getByRole("complementary", {
       name: "Trade selected token",
     });
-    const originalOrder = await order.elementHandle();
-    await page.getByRole("tab", { name: "Markets", exact: true }).click();
+    const originalOrder = await page.locator("#terminal-order").elementHandle();
+    await openPane(page, "Markets");
     await expect(
       page.getByRole("table", { name: "Sampled markets", exact: true }),
     ).toBeVisible();
-    await expect(order).toBeVisible();
+    if (width === 1440) await expect(order).toBeVisible();
+    else await expect(order).toBeHidden();
     expect(await originalOrder?.evaluate((node) => node.isConnected)).toBe(
       true,
     );
     expect(
       await page.locator("html").evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);
-    await page.getByRole("tab", { name: "Chart", exact: true }).click();
+    await openPane(page, "Chart");
     await expect(chart).toBeVisible();
     expect(await originalOrder?.evaluate((node) => node.isConnected)).toBe(
       true,

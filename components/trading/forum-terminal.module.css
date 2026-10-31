@@ -3,13 +3,21 @@
   --terminal-panel-radius: 8px;
   --terminal-control-radius: 6px;
   container-type: inline-size;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: calc(
+    var(--terminal-visible-height, 100dvh) - var(--site-header-offset, 56px)
+  );
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   color: hsl(var(--foreground));
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
 }
 .header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -56,9 +64,13 @@
   justify-content: end;
   gap: 12px;
 }
-.headerLink,
-.receiptsLink,
-.tradeShortcut {
+.headerToken {
+  display: none;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
+.headerLink {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -68,13 +80,8 @@
   text-decoration: none;
   text-underline-offset: 4px;
 }
-.headerLink:hover,
-.receiptsLink:hover,
-.tradeShortcut:hover {
+.headerLink:hover {
   text-decoration: underline;
-}
-.tradeShortcut {
-  display: none;
 }
 .viewTabs {
   display: flex;
@@ -114,23 +121,50 @@
   content: "";
 }
 .layout {
-  --terminal-chart-height: clamp(380px, 46dvh, 420px);
+  flex: 1 1 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 328px;
   align-items: stretch;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border-bottom: 1px solid hsl(var(--border));
 }
 .analysis {
   container-type: inline-size;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
-.analysis [role="tabpanel"][hidden] {
+.page [hidden] {
   display: none;
 }
+.analysisMain {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
 .chartWorkspace,
-.marketsWorkspace,
-.tokenSurface,
+.marketsWorkspace {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.chartWorkspace {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.tokenSurface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 340px;
+  min-width: 0;
+}
 .discovery {
   min-width: 0;
 }
@@ -138,6 +172,7 @@
   min-height: 0;
 }
 .tokenHead {
+  flex: 0 0 auto;
   min-width: 0;
 }
 .tokenTop {
@@ -315,10 +350,13 @@
   line-height: 16px;
 }
 .chartLayout {
+  flex: 1 1 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(180px, 1fr) auto;
   align-items: center;
   min-width: 0;
+  min-height: min-content;
   border-top: 1px solid hsl(var(--border));
 }
 .chartWorkspace .chartControls {
@@ -377,16 +415,21 @@
 .chartWorkspace .chartFrame {
   grid-column: 1 / -1;
   min-width: 0;
+  min-height: 180px;
+  height: 100%;
 }
 .chartWorkspace .chartCanvas {
   grid-column: 1 / -1;
-  height: var(--terminal-chart-height);
+  height: 100%;
+  min-height: 180px;
   border-top: 1px solid hsl(var(--border));
 }
 .chartWorkspace .chartDataDisclosure {
   grid-column: 1 / -1;
   padding: 0;
   font-size: 12px;
+  max-height: 180px;
+  overflow: auto;
 }
 .chartWorkspace details > summary {
   min-height: 32px;
@@ -399,6 +442,9 @@
   padding-inline: 12px;
 }
 .marketDetails {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
   border-top: 1px solid hsl(var(--border));
   font-size: 12px;
 }
@@ -451,6 +497,7 @@
   height: 14px;
 }
 .discussionBar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -465,6 +512,10 @@
 }
 .aside {
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   border-left: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   scroll-margin-top: calc(var(--site-header-offset, 56px) + 12px);
@@ -508,7 +559,12 @@
   font-size: 12px;
   line-height: 1.65;
 }
-.executionNote a {
+.executionNote button {
+  min-height: 36px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
   color: hsl(var(--foreground));
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -750,12 +806,118 @@
   border-bottom: 1px solid hsl(var(--border));
 }
 .utilityGrid {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.6fr);
-  align-items: start;
-  gap: 12px;
   min-width: 0;
   padding: 12px;
+}
+.attention {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  padding: 0 12px;
+  border-bottom: 1px solid hsl(var(--primary) / 0.3);
+  background: hsl(var(--primary) / 0.05);
+  font-size: 12px;
+}
+.attention > span {
+  color: hsl(var(--muted-foreground));
+}
+.attention button {
+  min-height: 36px;
+  font-weight: 550;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.toolsDrawer {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 40%;
+  min-height: 140px;
+  max-height: 65%;
+  min-width: 0;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.toolsDrawer[data-expanded="true"] {
+  flex-basis: 65%;
+}
+.toolsHeading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding-left: 12px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.toolsHeading h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.toolsHeading > div {
+  display: flex;
+}
+.toolsHeading button {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+.toolsContent {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.toolMenu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 12px;
+}
+.toolMenu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--terminal-control-radius);
+  font-size: 13px;
+}
+.dock {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  min-height: 44px;
+  overflow-x: auto;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.dock button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 16px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.dock button[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.07);
+  color: hsl(var(--primary));
+  box-shadow: inset 0 2px 0 hsl(var(--primary));
+}
+.dock .mobileDock {
+  display: none;
 }
 .footer {
   margin: 0;
@@ -890,29 +1052,42 @@
   }
 }
 @container (max-width: 840px) {
-  .layout {
-    --terminal-chart-height: 272px;
-  }
-  .layout,
-  .below,
-  .utilityGrid {
+  .below {
     grid-template-columns: minmax(0, 1fr);
   }
-  .aside {
-    border-top: 1px solid hsl(var(--border));
-    border-left: 0;
+  .toolsHeading button,
+  .executionNote button,
+  .attention button {
+    min-width: 44px;
+    min-height: 44px;
   }
   .below > :first-child {
     border-right: 0;
-  }
-  .tradeShortcut {
-    display: inline-flex;
   }
   .headerActions .headerLink {
     display: none;
   }
 }
 @container (max-width: 600px) {
+  .attention {
+    flex-wrap: nowrap;
+    min-height: 44px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .attention > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .attention button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    white-space: nowrap;
+  }
   .header {
     flex-wrap: nowrap;
     gap: 0 4px;
@@ -941,19 +1116,11 @@
     font-size: 11px;
   }
   .viewTabs svg,
-  .tradeShortcut svg,
   .desktopTitle {
     display: none;
   }
   .compactTitle {
     display: inline;
-  }
-  .receiptsLink,
-  .tradeShortcut {
-    justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    font-size: 11px;
   }
   .header h1 {
     font-size: 14px;
@@ -994,8 +1161,9 @@
   .chartWorkspace .chartQuote,
   .viewTabs button,
   .headerLink,
-  .receiptsLink,
-  .tradeShortcut,
+  .toolsHeading button,
+  .attention button,
+  .executionNote button,
   .chartWorkspace details > summary,
   .marketDetails > summary,
   .executionDetails > summary,
@@ -1007,15 +1175,17 @@
   .chartWorkspace .chartControls button {
     min-width: 44px;
   }
-  .receiptsLink,
-  .tradeShortcut {
-    justify-content: center;
+  .toolsHeading button {
     min-width: 44px;
+  }
+  .aside :global(.commerce-amount input) {
+    font-size: max(16px, 1em);
   }
 }
 @container (max-width: 360px) {
   .chartLayout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(180px, 1fr) auto;
   }
   .chartWorkspace .chartQuote {
     justify-content: space-between;

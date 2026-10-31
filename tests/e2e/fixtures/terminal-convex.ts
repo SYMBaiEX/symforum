@@ -26,6 +26,14 @@ const subscribe = (fn: () => void) => {
 const snapshot = () => revision;
 let watches: WatchToken[] = [];
 let researchVerified = false;
+let signedOut = false;
+const queryNames: string[] = [];
+Object.assign(window, { __terminalFixtureQueries: queryNames });
+window.addEventListener("terminal-fixture:signout", () => {
+  signedOut = true;
+  revision++;
+  listeners.forEach((listener) => listener());
+});
 const now = Date.now();
 // These branded IDs and identities are invented; no fixture can open a transport.
 const memberId = "fixture-member" as Id<"users">;
@@ -174,8 +182,9 @@ const currentCohort: TerminalMarket[] = [..."23456789AB"].map(
 const selectedMarketRows = () =>
   location.search.includes("currentcohort") ? currentCohort : marketRows;
 export function useConvexAuth() {
+  useSyncExternalStore(subscribe, snapshot, snapshot);
   return {
-    isAuthenticated: !location.search.includes("guest"),
+    isAuthenticated: !signedOut && !location.search.includes("guest"),
     isLoading: false,
   };
 }
@@ -187,6 +196,7 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   if (args === "skip") return undefined;
   const input = args as Record<string, unknown>;
   const name = getFunctionName(ref);
+  queryNames.push(name);
   let result: unknown;
   if (name === "forumCommunity:listProjects")
     result = location.search.includes("empty") ? [] : projects;
@@ -277,11 +287,45 @@ export function useQuery<Ref extends FunctionReference<"query">>(
       coverage: "verified-promotion-receipts",
       historyComplete: false,
     };
+  else if (
+    name === "forumCommerce:getConfig" &&
+    location.search.includes("orderinput")
+  )
+    result = {
+      swapsEnabled: false,
+      signatureFirstEnabled: true,
+      managedEnabled: true,
+      promotionsEnabled: false,
+      treasury: null,
+      platformFeeBps: 50,
+      promotionAmountRaw: "10000000000",
+      promotionDurationMs: 86_400_000,
+      promotionBurnBps: 5000,
+      holderThresholdUsd: 1,
+      holderCacheTtlMs: 60_000,
+      holderDiscountEnabled: false,
+      maxPromotedPerBoard: 5,
+      symfMint: SYMF_TOKEN.mint,
+    } satisfies FunctionReturnType<typeof api.forumCommerce.getConfig>;
+  else if (
+    name === "forumCommerce:searchTokens" &&
+    location.search.includes("orderinput")
+  )
+    result = [
+      {
+        mint: "So11111111111111111111111111111111111111112",
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+        tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      },
+    ];
   else if (name === "forumSwaps:listMine")
     result = location.search.includes("held")
-      ? [
-          {
-            quoteId: "isolated-quote",
+      ? Array.from(
+          { length: location.search.includes("longhistory") ? 30 : 1 },
+          (_, index) => ({
+            quoteId: `isolated-quote${index ? `-${index}` : ""}`,
             wallet: "11111111111111111111111111111111",
             status: "held",
             signature: null,
@@ -290,8 +334,8 @@ export function useQuery<Ref extends FunctionReference<"query">>(
             amountRaw: "10000",
             createdAt: now,
             issue: null,
-          },
-        ]
+          }),
+        )
       : [];
   else throw new Error(`Unmocked terminal query: ${name}`);
   return result as FunctionReturnType<Ref>;
@@ -326,6 +370,18 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
   const name = getFunctionName(ref);
   return useCallback(
     async (_args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> => {
+      if (location.search.includes("orderinput")) {
+        if (name === "forumTerminal:getWalletReadState")
+          return null as FunctionReturnType<Ref>;
+        if (name === "forumCommerce:resolveMint")
+          return {
+            mint: (_args as { mint: string }).mint,
+            symbol: "SYMF",
+            name: "Invented fixture token",
+            decimals: 6,
+            tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          } as FunctionReturnType<Ref>;
+      }
       if (
         name === "forumResearchActions:check" &&
         location.search.includes("research")

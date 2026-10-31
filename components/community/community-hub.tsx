@@ -40,6 +40,7 @@ import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
 import { lamportsToSol, solToLamports } from "@/lib/forum-community";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { forumSiteUrl } from "@/lib/site-urls";
+import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
 
 type Payment = FunctionReturnType<typeof api.forumCommunity.preparePayment>;
@@ -121,6 +122,7 @@ function CommunityContent({
   compact: boolean;
 }) {
   const [section, setSection] = useState<Section>("projects"),
+    [receiptsVisited, setReceiptsVisited] = useState(false),
     [payment, setPayment] = useState<Payment | null>(null);
   const client = useCommerceWallet();
   const contentId = useId();
@@ -130,6 +132,10 @@ function CommunityContent({
     support: "Tips & holder profile",
     receipts: "Your receipts",
   };
+  function goToReceipts() {
+    setReceiptsVisited(true);
+    setSection("receipts");
+  }
   return (
     <div className={`${styles.hub} ${compact ? styles.compact : ""}`}>
       {!compact && (
@@ -162,7 +168,9 @@ function CommunityContent({
             variant="ghost"
             aria-pressed={section === id}
             aria-controls={contentId}
-            onClick={() => setSection(id)}
+            onClick={() =>
+              id === "receipts" ? goToReceipts() : setSection(id)
+            }
           >
             {label}
           </Button>
@@ -176,13 +184,19 @@ function CommunityContent({
         {section === "support" && (
           <Support client={client} onPayment={setPayment} />
         )}
-        {section === "receipts" && <Receipts onPayment={setPayment} />}
+        {/* Do not eagerly load private receipts, but retain the existing
+            subscription and known protection notice after their first use. */}
+        {receiptsVisited && (
+          <div hidden={section !== "receipts"}>
+            <Receipts onPayment={setPayment} />
+          </div>
+        )}
       </div>
       <p className={styles.safetyNote}>
         <ShieldCheck size={15} aria-hidden="true" />
         <span>
           Have an unresolved payment?{" "}
-          <button type="button" onClick={() => setSection("receipts")}>
+          <button type="button" onClick={goToReceipts}>
             Open your receipts
           </button>{" "}
           to check the same attempt. Never pay again to resolve a missing
@@ -1135,6 +1149,13 @@ function Receipts({ onPayment }: { onPayment: (payment: Payment) => void }) {
       api.forumCommunity.listPayments,
       isAuthenticated ? {} : "skip",
     );
+  useTerminalAttention(
+    "community",
+    isAuthenticated
+      ? (rows?.filter((row) => row.status === "held" || row.status === "opened")
+          .length ?? 0)
+      : 0,
+  );
   return (
     <section className={styles.panel}>
       <div className={styles.sectionHeading}>
@@ -1211,6 +1232,8 @@ function PaymentDialog({
   payment: Payment | null;
   onClose: () => void;
 }) {
+  const { isAuthenticated } = useConvexAuth();
+  const returnFocus = useRef<HTMLElement | null>(null);
   const live = useQuery(
       api.forumCommunity.getPayment,
       payment ? { intentId: payment.intentId } : "skip",
@@ -1222,6 +1245,12 @@ function PaymentDialog({
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const row = live ?? payment;
+  useTerminalAttention(
+    "community",
+    isAuthenticated && row && (row.status === "held" || row.status === "opened")
+      ? 1
+      : 0,
+  );
   useEffect(() => {
     setSignature("");
     setMessage("");
@@ -1234,7 +1263,33 @@ function PaymentDialog({
         if (!value && !busy) onClose();
       }}
     >
-      <DialogContent data-surface="forum">
+      <DialogContent
+        data-surface="forum"
+        className={styles.paymentDialog}
+        onOpenAutoFocus={() => {
+          // This controlled dialog has several launch buttons rather than a
+          // single Radix Trigger. Capture the real launcher before autofocus.
+          const active = document.activeElement;
+          returnFocus.current =
+            active instanceof HTMLElement && active !== document.body
+              ? active
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          const launcher = returnFocus.current;
+          returnFocus.current = null;
+          if (
+            launcher?.isConnected &&
+            launcher.getClientRects().length > 0 &&
+            !launcher.matches(":disabled") &&
+            !launcher.closest("[inert]") &&
+            getComputedStyle(launcher).visibility === "visible"
+          ) {
+            event.preventDefault();
+            launcher.focus({ preventScroll: true });
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {row?.purpose === "reward"
