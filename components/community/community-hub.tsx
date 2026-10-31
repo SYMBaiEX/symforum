@@ -37,7 +37,12 @@ import {
   useCommerceWallet,
 } from "@/components/swap/commerce-wallet";
 import type { CommerceWalletClient } from "@/lib/commerce-wallet-client";
-import { lamportsToSol, solToLamports } from "@/lib/forum-community";
+import {
+  communityHttpsUrl,
+  communityText,
+  lamportsToSol,
+  solToLamports,
+} from "@/lib/forum-community";
 import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { ForumLink } from "@/components/forum/forum-link";
 import { forumSiteUrl } from "@/lib/site-urls";
@@ -50,6 +55,9 @@ type Project = FunctionReturnType<
   typeof api.forumCommunity.listProjects
 >[number];
 type AffiliationDraft = { mint: string; claim: Project["claims"][number] };
+type Submission = FunctionReturnType<
+  typeof api.forumCommunity.listSubmissions
+>[number];
 type Section = "projects" | "work" | "support" | "receipts";
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 function safeMessage(error: unknown) {
@@ -781,10 +789,10 @@ function WorkItem({
   client: CommerceWalletClient | null;
   onPayment: (payment: Payment) => void;
 }) {
-  const { isAuthenticated } = useConvexAuth(),
+  const { isAuthenticated, isLoading } = useConvexAuth(),
     mine = useQuery(
       api.forumCommunity.getMine,
-      isAuthenticated ? { now: 0 } : "skip",
+      isAuthenticated && !isLoading ? { now: 0 } : "skip",
     ),
     cancel = useMutation(api.forumCommunity.cancelBounty),
     [message, setMessage] = useState("");
@@ -814,24 +822,25 @@ function WorkItem({
       <div className={styles.meta}>By @{work.sponsor}</div>
       <p className={styles.prose}>{work.brief}</p>
       {work.mint && <code className={styles.address}>{work.mint}</code>}
-      {isAuthenticated && work.status !== "cancelled" && (
-        <details className={styles.details}>
-          <summary>
-            {sponsor
-              ? "Review deliverables and approve reward"
-              : "Submit or view your deliverable"}
-          </summary>
-          <SubmissionList
-            work={work}
-            sponsor={sponsor}
-            client={client}
-            onPayment={onPayment}
-          />
-          {!sponsor && work.status === "open" && (
-            <SubmissionForm workId={work.workId} />
-          )}
-        </details>
-      )}
+      {isAuthenticated &&
+        !isLoading &&
+        mine !== undefined &&
+        work.status !== "cancelled" && (
+          <details className={styles.details}>
+            <summary>
+              {sponsor
+                ? "Review deliverables and approve reward"
+                : "Submit or view your deliverable"}
+            </summary>
+            <SubmissionList
+              work={work}
+              sponsor={sponsor}
+              authorId={mine?.userId}
+              client={client}
+              onPayment={onPayment}
+            />
+          </details>
+        )}
       {sponsor && ["open", "selected"].includes(work.status) && (
         <div className={styles.actions}>
           <Button
@@ -854,30 +863,151 @@ function WorkItem({
     </article>
   );
 }
-function SubmissionForm({ workId }: { workId: Id<"forumCommunityWork"> }) {
+function SubmissionForm({
+  workId,
+  saved,
+}: {
+  workId: Id<"forumCommunityWork">;
+  saved?: Submission;
+}) {
   const submit = useMutation(api.forumCommunity.claimBounty),
     [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [url, setUrl] = useState(saved?.url ?? ""),
+    [summary, setSummary] = useState(saved?.summary ?? ""),
+    [awaitingSaved, setAwaitingSaved] = useState<{
+      url: string;
+      summary: string;
+    } | null>(null),
+    [baseline, setBaseline] = useState<{
+      url: string;
+      summary: string;
+      previousSaved?: Submission;
+      draftUrl: string;
+      draftSummary: string;
+    }>({
+      url: saved?.url ?? "",
+      summary: saved?.summary ?? "",
+      draftUrl: saved?.url ?? "",
+      draftSummary: saved?.summary ?? "",
+    });
+  const dirty = url !== baseline.draftUrl || summary !== baseline.draftSummary;
+  const savedMatchesBaseline =
+    saved?.url === baseline.url && saved.summary === baseline.summary;
+  // A mutation may resolve before its subscription catches up. That exact
+  // pre-save snapshot is not a newer version and must never be loaded back.
+  const previousSnapshot =
+    saved &&
+    baseline.previousSaved &&
+    saved.url === baseline.previousSaved.url &&
+    saved.summary === baseline.previousSaved.summary &&
+    saved.submittedAt === baseline.previousSaved.submittedAt;
+  const divergent = Boolean(
+    saved && !savedMatchesBaseline && !previousSnapshot,
+  );
+  // Reconcile only the acknowledgement marker, never the editable draft.
+  // Guarded adjustment avoids committing an obsolete synchronization notice.
+  if (
+    awaitingSaved &&
+    saved?.url === awaitingSaved.url &&
+    saved.summary === awaitingSaved.summary
+  ) {
+    setAwaitingSaved(null);
+  }
   return (
     <form
+      aria-label={saved ? "Edit your deliverable" : "Submit your deliverable"}
       className={`${styles.form} ${styles.details}`}
       onSubmit={(event) => {
         event.preventDefault();
-        const data = new FormData(event.currentTarget);
+        if (busy || awaitingSaved || divergent || !dirty) return;
+        let submitted: { url: string; summary: string };
+        try {
+          submitted = {
+            url: communityHttpsUrl(url),
+            summary: communityText(summary, 2000, 20),
+          };
+        } catch (error) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Check the deliverable link and summary.",
+          );
+          return;
+        }
         setBusy(true);
         setMessage("");
         void submit({
           workId,
-          url: String(data.get("url") ?? ""),
-          summary: String(data.get("summary") ?? ""),
+          ...submitted,
         })
-          .then(() =>
-            setMessage("Submission saved. The sponsor can now review it."),
-          )
+          .then(() => {
+            setBaseline({
+              ...submitted,
+              draftUrl: url,
+              draftSummary: summary,
+              previousSaved: saved,
+            });
+            setAwaitingSaved(submitted);
+            setMessage("Submission saved. The sponsor can now review it.");
+          })
           .catch((error) => setMessage(safeMessage(error)))
           .finally(() => setBusy(false));
       }}
     >
+      {awaitingSaved && (
+        <p className={styles.muted} role="status">
+          Your save completed. Waiting for the saved version to sync before
+          another save. You can keep editing your draft.
+        </p>
+      )}
+      <p className={styles.muted} role="status">
+        {dirty
+          ? "You have unsaved changes."
+          : awaitingSaved
+            ? "Saved changes are awaiting subscription confirmation."
+            : divergent
+              ? "A different version is saved. Load it before saving another edit."
+              : saved
+                ? "Your deliverable is saved. You can edit it while this pledge is open."
+                : "No deliverable saved yet."}
+      </p>
+      {saved && savedMatchesBaseline && (
+        <p className={styles.muted}>
+          Last saved{" "}
+          <time dateTime={new Date(saved.submittedAt).toISOString()}>
+            {new Date(saved.submittedAt).toLocaleString()}
+          </time>
+          . This is not a reward approval or payment receipt.
+        </p>
+      )}
+      {saved && divergent && (
+        <div>
+          <p className={styles.muted}>
+            The saved version changed. Your current draft has not been replaced.
+            Loading the saved version replaces the fields below.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setUrl(saved.url);
+              setSummary(saved.summary);
+              setAwaitingSaved(null);
+              setBaseline({
+                url: saved.url,
+                summary: saved.summary,
+                draftUrl: saved.url,
+                draftSummary: saved.summary,
+              });
+              setMessage("");
+            }}
+          >
+            Load latest saved version
+          </Button>
+        </div>
+      )}
       <Field label="Deliverable link">
         <Input
           name="url"
@@ -885,16 +1015,30 @@ function SubmissionForm({ workId }: { workId: Id<"forumCommunityWork"> }) {
           required
           placeholder="https://"
           maxLength={1000}
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          disabled={busy}
         />
       </Field>
       <Field label="What did you deliver?">
-        <Textarea name="summary" required minLength={20} maxLength={2000} />
+        <Textarea
+          name="summary"
+          required
+          minLength={20}
+          maxLength={2000}
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+          disabled={busy}
+        />
       </Field>
       <p className={styles.muted}>
         Only you and the sponsor see your submission here. Avoid confidential
         files in public links.
       </p>
-      <Button disabled={busy} type="submit">
+      <Button
+        disabled={busy || !!awaitingSaved || divergent || !dirty}
+        type="submit"
+      >
         {busy ? "Saving…" : "Save deliverable"}
       </Button>
       {message && (
@@ -908,11 +1052,13 @@ function SubmissionForm({ workId }: { workId: Id<"forumCommunityWork"> }) {
 function SubmissionList({
   work,
   sponsor,
+  authorId,
   client,
   onPayment,
 }: {
   work: Work;
   sponsor: boolean;
+  authorId: Id<"users"> | undefined;
   client: CommerceWalletClient | null;
   onPayment: (payment: Payment) => void;
 }) {
@@ -928,45 +1074,54 @@ function SubmissionList({
       ) : !rows.length ? (
         <p className={styles.empty}>No submitted deliverable yet.</p>
       ) : (
-        rows.map((row) => (
-          <div className={styles.item} key={row.submissionId}>
-            <div className={styles.meta}>
-              <strong>@{row.username}</strong>
-              {work.selectedSubmissionId === row.submissionId && (
-                <span className={styles.badge}>Selected for reward</span>
-              )}
-            </div>
-            <p className={styles.prose}>{row.summary}</p>
-            <a className={styles.link} href={row.url} {...external}>
-              Review deliverable
-            </a>
-            {sponsor && work.status === "open" && (
-              <div className={styles.actions}>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    void select({
-                      workId: work.workId,
-                      submissionId: row.submissionId,
-                    }).catch((error) => setMessage(safeMessage(error)));
-                  }}
-                >
-                  Select this deliverable
-                </Button>
+        rows
+          .filter((row) => sponsor || row.authorId === authorId)
+          .map((row) => (
+            <div className={styles.item} key={row.submissionId}>
+              <div className={styles.meta}>
+                <strong>@{row.username}</strong>
+                {work.selectedSubmissionId === row.submissionId && (
+                  <span className={styles.badge}>Selected for reward</span>
+                )}
               </div>
-            )}
-            {sponsor &&
-              work.status === "selected" &&
-              work.selectedSubmissionId === row.submissionId &&
-              client && (
-                <RewardButton
-                  client={client}
-                  workId={work.workId}
-                  onPayment={onPayment}
-                />
+              <p className={styles.prose}>{row.summary}</p>
+              <a className={styles.link} href={row.url} {...external}>
+                Review deliverable
+              </a>
+              {sponsor && work.status === "open" && (
+                <div className={styles.actions}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void select({
+                        workId: work.workId,
+                        submissionId: row.submissionId,
+                      }).catch((error) => setMessage(safeMessage(error)));
+                    }}
+                  >
+                    Select this deliverable
+                  </Button>
+                </div>
               )}
-          </div>
-        ))
+              {sponsor &&
+                work.status === "selected" &&
+                work.selectedSubmissionId === row.submissionId &&
+                client && (
+                  <RewardButton
+                    client={client}
+                    workId={work.workId}
+                    onPayment={onPayment}
+                  />
+                )}
+            </div>
+          ))
+      )}
+      {!sponsor && work.status === "open" && rows !== undefined && authorId && (
+        <SubmissionForm
+          key={`${work.workId}:${authorId}`}
+          workId={work.workId}
+          saved={rows.find((row) => row.authorId === authorId)}
+        />
       )}
       {message && (
         <p role="alert" className={styles.status}>

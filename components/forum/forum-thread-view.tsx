@@ -3,6 +3,7 @@ import { ForumCommerceFrame } from "@/components/swap/forum-commerce";
 import { CommunityHolderBadge } from "@/components/community/community-hub";
 import type { Id } from "@/convex/_generated/dataModel";
 import { forumReplyBranches } from "./forum-reply-branches";
+import { focusForumReplyComposer } from "./forum-reply-motion";
 import { forumExperienceRefs } from "./forum-experience-refs";
 import { convexRefs } from "@/lib/convex-refs";
 
@@ -643,10 +644,11 @@ function LiveForumThreadView({
     setReplyPreviewOpen(false);
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
-        document
-          .getElementById("forum-reply-composer")
-          ?.scrollIntoView({ block: "start", behavior: "smooth" });
-        replyTextareaRef.current?.focus();
+        focusForumReplyComposer(
+          document.getElementById("forum-reply-composer"),
+          replyTextareaRef.current,
+          "start",
+        );
       });
     }
   }
@@ -1443,13 +1445,11 @@ function LiveForumThreadView({
                           className="min-h-11 rounded-full text-xs"
                           onClick={() => {
                             setReplyTo(post);
-                            document
-                              .getElementById("forum-reply-composer")
-                              ?.scrollIntoView({
-                                behavior: "smooth",
-                                block: "center",
-                              });
-                            replyTextareaRef.current?.focus();
+                            focusForumReplyComposer(
+                              document.getElementById("forum-reply-composer"),
+                              replyTextareaRef.current,
+                              "center",
+                            );
                           }}
                         >
                           Reply

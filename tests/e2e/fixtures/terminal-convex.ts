@@ -420,13 +420,30 @@ export function useMutation<Ref extends FunctionReference<"mutation">>(
       operationCalls.push(`mutation:${name}`);
       const input = args as Record<string, unknown>;
       if (name === "forumTerminal:setWatchlist") {
+        const existing = watches.find((entry) => entry.mint === input.mint);
+        const high =
+          input.priceAboveUsd === undefined
+            ? (existing?.priceAboveUsd ?? null)
+            : (input.priceAboveUsd as number | null);
+        const low =
+          input.priceBelowUsd === undefined
+            ? (existing?.priceBelowUsd ?? null)
+            : (input.priceBelowUsd as number | null);
+        if (
+          input.enabled &&
+          ([high, low].some(
+            (value) => value != null && (!Number.isFinite(value) || value <= 0),
+          ) ||
+            (high != null && low != null && high <= low))
+        )
+          throw new Error("Invented merged watch threshold validation failure");
         watches = watches.filter((entry) => entry.mint !== input.mint);
         if (input.enabled)
           watches.push({
             mint: String(input.mint),
             symbol: null,
-            priceAboveUsd: input.priceAboveUsd as number | null,
-            priceBelowUsd: input.priceBelowUsd as number | null,
+            priceAboveUsd: high,
+            priceBelowUsd: low,
             updatedAt: Date.now(),
           });
         revision++;

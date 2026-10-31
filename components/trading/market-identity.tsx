@@ -20,10 +20,28 @@ export const symfChoice: MarketChoice = {
 };
 
 export function TokenLogo({ token }: { token: MarketChoice }) {
-  const [failed, setFailed] = useState(false);
   const src = token.imageUrl?.startsWith("/images/")
     ? token.imageUrl
     : safeExternalUrl(token.imageUrl);
+  // A failed image belongs to this exact mint/source pair, not the reusable
+  // market row. Keying the state also fences late errors from a replaced image.
+  return (
+    <TokenLogoImage
+      key={`${token.mint}:${src ?? ""}`}
+      src={src}
+      symbol={token.symbol}
+    />
+  );
+}
+
+function TokenLogoImage({
+  src,
+  symbol,
+}: {
+  src: string | null;
+  symbol: string;
+}) {
+  const [failed, setFailed] = useState(false);
   return (
     <span className={styles.logo} aria-hidden="true">
       {src && !failed ? (
@@ -37,7 +55,7 @@ export function TokenLogo({ token }: { token: MarketChoice }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        token.symbol.slice(0, 2)
+        symbol.slice(0, 2)
       )}
     </span>
   );

@@ -370,7 +370,7 @@
     "evidence": "components/trading/watchlist-panel.tsx:127",
     "acceptance": "Invalid threshold inputs expose aria-invalid and stable aria-describedby links to a visible error; focus moves to the first invalid field and no mutation occurs on invalid values.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/trading/watchlist-panel.tsx"]
   },
   {
@@ -382,7 +382,7 @@
     "evidence": "components/trading/watchlist-panel.tsx:109",
     "acceptance": "Saved thresholds expose full stored numeric precision and USD units without relying only on rounded marketMoney text; blank input continues to mean keep the saved threshold.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/trading/watchlist-panel.tsx"]
   },
   {
@@ -430,7 +430,7 @@
     "evidence": "components/trading/watchlist-panel.tsx:171",
     "acceptance": "Explicit clear-above/clear-below actions submit null only for that threshold using the existing mutation; the other threshold and watch-enabled state remain unchanged; blanks still preserve saved values.",
     "dependsOn": ["TRADE-031", "TRADE-032"],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/trading/watchlist-panel.tsx"]
   },
   {
@@ -442,7 +442,7 @@
     "evidence": "components/trading/watchlist-panel.tsx:158",
     "acceptance": "Acknowledging an alert no longer changes the unrelated watch submit label to Saving; each operation has accurate accessible progress while preserving one-at-a-time mutation admission.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/trading/watchlist-panel.tsx"]
   },
   {
@@ -684,7 +684,7 @@
     "evidence": "components/trading/market-identity.tsx:23",
     "acceptance": "After a failed icon, replacing its already-approved source URL permits the new image to render; the same failed URL does not loop-retry, and unsafe URLs still render the text fallback.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/trading/market-identity.tsx"]
   },
   {
@@ -732,7 +732,7 @@
     "evidence": "components/community/community-hub.tsx:129",
     "acceptance": "Enhancement: support an allowlisted section query for projects/work/support/receipts; refresh and Back restore it without eager private queries or payment preparation.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "in_progress",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -744,7 +744,7 @@
     "evidence": "apps/platform/app/community/page.tsx:8",
     "acceptance": "Enhancement: preserve only validated mint and section values across /community redirects; reject duplicates/invalid values; no external redirect.",
     "dependsOn": ["COMMUNITY-001"],
-    "status": "queued",
+    "status": "in_progress",
     "paths": ["apps/platform/app/community/page.tsx"]
   },
   {
@@ -756,7 +756,7 @@
     "evidence": "components/community/community-hub.tsx:1401",
     "acceptance": "Enhancement: Sign in returns to receipts and the original validated mint rather than the default projects pane; no saved payment is replayed.",
     "dependsOn": ["COMMUNITY-001", "COMMUNITY-002"],
-    "status": "queued",
+    "status": "in_progress",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -973,7 +973,7 @@
     "evidence": "components/community/community-hub.tsx:857",
     "acceptance": "Confirmed missing integration: feed the existing private submission link/summary into the form; reactive updates must not replace dirty input; save remains the existing upsert.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -985,7 +985,7 @@
     "evidence": "components/community/community-hub.tsx:874",
     "acceptance": "Enhancement: after save show saved timestamp when available and pending-changes state; never imply sponsor acceptance or reward payment.",
     "dependsOn": ["COMMUNITY-021"],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/community/community-hub.tsx"]
   },
   {
@@ -1456,7 +1456,7 @@
     "evidence": "components/forum/forum-control-panel.tsx:158",
     "acceptance": "Hydrate profile fields once per authenticated profile identity; a later subscription result must not overwrite dirty local fields. Saving a snapshot must not erase edits made while its request was pending. Cover account switch and logout.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/forum/forum-control-panel.tsx"]
   },
   {
@@ -1468,7 +1468,7 @@
     "evidence": "components/forum/forum-control-panel.tsx:173",
     "acceptance": "A remote preference update must not replace locally edited notification toggles; reconcile a known saved snapshot without losing newer edits and reset drafts on identity change.",
     "dependsOn": [],
-    "status": "in_progress",
+    "status": "tested",
     "paths": ["components/forum/forum-control-panel.tsx"]
   },
   {
@@ -1745,7 +1745,7 @@
     "evidence": "components/forum/forum-compose.tsx:649",
     "acceptance": "If file one succeeds and file two fails, keep file one's confirmed storage record visible, report the failed file separately and offer only an explicit targeted retry. Do not upload confirmed successes again automatically.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/forum/forum-compose.tsx"]
   },
   {
@@ -1877,7 +1877,7 @@
     "evidence": "components/forum/forum-thread-view.tsx:648",
     "acceptance": "Quote/reply navigation uses instant or otherwise intentional reduced-motion scrolling when requested; keep the composer focus handoff and scroll offset working under the fixed header.",
     "dependsOn": [],
-    "status": "queued",
+    "status": "tested",
     "paths": ["components/forum/forum-thread-view.tsx"]
   },
   {
@@ -2664,8 +2664,9 @@
     "evidence": "convex/forumCommunity.ts:379",
     "acceptance": "Add a matching mint/status/updatedAt index and apply both filters before the existing bounded take. A fixture with 32 newer nonmatching statuses must still return an older matching bounty; preserve no-mint and omitted-status behavior.",
     "dependsOn": [],
-    "status": "in_progress",
-    "paths": ["convex/forumCommunity.ts"]
+    "status": "tested",
+    "paths": ["convex/forumCommunity.ts"],
+    "authorization": "Fresh target-specific production approval and bounded index-backfill readiness check before deployment."
   },
   {
     "id": "INFRA-042",

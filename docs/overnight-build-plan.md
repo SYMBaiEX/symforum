@@ -60,12 +60,12 @@ do not make conflicting changes to one shared source file safe to merge blindly.
 
 ## First selected batch
 
-| Lane      | Work                                                                          | Owner scope                                              | Status       |
-| --------- | ----------------------------------------------------------------------------- | -------------------------------------------------------- | ------------ |
-| Community | Prefill an author's existing private work submission, protect dirty edits     | Community hub and isolated submission regressions        | In progress  |
-| Forum     | Preserve unsaved profile and notification settings during live query updates  | Control panel and isolated settings regressions          | In progress  |
-| Trading   | Select the highest-value confirmed terminal integration issue after the audit | Explicit trading component paths assigned before changes | Audit/triage |
-| Parent    | Validated backlog, integration, review and final release checks               | Planning artifacts, shared/generated integration         | In progress  |
+| Lane      | Work                                                                         | Owner scope                                                       | Status                            |
+| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------- |
+| Community | Safely edit private submissions and recover explicitly from concurrent edits | Community hub and isolated submission regressions                 | Tested; release pending           |
+| Forum     | Protect settings drafts, retain confirmed uploads, honor reduced motion      | Control panel, composer, reply focus and isolated regressions     | Tested; release pending           |
+| Trading   | Precise staged alert controls, omission-safe updates and token-logo recovery | Watchlist and token identity components with isolated regressions | Tested; release pending           |
+| Parent    | Validate backlog, integrate, review and qualify the exact release candidate  | Planning artifacts, shared/generated integration                  | Full checks passed; merge pending |
 
 Follow-on candidates include shareable utility-section navigation, clearer
 sampled-market provenance, project-directory search over already loaded data,
