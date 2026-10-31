@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import {
   Dialog,
@@ -9,8 +9,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 export type ForumMediaAttachment = {
-  _id: string; filename: string; contentType: string; size: number; url: string;
-  altText?: string; credit?: string;
+  _id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url: string;
+  altText?: string;
+  credit?: string;
 };
 
 const IMAGE_TYPES = new Set([
@@ -43,12 +48,50 @@ export function ForumMediaGallery({
     .filter((file) => forumMediaUrl(file.url));
   const images = files.filter((file) => IMAGE_TYPES.has(file.contentType));
   const documents = files.filter((file) => !IMAGE_TYPES.has(file.contentType));
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selection, setSelection] = useState<{
+    id: string;
+    announcement: string;
+  } | null>(null);
+  const [hasOpened, setHasOpened] = useState(false);
+  const gallery = useRef<HTMLDivElement | null>(null);
   const returnFocus = useRef<HTMLButtonElement | null>(null);
-  const image = selected === null ? undefined : images[selected];
-  if (!files.length) return null;
+  const selected = images.findIndex((file) => file._id === selection?.id);
+  const image = selected < 0 ? undefined : images[selected];
+  // Close in the same render that loses the selected identity; never display
+  // another attachment at its previous index or reopen it if it later returns.
+  useEffect(() => {
+    if (selection && !image) setSelection(null);
+  }, [selection, image]);
+  function navigate(direction: number) {
+    setSelection((current) => {
+      const index = images.findIndex((file) => file._id === current?.id);
+      if (index < 0 || images.length < 2) return current;
+      const next = (index + direction + images.length) % images.length;
+      const file = images[next];
+      return {
+        id: file._id,
+        announcement: `Image ${next + 1} of ${images.length}: ${file.altText || file.filename}`,
+      };
+    });
+  }
+  function visible(node: HTMLElement | null): node is HTMLElement {
+    return Boolean(
+      node?.isConnected &&
+      !node.closest("[hidden], [inert]") &&
+      node.getClientRects().length &&
+      getComputedStyle(node).visibility !== "hidden",
+    );
+  }
+  if (!files.length && !hasOpened) return null;
   return (
-    <div className={`forum-media ${compact ? "is-compact" : ""}`}>
+    <div
+      ref={gallery}
+      className={`forum-media ${compact ? "is-compact" : ""}`}
+      role="group"
+      aria-label="Attachments"
+      tabIndex={-1}
+    >
+      {!files.length && <p>Attachments are no longer available.</p>}
       {images.length > 0 && (
         <div className="forum-media-grid" data-count={images.length}>
           {images.map((file, index) => (
@@ -59,7 +102,8 @@ export function ForumMediaGallery({
               aria-label={`View image ${index + 1} of ${images.length}: ${file.altText || file.filename}`}
               onClick={(event) => {
                 returnFocus.current = event.currentTarget;
-                setSelected(index);
+                setHasOpened(true);
+                setSelection({ id: file._id, announcement: "" });
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- Authorized runtime storage URLs must not enter the public image optimizer cache. */}
@@ -97,36 +141,53 @@ export function ForumMediaGallery({
       <Dialog
         open={image !== undefined}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) setSelection(null);
         }}
       >
         <DialogContent
           className="forum-media-viewer"
           onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            returnFocus.current?.focus();
+            const fallback = Array.from(
+              gallery.current?.querySelectorAll<HTMLButtonElement>(
+                ".forum-media-tile",
+              ) ?? [],
+            ).find(visible);
+            const target = visible(returnFocus.current)
+              ? returnFocus.current
+              : (fallback ?? gallery.current);
+            if (visible(target)) {
+              event.preventDefault();
+              target.focus();
+            }
           }}
           onKeyDown={(event) => {
             if (images.length < 2) return;
             if (event.key === "ArrowRight") {
               event.preventDefault();
-              setSelected(((selected ?? 0) + 1) % images.length);
+              navigate(1);
             }
             if (event.key === "ArrowLeft") {
               event.preventDefault();
-              setSelected(
-                ((selected ?? 0) + images.length - 1) % images.length,
-              );
+              navigate(-1);
             }
           }}
         >
           <DialogTitle className="pr-10 text-sm">
-            {image?.altText || image?.filename}
+            <span className="sr-only">Image viewer</span>
+            <span aria-hidden="true">{image?.altText || image?.filename}</span>
           </DialogTitle>
           <DialogDescription className="sr-only">
             Attached image. Use the arrow keys to browse photos, or Escape to
             close.
           </DialogDescription>
+          <span
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {selection?.announcement ?? ""}
+          </span>
           {image && (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element -- Runtime authorized attachment, deliberately uncached. */}
@@ -137,7 +198,9 @@ export function ForumMediaGallery({
               />
               <div className="forum-media-viewer-footer">
                 <span>
-                  {(selected ?? 0) + 1} / {images.length}
+                  <span aria-hidden="true">
+                    {selected + 1} / {images.length}
+                  </span>
                   {image.credit ? ` · ${image.credit}` : ""}
                 </span>
                 {images.length > 1 && (
@@ -145,20 +208,14 @@ export function ForumMediaGallery({
                     <button
                       type="button"
                       aria-label="Previous image"
-                      onClick={() =>
-                        setSelected(
-                          ((selected ?? 0) + images.length - 1) % images.length,
-                        )
-                      }
+                      onClick={() => navigate(-1)}
                     >
                       <ChevronLeft aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       aria-label="Next image"
-                      onClick={() =>
-                        setSelected(((selected ?? 0) + 1) % images.length)
-                      }
+                      onClick={() => navigate(1)}
                     >
                       <ChevronRight aria-hidden="true" />
                     </button>
