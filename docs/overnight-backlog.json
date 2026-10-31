@@ -382,6 +382,7 @@
       "components/trading/price-chart.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/chart-workspace-controls.spec.ts",
+      "tests/e2e/terminal.spec.ts",
       "tests/e2e/fixtures/chart-workspace-controls.tsx",
       "tests/e2e/fixtures/chart-workspace-controls-state.tsx"
     ]
@@ -400,6 +401,7 @@
       "components/trading/price-chart.tsx",
       "components/trading/forum-terminal.module.css",
       "tests/e2e/chart-workspace-controls.spec.ts",
+      "tests/e2e/terminal.spec.ts",
       "tests/e2e/fixtures/chart-workspace-controls.tsx",
       "tests/e2e/fixtures/chart-workspace-controls-state.tsx"
     ]
