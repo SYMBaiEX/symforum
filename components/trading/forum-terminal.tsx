@@ -516,6 +516,7 @@ function TerminalWorkspace({
                             <button
                               type="button"
                               aria-label={label}
+                              aria-describedby={`terminal-tool-${value}-description`}
                               onClick={() => openTool(value)}
                             >
                               <Icon
@@ -525,7 +526,11 @@ function TerminalWorkspace({
                               />
                               <span>
                                 <strong>{label}</strong>
-                                <small>{description}</small>
+                                <small
+                                  id={`terminal-tool-${value}-description`}
+                                >
+                                  {description}
+                                </small>
                               </span>
                               <ChevronRight size={16} aria-hidden="true" />
                             </button>
