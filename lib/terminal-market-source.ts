@@ -75,15 +75,32 @@ async function readBoundedPublicMarket(
   url: string,
   limit: number,
   fetcher: typeof fetch = fetch,
+  trackerApiKey?: string,
 ): Promise<unknown> {
   const parsed = new URL(url);
   if (
     parsed.protocol !== "https:" ||
-    !["api.dexscreener.com", "api.geckoterminal.com"].includes(parsed.hostname)
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    (trackerApiKey !== undefined
+      ? parsed.hostname !== "data.solanatracker.io" ||
+        !/^\/chart\/[1-9A-HJ-NP-Za-km-z]{32,44}\/[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(
+          parsed.pathname,
+        )
+      : !["api.dexscreener.com", "api.geckoterminal.com"].includes(
+          parsed.hostname,
+        ))
   )
     throw new PublicMarketSourceError("unsupported", "invalid_market_provider");
   const response = await fetcher(url, {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept:
+        parsed.hostname === "api.geckoterminal.com"
+          ? "application/json;version=20230203"
+          : "application/json",
+      ...(trackerApiKey !== undefined ? { "x-api-key": trackerApiKey } : {}),
+    },
     signal: AbortSignal.timeout(8_000),
     redirect: "error",
   });
@@ -160,8 +177,30 @@ export async function readPublicMarket(
   limit: number,
   fetcher: typeof fetch = fetch,
 ): Promise<unknown> {
+  return readMarketTransport(url, limit, fetcher);
+}
+
+/** Server-only credential lane: fixed host and exact pool-chart path, no redirect. */
+export async function readTrackerMarket(
+  url: string,
+  apiKey: string,
+  fetcher: typeof fetch = fetch,
+): Promise<unknown> {
+  if (!apiKey.trim())
+    throw new PublicMarketSourceError(
+      "unsupported",
+      "market_provider_unavailable",
+    );
+  return readMarketTransport(url, 150_000, fetcher, apiKey);
+}
+async function readMarketTransport(
+  url: string,
+  limit: number,
+  fetcher: typeof fetch,
+  trackerApiKey?: string,
+): Promise<unknown> {
   try {
-    return await readBoundedPublicMarket(url, limit, fetcher);
+    return await readBoundedPublicMarket(url, limit, fetcher, trackerApiKey);
   } catch (error) {
     if (error instanceof PublicMarketSourceError) throw error;
     const timeout =

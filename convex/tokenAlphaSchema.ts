@@ -146,6 +146,7 @@ export const tokenAlphaTables = {
     dayKey: v.string(),
     requests: v.number(),
     enrichmentRequests: v.optional(v.number()),
+    candleRequests: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_dayKey", ["dayKey"]),
 };

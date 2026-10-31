@@ -31,6 +31,7 @@ import {
 
 const DAILY_REQUEST_CAP = 70;
 const DAILY_ENRICHMENT_CAP = 10;
+const DAILY_CANDLE_CAP = 12;
 const ROLLING_REQUEST_CAP = 2_300;
 const INITIAL_MANUAL_REQUESTS = 12;
 const RUN_LIFETIME_MS = 30 * 60 * 1_000;
@@ -50,6 +51,12 @@ const trackerLimiter = new RateLimiter(components.rateLimiter, {
   tokenAlphaTrackerEnrichment: {
     kind: "fixed window",
     rate: DAILY_ENRICHMENT_CAP,
+    period: DAY,
+    start: 0,
+  },
+  tokenAlphaTrackerCandles: {
+    kind: "fixed window",
+    rate: DAILY_CANDLE_CAP,
     period: DAY,
     start: 0,
   },
@@ -827,7 +834,13 @@ export const finishRun = internalMutation({
 /** Must commit before every provider request. Errors never refund a request. */
 export const reserveApiRequest = internalMutation({
   args: {
-    kind: v.optional(v.union(v.literal("ranking"), v.literal("enrichment"))),
+    kind: v.optional(
+      v.union(
+        v.literal("ranking"),
+        v.literal("enrichment"),
+        v.literal("candle"),
+      ),
+    ),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -850,9 +863,12 @@ export const reserveApiRequest = internalMutation({
       return false;
     const today = days.find((day) => day.dayKey === dayKey);
     const enrichmentRequests = today?.enrichmentRequests ?? 0;
+    const candleRequests = today?.candleRequests ?? 0;
     if (
       !Number.isSafeInteger(enrichmentRequests) ||
       enrichmentRequests < 0 ||
+      !Number.isSafeInteger(candleRequests) ||
+      candleRequests < 0 ||
       (today?.requests ?? 0) >= DAILY_REQUEST_CAP ||
       days.reduce((total, day) => total + day.requests, 0) >=
         ROLLING_REQUEST_CAP
@@ -861,6 +877,17 @@ export const reserveApiRequest = internalMutation({
     // Metadata must never spend the daily capacity reserved for the forty-eight
     // scheduled ranking reads. Denial occurs before the overall provider limit.
     const isEnrichment = args.kind === "enrichment";
+    const isCandle = args.kind === "candle";
+    // Separate restrictive allowance: 48 rankings + 10 enrichments + 12 candles.
+    // This cannot increase or bypass the original daily/rolling provider caps.
+    if (isCandle) {
+      if (candleRequests >= DAILY_CANDLE_CAP) return false;
+      const candleAllowance = await trackerLimiter.limit(
+        ctx,
+        "tokenAlphaTrackerCandles",
+      );
+      if (!candleAllowance.ok) return false;
+    }
     if (isEnrichment) {
       if (enrichmentRequests >= DAILY_ENRICHMENT_CAP) return false;
       const metadataAllowance = await trackerLimiter.limit(
@@ -879,12 +906,14 @@ export const reserveApiRequest = internalMutation({
         dayKey,
         requests: 1,
         enrichmentRequests: isEnrichment ? 1 : 0,
+        candleRequests: isCandle ? 1 : 0,
         updatedAt: now,
       });
     else
       await ctx.db.patch("tokenAlphaUsageDays", today._id, {
         requests: today.requests + 1,
         enrichmentRequests: enrichmentRequests + (isEnrichment ? 1 : 0),
+        candleRequests: candleRequests + (isCandle ? 1 : 0),
         updatedAt: now,
       });
     return true;
