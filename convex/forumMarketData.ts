@@ -5,6 +5,7 @@ import {
   action,
   internalMutation,
   type MutationCtx,
+  type ActionCtx,
   env,
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
@@ -18,6 +19,7 @@ import {
   completeSnapshotRef,
 } from "./forumMarketSnapshot";
 import { commerceLimiter } from "./forumCommerce";
+import { providerFetch, ProviderAdmissionError } from "./forumProviderFetch";
 import {
   marketFailureCodeValidator,
   marketFailureStageValidator,
@@ -71,6 +73,23 @@ const limiter = new RateLimiter(components.rateLimiter, {
   },
 });
 export const marketReadLimiter = limiter;
+/** Keep a known pre-I/O denial and its deadline through the transport parser. */
+export function marketProviderFetch(ctx: ActionCtx): typeof fetch {
+  const fetcher = providerFetch(ctx);
+  return async (input, init) => {
+    try {
+      return await fetcher(input, init);
+    } catch (error) {
+      if (error instanceof ProviderAdmissionError)
+        throw new PublicMarketSourceError(
+          "budget",
+          "market_provider_admission_denied",
+          error.retryAt,
+        );
+      throw error;
+    }
+  };
+}
 const kind = v.union(v.literal("chart"), v.literal("market"));
 const state = v.union(
   v.literal("ready"),
@@ -122,7 +141,7 @@ type ReadArgs = {
   pinnedSymf?: boolean;
 };
 const cacheKey = (args: ReadArgs) =>
-  `${args.pinnedSymf ? "pinned-chart" : args.kind}:${args.mint}:${args.kind === "chart" ? args.interval : "all"}`;
+  `${args.pinnedSymf ? `pinned-${args.kind}` : args.kind}:${args.mint}:${args.kind === "chart" ? args.interval : "all"}`;
 const stamp = (value: number | undefined): number | null =>
   Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
 const count = (value: number | undefined) =>
@@ -230,8 +249,7 @@ async function allowed(ctx: MutationCtx, args: ReadArgs, now: number) {
   if (
     !isSolanaAddress(args.mint) ||
     !Object.hasOwn(SYMF_CHART_INTERVALS, args.interval) ||
-    (args.pinnedSymf &&
-      (args.mint !== SYMF_TOKEN.mint || args.kind !== "chart"))
+    (args.pinnedSymf && args.mint !== SYMF_TOKEN.mint)
   )
     return false;
   if (args.mint === SYMF_TOKEN.mint) return true;
@@ -249,23 +267,25 @@ function keyArgs(key: string): ReadArgs | null {
     extra ||
     !mint ||
     !interval ||
-    !["chart", "pinned-chart", "market"].includes(type)
+    !["chart", "pinned-chart", "market", "pinned-market"].includes(type)
   )
     return null;
   return {
     mint,
-    kind: type === "market" ? "market" : "chart",
-    interval: type === "market" ? "15m" : interval,
-    pinnedSymf: type === "pinned-chart",
+    kind: type === "market" || type === "pinned-market" ? "market" : "chart",
+    interval: type === "market" || type === "pinned-market" ? "15m" : interval,
+    pinnedSymf: type.startsWith("pinned-"),
   };
 }
 function validPayloadShape(
   payload: Record<string, unknown>,
   type: ReadArgs["kind"],
   checkedAt: number,
+  nullableStats = false,
 ) {
   const stats = record(payload.stats);
   if (
+    !(nullableStats && payload.stats === null) &&
     !["marketCap", "fdv", "liquidity", "volume24h"].every(
       (key) =>
         key in stats &&
@@ -276,6 +296,38 @@ function validPayloadShape(
     )
   )
     return false;
+  if (nullableStats && payload.stats === null) {
+    if (
+      !Array.isArray(payload.trades) ||
+      payload.trades.length > 20 ||
+      payload.marketCheckedAt !== undefined ||
+      new Set(payload.trades.map((raw) => record(raw).id)).size !==
+        payload.trades.length
+    )
+      return false;
+    return payload.trades.every((raw) => {
+      const trade = record(raw);
+      return (
+        typeof trade.id === "string" &&
+        trade.id.startsWith("solana_") &&
+        trade.id.length <= 220 &&
+        typeof trade.hash === "string" &&
+        /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(trade.hash) &&
+        (trade.side === "buy" || trade.side === "sell") &&
+        typeof trade.time === "number" &&
+        Number.isFinite(trade.time) &&
+        trade.time > 0 &&
+        trade.time <= checkedAt + 120000 &&
+        [trade.valueUsd, trade.amount].every(
+          (n) => typeof n === "number" && Number.isFinite(n) && n >= 0,
+        ) &&
+        (trade.priceUsd === null ||
+          (typeof trade.priceUsd === "number" &&
+            Number.isFinite(trade.priceUsd) &&
+            trade.priceUsd >= 0))
+      );
+    });
+  }
   if (type === "market")
     return (
       payload.trades === null ||
@@ -374,11 +426,13 @@ export const claim = internalMutation({
       return { ...current, ...noFetch };
     const source = await dexSnapshot(ctx, args.mint);
     const sourcePayload = freshDexSnapshot(source, now);
-    if (
+    const sourceBlocked = Boolean(
       sourcePayload === null &&
       source &&
-      (source.nextAttemptAt > now || source.leaseUntil > now)
-    )
+      (source.nextAttemptAt > now || source.leaseUntil > now),
+    );
+    const pinnedMarket = args.pinnedSymf === true && args.kind === "market";
+    if (sourceBlocked && !pinnedMarket && source)
       return {
         ...current,
         ...noFetch,
@@ -410,16 +464,16 @@ export const claim = internalMutation({
       };
     const sub = await limiter.limit(ctx, "terminalReadDaily", {
       key: "all",
-      count: sourcePayload === null ? 2 : 1,
+      count: sourcePayload === null && !sourceBlocked ? 2 : 1,
     });
     const shared =
       sub.ok &&
       (await commerceLimiter.limit(ctx, "commerceNetworkDaily", {
         key: "all",
-        count: sourcePayload === null ? 2 : 1,
+        count: sourcePayload === null && !sourceBlocked ? 2 : 1,
       }));
     const admitted = Boolean(shared && shared.ok);
-    if (admitted && sourcePayload === null)
+    if (admitted && sourcePayload === null && !sourceBlocked)
       await claimDexSnapshot(ctx, source, args.mint, args.lease, now);
     const candleProvider: MarketCandleProvider | undefined =
       args.kind === "chart"
@@ -429,6 +483,8 @@ export const claim = internalMutation({
           row.failureStage === "candles" &&
           row.failureCode !== undefined &&
           row.failureCode !== "incomplete" &&
+          row.failureCode !== "budget" &&
+          row.failureCode !== "burst" &&
           (current.cache.failureProvider === "geckoterminal" ||
             (current.cache.failureProvider === "solana-tracker" &&
               row.failureCode === "candle-window"))
@@ -473,7 +529,7 @@ export const claim = internalMutation({
       marketSnapshot: admitted ? sourcePayload : null,
       marketCheckedAt:
         admitted && sourcePayload !== null ? source!.checkedAt : null,
-      fetchSnapshot: admitted && sourcePayload === null,
+      fetchSnapshot: admitted && sourcePayload === null && !sourceBlocked,
     };
   },
 });
@@ -550,7 +606,12 @@ export const save = internalMutation({
         (request.pinnedSymf &&
           (payload.pool !== SYMF_TOKEN.pool ||
             payload.quote !== MARKET_QUOTES[0])) ||
-        !validPayloadShape(payload, request.kind, checkedAt)
+        !validPayloadShape(
+          payload,
+          request.kind,
+          checkedAt,
+          request.pinnedSymf === true && request.kind === "market",
+        )
       )
         throw Error("invalid_market_cache");
     }
@@ -673,6 +734,8 @@ export const read = action({
     let diagnostic: { code: MarketFailureCode; retryAfterAt?: number } | null =
       null;
     let diagnosticStage: MarketFailureStage | undefined;
+    const pinnedMarket = args.pinnedSymf === true && args.kind === "market";
+    const fetcher = marketProviderFetch(ctx);
     try {
       let sourcePayload = reserved.marketSnapshot;
       let marketCheckedAt = reserved.marketCheckedAt;
@@ -681,6 +744,7 @@ export const read = action({
           const raw = await readPublicMarket(
             `https://api.dexscreener.com/token-pairs/v1/solana/${args.mint}`,
             200_000,
+            fetcher,
           );
           const normalized = normalizeDexPairs(raw, args.mint);
           if (normalized.length === 0) throw Error("market_pool_unavailable");
@@ -709,19 +773,26 @@ export const read = action({
             failureCode: failure.code,
             retryAfterAt: failure.retryAfterAt,
           });
-          throw error;
+          if (!pinnedMarket || failure.code === "incomplete") throw error;
+          sourcePayload = null;
+          marketCheckedAt = null;
+          diagnostic = failure;
+          diagnosticStage = "pool";
         }
       }
-      if (
+      const usableSource = !(
         sourcePayload === null ||
         marketCheckedAt === null ||
         Date.now() - marketCheckedAt >= CHART_CACHE_FRESH_MS
-      )
+      );
+      if (!usableSource && !pinnedMarket)
         throw new PublicMarketSourceError(
           "incomplete",
           "market_source_expired",
         );
-      const sourcePairs = parseDexSnapshot(sourcePayload, args.mint);
+      const sourcePairs = usableSource
+        ? parseDexSnapshot(sourcePayload!, args.mint)
+        : [];
       const pairs = sourcePairs.map((pair) => ({
         chainId: "solana",
         pairAddress: pair.pool,
@@ -738,7 +809,13 @@ export const read = action({
           ? pairs.filter((pair) => record(pair).pairAddress === SYMF_TOKEN.pool)
           : []
         : pairs;
-      const binding = selectMarketBinding(poolCandidates, args.mint);
+      const binding = pinnedMarket
+        ? {
+            mint: SYMF_TOKEN.mint,
+            pool: SYMF_TOKEN.pool,
+            quote: MARKET_QUOTES[0],
+          }
+        : selectMarketBinding(poolCandidates, args.mint);
       if (
         args.pinnedSymf &&
         (binding.pool !== SYMF_TOKEN.pool || binding.quote !== MARKET_QUOTES[0])
@@ -775,6 +852,7 @@ export const read = action({
           const data = await readPublicMarket(
             `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/ohlcv/${options.timeframe}?${new URLSearchParams({ aggregate: options.aggregate, limit: "120", currency: "usd", token: binding.mint })}`,
             150_000,
+            fetcher,
           );
           candles = parseMarketCandles(
             data,
@@ -794,13 +872,19 @@ export const read = action({
           candleSource: reserved.candleProvider ?? "geckoterminal",
         });
       } else {
-        const stats = parseMarketStats(pairs, binding);
+        let stats = null;
+        try {
+          stats = parseMarketStats(pairs, binding);
+        } catch (error) {
+          if (!pinnedMarket) throw error;
+        }
         let trades = null;
         stage = "trades";
         try {
           const data = await readPublicMarket(
             `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/trades?trade_volume_in_usd_greater_than=0`,
             1_000_000,
+            fetcher,
           );
           trades = parseMarketTrades(data, checkedAt, binding);
         } catch (error) {
@@ -808,13 +892,16 @@ export const read = action({
           diagnosticStage = "trades";
         }
         // Valid statistics remain independently useful; failed trades are null.
-        payload = JSON.stringify({
-          ...binding,
-          checkedAt,
-          marketCheckedAt,
-          stats,
-          trades,
-        });
+        if (stats !== null || trades !== null)
+          payload = JSON.stringify({
+            ...binding,
+            checkedAt,
+            ...(stats !== null && marketCheckedAt !== null
+              ? { marketCheckedAt }
+              : {}),
+            stats,
+            trades,
+          });
       }
     } catch (error) {
       diagnostic = safeFailure(error);

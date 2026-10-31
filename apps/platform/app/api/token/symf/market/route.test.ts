@@ -3,6 +3,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { GET } from "./route";
 import { SYMF_TOKEN } from "@/lib/symf-token";
 import { parseSymfStats, parseSymfTrades } from "@/lib/symf-market-overview";
+const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+vi.mock("convex/browser", () => ({
+  ConvexHttpClient: class {
+    action = action;
+  },
+}));
 
 const quote = "So11111111111111111111111111111111111111112";
 function stats() {
@@ -36,7 +42,11 @@ function trade(side: "buy" | "sell" = "buy", id = "one") {
     },
   };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  action.mockReset();
+});
 
 test("reported market cap and FDV stay distinct; missing market cap is never replaced by FDV", () => {
   expect(parseSymfStats(stats())).toMatchObject({
@@ -72,7 +82,30 @@ test("overview can serve trades during a stats outage and returns only the bound
       : Response.json({ data: [trade()] }),
   );
   vi.stubGlobal("fetch", fetcher);
-  const response = await GET();
+  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://fixture.convex.cloud");
+  action.mockResolvedValue({
+    state: "ready",
+    stale: false,
+    cache: {
+      lastSuccessAt: Date.now(),
+      lastAttemptAt: Date.now(),
+      nextRetryAt: Date.now() + 60000,
+      failureCount: 0,
+      failureStage: "pool",
+      failureCode: "http-5xx",
+    },
+    payload: JSON.stringify({
+      mint: SYMF_TOKEN.mint,
+      pool: SYMF_TOKEN.pool,
+      quote,
+      checkedAt: Date.now(),
+      stats: null,
+      trades: parseSymfTrades({ data: [trade()] }, Date.now()),
+    }),
+  });
+  const response = await GET(
+    new Request("https://forum.symbaiex.com/api/token/symf/market"),
+  );
   expect(response.status).toBe(200);
   const data = await response.json();
   expect(data.stats).toBeNull();
@@ -83,6 +116,8 @@ test("overview can serve trades during a stats outage and returns only the bound
       ([url]) => url.includes(SYMF_TOKEN.mint) || url.includes(SYMF_TOKEN.pool),
     ),
   ).toBe(true);
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(action).toHaveBeenCalledTimes(1);
 });
 
 test("a total provider outage does not manufacture empty trades or zero market cap", async () => {
@@ -90,7 +125,23 @@ test("a total provider outage does not manufacture empty trades or zero market c
     "fetch",
     vi.fn().mockResolvedValue(new Response("limited", { status: 429 })),
   );
-  const response = await GET();
+  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://fixture.convex.cloud");
+  action.mockResolvedValue({
+    state: "unavailable",
+    payload: null,
+    stale: false,
+    cache: {
+      lastSuccessAt: null,
+      lastAttemptAt: Date.now(),
+      nextRetryAt: Date.now() + 60000,
+      failureCount: 1,
+      failureStage: "trades",
+      failureCode: "http-429",
+    },
+  });
+  const response = await GET(
+    new Request("https://forum.symbaiex.com/api/token/symf/market"),
+  );
   expect(response.status).toBe(503);
   expect(await response.json()).not.toHaveProperty("stats");
   expect(response.headers.get("retry-after")).toBe("60");

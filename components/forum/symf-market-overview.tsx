@@ -116,7 +116,7 @@ export function SymfStats({
       ))}
       <p role="status" className={styles.marketStatus}>
         {data
-          ? `${failed ? "Refresh unavailable. Last checked" : "Checked"} ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+          ? `${failed ? "Refresh unavailable. Last checked" : "Checked"} ${new Date(data.marketCheckedAt ?? data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
           : failed
             ? "Market statistics are temporarily unavailable."
             : "Loading market statistics…"}{" "}

@@ -17,6 +17,7 @@ export type SymfTrade = {
 };
 export type SymfMarketOverview = {
   checkedAt: number;
+  marketCheckedAt?: number;
   stats: SymfStats | null;
   trades: SymfTrade[] | null;
 };
