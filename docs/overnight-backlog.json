@@ -8,13 +8,14 @@
     "evidence": "components/trading/market-explorer.tsx:310",
     "acceptance": "A valid pasted mint can explicitly select that exact token through existing onSelect; invalid addresses stay local; no symbol-derived identity, discovery guarantee, extra source path, or automatic trade.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
       "tests/e2e/fixtures/market-controls.tsx",
       "tests/e2e/fixtures/market-controls-state.ts"
-    ]
+    ],
+    "receipt": "PR #260 merged at 9217d1e4aeecb6b3a082626ca480bd36757feb53; exact qualified tree and all five original domains verified 2026-10-31 10:09 UTC. Bounded public Feed and receipt gates checked 10:10 UTC. Protected/terminal flows remain isolated-test evidence; Community phone repeated-paint issue remains under investigation."
   },
   {
     "id": "TRADE-002",
@@ -25,13 +26,14 @@
     "evidence": "components/trading/market-explorer.tsx:198",
     "acceptance": "A named clear-search button appears for nonempty search, restores input focus, and leaves market-cap, platform and sort selections unchanged; clearing makes no refresh action.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
       "tests/e2e/fixtures/market-controls.tsx",
       "tests/e2e/fixtures/market-controls-state.ts"
-    ]
+    ],
+    "receipt": "PR #260 merged at 9217d1e4aeecb6b3a082626ca480bd36757feb53; exact qualified tree and all five original domains verified 2026-10-31 10:09 UTC. Bounded public Feed and receipt gates checked 10:10 UTC. Protected/terminal flows remain isolated-test evidence; Community phone repeated-paint issue remains under investigation."
   },
   {
     "id": "TRADE-003",
@@ -67,13 +69,14 @@
     "evidence": "components/trading/market-explorer.tsx:454",
     "acceptance": "A separately named clipboard action copies only that row's exact full mint, reports failure accessibly, and neither changes selection nor initializes any provider or wallet request.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/market-explorer.tsx",
       "tests/e2e/market-controls.spec.ts",
       "tests/e2e/fixtures/market-controls.tsx",
       "tests/e2e/fixtures/market-controls-state.ts"
-    ]
+    ],
+    "receipt": "PR #260 merged at 9217d1e4aeecb6b3a082626ca480bd36757feb53; exact qualified tree and all five original domains verified 2026-10-31 10:09 UTC. Bounded public Feed and receipt gates checked 10:10 UTC. Protected/terminal flows remain isolated-test evidence; Community phone repeated-paint issue remains under investigation."
   },
   {
     "id": "TRADE-006",
@@ -157,8 +160,14 @@
     "evidence": "components/trading/token-detail.tsx:50",
     "acceptance": "Mock clipboard success and denial, switch exact mints, and verify feedback cannot claim a new mint was copied when only the prior one was; no production clipboard or network dependency.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/token-detail-context.spec.ts",
+      "tests/e2e/fixtures/token-detail-context.tsx",
+      "tests/e2e/fixtures/token-detail-context-state.ts"
+    ]
   },
   {
     "id": "TRADE-013",
@@ -169,8 +178,14 @@
     "evidence": "components/trading/token-detail.tsx:85",
     "acceptance": "Website/social links receive concise unverified-project-metadata context without removing valid links or treating them as endorsed; credentialed and unsafe schemes remain rejected.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/token-detail-context.spec.ts",
+      "tests/e2e/fixtures/token-detail-context.tsx",
+      "tests/e2e/fixtures/token-detail-context-state.ts"
+    ]
   },
   {
     "id": "TRADE-014",
@@ -181,8 +196,14 @@
     "evidence": "components/trading/token-detail.tsx:66",
     "acceptance": "Keyboard/touch-readable definitions distinguish market cap, FDV, liquidity, holder samples and 1h/24h volume; glossary changes no values, coverage claims, provider usage or financial advice.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/trading/token-detail.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/trading/token-detail.tsx",
+      "components/trading/forum-terminal.module.css",
+      "tests/e2e/token-detail-context.spec.ts",
+      "tests/e2e/fixtures/token-detail-context.tsx",
+      "tests/e2e/fixtures/token-detail-context-state.ts"
+    ]
   },
   {
     "id": "TRADE-015",
@@ -975,8 +996,14 @@
     "evidence": "components/community/community-hub.tsx:298",
     "acceptance": "Enhancement: each public handle opens its canonical forum member profile using the existing username route helper; no wallet appears in URL.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "tests/e2e/community-identity-links.spec.ts",
+      "tests/e2e/fixtures/community-identity-links.tsx",
+      "tests/e2e/fixtures/community-identity-links-state.ts"
+    ]
   },
   {
     "id": "COMMUNITY-015",
@@ -987,8 +1014,14 @@
     "evidence": "components/community/community-hub.tsx:291",
     "acceptance": "Enhancement: copy exact mint from hub with accessible success/failure feedback; keep full selectable address and no wallet action.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "tests/e2e/community-identity-links.spec.ts",
+      "tests/e2e/fixtures/community-identity-links.tsx",
+      "tests/e2e/fixtures/community-identity-links-state.ts"
+    ]
   },
   {
     "id": "COMMUNITY-016",
@@ -1134,8 +1167,14 @@
     "evidence": "components/community/community-hub.tsx:816",
     "acceptance": "Enhancement: related exact mint has a canonical terminal link and copy control; no ticker inference or automatic quote/payment action.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/community/community-hub.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/community/community-hub.tsx",
+      "components/community/community-hub.module.css",
+      "tests/e2e/community-identity-links.spec.ts",
+      "tests/e2e/fixtures/community-identity-links.tsx",
+      "tests/e2e/fixtures/community-identity-links-state.ts"
+    ]
   },
   {
     "id": "COMMUNITY-028",
@@ -1478,13 +1517,14 @@
     "evidence": "components/trading/research-purchase.tsx:339",
     "acceptance": "Enhancement: distinct config-loading/setup-required/free-credit-exhausted states before purchase; wallet linking does not hide disabled payment readiness; no enabling or allowance changes.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/trading/research-purchase.tsx",
       "tests/e2e/research-readiness.spec.ts",
       "tests/e2e/fixtures/research-readiness.tsx",
       "tests/e2e/fixtures/research-readiness-state.ts"
-    ]
+    ],
+    "receipt": "PR #260 merged at 9217d1e4aeecb6b3a082626ca480bd36757feb53; exact qualified tree and all five original domains verified 2026-10-31 10:09 UTC. Bounded public Feed and receipt gates checked 10:10 UTC. Protected/terminal flows remain isolated-test evidence; Community phone repeated-paint issue remains under investigation."
   },
   {
     "id": "COMMUNITY-056",
@@ -1716,14 +1756,15 @@
     "evidence": "components/forum/forum-compose.tsx:154",
     "acceptance": "Encountering an unsupported saved draft version must not silently overwrite it with an empty/template/current-schema draft. Show recoverable local-only guidance and require explicit consent before replacement.",
     "dependsOn": [],
-    "status": "tested",
+    "status": "deployed",
     "paths": [
       "components/forum/forum-compose.tsx",
       "tests/e2e/draft-schema.spec.ts",
       "tests/e2e/fixtures/draft-schema.tsx",
       "tests/e2e/fixtures/draft-schema-state.ts",
       "components/forum/forum-compose.test.tsx"
-    ]
+    ],
+    "receipt": "PR #260 merged at 9217d1e4aeecb6b3a082626ca480bd36757feb53; exact qualified tree and all five original domains verified 2026-10-31 10:09 UTC. Bounded public Feed and receipt gates checked 10:10 UTC. Protected/terminal flows remain isolated-test evidence; Community phone repeated-paint issue remains under investigation."
   },
   {
     "id": "FORUM-014",
@@ -2025,8 +2066,13 @@
     "evidence": "components/forum/forum-media-gallery.tsx:46",
     "acceptance": "If attachments reorder or disappear while the viewer is open, the selected image remains bound to its attachment ID or closes safely; an array index must not silently switch the user to another image.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-media-gallery.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/forum/forum-media-gallery.tsx",
+      "tests/e2e/forum-gallery-lifecycle.spec.ts",
+      "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
+      "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
+    ]
   },
   {
     "id": "FORUM-039",
@@ -2037,8 +2083,13 @@
     "evidence": "components/forum/forum-media-gallery.tsx:105",
     "acceptance": "Close auto-focus checks that the originating tile is still connected and visible; otherwise use a safe nearby focus target rather than preventing the default and focusing a removed element.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-media-gallery.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/forum/forum-media-gallery.tsx",
+      "tests/e2e/forum-gallery-lifecycle.spec.ts",
+      "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
+      "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
+    ]
   },
   {
     "id": "FORUM-040",
@@ -2049,8 +2100,13 @@
     "evidence": "components/forum/forum-media-gallery.tsx:139",
     "acceptance": "Arrow-key and next/previous changes announce image position and concise title through a polite status region, retain Escape behavior and avoid duplicate announcements from decorative counters.",
     "dependsOn": [],
-    "status": "queued",
-    "paths": ["components/forum/forum-media-gallery.tsx"]
+    "status": "tested",
+    "paths": [
+      "components/forum/forum-media-gallery.tsx",
+      "tests/e2e/forum-gallery-lifecycle.spec.ts",
+      "tests/e2e/fixtures/forum-gallery-lifecycle.tsx",
+      "tests/e2e/fixtures/forum-gallery-lifecycle-state.tsx"
+    ]
   },
   {
     "id": "FORUM-041",
