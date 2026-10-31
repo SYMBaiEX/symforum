@@ -140,6 +140,7 @@ import type * as forumSwapSubmission from "../forumSwapSubmission.js";
 import type * as forumSwaps from "../forumSwaps.js";
 import type * as forumTerminal from "../forumTerminal.js";
 import type * as forumTerminalData from "../forumTerminalData.js";
+import type * as forumTerminalRefresh from "../forumTerminalRefresh.js";
 import type * as forumTerminalSchema from "../forumTerminalSchema.js";
 import type * as forumTerminalTransparency from "../forumTerminalTransparency.js";
 import type * as forumTerminalWallet from "../forumTerminalWallet.js";
@@ -366,6 +367,7 @@ declare const fullApi: ApiFromModules<{
   forumSwaps: typeof forumSwaps;
   forumTerminal: typeof forumTerminal;
   forumTerminalData: typeof forumTerminalData;
+  forumTerminalRefresh: typeof forumTerminalRefresh;
   forumTerminalSchema: typeof forumTerminalSchema;
   forumTerminalTransparency: typeof forumTerminalTransparency;
   forumTerminalWallet: typeof forumTerminalWallet;

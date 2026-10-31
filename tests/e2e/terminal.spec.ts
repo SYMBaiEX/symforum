@@ -1294,7 +1294,11 @@ for (const width of [320, 390])
     await expect(
       symf.getByRole("cell").first().getByText("Stale", { exact: true }),
     ).toHaveCount(0);
-    expect(await recordedOperations(page)).toEqual([]);
+    // Entering Markets requests one shared cache refresh. Local sorting must
+    // not create another refresh, a per-token fetch or a payment operation.
+    await expect.poll(() => recordedOperations(page)).toEqual([
+      "action:forumTerminalRefresh:refresh",
+    ]);
     expect(chartMints).toHaveLength(1);
     await expectViewportBounded(page);
     expect(errors).toEqual([]);
