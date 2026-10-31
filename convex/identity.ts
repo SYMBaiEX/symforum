@@ -12,7 +12,7 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import type { GenericCtx } from "@convex-dev/better-auth";
 import type { DataModel } from "./_generated/dataModel";
 import { env } from "./_generated/server";
-import { identityComponent } from "./betterAuthClient";
+import { identityCounterAdapter } from "./identityRateLimit";
 import { internal } from "./_generated/api";
 import { humanIdentityPlugin } from "./identityPlugin";
 import { resend } from "./resendClient";
@@ -56,7 +56,7 @@ export const createIdentityAuth = (ctx: GenericCtx<DataModel>) => {
       env.BETTER_AUTH_SECRET ??
       "disabled-better-auth-never-enable-without-a-secret",
     logger: { disabled: production },
-    database: identityComponent.adapter(ctx),
+    database: identityCounterAdapter(ctx),
     trustedOrigins: IDENTITY_ORIGINS.filter(
       (origin) => !production || origin.startsWith("https:"),
     ),
