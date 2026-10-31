@@ -55,6 +55,7 @@ async function harness(
   page: Page,
   scenario = "",
   app: "platform" | "forum" = "platform",
+  longSource = false,
 ) {
   const audit = { errors: [] as string[], outbound: [] as string[] };
   audits.set(page, audit);
@@ -71,7 +72,9 @@ async function harness(
     audit.outbound.push(url.href);
     return route.abort();
   });
-  await page.goto(`${origin}/?scenario=${scenario}`);
+  await page.goto(
+    `${origin}/?scenario=${scenario}${longSource ? "&long-source" : ""}`,
+  );
   await expect(
     page.getByRole("heading", { name: "$SAME", exact: true }),
   ).toBeVisible();
@@ -79,6 +82,22 @@ async function harness(
 async function open(page: Page) {
   await page.getByText("Market details & sources", { exact: true }).click();
   await inspection(page).locator("summary").click();
+}
+async function expectHolderReference(
+  page: Page,
+  source = "https://indexed.example.test/original",
+) {
+  const holders = reading(page, "Holders");
+  await expect(holders).toContainText(
+    "Original holder reference (not refreshed market data):",
+  );
+  await expect(holders.locator("code")).toHaveText(source);
+  await expect(holders.getByRole("link")).toHaveCount(0);
+  await expect(holders.locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-10-31T10:00:00.000Z",
+  );
+  await expect(holders).toContainText("Stale sample");
 }
 test.afterEach(async ({ page }) => {
   expect(audits.get(page)?.errors).toEqual([]);
@@ -179,11 +198,13 @@ test("fresh chart readings retain original holder and one-hour sources and times
       "datetime",
       "2026-10-31T10:00:00.000Z",
     );
-    await expect(reading(page, label).getByRole("link")).toHaveAttribute(
-      "href",
-      "https://indexed.example.test/original",
-    );
+    if (label !== "Holders")
+      await expect(reading(page, label).getByRole("link")).toHaveAttribute(
+        "href",
+        "https://indexed.example.test/original",
+      );
   }
+  await expectHolderReference(page);
   await expect(reading(page, "Market cap")).toContainText("Unavailable");
   await expect(reading(page, "FDV")).toContainText("9876543.21 USD");
   await expect(reading(page, "1h change")).toContainText("-0.00123456789 %");
@@ -207,11 +228,10 @@ test("refreshed market sample does not retime holders and gives distinct exact-m
     ).toHaveAttribute("href", "https://refreshed.example.test/pool");
   }
   await expect(reading(page, "Holders")).toContainText("1234 addresses");
-  await expect(reading(page, "Holders")).toContainText("Stale sample");
-  await expect(reading(page, "Holders").locator("time")).toHaveAttribute(
-    "datetime",
-    "2026-10-31T10:00:00.000Z",
-  );
+  await expectHolderReference(page);
+  await expect(
+    inspection(page).locator('a[href="https://indexed.example.test/original"]'),
+  ).toHaveCount(0);
 });
 test("zero is inspectable while missing cap stays missing beside FDV and tiny values stay unabridged", async ({
   page,
@@ -279,6 +299,12 @@ for (const scenario of ["missing", "loading", "invalid-time", "unavailable"])
         "Source data unavailable",
       );
       await expect(reading(page, "Holders")).toContainText("1234 addresses");
+      await expectHolderReference(page);
+      await expect(
+        inspection(page).locator(
+          'a[href="https://indexed.example.test/original"]',
+        ),
+      ).toHaveCount(0);
     } else {
       await expect(inspection(page).locator("time")).toHaveCount(0);
       for (const label of ["Price", "Market cap", "Holders"])
@@ -291,7 +317,7 @@ for (const app of ["platform", "forum"] as const)
       page,
     }) => {
       await page.setViewportSize({ width, height: 568 });
-      await harness(page, "chart", app);
+      await harness(page, "chart", app, true);
       await expect(inspection(page).locator("summary")).toBeHidden();
       const outer = page.getByText("Market details & sources", { exact: true });
       await outer.focus();
@@ -301,6 +327,10 @@ for (const app of ["platform", "forum"] as const)
       await expect(summary).toBeFocused();
       expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       await page.keyboard.press("Enter");
+      await expectHolderReference(
+        page,
+        `https://indexed.example.test/original/${"historic-holder-snapshot-".repeat(10)}`,
+      );
       const workspace = page.getByRole("region", {
         name: "Loaded metric workspace",
         exact: true,
