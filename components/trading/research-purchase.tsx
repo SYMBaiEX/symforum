@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import {
@@ -99,8 +99,9 @@ export function ResearchPurchase({ mint }: { mint: string }) {
   return client ? (
     <ResearchPurchaseConnected key={mint} mint={mint} client={client} />
   ) : (
-    <p className="text-sm text-muted-foreground">
-      Wallet services are loading.
+    <p className="text-sm text-muted-foreground" role="status">
+      Wallet services are loading. Research payment readiness has not been
+      checked.
     </p>
   );
 }
@@ -120,6 +121,35 @@ function ResearchPurchaseConnected({
     () => Math.floor(Date.now() / 60_000) * 60_000,
   );
   const config = useQuery(configRef, { now });
+  const readinessId = useId();
+  const readiness = !config
+    ? "loading"
+    : config.enabled && config.reason === "ready"
+      ? "ready"
+      : !config.enabled && config.reason === "setup_required"
+        ? "setup"
+        : !config.enabled && config.reason === "free_credits_exhausted"
+          ? "exhausted"
+          : "unavailable";
+  const readinessLabel = {
+    loading: "Checking research payment readiness…",
+    ready: "Research payments are available for review.",
+    setup: "Research payments need setup.",
+    exhausted: "Research payments are paused.",
+    unavailable: "Research payment readiness is unavailable.",
+  }[readiness];
+  const readinessHelp = {
+    loading:
+      "Availability is not confirmed yet. No wallet action is needed to check it.",
+    ready:
+      "Source coverage and payment readiness are checked again before a quote. Reviewing an export does not authorize payment.",
+    setup:
+      "Payments open only after treasury, facilitator and free-credit checks pass. No wallet action is needed while setup is incomplete.",
+    exhausted:
+      "The free facilitator allowance is exhausted. Payments are paused; no paid upgrade will be used.",
+    unavailable:
+      "Payments stay closed until availability can be confirmed. No wallet action is needed.",
+  }[readiness];
   const history = useQuery(historyRef, isAuthenticated ? {} : "skip");
   const quote = useAction(quoteRef),
     simulate = useAction(simulateRef),
@@ -319,15 +349,24 @@ function ResearchPurchaseConnected({
         Optional Solana x402 purchase. Forum content stays free. No recurring
         charges or automatic payments.
       </p>
+      <div
+        id={readinessId}
+        role="status"
+        className="mb-3 rounded-lg bg-muted p-3 text-sm"
+      >
+        <p className="font-medium">{readinessLabel}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{readinessHelp}</p>
+      </div>
       {!linked || !connected ? (
         <CommerceWalletButton
           requiredFeature="solana:signTransaction"
-          disabled={busy}
+          disabled={busy || readiness !== "ready"}
         />
       ) : (
         <Button
           onClick={() => void review()}
-          disabled={busy || !config?.enabled || !!held}
+          disabled={busy || readiness !== "ready" || !!held}
+          aria-describedby={readinessId}
         >
           {busy
             ? "Preparing…"
@@ -335,13 +374,6 @@ function ResearchPurchaseConnected({
               ? "Payment receipt protected"
               : "Review research export"}
         </Button>
-      )}
-      {config && !config.enabled && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {config.reason === "free_credits_exhausted"
-            ? "The free facilitator allowance is exhausted. Payments are paused; no paid upgrade will be used."
-            : "Payments open only after treasury, facilitator and free-credit checks pass."}
-        </p>
       )}
       {held && (
         <p className="mt-2 text-sm" role="status">
