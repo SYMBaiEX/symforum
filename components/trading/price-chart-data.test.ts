@@ -6,6 +6,7 @@ import {
 import {
   chartResponsePolicy,
   chartStateMessage,
+  chartSourceLabel,
   readChartData,
   retainedChartData,
 } from "./price-chart-data";
@@ -33,6 +34,32 @@ const response = (status = 200, headers: Record<string, string> = {}) => ({
   ok: status < 400,
   status,
   headers: new Headers(headers),
+});
+
+test("validated source attribution survives retention without renewing its timestamp", () => {
+  const parsed = readChartData(
+    { ...data, candleSource: "solana-tracker" },
+    mint,
+    "15m",
+    now,
+  );
+  expect(chartSourceLabel(parsed)).toBe("Solana Tracker");
+  expect(retainedChartData(parsed, now + 60_000, true)).toMatchObject({
+    candleSource: "solana-tracker",
+    checkedAt: now,
+    stale: true,
+  });
+  expect(chartSourceLabel(readChartData(data, mint, "15m", now))).toBe(
+    "GeckoTerminal",
+  );
+  expect(() =>
+    readChartData(
+      { ...data, candleSource: "<private-error>" },
+      mint,
+      "15m",
+      now,
+    ),
+  ).toThrow();
 });
 
 test("CDN payloads cannot claim freshness past five minutes or survive 24-hour retention", () => {

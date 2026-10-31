@@ -5,6 +5,7 @@ import {
   CHART_CACHE_RETENTION_MS,
   marketProviderRetryAt,
   type MarketCacheView,
+  type MarketCandleProvider,
 } from "@/lib/chart-cache-policy";
 
 export type ChartCacheState = MarketCacheView["state"];
@@ -12,7 +13,15 @@ export type CheckedChartData = SymfChartData & {
   stale?: boolean;
   priceUsd?: ChartMarketData["priceUsd"];
   stats?: ChartMarketData["stats"];
+  candleSource?: MarketCandleProvider;
 };
+
+/** Legacy retained charts came only from Gecko; never render arbitrary labels. */
+export function chartSourceLabel(data: CheckedChartData) {
+  return data.candleSource === "solana-tracker"
+    ? "Solana Tracker"
+    : "GeckoTerminal";
+}
 
 /** Display retention is independent of whether another network attempt is due. */
 export function retainedChartData(
@@ -140,6 +149,7 @@ const chartShape = z.object({
   interval: z.enum(["1m", "5m", "15m", "1h", "4h"]),
   checkedAt: positive,
   stale: z.boolean().optional(),
+  candleSource: z.enum(["geckoterminal", "solana-tracker"]).optional(),
   priceUsd: z.number().finite().nonnegative().nullable().optional(),
   stats: z
     .object({
