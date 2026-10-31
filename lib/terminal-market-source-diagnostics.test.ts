@@ -46,7 +46,7 @@ describe("public market safe transport diagnostics", () => {
     const fetcher = vi.fn(async () => Response.json({ ok: true }));
     expect(await readPublicMarket(URL, 100, fetcher)).toEqual({ ok: true });
     expect(fetcher).toHaveBeenCalledExactlyOnceWith(URL, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json;version=20230203" },
       signal: expect.any(AbortSignal),
       redirect: "error",
     });

@@ -411,7 +411,11 @@ function TerminalWorkspace({
                 key={`market:${selected.mint}`}
                 label="Selected token data"
               >
-                <TokenDetail token={selected} now={now} />
+                <TokenDetail
+                  token={selected}
+                  now={now}
+                  onBrowseMarkets={() => openView("markets", true)}
+                />
               </TerminalBoundary>
             </div>
             <div

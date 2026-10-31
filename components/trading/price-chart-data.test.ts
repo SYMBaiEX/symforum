@@ -6,6 +6,8 @@ import {
 import {
   chartResponsePolicy,
   chartStateMessage,
+  chartSourceLabel,
+  chartHistoryLabel,
   readChartData,
   retainedChartData,
 } from "./price-chart-data";
@@ -33,6 +35,60 @@ const response = (status = 200, headers: Record<string, string> = {}) => ({
   ok: status < 400,
   status,
   headers: new Headers(headers),
+});
+
+test("recent checks do not make historical bars appear to be recent trades", () => {
+  const historic = {
+    ...data,
+    candles: data.candles.map((row) => ({
+      ...row,
+      time: now / 1000 - 2 * 86_400,
+    })),
+  };
+  expect(chartHistoryLabel(historic, now)).toBe(
+    `Historical bars · latest ${new Date(historic.candles[0].time * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`,
+  );
+  expect(historic.checkedAt).toBe(now);
+  expect(chartHistoryLabel(data, now)).toBeNull();
+  expect(
+    chartHistoryLabel(
+      {
+        ...data,
+        interval: "4h",
+        candles: data.candles.map((row) => ({
+          ...row,
+          time: now / 1000 - 3_600,
+        })),
+      },
+      now,
+    ),
+  ).toBeNull();
+});
+
+test("validated source attribution survives retention without renewing its timestamp", () => {
+  const parsed = readChartData(
+    { ...data, candleSource: "solana-tracker" },
+    mint,
+    "15m",
+    now,
+  );
+  expect(chartSourceLabel(parsed)).toBe("Solana Tracker");
+  expect(retainedChartData(parsed, now + 60_000, true)).toMatchObject({
+    candleSource: "solana-tracker",
+    checkedAt: now,
+    stale: true,
+  });
+  expect(chartSourceLabel(readChartData(data, mint, "15m", now))).toBe(
+    "GeckoTerminal",
+  );
+  expect(() =>
+    readChartData(
+      { ...data, candleSource: "<private-error>" },
+      mint,
+      "15m",
+      now,
+    ),
+  ).toThrow();
 });
 
 test("CDN payloads cannot claim freshness past five minutes or survive 24-hour retention", () => {

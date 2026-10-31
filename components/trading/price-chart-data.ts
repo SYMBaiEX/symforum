@@ -5,6 +5,7 @@ import {
   CHART_CACHE_RETENTION_MS,
   marketProviderRetryAt,
   type MarketCacheView,
+  type MarketCandleProvider,
 } from "@/lib/chart-cache-policy";
 
 export type ChartCacheState = MarketCacheView["state"];
@@ -12,7 +13,31 @@ export type CheckedChartData = SymfChartData & {
   stale?: boolean;
   priceUsd?: ChartMarketData["priceUsd"];
   stats?: ChartMarketData["stats"];
+  candleSource?: MarketCandleProvider;
 };
+
+/** Legacy retained charts came only from Gecko; never render arbitrary labels. */
+export function chartSourceLabel(data: CheckedChartData) {
+  return data.candleSource === "solana-tracker"
+    ? "Solana Tracker"
+    : "GeckoTerminal";
+}
+
+/** A recent fetch must never imply that an old observed bar is a recent trade. */
+export function chartHistoryLabel(data: CheckedChartData, now: number) {
+  const last = data.candles.at(-1);
+  const duration =
+    parseInt(data.interval, 10) *
+    (data.interval.endsWith("h") ? 3_600_000 : 60_000);
+  if (
+    !last ||
+    !Number.isSafeInteger(last.time) ||
+    !Number.isFinite(now) ||
+    now - last.time * 1000 <= Math.max(15 * 60_000, 2 * duration)
+  )
+    return null;
+  return `Historical bars · latest ${new Date(last.time * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
 
 /** Display retention is independent of whether another network attempt is due. */
 export function retainedChartData(
@@ -140,6 +165,7 @@ const chartShape = z.object({
   interval: z.enum(["1m", "5m", "15m", "1h", "4h"]),
   checkedAt: positive,
   stale: z.boolean().optional(),
+  candleSource: z.enum(["geckoterminal", "solana-tracker"]).optional(),
   priceUsd: z.number().finite().nonnegative().nullable().optional(),
   stats: z
     .object({

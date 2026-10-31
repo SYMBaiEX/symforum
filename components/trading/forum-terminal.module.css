@@ -1,4 +1,6 @@
 .page {
+  --terminal-gain-text: 174 54% 26%;
+  --terminal-loss-text: 0 70% 38%;
   --terminal-space: 12px;
   --terminal-panel-radius: 8px;
   --terminal-control-radius: 6px;
@@ -16,14 +18,36 @@
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
 }
+/* Market text is not a decorative accent. Keep it readable on light cards,
+   and honor a first-party surface's explicit theme over the document theme. */
+:global(:is(html.dark, html[data-theme="dark"])) .page,
+:global(
+    :is(.forum-app, .forum-app-shell, [data-surface="forum"])[data-theme="dark"]
+  )
+  .page {
+  --terminal-gain-text: var(--accent);
+  --terminal-loss-text: 0 80% 72%;
+}
+:global(html[data-theme="light"]) .page,
+:global(
+    :is(
+      .forum-app,
+      .forum-app-shell,
+      [data-surface="forum"]
+    )[data-theme="light"]
+  )
+  .page {
+  --terminal-gain-text: 174 54% 26%;
+  --terminal-loss-text: 0 70% 38%;
+}
 .header {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0 12px;
-  min-height: 36px;
-  padding-inline: 12px;
+  gap: 0 16px;
+  min-height: 44px;
+  padding-inline: 16px;
   border-bottom: 1px solid hsl(var(--border));
 }
 .heading {
@@ -123,7 +147,7 @@
 .layout {
   flex: 1 1 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 328px;
+  grid-template-columns: minmax(0, 1fr) clamp(328px, 25vw, 360px);
   align-items: stretch;
   min-width: 0;
   min-height: 0;
@@ -180,8 +204,8 @@
   grid-template-columns: minmax(160px, 0.75fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: 64px;
+  padding: 8px 16px;
 }
 .identity {
   display: flex;
@@ -194,8 +218,8 @@
   position: relative;
   place-items: center;
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   overflow: hidden;
   border: 1px solid hsl(var(--border));
   border-radius: 50%;
@@ -213,7 +237,7 @@
 .identity h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 20px;
   letter-spacing: -0.025em;
@@ -223,8 +247,8 @@
   margin: 1px 0 0;
   overflow: hidden;
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -304,37 +328,37 @@
   margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 550;
-  line-height: 20px;
+  line-height: 24px;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
 .price dd[data-unavailable="true"] {
   color: hsl(var(--muted-foreground));
-  font-size: 16px;
+  font-size: 18px;
 }
 .topMetrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 16px;
   margin: 0;
-  padding: 0 12px 2px;
+  padding: 0 16px 8px;
 }
 .topMetrics > div {
   min-width: 0;
 }
 .topMetrics dt {
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
 }
 .topMetrics dd {
   margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 13px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
 .topMetrics dd[data-unavailable="true"] {
@@ -342,11 +366,17 @@
   font-family: var(--font-geist-sans), sans-serif;
   font-size: 12px;
 }
+.topMetrics dd[data-change="up"] {
+  color: hsl(var(--terminal-gain-text));
+}
+.topMetrics dd[data-change="down"] {
+  color: hsl(var(--terminal-loss-text));
+}
 .marketStatus {
   margin: 0;
-  padding: 0 12px 2px;
+  padding: 0 16px 8px;
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
 }
 .chartLayout {
@@ -393,7 +423,7 @@
   flex-wrap: wrap;
   justify-content: end;
   gap: 0 12px;
-  min-height: 36px;
+  min-height: 28px;
   padding: 0 12px 0 4px;
 }
 .chartWorkspace .chartQuote > p:first-child,
@@ -412,6 +442,14 @@
   margin: 0;
   font-size: 11px;
 }
+.historyNote,
+.chartWorkspace .chartQuote .historyNote {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: hsl(var(--muted-foreground));
+}
 .chartWorkspace .chartFrame {
   grid-column: 1 / -1;
   min-width: 0;
@@ -424,12 +462,67 @@
   min-height: 180px;
   border-top: 1px solid hsl(var(--border));
 }
+.chartLayout:has([data-terminal-chart-empty]) {
+  flex: 0 0 auto;
+  grid-template-rows: auto auto;
+}
+.tokenSurface:has([data-terminal-chart-empty]) {
+  min-height: 0;
+}
+.tokenSurface:has([data-terminal-chart-empty]) .discussionBar {
+  margin-top: auto;
+}
+.chartWorkspace .chartEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: clamp(180px, 28dvh, 240px);
+  padding: 16px;
+  text-align: center;
+  background: hsl(var(--muted) / 0.15);
+}
+.chartEmptyLabel {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 16px;
+}
+.chartEmptyMessage {
+  max-width: 42ch;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+.chartEmptyHint {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 16px;
+}
+.chartEmptyAction {
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--terminal-control-radius);
+  background: hsl(var(--card));
+  color: hsl(var(--primary));
+  font-size: 14px;
+  font-weight: 500;
+}
+.chartEmptyAction:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--primary) / 0.05);
+}
+.compactExtraMetric {
+  display: none;
+}
 .chartWorkspace .chartDataDisclosure {
   grid-column: 1 / -1;
   padding: 0;
   font-size: 12px;
-  max-height: 180px;
-  overflow: auto;
+  overflow: visible;
 }
 .chartWorkspace details > summary {
   min-height: 32px;
@@ -443,8 +536,7 @@
 }
 .marketDetails {
   flex: 0 0 auto;
-  max-height: 45%;
-  overflow: auto;
+  overflow: visible;
   border-top: 1px solid hsl(var(--border));
   font-size: 12px;
 }
@@ -1098,6 +1190,27 @@
   }
 }
 @container (max-width: 840px) {
+  /* The instrument header below is the mobile context; don't spend another
+     toolbar repeating Terminal and the selected ticker. Keep its h1 available. */
+  .header {
+    position: relative;
+    min-height: 0;
+    height: 0;
+    padding: 0;
+    border: 0;
+  }
+  .heading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .headerActions {
+    display: none;
+  }
   .below {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1115,6 +1228,10 @@
   }
 }
 @container (max-width: 600px) {
+  .chartLayout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(180px, 1fr) auto;
+  }
   .attention {
     flex-wrap: nowrap;
     min-height: 44px;
@@ -1137,19 +1254,18 @@
   .header {
     flex-wrap: nowrap;
     gap: 0 4px;
-    min-height: 44px;
-    padding-inline: 8px;
+    min-height: 0;
+    padding-inline: 0;
   }
   .heading {
     flex: 0 0 auto;
-    min-height: 44px;
+    min-height: 0;
   }
   .network {
     display: none;
   }
   .headerActions {
-    flex: 1 0 auto;
-    gap: 8px;
+    display: none;
   }
   .viewTabs {
     flex: 0 0 auto;
@@ -1172,18 +1288,17 @@
     font-size: 14px;
   }
   .price dd {
-    font-size: 16px;
+    font-size: 18px;
   }
   .tokenTop {
-    min-height: 44px;
+    min-height: 56px;
+    padding: 8px 12px;
   }
   .chartWorkspace .chartQuote {
+    grid-column: 1 / -1;
+    justify-content: space-between;
     gap: 0 8px;
-    padding-right: 8px;
-  }
-  .chartWorkspace .chartQuote > p:first-child,
-  .chartWorkspace .chartQuote > p:last-child {
-    font-size: 11px;
+    padding-inline: 12px;
   }
   .chartWorkspace .chartControls button {
     padding-inline: 5px;
@@ -1204,7 +1319,6 @@
     min-height: 44px;
   }
   .chartWorkspace .chartControls button,
-  .chartWorkspace .chartQuote,
   .viewTabs button,
   .headerLink,
   .toolsHeading button,
@@ -1229,6 +1343,16 @@
   }
 }
 @container (max-width: 360px) {
+  .topMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-inline: 12px;
+  }
+  .topMetrics > div:nth-child(n + 3) {
+    display: none;
+  }
+  .compactExtraMetric {
+    display: block;
+  }
   .chartLayout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(180px, 1fr) auto;

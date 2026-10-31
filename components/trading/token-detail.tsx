@@ -27,9 +27,11 @@ const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 export function TokenDetail({
   token,
   now,
+  onBrowseMarkets,
 }: {
   token: MarketChoice;
   now: number;
+  onBrowseMarkets?: () => void;
 }) {
   const indexed = useQuery(terminalApi.getMarket, { mint: token.mint, now });
   const market = indexed && indexed.mint !== token.mint ? null : indexed;
@@ -159,7 +161,21 @@ export function TokenDetail({
             ([label, value]) => (
               <div key={label}>
                 <dt>{label}</dt>
-                <dd data-unavailable={value === "Unavailable"}>{value}</dd>
+                <dd
+                  data-unavailable={value === "Unavailable"}
+                  data-change={
+                    label === "1h change" &&
+                    market?.priceChange1hPercent != null
+                      ? market.priceChange1hPercent > 0
+                        ? "up"
+                        : market.priceChange1hPercent < 0
+                          ? "down"
+                          : undefined
+                      : undefined
+                  }
+                >
+                  {value}
+                </dd>
               </div>
             ),
           )}
@@ -189,6 +205,7 @@ export function TokenDetail({
         symbol={displayToken.symbol}
         light={resolvedTheme === "light"}
         onMarket={setLiveMarket}
+        onBrowseMarkets={onBrowseMarkets}
       />
       <details className={styles.marketDetails}>
         <summary className="focus-ring">Market details &amp; sources</summary>
@@ -199,6 +216,12 @@ export function TokenDetail({
           <dl className={styles.metrics}>
             {[metrics[3], metrics[4], metrics[5]].map(([label, value]) => (
               <div key={label}>
+                <dt>{label}</dt>
+                <dd data-unavailable={value === "Unavailable"}>{value}</dd>
+              </div>
+            ))}
+            {[metrics[6], metrics[7]].map(([label, value]) => (
+              <div key={label} className={styles.compactExtraMetric}>
                 <dt>{label}</dt>
                 <dd data-unavailable={value === "Unavailable"}>{value}</dd>
               </div>

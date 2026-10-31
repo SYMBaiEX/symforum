@@ -18,8 +18,22 @@ export type MarketFailureCode =
   | "timeout"
   | "network"
   | "invalid-response"
+  | "empty-candles"
+  | "candle-schema"
+  | "candle-identity"
+  | "candle-numeric"
+  | "candle-number"
+  | "candle-price"
+  | "candle-volume"
+  | "candle-duplicate"
+  | "candle-time"
+  | "candle-time-unit"
+  | "candle-window"
+  | "candle-future"
+  | "candle-range"
   | "pool-unavailable"
   | "unsupported";
+export type MarketCandleProvider = "geckoterminal" | "solana-tracker";
 export type MarketCacheStatus = {
   lastSuccessAt: number | null;
   lastAttemptAt: number | null;
@@ -27,6 +41,7 @@ export type MarketCacheStatus = {
   failureCount: number;
   failureStage: MarketFailureStage | null;
   failureCode: MarketFailureCode | null;
+  failureProvider?: MarketCandleProvider | null;
 };
 export type MarketCacheView = {
   state: MarketCacheState;

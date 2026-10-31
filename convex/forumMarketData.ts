@@ -5,6 +5,7 @@ import {
   action,
   internalMutation,
   type MutationCtx,
+  env,
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -12,6 +13,7 @@ import { commerceLimiter } from "./forumCommerce";
 import {
   marketFailureCodeValidator,
   marketFailureStageValidator,
+  marketCandleProviderValidator,
 } from "./forumMarketSchema";
 import { SYMF_TOKEN } from "../lib/symf-token";
 import { isSolanaAddress, record } from "../lib/forum-commerce";
@@ -31,6 +33,7 @@ import {
   parseMarketStats,
   parseMarketTrades,
 } from "../lib/symf-market-overview";
+import { readTrackerCandles } from "../lib/tracker-market-candles";
 import {
   CHART_CACHE_FRESH_MS,
   CHART_CACHE_RETENTION_MS,
@@ -41,6 +44,7 @@ import {
   type MarketCacheView,
   type MarketFailureStage,
   type MarketFailureCode,
+  type MarketCandleProvider,
 } from "../lib/chart-cache-policy";
 
 const limiter = new RateLimiter(components.rateLimiter, {
@@ -74,6 +78,7 @@ const cacheStatus = v.object({
   failureCount: v.number(),
   failureStage: v.union(marketFailureStageValidator, v.null()),
   failureCode: v.union(marketFailureCodeValidator, v.null()),
+  failureProvider: v.optional(v.union(marketCandleProviderValidator, v.null())),
 });
 const view = v.object({
   state,
@@ -176,6 +181,10 @@ function persistedView(row: CacheRow | null, now: number): MarketCacheView {
       ),
       failureStage: incomplete ? "cache" : (row?.failureStage ?? null),
       failureCode: incomplete ? "incomplete" : (row?.failureCode ?? null),
+      failureProvider: incomplete
+        ? null
+        : (row?.failureProvider ??
+          (row?.failureStage === "candles" ? "geckoterminal" : null)),
     },
   };
 }
@@ -312,15 +321,27 @@ export const claim = internalMutation({
     lease: v.string(),
     pinnedSymf: v.optional(v.boolean()),
   },
-  returns: v.object({ ...view.fields, fetch: v.boolean() }),
-  handler: async (ctx, args): Promise<MarketCacheView & { fetch: boolean }> => {
+  returns: v.object({
+    ...view.fields,
+    fetch: v.boolean(),
+    candleProvider: v.union(marketCandleProviderValidator, v.null()),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    MarketCacheView & {
+      fetch: boolean;
+      candleProvider: MarketCandleProvider | null;
+    }
+  > => {
     const now = Date.now();
     if (
       !args.lease.trim() ||
       args.lease.length > 128 ||
       !(await allowed(ctx, args, now))
     )
-      return { ...unsupported(), fetch: false };
+      return { ...unsupported(), fetch: false, candleProvider: null };
     const key = cacheKey(args);
     const row = await ctx.db
       .query("forumMarketDataCache")
@@ -332,7 +353,7 @@ export const claim = internalMutation({
       (current.cache.nextRetryAt ?? 0) > now ||
       (row?.leaseUntil ?? 0) > now
     )
-      return { ...current, fetch: false };
+      return { ...current, fetch: false, candleProvider: null };
     const burst = await limiter.limit(ctx, "terminalMarketBurst", {
       key: "all",
     });
@@ -341,6 +362,7 @@ export const claim = internalMutation({
         ...current,
         state: "deferred",
         fetch: false,
+        candleProvider: null,
         cache: {
           ...current.cache,
           nextRetryAt: now + 1500,
@@ -359,6 +381,20 @@ export const claim = internalMutation({
         count: 2,
       }));
     const admitted = Boolean(shared && shared.ok);
+    const candleProvider: MarketCandleProvider | undefined =
+      args.kind === "chart"
+        ? args.mint === SYMF_TOKEN.mint &&
+          Boolean(env.SOLANA_TRACKER_API_KEY?.trim()) &&
+          row?.leaseUntil === 0 &&
+          row.failureStage === "candles" &&
+          row.failureCode !== undefined &&
+          row.failureCode !== "incomplete" &&
+          (current.cache.failureProvider === "geckoterminal" ||
+            (current.cache.failureProvider === "solana-tracker" &&
+              row.failureCode === "candle-window"))
+          ? "solana-tracker"
+          : "geckoterminal"
+        : undefined;
     const value = {
       key,
       payload: current.payload,
@@ -381,6 +417,8 @@ export const claim = internalMutation({
       failureCode: admitted
         ? (current.cache.failureCode ?? undefined)
         : ("budget" as const),
+      failureProvider: admitted ? row?.failureProvider : undefined,
+      attemptProvider: admitted ? candleProvider : undefined,
     };
     const id = row
       ? row._id
@@ -388,7 +426,11 @@ export const claim = internalMutation({
     if (row) await ctx.db.replace("forumMarketDataCache", id, value);
     const persisted = await ctx.db.get("forumMarketDataCache", id);
     await scheduleCleanup(ctx, persisted!, now);
-    return { ...persistedView(persisted, now), fetch: admitted };
+    return {
+      ...persistedView(persisted, now),
+      fetch: admitted,
+      candleProvider: admitted ? (candleProvider ?? null) : null,
+    };
   },
 });
 
@@ -401,6 +443,7 @@ export const save = internalMutation({
     failureStage: v.optional(marketFailureStageValidator),
     failureCode: v.optional(marketFailureCodeValidator),
     retryAfterAt: v.optional(v.number()),
+    candleProvider: v.optional(marketCandleProviderValidator),
   },
   returns: view,
   handler: async (ctx, args): Promise<MarketCacheView> => {
@@ -422,6 +465,13 @@ export const save = internalMutation({
     )
       return persistedView(row, now);
     let checkedAt: number | null = null;
+    const candleProvider =
+      args.candleProvider ?? row.attemptProvider ?? "geckoterminal";
+    if (
+      args.candleProvider !== undefined &&
+      args.candleProvider !== row.attemptProvider
+    )
+      return persistedView(row, now);
     if (args.payload !== null) {
       if (args.payload.length > 200_000) throw Error("invalid_market_cache");
       let payload: Record<string, unknown>;
@@ -441,6 +491,12 @@ export const save = internalMutation({
           payload.quote as (typeof MARKET_QUOTES)[number],
         ) ||
         (request.kind === "chart" && payload.interval !== request.interval) ||
+        (request.kind === "chart" &&
+          payload.candleSource !== undefined &&
+          payload.candleSource !== candleProvider) ||
+        (request.kind === "chart" &&
+          candleProvider === "solana-tracker" &&
+          payload.candleSource !== "solana-tracker") ||
         (request.pinnedSymf &&
           (payload.pool !== SYMF_TOKEN.pool ||
             payload.quote !== MARKET_QUOTES[0])) ||
@@ -484,6 +540,8 @@ export const save = internalMutation({
       failureCode:
         args.failureCode ??
         (args.payload === null ? "invalid-response" : undefined),
+      failureProvider:
+        args.failureStage === "candles" ? candleProvider : undefined,
     });
     const persisted = await ctx.db.get("forumMarketDataCache", row._id);
     await scheduleCleanup(ctx, persisted!, now);
@@ -537,14 +595,21 @@ export const read = action({
     const interval = args.interval ?? "15m",
       lease = crypto.randomUUID();
     const request = { ...args, interval };
-    const reserved: MarketCacheView & { fetch: boolean } =
-      await ctx.runMutation(internal.forumMarketData.claim, {
-        ...request,
-        lease,
-      });
+    const reserved: MarketCacheView & {
+      fetch: boolean;
+      candleProvider: MarketCandleProvider | null;
+    } = await ctx.runMutation(internal.forumMarketData.claim, {
+      ...request,
+      lease,
+    });
     if (!reserved.fetch) {
-      const { fetch: ignored, ...current } = reserved;
+      const {
+        fetch: ignored,
+        candleProvider: ignoredProvider,
+        ...current
+      } = reserved;
       void ignored;
+      void ignoredProvider;
       return current;
     }
     let payload: string | null = null;
@@ -572,17 +637,49 @@ export const read = action({
       if (args.kind === "chart") {
         stage = "candles";
         const options = SYMF_CHART_INTERVALS[interval as SymfChartInterval];
-        const data = await readPublicMarket(
-          `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/ohlcv/${options.timeframe}?${new URLSearchParams({ aggregate: options.aggregate, limit: "120", currency: "usd", token: "base" })}`,
-          150_000,
-        );
+        let candles;
+        if (reserved.candleProvider === "solana-tracker") {
+          const apiKey = env.SOLANA_TRACKER_API_KEY?.trim();
+          if (!apiKey)
+            throw new PublicMarketSourceError(
+              "budget",
+              "market_provider_unavailable",
+            );
+          const quota: boolean = await ctx.runMutation(
+            internal.tokenAlphaData.reserveApiRequest,
+            { kind: "candle" },
+          );
+          if (!quota)
+            throw new PublicMarketSourceError(
+              "budget",
+              "market_provider_unavailable",
+            );
+          candles = await readTrackerCandles(
+            binding,
+            interval as SymfChartInterval,
+            checkedAt,
+            apiKey,
+          );
+        } else {
+          const data = await readPublicMarket(
+            `https://api.geckoterminal.com/api/v2/networks/solana/pools/${binding.pool}/ohlcv/${options.timeframe}?${new URLSearchParams({ aggregate: options.aggregate, limit: "120", currency: "usd", token: binding.mint })}`,
+            150_000,
+          );
+          candles = parseMarketCandles(
+            data,
+            checkedAt,
+            binding,
+            "explicit-mint",
+          );
+        }
         payload = JSON.stringify({
           ...binding,
           interval,
           checkedAt,
           stats: parseMarketStats(pairs, binding),
           priceUsd: marketPrice(pairs, binding),
-          candles: parseMarketCandles(data, checkedAt, binding),
+          candles,
+          candleSource: reserved.candleProvider ?? "geckoterminal",
         });
       } else {
         const stats = parseMarketStats(pairs, binding);
@@ -614,6 +711,9 @@ export const read = action({
     return await ctx.runMutation(internal.forumMarketData.save, {
       key: cacheKey(request),
       lease,
+      ...(args.kind === "chart"
+        ? { candleProvider: reserved.candleProvider ?? "geckoterminal" }
+        : {}),
       attemptAt: reserved.cache.lastAttemptAt ?? undefined,
       payload,
       ...(diagnostic

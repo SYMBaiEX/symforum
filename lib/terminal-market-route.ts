@@ -2,6 +2,8 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import { isSolanaAddress } from "./forum-commerce";
 import { SYMF_CHART_INTERVALS } from "./symf-market-data";
+import { SYMF_TOKEN } from "./symf-token";
+import { MARKET_QUOTES } from "./terminal-market-source";
 import {
   CHART_CACHE_FRESH_MS,
   CHART_CACHE_RETENTION_MS,
@@ -55,6 +57,10 @@ export async function terminalMarketResponse(
       { error: "Unsupported token or chart interval." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
+  // Both website URLs for our own token share its configured official pool.
+  // This does not reset or migrate the old generic cache or any operation hold.
+  const pinnedSymf =
+    options.pinnedSymf || (kind === "chart" && mint === SYMF_TOKEN.mint);
   try {
     const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) throw Error("not_configured");
@@ -64,7 +70,7 @@ export async function terminalMarketResponse(
         mint,
         kind,
         interval,
-        ...(options.pinnedSymf ? { pinnedSymf: true } : {}),
+        ...(pinnedSymf ? { pinnedSymf: true } : {}),
       },
     )) as MarketCacheView;
     if (value.payload) {
@@ -72,6 +78,8 @@ export async function terminalMarketResponse(
       if (
         data.mint !== mint ||
         (kind === "chart" && data.interval !== interval) ||
+        (pinnedSymf &&
+          (data.pool !== SYMF_TOKEN.pool || data.quote !== MARKET_QUOTES[0])) ||
         typeof data.checkedAt !== "number" ||
         !Number.isSafeInteger(data.checkedAt) ||
         data.checkedAt <= 0 ||

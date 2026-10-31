@@ -1,8 +1,37 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
 
 const NOVA_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+async function marketTextContrast(metric: Locator) {
+  return metric.evaluate((element) => {
+    const surface = element.closest("[data-terminal-viewport]")!;
+    const foreground = getComputedStyle(element).color;
+    const background = getComputedStyle(surface).backgroundColor;
+    const luminance = (color: string) => {
+      const rgb = color
+        .match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map(Number)
+        .map((value) => {
+          const channel = value / 255;
+          return channel <= 0.04045
+            ? channel / 12.92
+            : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    const a = luminance(foreground),
+      b = luminance(background);
+    return {
+      foreground,
+      background,
+      ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+    };
+  });
+}
 
 let script: string;
 let css: string;
@@ -49,6 +78,9 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
       const key = `${mint}:${url.searchParams.get("interval")}`;
       const previous = chartPayloads.get(key);
       const payload = {
+        ...(scenario.includes("solanacandles")
+          ? { candleSource: "solana-tracker" }
+          : {}),
         mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
         pool: "11111111111111111111111111111111",
         interval: url.searchParams.get("interval"),
@@ -62,7 +94,9 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
         },
         candles: [
           {
-            time: Math.floor(now / 1000) - 60,
+            time:
+              Math.floor(now / 1000) -
+              (scenario.includes("historicalbars") ? 2 * 86_400 : 60),
             open: 0.001,
             high: 0.002,
             low: 0.0005,
@@ -228,6 +262,294 @@ async function recordedOperations(page: Page) {
     ...(window as typeof window & { __terminalFixtureCalls: string[] })
       .__terminalFixtureCalls,
   ]);
+}
+
+for (const theme of ["light", "dark"] as const) {
+  for (const host of ["document", "forum-surface"] as const)
+    test(`market gain and loss text meets contrast in ${host} ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      // An explicit forum theme must work even when the document differs.
+      const documentTheme =
+        host === "forum-surface"
+          ? theme === "light"
+            ? "dark"
+            : "light"
+          : theme;
+      const { errors } = await harness(page, `guest&${documentTheme}`);
+      await expect(
+        page.getByRole("heading", { name: "$SYMF", exact: true }),
+      ).toBeVisible();
+      if (host === "forum-surface") {
+        await page.addStyleTag({
+          content: `${FORUM_SHARED_THEME_CSS}
+          .forum-app[data-theme=light] { --card:var(--forum-card-light); --foreground:var(--forum-foreground-light); --muted-foreground:var(--forum-muted-foreground-light); --accent:var(--forum-cyan); }
+          .forum-app[data-theme=dark] { --card:var(--forum-card-dark); --foreground:var(--forum-foreground-dark); --muted-foreground:var(--forum-muted-foreground-dark); --accent:var(--forum-cyan); }`,
+        });
+        await page.locator(".forum-app-shell").evaluate((element, value) => {
+          element.classList.add("forum-app");
+          (element as HTMLElement).dataset.theme = value;
+        }, theme);
+      }
+      const gain = page.locator('#terminal-chart dd[data-change="up"]');
+      await expect(gain).toContainText("+12.50%");
+      const up = await marketTextContrast(gain);
+      expect(up.ratio, JSON.stringify(up)).toBeGreaterThanOrEqual(4.5);
+      await page.screenshot({
+        path: `tmp/forum-render-tests/review-contrast-${host}-${theme}-gain.png`,
+        animations: "disabled",
+      });
+      await openPane(page, "Markets");
+      await page.getByRole("button", { name: /^View NOVA,/ }).click();
+      const loss = page.locator('#terminal-chart dd[data-change="down"]');
+      await expect(loss).toContainText("−3.25%");
+      const down = await marketTextContrast(loss);
+      expect(down.ratio, JSON.stringify(down)).toBeGreaterThanOrEqual(4.5);
+      await page.screenshot({
+        path: `tmp/forum-render-tests/review-contrast-${host}-${theme}-loss.png`,
+        animations: "disabled",
+      });
+      console.log(
+        `Measured ${host} ${theme}: gain=${up.ratio.toFixed(2)}, loss=${down.ratio.toFixed(2)}`,
+      );
+      expect(errors).toEqual([]);
+    });
+}
+
+for (const width of [390, 840, 1024, 1033, 1034, 1035, 1100])
+  test(`terminal navigation follows its real container without clipping at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { errors } = await harness(page, "guest");
+    const workspace = page.locator("[data-terminal-viewport]");
+    const narrow = await workspace.evaluate(
+      (element) => element.clientWidth <= 840,
+    );
+    const tabs = page.getByRole("tablist", { name: "Terminal views" });
+    const dock = page.getByRole("navigation", {
+      name: "Terminal dock",
+      exact: true,
+    });
+    if (narrow) {
+      await expect(tabs).toBeHidden();
+      const mobile = dock.locator('[data-terminal-dock-mode="mobile"]');
+      await expect(mobile).toHaveCount(5);
+      for (const control of await mobile.all()) {
+        await expect(control).toBeVisible();
+        const box = await control.boundingBox();
+        expect(box!.width).toBeGreaterThanOrEqual(44);
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+        await expectInsideWidth(page, control);
+      }
+      const markets = dock.getByRole("button", {
+        name: "Markets",
+        exact: true,
+      });
+      await markets.focus();
+      await page.keyboard.press("Enter");
+      await expect(markets).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByRole("table", { name: "Sampled markets", exact: true }),
+      ).toBeVisible();
+      const chart = dock.getByRole("button", { name: "Chart", exact: true });
+      await chart.focus();
+      await page.keyboard.press("Space");
+      await expect(chart).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+      ).toBeVisible();
+    } else {
+      await expect(tabs).toBeVisible();
+      await expect(
+        dock.getByRole("button", { name: "Chart", exact: true }),
+      ).toBeHidden();
+      const chart = tabs.getByRole("tab", { name: "Chart", exact: true });
+      await chart.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect(
+        tabs.getByRole("tab", { name: "Markets", exact: true }),
+      ).toBeFocused();
+      await expect(
+        tabs.getByRole("tab", { name: "Markets", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      const header = tabs.locator("..");
+      const bounds = await header.boundingBox();
+      const tabBounds = await tabs.boundingBox();
+      expect(tabBounds!.y).toBeGreaterThanOrEqual(bounds!.y);
+      expect(tabBounds!.y + tabBounds!.height).toBeLessThanOrEqual(
+        bounds!.y + bounds!.height,
+      );
+    }
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1024, height: 900 },
+  { width: 1440, height: 900 },
+  { width: 640, height: 450 }, // 200% desktop reflow space
+])
+  test(`instrument layout keeps failure states compact and navigable at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const { errors, chartMints } = await harness(
+      page,
+      "guest&chartcache-unsupported&dark",
+    );
+    const empty = page.locator("[data-terminal-chart-empty]");
+    await expect(empty.getByRole("status")).toHaveText(
+      "No chart is supported for this indexed token.",
+    );
+    const box = await empty.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(180);
+    expect(box!.height).toBeLessThanOrEqual(240);
+    await expect(
+      page.getByRole("img", { name: /candlestick chart/ }),
+    ).toHaveCount(0);
+    const workspace = await page
+      .locator("[data-terminal-viewport]")
+      .boundingBox();
+    const header = page.getByRole("heading", {
+      name: "Trading terminal",
+      exact: true,
+    });
+    await expect(header).toHaveCount(1);
+    if (workspace!.width <= 840) {
+      expect(
+        (await header.locator("..").locator("..").boundingBox())!.height,
+      ).toBe(0);
+      await expect(
+        page.locator(
+          '[data-terminal-dock-nav] [data-terminal-dock-mode="mobile"]',
+        ),
+      ).toHaveCount(5);
+    } else {
+      await expect(
+        page.getByRole("complementary", { name: "Trade selected token" }),
+      ).toBeVisible();
+    }
+    const symbolSize = await page
+      .getByRole("heading", { name: "$SYMF", exact: true })
+      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    expect(symbolSize).toBeGreaterThanOrEqual(16);
+    await expectViewportBounded(page);
+    await page.screenshot({
+      path: `tmp/forum-render-tests/instrument-empty-${viewport.width}.png`,
+    });
+    const browse = empty.getByRole("button", {
+      name: "Browse markets",
+      exact: true,
+    });
+    await browse.scrollIntoViewIfNeeded();
+    await browse.click();
+    await expect(
+      page.getByRole("table", { name: "Sampled markets", exact: true }),
+    ).toBeVisible();
+    expect(chartMints).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+test("compact chart credits the actual candle provider beside the original check time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const { errors } = await harness(page, "guest&solanacandles");
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const credit = page.locator('#terminal-chart p[title^="Checked "]');
+  await expect(credit).toContainText("Solana Tracker · Checked");
+  await expect(credit).not.toContainText("GeckoTerminal");
+  await expectInsideWidth(page, credit);
+  await expectViewportBounded(page);
+  expect(errors).toEqual([]);
+});
+
+for (const width of [320, 1440]) {
+  test(`historical source bars show their real date without aging fresh market stats at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+    const { errors } = await harness(
+      page,
+      "guest&solanacandles&historicalbars&dark",
+    );
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/^Historical bars · latest .* UTC$/),
+    ).toBeVisible();
+    const instrument = page.locator(
+      'section[aria-labelledby="terminal-token-title"]',
+    );
+    await expect(instrument.locator('p[title^="Checked "]')).toContainText(
+      "Solana Tracker",
+    );
+    await expect(
+      instrument.getByText("Checked market data · 1h sampled. Not a quote.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expectViewportBounded(page);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 390, 1440])
+    test(`instrument chart maintains readable hierarchy in ${theme} at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+      const { errors } = await harness(page, `guest&${theme}`);
+      await expect(
+        page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+      ).toBeVisible();
+      const instrument = page.locator(
+        'section[aria-labelledby="terminal-token-title"]',
+      );
+      const primary = instrument.locator("dl").first().locator("dd");
+      expect(
+        await primary.evaluate((element) =>
+          parseFloat(getComputedStyle(element).fontSize),
+        ),
+      ).toBeGreaterThanOrEqual(18);
+      const checked = instrument.locator('p[title^="Checked "]');
+      expect((await checked.boundingBox())!.height).toBeLessThan(44);
+      await page.screenshot({
+        path: `tmp/forum-render-tests/instrument-${theme}-${width}.png`,
+        animations: "disabled",
+      });
+      await instrument.getByText("Read candle data", { exact: true }).click();
+      const readings = page.getByRole("region", {
+        name: "Recent candle data",
+        exact: true,
+      });
+      await expect(readings).toBeVisible();
+      expect(
+        await readings.evaluate(
+          (element) => getComputedStyle(element).overflowY,
+        ),
+      ).toBe("visible");
+      await instrument
+        .getByText("Market details & sources", { exact: true })
+        .click();
+      for (const label of ["24h volume", "1h change"])
+        await expect(
+          instrument
+            .locator("dt:visible")
+            .filter({ hasText: new RegExp(`^${label}$`) }),
+        ).toHaveCount(1);
+      await expectViewportBounded(page);
+      expect(errors).toEqual([]);
+    });
 }
 
 for (const viewport of [
@@ -880,7 +1202,7 @@ for (const width of [390, 1440])
     ])
       await expect(
         selectedToken
-          .locator("dt")
+          .locator("dt:visible")
           .filter({ hasText: new RegExp(`^${label}(?:\\s|$)`) }),
       ).toHaveCount(1);
     expect(chartMints).toContain(NOVA_MINT);

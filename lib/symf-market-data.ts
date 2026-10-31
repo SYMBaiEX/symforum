@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SYMF_TOKEN } from "./symf-token";
+import { PublicMarketSourceError } from "./chart-cache-policy";
 
 export const SYMF_CHART_INTERVALS = {
   "1m": { timeframe: "minute", aggregate: "1" },
@@ -25,7 +26,6 @@ export type SymfChartData = {
   candles: SymfCandle[];
 };
 
-const positive = z.number().positive();
 const responseSchema = z.object({
   meta: z.object({
     base: z.object({ address: z.string() }),
@@ -35,19 +35,7 @@ const responseSchema = z.object({
   }),
   data: z.object({
     attributes: z.object({
-      ohlcv_list: z
-        .array(
-          z.tuple([
-            z.number().int().positive(),
-            positive,
-            positive,
-            positive,
-            positive,
-            z.number().nonnegative(),
-          ]),
-        )
-        .min(1)
-        .max(200),
+      ohlcv_list: z.array(z.array(z.unknown())).max(200),
     }),
   }),
 });
@@ -56,14 +44,35 @@ export function parseMarketCandles(
   value: unknown,
   now: number,
   expected: { mint: string; quote: string },
+  mode?: "explicit-mint",
 ): SymfCandle[] {
-  const parsed = responseSchema.parse(value);
+  const result = responseSchema.safeParse(value);
+  if (!result.success)
+    throw new PublicMarketSourceError("candle-schema", "invalid_candle_schema");
+  const parsed = result.data;
+  const base = parsed.meta.base.address,
+    quote = parsed.meta.quote.address;
   if (
-    parsed.meta.base.address !== expected.mint ||
-    parsed.meta.quote.address !== expected.quote
+    !(base === expected.mint && quote === expected.quote) &&
+    !(
+      mode === "explicit-mint" &&
+      base === expected.quote &&
+      quote === expected.mint
+    )
   )
-    throw new Error("wrong_market_token");
-  const candles = parsed.data.attributes.ohlcv_list
+    throw new PublicMarketSourceError("candle-identity", "wrong_market_token");
+  const rows = parsed.data.attributes.ohlcv_list;
+  if (rows.length === 0)
+    throw new PublicMarketSourceError("empty-candles", "empty_market_candles");
+  if (
+    rows.some(
+      (row) =>
+        row.length !== 6 ||
+        row.some((n) => typeof n !== "number" || !Number.isFinite(n)),
+    )
+  )
+    throw new PublicMarketSourceError("candle-numeric", "invalid_market_data");
+  const candles = (rows as number[][])
     .map(([time, open, high, low, close, volume]) => ({
       time,
       open,
@@ -77,13 +86,20 @@ export function parseMarketCandles(
     new Set(candles.map((c) => c.time)).size !== candles.length ||
     candles.some(
       (c) =>
+        !Number.isSafeInteger(c.time) ||
+        c.time <= 0 ||
+        c.open <= 0 ||
+        c.high <= 0 ||
+        c.low <= 0 ||
+        c.close <= 0 ||
+        c.volume < 0 ||
         c.high < Math.max(c.open, c.close) ||
         c.low > Math.min(c.open, c.close) ||
         c.low > c.high ||
         c.time * 1000 > now + 60_000,
     )
   )
-    throw new Error("invalid_market_data");
+    throw new PublicMarketSourceError("candle-numeric", "invalid_market_data");
   return candles;
 }
 

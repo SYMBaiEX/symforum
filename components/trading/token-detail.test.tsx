@@ -3,13 +3,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { TerminalMarket } from "@/lib/forum-terminal-model";
 
-const state = vi.hoisted(() => ({ market: null as TerminalMarket | null }));
+const state = vi.hoisted(() => ({
+  market: null as TerminalMarket | null,
+  chart: vi.fn(),
+}));
 vi.mock("convex/react", () => ({
   useQuery: () => state.market,
   useAction: () => vi.fn(),
 }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
-vi.mock("./price-chart", () => ({ TokenPriceChart: () => null }));
+vi.mock("./price-chart", () => ({
+  TokenPriceChart: (props: unknown) => {
+    state.chart(props);
+    return null;
+  },
+}));
 vi.mock("./market-identity", () => ({ TokenLogo: () => null }));
 vi.mock("@/components/forum/forum-link", () => ({
   ForumLink: ({ href, children }: { href: string; children: ReactNode }) => (
@@ -23,6 +31,7 @@ const now = 1_800_000_000_000;
 const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const token = { mint, symbol: "FIXTURE", name: "Invented token" };
 beforeEach(() => {
+  vi.clearAllMocks();
   state.market = {
     ...token,
     platform: "other",
@@ -51,6 +60,22 @@ beforeEach(() => {
       sourceUrl: "https://example.com/checked-market-pool",
     },
   };
+});
+
+test("token details forward optional market navigation without invoking it or changing the mint", () => {
+  const browse = vi.fn();
+  renderToStaticMarkup(
+    <TokenDetail token={token} now={now} onBrowseMarkets={browse} />,
+  );
+  expect(state.chart).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      mint,
+      compact: true,
+      onBrowseMarkets: browse,
+    }),
+  );
+  expect(browse).not.toHaveBeenCalled();
+  expect(state.market?.mint).toBe(mint);
 });
 
 test("token details use refreshed metric provenance without refreshing the holder sample", () => {
