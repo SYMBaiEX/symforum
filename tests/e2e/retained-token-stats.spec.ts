@@ -118,7 +118,9 @@ test("callback freshness uses the exact five-minute boundary without renewing ob
 }) => {
   await harness(page);
   await open(page);
-  for (const age of [179999, 180001, 299999, 300000, 360000, 86400000, -1]) {
+  for (const age of [
+    179999, 180001, 299999, 300000, 360000, 86400000, -30000, -60000, -60001,
+  ]) {
     await page.evaluate(
       ({ age, now }) =>
         window.__retainedStats.update({
@@ -131,7 +133,7 @@ test("callback freshness uses the exact five-minute boundary without renewing ob
         }),
       { age, now },
     );
-    if (age < 0 || age >= 86400000) {
+    if (age < -60000 || age >= 86400000) {
       await expect(reading(page, "Price")).toContainText("Unavailable");
     } else {
       await expect(reading(page, "Price")).toContainText("2 USD");

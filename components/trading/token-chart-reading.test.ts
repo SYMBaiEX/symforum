@@ -29,7 +29,7 @@ test.each([300000, 360000, 86399999])(
     expect(tokenChartReading(data, "A", now, false)).toBeNull();
   },
 );
-test.each([86400000, 86400001, -1, NaN, Infinity])(
+test.each([86400000, 86400001, -60001, NaN, Infinity])(
   "invalid/expired age %d cannot produce readings",
   (age) => {
     expect(
@@ -37,6 +37,16 @@ test.each([86400000, 86400001, -1, NaN, Infinity])(
     ).toBeNull();
   },
 );
+test("valid responses later in the parent's current minute remain fresh", () => {
+  expect(
+    tokenChartReading({ ...sample, checkedAt: now + 30_000 }, "A", now, false)
+      ?.stale,
+  ).toBe(false);
+  expect(
+    tokenChartReading({ ...sample, checkedAt: now + 60_000 }, "A", now, false)
+      ?.stale,
+  ).toBe(false);
+});
 test("explicit stale, wrong mint, invalid clocks and latest cleared fields stay authoritative", () => {
   expect(
     tokenChartReading({ ...sample, stale: true }, "A", now, true)?.stale,
