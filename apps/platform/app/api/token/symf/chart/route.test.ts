@@ -1,8 +1,13 @@
 // @vitest-environment node
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GET } from "./route";
 import { SYMF_TOKEN } from "@/lib/symf-token";
-import { parseSymfCandles } from "@/lib/symf-market-data";
+import { parseSymfCandles, SYMF_CHART_INTERVALS } from "@/lib/symf-market-data";
+
+const shared = vi.hoisted(() => ({ respond: vi.fn() }));
+vi.mock("@/lib/terminal-market-route", () => ({
+  terminalMarketResponse: shared.respond,
+}));
 
 function market(mint = SYMF_TOKEN.mint as string) {
   return {
@@ -20,87 +25,90 @@ function market(mint = SYMF_TOKEN.mint as string) {
     },
   };
 }
+beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
+
+test.each([
+  "",
+  "?interval=1m",
+  "?interval=5m",
+  "?interval=15m",
+  "?interval=1h",
+  "?interval=4h",
+])(
+  "legacy chart forwards %s unchanged to the shared fixed-pool cache",
+  async (search) => {
+    const cached = Response.json({
+      mint: SYMF_TOKEN.mint,
+      pool: SYMF_TOKEN.pool,
+    });
+    shared.respond.mockResolvedValue(cached);
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const request = new Request(
+      `https://forum.symbaiex.com/api/token/symf/chart${search}`,
+    );
+    expect(await GET(request)).toBe(cached);
+    expect(shared.respond).toHaveBeenCalledExactlyOnceWith(
+      SYMF_TOKEN.mint,
+      "chart",
+      request,
+      { pinnedSymf: true },
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  },
+);
 
 test.each([
   ["1m", "1"],
   ["5m", "5"],
-])(
-  "%s candles use the provider's exact minute aggregation",
-  async (interval, aggregate) => {
-    const fetcher = vi.fn().mockResolvedValue(Response.json(market()));
+] as const)("%s preserves exact minute aggregation", (interval, aggregate) => {
+  expect(SYMF_CHART_INTERVALS[interval]).toEqual({
+    timeframe: "minute",
+    aggregate,
+  });
+});
+
+test.each([400, 429, 503])(
+  "shared rejection %s is returned without an alternate provider fetch",
+  async (status) => {
+    const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
-    expect(
-      (
-        await GET(
-          new Request(
-            `https://forum.symbaiex.com/api/token/symf/chart?interval=${interval}`,
-          ),
-        )
-      ).status,
-    ).toBe(200);
-    const url = new URL(fetcher.mock.calls[0][0]);
-    expect(url.pathname).toContain("/ohlcv/minute");
-    expect(url.searchParams.get("aggregate")).toBe(aggregate);
+    const denied = Response.json(
+      { state: "unavailable" },
+      {
+        status,
+        headers: { "Cache-Control": "no-store", "Retry-After": "120" },
+      },
+    );
+    shared.respond.mockResolvedValue(denied);
+    const request = new Request(
+      "https://forum.symbaiex.com/api/token/symf/chart?interval=https://other.example",
+    );
+    expect(await GET(request)).toBe(denied);
+    expect(shared.respond).toHaveBeenCalledExactlyOnceWith(
+      SYMF_TOKEN.mint,
+      "chart",
+      request,
+      { pinnedSymf: true },
+    );
+    expect(denied.headers.get("retry-after")).toBe("120");
+    expect(fetcher).not.toHaveBeenCalled();
   },
 );
 
-test("public chart fetches only the fixed verified pool and returns ordered USD candles with bounded caching", async () => {
-  const fetcher = vi.fn().mockResolvedValue(Response.json(market()));
-  vi.stubGlobal("fetch", fetcher);
-  const response = await GET(
-    new Request("https://forum.symbaiex.com/api/token/symf/chart?interval=1h"),
+test("fixed-mint parser rejects substituted token and quote identities and preserves ordered USD candles", () => {
+  expect(() => parseSymfCandles(market("another-mint"), Date.now())).toThrow(
+    "wrong_market_token",
   );
-  expect(response.status).toBe(200);
-  const body = await response.json();
-  expect(body.mint).toBe(SYMF_TOKEN.mint);
-  expect(body.candles.map((c: { time: number }) => c.time)).toEqual([
-    500, 1000,
-  ]);
-  const url = new URL(fetcher.mock.calls[0][0]);
-  expect(url.pathname).toBe(
-    `/api/v2/networks/solana/pools/${SYMF_TOKEN.pool}/ohlcv/hour`,
+  const wrongQuote = market();
+  wrongQuote.meta.quote.address = "another-quote";
+  expect(() => parseSymfCandles(wrongQuote, Date.now())).toThrow(
+    "wrong_market_token",
   );
-  expect(url.searchParams.get("currency")).toBe("usd");
-  expect(url.searchParams.get("aggregate")).toBe("1");
-  expect(fetcher.mock.calls[0][1].next.revalidate).toBe(60);
-  expect(response.headers.get("cache-control")).toContain("s-maxage=60");
-});
-
-test("unrecognized intervals cannot select arbitrary upstream requests", async () => {
-  const fetcher = vi.fn();
-  vi.stubGlobal("fetch", fetcher);
   expect(
-    (
-      await GET(
-        new Request(
-          "https://forum.symbaiex.com/api/token/symf/chart?interval=https://other.example",
-        ),
-      )
-    ).status,
-  ).toBe(400);
-  expect(fetcher).not.toHaveBeenCalled();
-});
-
-test("wrong-token and unavailable-provider results fail without invented or substituted prices", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(Response.json(market("another-mint"))),
-  );
-  let response = await GET(
-    new Request("https://forum.symbaiex.com/api/token/symf/chart"),
-  );
-  expect(response.status).toBe(503);
-  expect(await response.json()).not.toHaveProperty("candles");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(new Response("rate limited", { status: 429 })),
-  );
-  response = await GET(
-    new Request("https://forum.symbaiex.com/api/token/symf/chart"),
-  );
-  expect(response.status).toBe(503);
-  expect(response.headers.get("retry-after")).toBe("60");
+    parseSymfCandles(market(), Date.now()).map((candle) => candle.time),
+  ).toEqual([500, 1000]);
 });
 
 test("invalid OHLC bounds, duplicate times and future candles cannot enter the chart", () => {

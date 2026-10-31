@@ -1,15 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
-import type {
-  SymfCandle,
-  SymfChartData,
-  SymfChartInterval,
-} from "@/lib/symf-market-data";
+import type { SymfCandle, SymfChartInterval } from "@/lib/symf-market-data";
 import styles from "@/components/forum/forum-symf.module.css";
 import terminalStyles from "./forum-terminal.module.css";
-import { readChartData, type ChartMarketData } from "./price-chart-data";
+import {
+  readChartData,
+  retainedChartData,
+  chartResponsePolicy,
+  chartStateMessage,
+  type CheckedChartData,
+  type ChartCacheState,
+  type ChartMarketData,
+} from "./price-chart-data";
+import {
+  CHART_CACHE_FRESH_MS,
+  CHART_CACHE_RETENTION_MS,
+} from "@/lib/chart-cache-policy";
+import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { formatChartAxisPrice } from "./chart-axis-format";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
@@ -171,6 +186,7 @@ function ChartData({
   endpoint,
   onMarket,
   compact,
+  demandRoot,
 }: {
   interval: SymfChartInterval;
   light: boolean;
@@ -179,55 +195,142 @@ function ChartData({
   endpoint: string;
   onMarket?: (market: ChartMarketData) => void;
   compact?: boolean;
+  demandRoot: RefObject<HTMLDivElement | null>;
 }) {
-  const [data, setData] = useState<
-    (SymfChartData & { stale?: boolean }) | null
-  >(null);
-  const [error, setError] = useState(false);
+  const { host } = useForumRuntime();
+  const [data, setData] = useState<CheckedChartData | null>(null);
+  const lastGood = useRef<CheckedChartData | null>(null);
+  const [state, setState] = useState<ChartCacheState | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const showData = useCallback(
+    (next: CheckedChartData | null) => {
+      const previous = lastGood.current;
+      lastGood.current = next;
+      setData(next);
+      if (!next) {
+        // Zero is an internal invalidation sentinel, never a displayed check time.
+        onMarket?.({
+          mint,
+          checkedAt: previous?.checkedAt ?? 0,
+          stale: true,
+          stats: null,
+          priceUsd: null,
+        });
+      } else if (next.stats !== undefined || next.priceUsd !== undefined) {
+        onMarket?.({
+          mint: next.mint,
+          checkedAt: next.checkedAt,
+          stale: next.stale ?? false,
+          stats: next.stats ?? null,
+          priceUsd: next.priceUsd ?? null,
+        });
+      }
+    },
+    [mint, onMarket],
+  );
+
+  const ageData = useCallback(() => {
+    const previous = lastGood.current;
+    if (!previous) return;
+    const current = retainedChartData(previous, Date.now());
+    if (!current || current.stale !== previous.stale) showData(current);
+  }, [showData]);
+
   useEffect(() => {
+    if (!data) return;
+    const deadline =
+      data.checkedAt +
+      (data.stale ? CHART_CACHE_RETENTION_MS : CHART_CACHE_FRESH_MS);
+    const timer = setTimeout(ageData, Math.max(1, deadline - Date.now()));
+    return () => clearTimeout(timer);
+  }, [data, ageData]);
+
+  useEffect(() => {
+    const element = demandRoot.current;
+    if (host !== "website" || !element) return;
     const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let visible = false;
     let busy = false;
+    let nextAttemptAt: number | null = 0;
+    const keepLastGood = () =>
+      showData(
+        lastGood.current
+          ? retainedChartData(lastGood.current, Date.now(), true)
+          : null,
+      );
+    const demand = () => {
+      clearTimeout(timer);
+      if (controller.signal.aborted) return;
+      ageData();
+      setOffline(!navigator.onLine);
+      if (
+        !visible ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        !element.getClientRects().length ||
+        busy ||
+        nextAttemptAt === null
+      )
+        return;
+      if (nextAttemptAt > Date.now()) {
+        timer = setTimeout(demand, nextAttemptAt - Date.now());
+        return;
+      }
+      void refresh();
+    };
     async function refresh() {
       if (busy) return;
       busy = true;
+      nextAttemptAt = Date.now() + 60_000;
       try {
         const response = await fetch(`${endpoint}?interval=${interval}`, {
-          signal: controller.signal,
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(30_000),
+          ]),
         });
-        if (!response.ok) throw new Error("chart_data_unavailable");
-        const result = readChartData(
-          await response.json(),
-          mint,
-          interval,
-          Date.now(),
-        );
-        if (!controller.signal.aborted) {
-          setData(result);
-          setError(false);
-          if (result.stats !== undefined || result.priceUsd !== undefined)
-            onMarket?.({
-              mint: result.mint,
-              checkedAt: result.checkedAt,
-              stale: result.stale ?? false,
-              stats: result.stats ?? null,
-              priceUsd: result.priceUsd ?? null,
-            });
-        }
+        const body: unknown = await response.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        const policy = chartResponsePolicy(body, response, Date.now());
+        nextAttemptAt = policy.nextRetryAt;
+        setRetryAt(nextAttemptAt);
+        setState(policy.state);
+        if (response.ok) {
+          const result = readChartData(body, mint, interval, Date.now());
+          showData(
+            retainedChartData(result, Date.now(), policy.state !== "ready"),
+          );
+        } else keepLastGood();
       } catch {
-        if (!controller.signal.aborted) setError(true);
+        if (!controller.signal.aborted) {
+          setState("unavailable");
+          setRetryAt(nextAttemptAt);
+          keepLastGood();
+        }
       } finally {
         busy = false;
+        demand();
       }
     }
-    void refresh();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 60_000);
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      demand();
+    });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", demand);
+    window.addEventListener("online", demand);
+    window.addEventListener("offline", demand);
     return () => {
       controller.abort();
-      window.clearInterval(timer);
+      clearTimeout(timer);
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", demand);
+      window.removeEventListener("online", demand);
+      window.removeEventListener("offline", demand);
     };
-  }, [endpoint, mint, interval, onMarket]);
+  }, [endpoint, mint, interval, demandRoot, host, showData, ageData]);
   if (!data)
     return (
       <div
@@ -235,10 +338,15 @@ function ChartData({
       >
         <p
           role="status"
+          title={
+            retryAt
+              ? `Next permitted check after ${new Date(retryAt).toLocaleString()}.`
+              : undefined
+          }
           className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground"
         >
-          {error
-            ? "Market data is temporarily unavailable. We’ll retry in a minute. The token’s explorer remains available."
+          {state || offline
+            ? chartStateMessage(state, false, offline)
             : "Loading verified market data…"}
         </p>
       </div>
@@ -259,9 +367,13 @@ function ChartData({
         <p
           title={`Checked ${new Date(data.checkedAt).toLocaleString()}. USD candles, UTC.`}
         >
-          {error || data.stale
-            ? "Refresh unavailable. Showing the last checked data."
-            : `Checked ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+          {`Checked ${new Date(data.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+          {(data.stale || offline) && (
+            <span role="status">
+              {" "}
+              {chartStateMessage(state, true, offline)}
+            </span>
+          )}
         </p>
       </div>
       <CandleCanvas
@@ -338,9 +450,13 @@ export function TokenPriceChart({
   onMarket?: (market: ChartMarketData) => void;
   compact?: boolean;
 }) {
+  const demandRoot = useRef<HTMLDivElement>(null);
   const [interval, setInterval] = useState<SymfChartInterval>("15m");
   return (
-    <div className={compact ? terminalStyles.chartLayout : undefined}>
+    <div
+      ref={demandRoot}
+      className={compact ? terminalStyles.chartLayout : undefined}
+    >
       <div
         className={`${styles.chartControls} ${compact ? terminalStyles.chartControls : ""}`}
         role="group"
@@ -360,6 +476,7 @@ export function TokenPriceChart({
         {!compact && <span>USD candles · UTC</span>}
       </div>
       <ChartData
+        demandRoot={demandRoot}
         compact={compact}
         key={`${mint}:${interval}`}
         interval={interval}

@@ -30,6 +30,7 @@ test.beforeAll(() => {
 async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
   const errors: string[] = [];
   const chartMints: string[] = [];
+  const chartPayloads = new Map<string, Record<string, unknown>>();
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -45,31 +46,95 @@ async function harness(page: Page, scenario = "", clockNow = () => Date.now()) {
     if (mint) {
       chartMints.push(mint);
       const now = clockNow();
-      return route.fulfill({
-        json: {
-          mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
-          pool: "11111111111111111111111111111111",
-          interval: url.searchParams.get("interval"),
-          checkedAt: now,
-          priceUsd: 0.0015,
-          stats: {
-            marketCap: null,
-            fdv: 1_000_000,
-            liquidity: 20_000,
-            volume24h: 50_000,
-          },
-          candles: [
-            {
-              time: Math.floor(now / 1000) - 60,
-              open: 0.001,
-              high: 0.002,
-              low: 0.0005,
-              close: 0.0015,
-              volume: 100,
-            },
-          ],
+      const key = `${mint}:${url.searchParams.get("interval")}`;
+      const previous = chartPayloads.get(key);
+      const payload = {
+        mint: scenario.includes("wrongchart") ? NOVA_MINT : mint,
+        pool: "11111111111111111111111111111111",
+        interval: url.searchParams.get("interval"),
+        checkedAt: scenario.includes("chartcache-aged") ? now - 360_000 : now,
+        priceUsd: 0.0015,
+        stats: {
+          marketCap: null,
+          fdv: 1_000_000,
+          liquidity: 20_000,
+          volume24h: 50_000,
         },
-      });
+        candles: [
+          {
+            time: Math.floor(now / 1000) - 60,
+            open: 0.001,
+            high: 0.002,
+            low: 0.0005,
+            close: 0.0015,
+            volume: 100,
+          },
+        ],
+      };
+      if (scenario.includes("chartcache")) {
+        const state = scenario.includes("chartcache-unsupported")
+          ? "unsupported"
+          : scenario.includes("chartcache-budget")
+            ? "budget"
+            : scenario.includes("chartcache-deferred") && !previous
+              ? "deferred"
+              : previous && scenario.includes("chartcache-retain-budget")
+                ? "budget"
+                : previous && scenario.includes("chartcache-fail")
+                  ? "unavailable"
+                  : "ready";
+        const nextRetryAt =
+          state === "unsupported"
+            ? null
+            : now +
+              (state === "deferred"
+                ? 1500
+                : scenario.includes("chartcache-fresh")
+                  ? 300_000
+                  : scenario.includes("chartcache-budget")
+                    ? 3_600_000
+                    : previous
+                      ? 120_000
+                      : 60_000);
+        const cache = {
+          lastSuccessAt:
+            previous?.checkedAt ??
+            (state === "ready" ? payload.checkedAt : null),
+          nextRetryAt,
+        };
+        const headers: Record<string, string> = nextRetryAt
+          ? { "Retry-After": String(Math.ceil((nextRetryAt - now) / 1000)) }
+          : {};
+        // Deferred is pre-I/O: retain a sentinel only to advance this invented fixture.
+        if (state === "deferred") chartPayloads.set(key, {});
+        if (state === "ready") {
+          chartPayloads.set(key, payload);
+          return route.fulfill({
+            json: { ...payload, stale: false, state, cache },
+            headers,
+          });
+        }
+        if (
+          previous?.candles &&
+          state === "budget" &&
+          scenario.includes("chartcache-retain-budget")
+        )
+          return route.fulfill({
+            json: { ...previous, stale: true, state, cache },
+            headers,
+          });
+        return route.fulfill({
+          status:
+            state === "unsupported" ? 404 : state === "budget" ? 429 : 503,
+          json: {
+            state,
+            cache,
+            error: "Raw invented provider detail must never appear in UI",
+          },
+          headers,
+        });
+      }
+      return route.fulfill({ json: payload });
     }
     return route.abort();
   });
@@ -977,14 +1042,12 @@ for (const scenario of ["marketrefreshloading", "marketrefresherror"]) {
     const { errors } = await harness(page, `guest&${scenario}`);
     await openPane(page, "Markets");
     await expect(
-      page
-        .getByRole("status")
-        .filter({
-          hasText:
-            scenario === "marketrefreshloading"
-              ? "Shared refresh in progress"
-              : "Refresh unavailable · retained rows",
-        }),
+      page.getByRole("status").filter({
+        hasText:
+          scenario === "marketrefreshloading"
+            ? "Shared refresh in progress"
+            : "Refresh unavailable · retained rows",
+      }),
     ).toBeVisible();
     await page.clock.fastForward(30_000);
     expect(
@@ -992,6 +1055,248 @@ for (const scenario of ["marketrefreshloading", "marketrefresherror"]) {
         (name) => name === "action:forumTerminalRefresh:refresh",
       ),
     ).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const scenario of ["chartcache-retain-budget", "chartcache-fail"]) {
+  test(`chart cache retains original check time and server backoff: ${scenario}`, async ({
+    page,
+  }) => {
+    const base = Date.parse("2026-10-30T18:00:00.000Z");
+    let transportNow = base;
+    await page.clock.install({ time: base });
+    const { errors, chartMints } = await harness(
+      page,
+      `guest&${scenario}`,
+      () => transportNow,
+    );
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    const checked = page.locator('p[title^="Checked "]');
+    const original = await checked.getAttribute("title");
+    const price = page
+      .locator('[aria-labelledby="terminal-token-title"] dl')
+      .first()
+      .locator("dd");
+    await expect(price).toHaveText("$0.0015");
+    transportNow += 60_000;
+    await page.clock.runFor(60_000);
+    await expect.poll(() => chartMints.length).toBe(2);
+    await expect(
+      page.getByRole("status").filter({
+        hasText:
+          scenario === "chartcache-fail"
+            ? "Chart source is temporarily unavailable. Showing last checked data."
+            : "Free-data allowance reached. Showing last checked data.",
+      }),
+    ).toBeVisible();
+    await expect(checked).toHaveAttribute("title", original!);
+    await expect(price).toHaveText("$0.00006");
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toBeVisible();
+    transportNow += 60_000;
+    await page.clock.runFor(60_000);
+    expect(chartMints).toHaveLength(2);
+    await expect(page.getByText(/Raw invented provider detail/)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("an aged CDN chart is stale on arrival and never supplies fresh token-header metrics", async ({
+  page,
+}) => {
+  const base = Date.parse("2026-10-30T18:00:00.000Z");
+  await page.clock.install({ time: base });
+  const { errors } = await harness(page, "guest&chartcache-aged", () => base);
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Cached chart is stale. Showing last checked data." }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator('[aria-labelledby="terminal-token-title"] dl')
+      .first()
+      .locator("dd"),
+  ).toHaveText("$0.00006");
+  await expect(page.locator('p[title^="Checked "]')).toHaveAttribute(
+    "title",
+    `Checked ${new Date(base - 360_000).toLocaleString()}. USD candles, UTC.`,
+  );
+  expect(errors).toEqual([]);
+});
+
+test("offline chart data expires locally after retention without another transport request", async ({
+  page,
+}) => {
+  const base = Date.parse("2026-10-30T18:00:00.000Z");
+  await page.clock.install({ time: base });
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&chartcache-normal",
+    () => base,
+  );
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  await page.context().setOffline(true);
+  await page.clock.fastForward(86_400_001);
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Offline; chart refresh is paused." }),
+  ).toBeVisible();
+  expect(chartMints).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
+test("mounted chart transport pauses in Markets, background and offline, then cleans up on unmount", async ({
+  page,
+}) => {
+  const base = Date.parse("2026-10-30T18:00:00.000Z");
+  let transportNow = base;
+  await page.clock.install({ time: base });
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&chartcache-normal",
+    () => transportNow,
+  );
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  const originalChart = await page
+    .getByRole("img", { name: /SYMF USD candlestick chart/ })
+    .elementHandle();
+  await openPane(page, "Markets");
+  expect(await originalChart?.evaluate((element) => element.isConnected)).toBe(
+    true,
+  );
+  await expect(
+    page.getByRole("img", {
+      name: /SYMF USD candlestick chart/,
+      includeHidden: true,
+    }),
+  ).toBeHidden();
+  transportNow += 120_000;
+  await page.clock.fastForward(120_000);
+  expect(chartMints).toHaveLength(1);
+  await openPane(page, "Chart");
+  await expect.poll(() => chartMints.length).toBe(2);
+  await page.context().setOffline(true);
+  transportNow += 180_000;
+  await page.clock.fastForward(180_000);
+  expect(chartMints).toHaveLength(2);
+  await page.context().setOffline(false);
+  await expect.poll(() => chartMints.length).toBe(3);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  transportNow += 180_000;
+  await page.clock.fastForward(180_000);
+  expect(chartMints).toHaveLength(3);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => chartMints.length).toBe(4);
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("terminal-fixture:unmount")),
+  );
+  await page.clock.fastForward(180_000);
+  expect(chartMints).toHaveLength(4);
+  expect(errors).toEqual([]);
+});
+
+test("a fresh server chart deadline prevents a fixed one-minute refresh loop", async ({
+  page,
+}) => {
+  const base = Date.parse("2026-10-30T18:00:00.000Z");
+  let transportNow = base;
+  await page.clock.install({ time: base });
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&chartcache-fresh",
+    () => transportNow,
+  );
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  transportNow += 240_000;
+  await page.clock.runFor(240_000);
+  expect(chartMints).toHaveLength(1);
+  transportNow += 60_001;
+  await page.clock.runFor(60_001);
+  await expect.poll(() => chartMints.length).toBe(2);
+  expect(errors).toEqual([]);
+});
+
+test("a deferred chart response waits for the server deadline before one retry", async ({
+  page,
+}) => {
+  const base = Date.parse("2026-10-30T18:00:00.000Z");
+  await page.clock.install({ time: base });
+  const { errors, chartMints } = await harness(
+    page,
+    "guest&chartcache-deferred",
+    () => base,
+  );
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Waiting for shared data window." }),
+  ).toBeVisible();
+  expect(chartMints).toHaveLength(1);
+  await page.clock.runFor(2000);
+  await expect(
+    page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+  ).toBeVisible();
+  expect(chartMints).toHaveLength(2);
+  expect(errors).toEqual([]);
+});
+
+for (const scenario of ["chartcache-budget", "chartcache-unsupported"]) {
+  test(`a chart without cached data reports safe policy and does not poll early: ${scenario}`, async ({
+    page,
+  }) => {
+    const base = Date.parse("2026-10-30T18:00:00.000Z");
+    await page.clock.install({ time: base });
+    const { errors, chartMints } = await harness(
+      page,
+      `guest&${scenario}`,
+      () => base,
+    );
+    await expect(
+      page.getByRole("status").filter({
+        hasText:
+          scenario === "chartcache-budget"
+            ? "Free-data allowance reached."
+            : "No chart is supported for this indexed token.",
+      }),
+    ).toBeVisible();
+    await page.clock.fastForward(120_000);
+    expect(chartMints).toHaveLength(1);
+    await expect(
+      page.getByRole("img", { name: /SYMF USD candlestick chart/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(/retry in a minute|Raw invented provider detail/i),
+    ).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }
@@ -1296,9 +1601,9 @@ for (const width of [320, 390])
     ).toHaveCount(0);
     // Entering Markets requests one shared cache refresh. Local sorting must
     // not create another refresh, a per-token fetch or a payment operation.
-    await expect.poll(() => recordedOperations(page)).toEqual([
-      "action:forumTerminalRefresh:refresh",
-    ]);
+    await expect
+      .poll(() => recordedOperations(page))
+      .toEqual(["action:forumTerminalRefresh:refresh"]);
     expect(chartMints).toHaveLength(1);
     await expectViewportBounded(page);
     expect(errors).toEqual([]);
@@ -1716,7 +2021,9 @@ test("a mismatched chart response cannot replace the selected mint's recorded ma
 }) => {
   const { errors, chartMints } = await harness(page, "guest&wrongchart");
   await expect(
-    page.getByText("Market data is temporarily unavailable.", { exact: false }),
+    page.getByText("Chart source is temporarily unavailable.", {
+      exact: false,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole("img", { name: /USD candlestick chart/ }),
