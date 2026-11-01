@@ -15,6 +15,7 @@ export const adminSectionIds = [
   "content",
   "ai",
   "telemetry",
+  "providers",
   "evidence",
 ] as const;
 

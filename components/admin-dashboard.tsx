@@ -130,6 +130,10 @@ const AdminEvidence = dynamic(
     ),
   { loading: AdminPanelLoading, ssr: false },
 );
+const ProviderUsagePanel = dynamic(
+  () => import("@/components/admin/provider-usage-panel").then((module) => module.ProviderUsagePanel),
+  { loading: AdminPanelLoading, ssr: false },
+);
 const AdminUsers = dynamic(
   () => import("@/components/admin-users").then((module) => module.AdminUsers),
   { loading: AdminPanelLoading, ssr: false },
@@ -659,6 +663,12 @@ function SiteAdminDashboard({
           id: "telemetry",
           label: "Telemetry",
           note: "OpenRouter + agents",
+          icon: Gauge,
+        },
+        {
+          id: "providers",
+          label: "Providers",
+          note: "Read-only allowances",
           icon: Gauge,
         },
         {
@@ -1607,6 +1617,7 @@ function SiteAdminDashboard({
         {activeTab === "content" ? <AdminSiteContent /> : null}
         {isOwner && activeTab === "ai" ? <AdminAiChat /> : null}
         {isOwner && activeTab === "telemetry" ? <AdminTelemetry /> : null}
+        {activeTab === "providers" ? <ProviderUsagePanel /> : null}
         {activeTab === "evidence" ? <AdminEvidence /> : null}
       </div>
     </>
