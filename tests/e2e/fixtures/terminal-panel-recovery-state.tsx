@@ -84,9 +84,9 @@ export function TokenSwap(props: ComponentProps<typeof RealTokenSwap>) {
   useInstrument("swap", "swap");
   return <RealTokenSwap {...props} />;
 }
-export function SwapHistory() {
+export function SwapHistory(props: ComponentProps<typeof RealSwapHistory>) {
   useInstrument("receipts");
-  return <RealSwapHistory />;
+  return <RealSwapHistory {...props} />;
 }
 export function WalletPanel(props: ComponentProps<typeof RealWalletPanel>) {
   useInstrument("balances");
