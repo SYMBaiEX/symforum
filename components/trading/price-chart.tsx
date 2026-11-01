@@ -30,6 +30,7 @@ import { useForumRuntime } from "@/components/forum/forum-runtime-context";
 import { formatChartAxisPrice } from "./chart-axis-format";
 import { Button } from "@/components/ui/button";
 import { CandleReadings } from "./candle-readings";
+import { assessCandleGaps, candleGapSummary } from "./candle-gaps";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -474,6 +475,22 @@ function ChartData({
             )}
           </div>
         )}
+        <div
+          role="note"
+          aria-label="Loaded candle coverage"
+          className="space-y-2 px-3 py-3 [overflow-wrap:anywhere]"
+        >
+          <p>
+            {candleGapSummary(
+              assessCandleGaps(data.candles, interval, data.checkedAt),
+            )}
+          </p>
+          <p>
+            Only the loaded sample is assessed. Unrepresented intervals do not
+            prove zero trading or complete provider history. No candles are
+            filled in or synthesized.
+          </p>
+        </div>
         <CandleReadings
           candles={data.candles}
           compact={compact}
