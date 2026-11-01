@@ -280,10 +280,22 @@
         {
           "kind": "isolated_tests",
           "reference": "Private-history worker76 browser checks/209 trading units,both types/lint. Independent49 browsers/16 units clean. Stable same-owner protection survives failed read; only read projection retries. Original WalletPanel/identity/controller keys/queries and financial handlers unchanged; three old fixtures only forward required inert owner props."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR283 final unchanged candidate844661d5:4917 unit/backend and1255 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews clean. Two interrupted parent runs and test-only metadata/settled-geometry repairs retained; no skipped or weakened assertions."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR283 normal protected rebase merge main11bf6c5357da3942ac530fe894a35795f80b8b57; exact complete tested tree88763e437247ab524ea62a26576c04c2b5ff65ad and all five new authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR283 exact automatic production revision and all five original domains verified. Same signed-out public visit confirmed chooser guidance,44px controls,desktop/phone bounds and Escape focus. Initial background-locator harness timeout retained; same-visit continuation only. No wallet selected/sign-in/payment/provider action; live protected/OS/AT certification unclaimed. Operational receipts private."
         }
       ],
       "remainingAcceptance": [
-        "Community, research, watchlist and other protected-panel recovery remain unqualified. Three public read siblings are released; additional private SwapHistory read recovery is frozen and independently reviewed, awaiting combined parent qualification/rollout. No whole-item dependency is satisfied by these slices."
+        "Community, research, watchlist and other protected-panel recovery remain unqualified. Three public read siblings and owner-scoped private SwapHistory read recovery are source-deployed; no whole-item dependency is satisfied by these partial slices or isolated tests."
       ]
     },
     {
@@ -336,7 +348,8 @@
           "kind": "approval",
           "phase": "live_acceptance",
           "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
-          "resolved": false
+          "resolved": true,
+          "receipt": "November 1 owner approval call_dce1b14015ee4d46b166431f77745802: deploy only the admin-only 41-existing-record reader on prod:strong-bee-384 after tests and review; no providers, resets or policy/hold changes."
         }
       ],
       "qualification": [
@@ -346,7 +359,7 @@
         },
         {
           "kind": "isolated_tests",
-          "reference": "98 focused units and 8 isolated browser cases; full parent qualification and explicit backend release approval remain pending. Worker checks are not parent full qualification or live proof."
+          "reference": "98 focused units and 8 isolated browser cases; full parent qualification remains pending. Worker checks are not parent full qualification or live proof."
         }
       ]
     },
@@ -791,7 +804,7 @@
       "number": 16,
       "title": "Unsupported-wallet guidance",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -837,6 +850,18 @@
         {
           "kind": "isolated_tests",
           "reference": "Actual Wallet Standard/Kit discovery fixtures and unchanged wallet/sign-in/commerce regressions; guidance-only capabilities and scoped44px wallet targets. Original feature predicates/controller prefixes/action admissions unchanged. No new SDK/signing/auth path or live wallet/device support certification. Final exact focused check receipts are retained by parent."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR283 final unchanged candidate844661d5:4917 unit/backend and1255 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews clean. Two interrupted parent runs and test-only metadata/settled-geometry repairs retained; no skipped or weakened assertions."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR283 normal protected rebase merge main11bf6c5357da3942ac530fe894a35795f80b8b57; exact complete tested tree88763e437247ab524ea62a26576c04c2b5ff65ad and all five new authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR283 exact automatic production revision and all five original domains verified. Same signed-out public visit confirmed chooser guidance,44px controls,desktop/phone bounds and Escape focus. Initial background-locator harness timeout retained; same-visit continuation only. No wallet selected/sign-in/payment/provider action; live protected/OS/AT certification unclaimed. Operational receipts private."
         }
       ]
     },
@@ -2206,7 +2231,8 @@
           "kind": "approval",
           "phase": "live_acceptance",
           "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
-          "resolved": false
+          "resolved": true,
+          "receipt": "November 1 owner approval call_584870782e1b446395630e54b5d5717a: deploy reviewed indexed project pagination on prod:strong-bee-384 after full verification, backend before UI; preserve limits and holds."
         }
       ],
       "qualification": [
@@ -2216,7 +2242,7 @@
         },
         {
           "kind": "isolated_tests",
-          "reference": "51 focused units,191 browser checks,both types/lint. Independent57units49browsers closed proven draft-loss and stale-handle P2s. Existing indexes/public projection and every old backend declaration unchanged. New public page defaults12 under24-row/262144-byte ceilings; parent qualification and exact backend approval remain pending."
+          "reference": "51 focused units,191 browser checks,both types/lint. Fresh independent57units49browsers confirm draft-loss and stale-handle P2s remain closed. Existing indexes/public projection and every old backend declaration unchanged. New public page defaults12 under24-row/262144-byte project scan ceilings, plus unchanged bounded claim/user hydration; full parent qualification remains pending."
         }
       ]
     },

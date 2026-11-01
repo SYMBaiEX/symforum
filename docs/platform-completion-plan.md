@@ -101,33 +101,48 @@ authors, automatic five-domain rollout and one bounded public Feed acceptance
 were verified. Both public viewport sizes switched spacing and restored the
 original baseline with 44px menu choices and correct keyboard focus.
 
-The next web-only batch covers wallet-capability guidance (#16) and another
-explicitly partial slice of #5: private swap-history read recovery. The history
+PR283 shipped wallet-capability guidance (#16) and another explicitly partial
+slice of #5: private swap-history read recovery. The history
 reader can fail/retry without discarding the same owner's last confirmed
 protection warning or remounting payment controllers. It does not complete
-Community, research, watchlist or other protected-panel recovery. Worker and
-independent checks do not substitute for combined parent release qualification.
+Community, research, watchlist or other protected-panel recovery. The final
+unchanged candidate passed 4,917 unit/backend and 1,255 isolated browser tests,
+both types, five builds, parity, audits and security checks. Exact complete tree,
+authors, automatic five-domain rollout and bounded public chooser acceptance
+were verified. No wallet was selected or sign-in/payment started. The public
+check's background-locator timeout is retained; it continued in the same visit,
+without a reload, and confirmed guidance, 44px targets, bounds and Escape focus.
 
-The admin-only provider snapshot (#6) and bounded project-directory pagination
-(#41) remain separately frozen and await their exact backend approvals. Neither
-is included in this web-only release. The frozen pagination/history candidates
-share one inert test fixture; a single parent integration lane now owns their
-serial integration, preserving both exact changes without concurrent writers.
+The owner approved the admin-only provider snapshot (#6) and bounded
+project-directory pagination (#41) on November 1, after full tests and review,
+with backend before UI. Their frozen exact chains are now integrated for parent
+qualification; neither is deployed yet. The directory defaults to 12 projects
+within 24-row/256-KiB project scan ceilings, plus the existing capped public
+affiliation/user lookups. These are not aggregate response-byte limits. The
+shared inert history fixture retains both current owner-prop forwarding and the
+pagination adapter. No provider traffic, counter reset or hold change is needed.
 
 The initial combined browser run exposed two unchanged Community/terminal
 regressions: an older inert wallet fixture omitted the chain/feature arrays
 provided by the actual SDK. A test-only metadata correction retained its lack
 of signing capability, all existing actions and every original assertion. The
 two original regressions and 40 new guidance cases passed afterward. The
-initial interrupted run is retained; every full final gate must pass again on
-the corrected unchanged tree before release.
+initial interrupted run is retained; every full final gate subsequently passed
+on the corrected unchanged tree before release.
 
 A later full run also caught an unchanged pillar-menu test sampling its existing
 95% opening animation at 41.8px. Its helper now waits for the settled 44px target
 before performing every original bounds, hit-test and focus assertion. Runtime
 menu/CSS behavior and the 44px threshold are unchanged. All 15 cases passed
 independently; the interrupted run and captured failure remain recorded, and
-the complete parent qualification is rerun rather than inferred from that fix.
+the complete parent qualification was rerun rather than inferred from that fix.
+
+Current post-PR283 source ledger: 20 source-deployed, six partial, two separately
+reviewed backend candidates, 57 queued, 13 blocked and two needing decisions.
+All 100 original items remain present; none is marked live-verified. Source
+deployment is not live wallet, provider, hardware or assistive-technology proof.
+Post-deployment planning receipts may await the next planning commit; they do
+not represent additional unqualified runtime changes.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. At inventory
