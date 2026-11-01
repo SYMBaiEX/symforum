@@ -747,7 +747,7 @@ export function MarketExplorer({
                     key={action}
                     type="button"
                     disabled={host !== "website"}
-                    className="focus-ring inline-flex min-h-11 max-w-full items-center rounded-md border border-border px-3 text-sm disabled:opacity-50"
+                    className="focus-ring inline-flex min-h-11 max-w-full items-center rounded-md border border-border px-3 text-sm disabled:opacity-50 [&&]:!min-h-11"
                     onClick={() => manageSavedView(action)}
                   >
                     {action === "save"
