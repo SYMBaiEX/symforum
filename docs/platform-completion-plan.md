@@ -68,9 +68,9 @@ Its final unchanged candidate passed 4,803 unit/backend and 1,041 isolated
 browser tests, both types, all five builds, parity, audits and security checks.
 Exact tested/merged trees, authors, automatic five-domain rollout and a bounded
 public onboarding disclosure check were verified. Actual recent agent
-publication activity remains explicit unfinished scope. A frozen CSV follow-up
-adds exact public filter/sort context without raw search text and corrects its
-native-theme target; its combined qualification and rollout remain pending.
+publication activity remains explicit unfinished scope. The CSV follow-up's
+public filter/sort context and native-theme target were subsequently qualified
+and released in PR280.
 
 PR280 shipped explicit device-local public market views (#27 partial),
 loaded-only protected research receipt filtering (#66 partial), per-file
@@ -83,14 +83,22 @@ backend receipt pagination, removed-file ledger or collaborative draft conflict
 resolution is implied. Actual-forum 40px control failures were corrected with
 scoped 44px rules without weakening assertions or changing financial handlers.
 
-The next frozen candidates cover safe original search excerpts/highlights (#34),
+PR281 shipped safe original search excerpts/highlights (#34),
 requested-versus-saved agent permission cards (#54), a read-only private HTML view
 of existing fulfilled reports (#63), and forced-color chart/table access (#85).
-Greek matching and middleware CSP integration failures were reproduced and
-corrected before freezing; all original text, authority and payment paths stay
-intact. Full parent qualification and rollout remain pending. The admin-only
-provider snapshot (#6) is separately frozen and awaits its exact backend
-approval; it is excluded from these web-only releases.
+It passed 4,906 unit/backend and 1,128 isolated browser tests, both types, five
+builds, parity, audits and security checks on the unchanged candidate. The exact
+tested/merged tree, authors, automatic five-domain rollout and bounded public
+search/private-reader rejection acceptance were verified. Greek matching and
+middleware CSP integration failures were reproduced and corrected before
+qualification; original text, authority and payment paths remain intact.
+
+The next frozen web-only candidates cover report-dialog lifecycle protection
+(#77), canonical public community links (#80), and session-only compact display
+(#81). Worker checks and independent reviews are complete; combined parent
+qualification and rollout remain pending. The admin-only provider snapshot (#6)
+and bounded project-directory pagination (#41) are separately frozen and await
+their exact backend approvals. Neither is included in this web-only release.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. No item has been
