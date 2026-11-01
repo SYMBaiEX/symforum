@@ -409,6 +409,30 @@
   background: hsl(var(--primary) / 0.08);
   color: hsl(var(--primary));
 }
+@media (forced-colors: active) {
+  .chartContainer .chartControls button[aria-pressed="true"] {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    font-weight: 700;
+  }
+
+  /* The shared field rule removes outlines in favor of a color-only border. */
+  .chartContainer .chartDataDisclosure select:focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
+
+  /* Override the forum surface's important 40px mobile minimums only here. */
+  .chartContainer
+    :is(
+      .chartControls button,
+      .chartDataDisclosure button,
+      .chartDataDisclosure select
+    ) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+}
 .chartContainer .chartTools,
 .chartWorkspace .chartControls .chartTools {
   min-width: 44px;
