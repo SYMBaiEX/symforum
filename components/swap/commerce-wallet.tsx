@@ -94,7 +94,11 @@ export function CommerceWalletButton({
       requiredFeature={requiredFeature}
     />
   ) : (
-    <Button disabled variant="outline">
+    <Button
+      disabled
+      variant="outline"
+      className="[&&]:!min-h-11 [&&]:!min-w-11"
+    >
       <Wallet aria-hidden="true" />
       Loading wallet…
     </Button>
@@ -111,7 +115,8 @@ function ConnectedButton({
 }) {
   const { isAuthenticated, isLoading, session, connected, linked } =
     useCommerceIdentity(client, requiredFeature);
-  const wallets = useWallets(client).filter((w) =>
+  const detectedWallets = useWallets(client);
+  const wallets = detectedWallets.filter((w) =>
     w.features.includes(requiredFeature),
   );
   const connect = useConnect(client);
@@ -140,7 +145,11 @@ function ConnectedButton({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" disabled={disabled || !session}>
+        <Button
+          variant="outline"
+          className="[&&]:!min-h-11 [&&]:!min-w-11"
+          disabled={disabled || !session}
+        >
           <Wallet aria-hidden="true" />
           {linked && connected
             ? `${connected.account.address.slice(0, 4)}…${connected.account.address.slice(-4)}`
@@ -149,7 +158,7 @@ function ConnectedButton({
       </DialogTrigger>
       <DialogContent
         data-surface="forum"
-        className="wallet-picker"
+        className="wallet-picker [&&>button:last-child]:!min-h-11 [&&>button:last-child]:!min-w-11"
         overlayClassName="wallet-picker-overlay"
       >
         <DialogHeader className="wallet-picker-header">
@@ -184,9 +193,39 @@ function ConnectedButton({
           </div>
           {!wallets.length && (
             <p className="wallet-picker-empty">
-              Open this page in a Wallet Standard compatible Solana browser.
+              No exposed wallet advertises the capability required here. Open
+              this page in a Wallet Standard compatible Solana browser. The
+              wallet must expose {requiredFeature}; compatibility cannot be
+              inferred from sign-in alone. This does not tell us whether another
+              wallet is installed or locked.
             </p>
           )}
+          {detectedWallets.length > wallets.length && (
+            <p className="wallet-picker-empty">
+              {detectedWallets.length - wallets.length} detected{" "}
+              {detectedWallets.length - wallets.length === 1
+                ? "wallet does"
+                : "wallets do"}{" "}
+              not expose{" "}
+              {requiredFeature === "solana:signTransaction"
+                ? "transaction signing (solana:signTransaction)"
+                : "transaction signing and sending (solana:signAndSendTransaction)"}
+              . Signing in alone does not enable payments.{" "}
+              {wallets.length
+                ? "Select a compatible linked wallet above."
+                : "Make a compatible linked wallet available, then select it."}{" "}
+              Connecting does not approve a payment.
+            </p>
+          )}
+          {connected &&
+            !connected.account.features.includes(requiredFeature) && (
+              <p className="wallet-picker-empty">
+                The connected account does not expose {requiredFeature}. Choose
+                another compatible linked wallet above. Wallet-level support
+                does not guarantee support for every account or transaction
+                format.
+              </p>
+            )}
           {Boolean(connect.error) && (
             <p role="alert">
               The wallet could not connect. Check its open requests.
@@ -197,6 +236,7 @@ function ConnectedButton({
               <code className="commerce-mint">{connected.account.address}</code>
               <Button
                 variant="ghost"
+                className="[&&]:!min-h-11 [&&]:!min-w-11"
                 disabled={connect.isRunning}
                 onClick={() => {
                   void client.wallet.disconnect().then(() => setOpen(false));

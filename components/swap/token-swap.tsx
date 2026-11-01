@@ -841,6 +841,18 @@ function LiveSwap({
         disabled={locked}
         requiredFeature={requiredFeature}
       />
+      {connected && !supportsV1 && !supportsV0 && (
+        <p className="commerce-note" role="status">
+          {!connected.account.chains.includes("solana:mainnet")
+            ? "The connected account is not available on Solana mainnet."
+            : !connected.account.features.includes(requiredFeature)
+              ? `The connected account does not expose ${requiredFeature}, which this swap requires.`
+              : "The connected account does not support the selected transaction format for this swap."}{" "}
+          Use the wallet selector above to choose a compatible linked wallet
+          when the form is available. A held outcome must be verified first;
+          changing wallets or formats never retries an existing payment.
+        </p>
+      )}
       {!isAuthenticated && (
         <p>
           <ForumLink
@@ -980,9 +992,14 @@ function LiveSwap({
           </select>
         </div>
         <p>
-          Automatic checks the wallet send capability. If your wallet reports an
-          internal error with v1, you can select v0 for a future swap after any
-          held outcome is verified. This never retries an existing payment.
+          Automatic checks the connected account’s{" "}
+          {requiredFeature === "solana:signTransaction"
+            ? "transaction signing"
+            : "transaction signing and sending"}{" "}
+          capability for v1 and v0. v0 compatibility requires v0 support; it
+          does not add a missing wallet capability. You can select v0 for a
+          future swap after any held outcome is verified. This never retries an
+          existing payment.
         </p>
       </details>
       {best && fresh && input && output && (
