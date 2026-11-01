@@ -1,5 +1,6 @@
 "use client";
-import { SYMF_TOKEN } from "@/lib/symf-token";
+import { installation } from "@/lib/installation";
+import { forumCommunityLinks } from "@/lib/forum-community-links";
 
 import { Suspense, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -61,9 +62,9 @@ import {
   FORUM_PRIMARY_NAVIGATION,
 } from "@/lib/forum-navigation-model";
 import { cn } from "@/lib/utils";
-import { FORUM_TELEGRAM_URL } from "@/lib/site-urls";
 import { forumSignInHref } from "@/lib/forum-signin-context";
 import { useForumRuntime } from "./forum-runtime-context";
+const communityLinks = forumCommunityLinks(installation);
 
 const navigationIcons = {
   feed: MessageSquare,
@@ -416,9 +417,9 @@ export function ForumNavigationLayout({
                 <ForumMenuLink href="/forum/start-here" icon={Compass}>
                   Start here
                 </ForumMenuLink>
-                <ForumMenuLink href="/forum/symf" icon={Coins}>
-                  ${SYMF_TOKEN.symbol}
-                </ForumMenuLink>
+                {communityLinks.token && <ForumMenuLink href={communityLinks.token.path} icon={Coins}>
+                  ${communityLinks.token.symbol}
+                </ForumMenuLink>}
                 <ForumMenuLink href="/forum/swap" icon={ArrowLeftRight}>
                   Swap tokens
                 </ForumMenuLink>
@@ -452,12 +453,12 @@ export function ForumNavigationLayout({
                 <ForumMenuLink href="/forum/help" icon={HelpCircle}>
                   Help
                 </ForumMenuLink>
-                <DropdownMenuItem
+                {communityLinks.telegram && <DropdownMenuItem
                   asChild
                   className="min-h-11 rounded-lg px-3 focus:bg-muted focus:text-foreground"
                 >
                   <a
-                    href={FORUM_TELEGRAM_URL}
+                    href={communityLinks.telegram.href}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -467,7 +468,7 @@ export function ForumNavigationLayout({
                     />
                     Telegram community
                   </a>
-                </DropdownMenuItem>
+                </DropdownMenuItem>}
               </DropdownMenuGroup>
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="mt-1 px-3 py-2 text-xs text-muted-foreground">
@@ -569,9 +570,9 @@ export function ForumNavigationLayout({
         <ForumRailLink href="/forum/start-here" icon={Compass}>
           Start here
         </ForumRailLink>
-        <ForumRailLink href="/forum/symf" icon={Coins}>
-          {`$${SYMF_TOKEN.symbol}`}
-        </ForumRailLink>
+        {communityLinks.token && <ForumRailLink href={communityLinks.token.path} icon={Coins}>
+          {`$${communityLinks.token.symbol}`}
+        </ForumRailLink>}
         <ForumRailLink href="/forum/swap" icon={ArrowLeftRight}>
           Swap tokens
         </ForumRailLink>
@@ -581,8 +582,8 @@ export function ForumNavigationLayout({
         <ForumRailLink href="/forum/community" icon={Handshake}>
           Community utilities
         </ForumRailLink>
-        <a
-          href={FORUM_TELEGRAM_URL}
+        {communityLinks.telegram && <a
+          href={communityLinks.telegram.href}
           target="_blank"
           rel="noopener noreferrer"
           title="Telegram community"
@@ -591,7 +592,7 @@ export function ForumNavigationLayout({
         >
           <Send aria-hidden="true" className="size-[19px] shrink-0" />
           <span className="forum-nav-label">Telegram community</span>
-        </a>
+        </a>}
         {navState?.authenticated && (
           <nav
             aria-label="Quick personal tools"

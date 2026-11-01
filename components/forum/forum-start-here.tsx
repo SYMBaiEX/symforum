@@ -1,6 +1,7 @@
 "use client";
 import { installation } from "@/lib/installation";
-import { SYMF_TOKEN, TOKEN_CONFIGURED } from "@/lib/symf-token";
+import { SYMF_TOKEN } from "@/lib/symf-token";
+import { forumCommunityLinks } from "@/lib/forum-community-links";
 import { FORUM_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
 
 import { useConvexAuth } from "convex/react";
@@ -17,6 +18,7 @@ import {
 
 const action =
   "forum-action-pill focus-ring inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-medium";
+const communityLinks = forumCommunityLinks(installation);
 
 function JoinForumLink() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -378,7 +380,17 @@ export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
         </ForumLink>
       </section>
 
-      {TOKEN_CONFIGURED && (
+      <section aria-labelledby="forum-community-links-title" className="forum-panel min-w-0">
+        <h2 id="forum-community-links-title" className="font-semibold">Community links</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Configured forum and community destinations. Personal profiles in the footer are separate.</p>
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+          {[communityLinks.forum, communityLinks.telegram, communityLinks.x].map((link) => link ? (
+            <a key={link.href} href={link.href} className={`${action} max-w-full text-muted-foreground [overflow-wrap:anywhere]`} rel="noopener noreferrer" target="_blank">{link.label}</a>
+          ) : null)}
+        </div>
+      </section>
+
+      {communityLinks.token && (
         <aside
           aria-labelledby="forum-official-links-title"
           className="forum-panel"
@@ -392,26 +404,16 @@ export function ForumStartHere({ enabled = true }: { enabled?: boolean }) {
             separate assets and are not interchangeable.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <ForumLink href="/forum/symf" className={`${action} text-primary`}>
+            <ForumLink href={communityLinks.token.path} className={`${action} text-primary`}>
               ${SYMF_TOKEN.symbol} page &amp; chart
             </ForumLink>
-            {SYMF_TOKEN.announcementPath && (
+            {communityLinks.token.announcementPath && (
               <ForumLink
-                href={SYMF_TOKEN.announcementPath}
+                href={communityLinks.token.announcementPath}
                 className={`${action} text-primary`}
               >
                 Official ${SYMF_TOKEN.symbol} announcement
               </ForumLink>
-            )}
-            {installation.x.accounts.symforum && (
-              <a
-                href={`https://x.com/${installation.x.accounts.symforum}`}
-                className={`${action} text-muted-foreground`}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                @{installation.x.accounts.symforum} on X
-              </a>
             )}
           </div>
         </aside>
