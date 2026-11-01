@@ -2,10 +2,7 @@ import { INSTALLATION_NAMESPACE } from "./site-urls";
 import { AI_CATALOG } from "./agent-discovery";
 
 // ARD v0.91 keeps existing entry identifiers; examples describe actual supported jobs.
-const queries: Record<
-  string,
-  readonly [string, string]
-> = {
+const queries: Record<string, readonly [string, string]> = {
   [`urn:air:${INSTALLATION_NAMESPACE}:a2a:documentation`]: [
     "Find SYMBaiEX integration guidance through an A2A agent",
     "Look up the public SYMBaiEX authentication instructions",
@@ -21,6 +18,10 @@ const queries: Record<
   [`urn:air:${INSTALLATION_NAMESPACE}:api:sandbox-v1`]: [
     "Test evidence response parsing without production credentials",
     "Explore synthetic SYMBaiEX search results safely",
+  ],
+  [`urn:air:${INSTALLATION_NAMESPACE}:api:research-catalog-v1`]: [
+    "Inspect optional token report pricing and current charging readiness",
+    "Read the human owner and linked wallet requirements before considering a purchase",
   ],
   [`urn:air:${INSTALLATION_NAMESPACE}:api:sandbox-openapi-v1`]: [
     "Find the OpenAPI contract for the synthetic sandbox",

@@ -29,6 +29,16 @@ describe("SYMBaiEX developer resources page", () => {
     );
     expect(html).toContain("Third-party Glama connector page");
     expect(html).toContain('href="/.well-known/mcp"');
+    expect(html).toContain('href="/api/research/catalog"');
+    expect(html).toContain("current x402 readiness");
+    expect(html).toContain("human owner session");
+    expect(html).toContain("verified linked Solana wallet");
+    expect(html).toContain("explicit one-purchase approval");
+    expect(html).toContain("Evidence-agent grants do not authorize spending");
+    expect(html).toContain("free forum content is unchanged");
+    expect(html).toContain(
+      "catalog discovery does not activate it or authorize a purchase",
+    );
     expect(html).toContain('href="/developers/webmcp"');
     expect(html).toContain(
       'href="https://skills.sh/symbaiex/skills">the SYMBaiEX Skills.sh listing</a>',

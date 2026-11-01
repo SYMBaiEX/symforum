@@ -9,7 +9,12 @@ import {
   SERVICE_AUTH_METADATA,
   serviceAuthEnabled,
 } from "@/lib/agent-service-auth-config";
-import { APEX_SITE_URL, INSTALLATION_NAMESPACE, PRIMARY_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
+import {
+  APEX_SITE_URL,
+  INSTALLATION_NAMESPACE,
+  PRIMARY_SITE_URL,
+  primarySiteUrl,
+} from "@/lib/site-urls";
 import evidenceRegistry from "@/registry/evidence.server.json";
 import docsRegistry from "@/registry/docs.server.json";
 
@@ -424,6 +429,17 @@ export const AI_CATALOG = {
       tags: ["sandbox", "synthetic", "read-only", "developer"],
       publisher: catalogPublisher(),
       trustManifest: catalogTrustManifest("sandbox-api-v1"),
+    },
+    {
+      identifier: `urn:air:${INSTALLATION_NAMESPACE}:api:research-catalog-v1`,
+      displayName: "SYMBaiEX Optional Token Research Catalog",
+      type: "application/json",
+      url: primarySiteUrl("/api/research/catalog"),
+      description:
+        "Read-only catalog of optional x402 token reports and current charging readiness. Purchasing requires a human owner session, a verified linked Solana wallet and explicit approval for one purchase. Evidence-agent grants do not authorize spending; free forum content is unchanged.",
+      tags: ["catalog", "research", "x402", "owner-approved", "read-only"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("research-catalog-v1"),
     },
     {
       identifier: `urn:air:${INSTALLATION_NAMESPACE}:api:sandbox-openapi-v1`,
