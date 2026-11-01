@@ -257,6 +257,20 @@ for (const app of ["platform", "forum"] as const)
       await page.keyboard.press("Tab");
       await expect(search(page)).toBeFocused();
       await search(page).fill("x".repeat(120));
+      // Collect independent evidence for BOTH fields before the original hard
+      // control/row assertions below. Soft failures still fail the whole test.
+      for (const field of [
+        search(page),
+        page.getByRole("combobox", { name: "Receipt status" }),
+      ]) {
+        const bounds = await field.boundingBox();
+        expect
+          .soft(
+            bounds?.height,
+            (await field.getAttribute("type")) ?? "status select",
+          )
+          .toBeGreaterThanOrEqual(44);
+      }
       for (const control of [
         search(page),
         page.getByRole("combobox", { name: "Receipt status" }),
