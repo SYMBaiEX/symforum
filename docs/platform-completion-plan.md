@@ -93,19 +93,33 @@ search/private-reader rejection acceptance were verified. Greek matching and
 middleware CSP integration failures were reproduced and corrected before
 qualification; original text, authority and payment paths remain intact.
 
-The next frozen web-only candidates cover report-dialog lifecycle protection
-(#77), canonical public community links (#80), and session-only compact display
-(#81). Worker checks and independent reviews are complete; combined parent
-qualification and rollout remain pending. The admin-only provider snapshot (#6)
-and bounded project-directory pagination (#41) are separately frozen and await
-their exact backend approvals. Neither is included in this web-only release.
+PR282 shipped report-dialog lifecycle protection (#77), canonical public
+community links (#80), and session-only compact display (#81). The unchanged
+candidate passed 4,911 unit/backend and 1,200 isolated browser tests, both types,
+five builds, parity, audits and security controls. Exact tested/merged tree,
+authors, automatic five-domain rollout and one bounded public Feed acceptance
+were verified. Both public viewport sizes switched spacing and restored the
+original baseline with 44px menu choices and correct keyboard focus.
+
+The next web-only batch covers wallet-capability guidance (#16) and another
+explicitly partial slice of #5: private swap-history read recovery. The history
+reader can fail/retry without discarding the same owner's last confirmed
+protection warning or remounting payment controllers. It does not complete
+Community, research, watchlist or other protected-panel recovery. Worker and
+independent checks do not substitute for combined parent release qualification.
+
+The admin-only provider snapshot (#6) and bounded project-directory pagination
+(#41) remain separately frozen and await their exact backend approvals. Neither
+is included in this web-only release. The frozen pagination/history candidates
+share one inert test fixture; a single parent integration lane now owns their
+serial integration, preserving both exact changes without concurrent writers.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
-seven ready for review, 13 blocked and two needing decisions. No item has been
-marked deployed or live-verified in this new inventory. These are dated planning
-states, not permanent test expectations. Item #5's initial candidate covers
-three public terminal siblings only; Community/private-panel recovery remains
-unqualified within the complete scope.
+seven ready for review, 13 blocked and two needing decisions. At inventory
+creation no item was marked deployed or live-verified. These are dated planning
+states, not the current counts or permanent test expectations. Item #5's initial
+candidate covered three public terminal siblings only; later private-history
+work does not complete the remaining Community/protected-panel recovery scope.
 
 ## Protected inputs and decisions
 

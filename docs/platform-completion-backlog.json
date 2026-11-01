@@ -239,13 +239,20 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": "panel-recovery",
+        "owner": "read-recovery-integration",
         "paths": [
-          "components/trading/terminal-boundary.tsx",
           "components/trading/forum-terminal.tsx",
-          "tests/e2e/terminal-panel-recovery.spec.ts",
+          "components/trading/swap-history-recovery.test.tsx",
+          "components/trading/terminal-boundary.tsx",
+          "components/trading/wallet-panel.tsx",
+          "tests/e2e/fixtures/community-navigation-terminal-probes.tsx",
+          "tests/e2e/fixtures/private-panel-recovery-state.tsx",
+          "tests/e2e/fixtures/private-panel-recovery.tsx",
+          "tests/e2e/fixtures/terminal-panel-recovery-state.tsx",
           "tests/e2e/fixtures/terminal-panel-recovery.tsx",
-          "tests/e2e/fixtures/terminal-panel-recovery-state.tsx"
+          "tests/e2e/fixtures/wallet-identity-receipts.tsx",
+          "tests/e2e/private-panel-recovery.spec.ts",
+          "tests/e2e/terminal-panel-recovery.spec.ts"
         ]
       },
       "blockers": [],
@@ -265,10 +272,18 @@
         {
           "kind": "deployment",
           "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
+        },
+        {
+          "kind": "source_commit",
+          "reference": "Additional private-history-only slice frozen241fbb78dd8f158c33f3269703b493f1ee87a80f; parent qualification/merge/rollout pending, whole item remains partial."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Private-history worker76 browser checks/209 trading units,both types/lint. Independent49 browsers/16 units clean. Stable same-owner protection survives failed read; only read projection retries. Original WalletPanel/identity/controller keys/queries and financial handlers unchanged; three old fixtures only forward required inert owner props."
         }
       ],
       "remainingAcceptance": [
-        "Community and private-panel recovery remain unqualified. Only three public terminal read subtrees use local retry; their own failed state may remount, while protected siblings stay mounted."
+        "Community, research, watchlist and other protected-panel recovery remain unqualified. Three public read siblings are released; additional private SwapHistory read recovery is frozen and independently reviewed, awaiting combined parent qualification/rollout. No whole-item dependency is satisfied by these slices."
       ]
     },
     {
@@ -776,7 +791,7 @@
       "number": 16,
       "title": "Unsupported-wallet guidance",
       "area": "trading",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -801,11 +816,27 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/swap/token-swap.tsx"]
+        "owner": "wallet-capability-guidance",
+        "paths": [
+          "components/auth/wallet-signin.tsx",
+          "components/swap/commerce-wallet.tsx",
+          "components/swap/token-swap.tsx",
+          "tests/e2e/fixtures/wallet-capability-guidance-state.tsx",
+          "tests/e2e/fixtures/wallet-capability-guidance.tsx",
+          "tests/e2e/wallet-capability-guidance.spec.ts"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed candidatefc4ee7c17c74a504d77091067007a4e0ba9158c8; full parent qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Actual Wallet Standard/Kit discovery fixtures and unchanged wallet/sign-in/commerce regressions; guidance-only capabilities and scoped44px wallet targets. Original feature predicates/controller prefixes/action admissions unchanged. No new SDK/signing/auth path or live wallet/device support certification. Final exact focused check receipts are retained by parent."
+        }
+      ]
     },
     {
       "id": "PLATFORM-017",
@@ -2145,7 +2176,7 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": "project-pagination",
+        "owner": "read-recovery-integration",
         "paths": [
           "components/community/community-hub.tsx",
           "components/community/project-directory-model.test.ts",
@@ -3986,7 +4017,7 @@
       "number": 77,
       "title": "Reporting-dialog lifecycle",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4028,6 +4059,18 @@
         {
           "kind": "isolated_tests",
           "reference": "23 aggregate browser checks(21new+2old),20original units,both types/lint. Independent same counts. Five baseline failures reproduced; synchronous admission/identity-generation/focus fences fixed. No cancellation/replay/permanenthold claim; original createReport payload/nonreport handlers unchanged."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR282 final unchanged candidate8f75f8c2:4911 unit/backend and1200 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; restricted local permission failures and interrupted initial run retained. No tests skipped or weakened."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR282 normal protected rebase merge main3e083194f591f3bca603b7220f85290dee63e9f3; exact complete tested treeb9d67214a84024d8c1e94f6f8f60d85c06f127d7 and all four authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR282 exact automatic production revision and all five original domains verified. One bounded signed-out Feed desktop/phone acceptance confirmed12/10px to8px spacing and exact restoration,44px menu choice and canonical community links. Protected live/OS/physical device/AT outcomes unclaimed; operational receipts private."
         }
       ]
     },
@@ -4135,7 +4178,7 @@
       "number": 80,
       "title": "Canonical community social links",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4181,6 +4224,18 @@
         {
           "kind": "isolated_tests",
           "reference": "14newchecks/44oldbrowsers/81units/types/lint; independent44units29browsers. Pure existing validated public config, official links independent of token setup, personal profiles separate; nonforum identity/auth/token risk/history unchanged. No external availability certification."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR282 final unchanged candidate8f75f8c2:4911 unit/backend and1200 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; restricted local permission failures and interrupted initial run retained. No tests skipped or weakened."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR282 normal protected rebase merge main3e083194f591f3bca603b7220f85290dee63e9f3; exact complete tested treeb9d67214a84024d8c1e94f6f8f60d85c06f127d7 and all four authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR282 exact automatic production revision and all five original domains verified. One bounded signed-out Feed desktop/phone acceptance confirmed12/10px to8px spacing and exact restoration,44px menu choice and canonical community links. Protected live/OS/physical device/AT outcomes unclaimed; operational receipts private."
         }
       ]
     },
@@ -4189,7 +4244,7 @@
       "number": 81,
       "title": "Compact and comfortable layout preference",
       "area": "accessibility",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4237,6 +4292,18 @@
         {
           "kind": "isolated_tests",
           "reference": "37newbrowser/74oldbrowser/44oldunits,both types/lint; independent157browsers(37new+120unchangedterminal)and44units clean. Offline cached layout scan0findings. Comfortable default unchanged, explicit session-only spacing across Feed/Community/Markets; protected controllers, fonts, values and chart/order geometry unchanged. Full parent qualification/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR282 final unchanged candidate8f75f8c2:4911 unit/backend and1200 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; restricted local permission failures and interrupted initial run retained. No tests skipped or weakened."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR282 normal protected rebase merge main3e083194f591f3bca603b7220f85290dee63e9f3; exact complete tested treeb9d67214a84024d8c1e94f6f8f60d85c06f127d7 and all four authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR282 exact automatic production revision and all five original domains verified. One bounded signed-out Feed desktop/phone acceptance confirmed12/10px to8px spacing and exact restoration,44px menu choice and canonical community links. Protected live/OS/physical device/AT outcomes unclaimed; operational receipts private."
         }
       ]
     },
