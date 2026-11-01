@@ -80,7 +80,12 @@ function SharedWalletSignIn(props: WalletSignInProps) {
   // register browser wallet listeners or share state between requests.
   if (!client)
     return (
-      <Button type="button" variant="outline" disabled>
+      <Button
+        type="button"
+        variant="outline"
+        className="[&&]:!min-h-11 [&&]:!min-w-11"
+        disabled
+      >
         <Wallet data-icon="inline-start" />
         {props.label ??
           (props.purpose === "link" ? "Link wallet" : "Solana wallet")}
@@ -101,7 +106,8 @@ function WalletPicker({
   onComplete,
 }: WalletSignInProps) {
   const client = useClient<IdentityWalletClient>();
-  const wallets = useWallets(client).filter(
+  const detectedWallets = useWallets(client);
+  const wallets = detectedWallets.filter(
     (wallet) =>
       wallet.features.includes("solana:signMessage") ||
       wallet.features.includes("solana:signIn"),
@@ -329,14 +335,19 @@ function WalletPicker({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" disabled={disabled || !ready}>
+        <Button
+          type="button"
+          variant="outline"
+          className="[&&]:!min-h-11 [&&]:!min-w-11"
+          disabled={disabled || !ready}
+        >
           <Wallet data-icon="inline-start" />
           {label ?? (purpose === "link" ? "Link wallet" : "Solana wallet")}
         </Button>
       </DialogTrigger>
       <DialogContent
         data-surface="forum"
-        className="wallet-picker"
+        className="wallet-picker [&&>button:last-child]:!min-h-11 [&&>button:last-child]:!min-w-11"
         overlayClassName="wallet-picker-overlay"
       >
         <DialogHeader className="wallet-picker-header">
@@ -395,11 +406,29 @@ function WalletPicker({
             ))}
             {!wallets.length && (
               <p className="wallet-picker-empty">
-                No compatible wallet found. Install a Solana wallet such as
-                Phantom, or open this site in your wallet’s browser.
+                No compatible wallet found for sign-in among the wallets exposed
+                to this page. Use a Solana wallet with Sign In with Solana or
+                message signing, or open this page in that wallet’s browser.
+                This does not tell us whether another wallet is installed or
+                locked.
               </p>
             )}
           </div>
+          {detectedWallets.length > wallets.length && (
+            <p className="wallet-picker-empty">
+              {detectedWallets.length - wallets.length} detected{" "}
+              {detectedWallets.length - wallets.length === 1
+                ? "wallet does"
+                : "wallets do"}{" "}
+              not expose Sign In with Solana (solana:signIn) or message signing
+              (solana:signMessage). Transaction signing alone cannot sign you
+              in.{" "}
+              {wallets.length
+                ? "Choose a compatible wallet above."
+                : "Make a compatible wallet available, then select it."}{" "}
+              No request is sent until you select a wallet.
+            </p>
+          )}
           <p role="status" className="wallet-picker-status">
             {phase === "connecting"
               ? `Connect your account in ${selected?.name}.`
