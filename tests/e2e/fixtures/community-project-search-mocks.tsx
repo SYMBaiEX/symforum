@@ -11,7 +11,10 @@ Object.assign(window, {
 let revision = 0;
 let loading = parameters.has("loading");
 let initialError = parameters.has("initialerror");
-let owner: string | null = parameters.has("owner") ? "author-0" : null;
+let owner: string | null =
+  parameters.has("owner") || parameters.has("formpending") ? "author-0" : null;
+const formOperations: { name: string; args: unknown }[] = [];
+let rejectForm: (() => void) | undefined;
 let changedCursor = false;
 let pageMode = parameters.has("deferred") ? "deferred" : "ok";
 const pageRequests: unknown[] = [];
@@ -60,7 +63,7 @@ let projects = Array.from({ length: 24 }, (_, index) => ({
     },
   ],
 }));
-const laterProjects = Array.from({ length: 25 }, (_, index) => ({
+let laterProjects = Array.from({ length: 25 }, (_, index) => ({
   ...projects[0],
   projectId: `project-${index + 24}`,
   mint: `invented-mint-${index + 24}`,
@@ -70,6 +73,10 @@ const laterProjects = Array.from({ length: 25 }, (_, index) => ({
 }));
 const fixture = {
   pageRequests,
+  formOperations,
+  rejectForm() {
+    rejectForm?.();
+  },
   mode(value: string) {
     pageMode = value;
   },
@@ -92,6 +99,10 @@ const fixture = {
     initialError = false;
     changed();
   },
+  failInitial() {
+    initialError = true;
+    changed();
+  },
   moveCursor() {
     changedCursor = !changedCursor;
     changed();
@@ -99,6 +110,20 @@ const fixture = {
   replaceFirstId() {
     projects = projects.map((project, index) =>
       index === 0 ? { ...project, projectId: "replacement-project" } : project,
+    );
+    changed();
+  },
+  renameLaterHandle() {
+    laterProjects = laterProjects.map((project, index) =>
+      index === 0
+        ? {
+            ...project,
+            claims: project.claims.map((claim) => ({
+              ...claim,
+              username: "renamed_builder",
+            })),
+          }
+        : project,
     );
     changed();
   },
@@ -236,7 +261,17 @@ export function useMutation() {
     throw new Error("Local search cannot perform writes");
   };
 }
-export function useAction() {
+export function useAction(reference: FunctionReference<"action">) {
+  if (
+    parameters.has("formpending") &&
+    getFunctionName(reference) === "forumCommerce:resolveMint"
+  )
+    return async (args: unknown) => {
+      formOperations.push({ name: getFunctionName(reference), args });
+      await new Promise<void>((_resolve, reject) => {
+        rejectForm = () => reject(new Error("Invented inert mint rejection"));
+      });
+    };
   return async () => {
     operations.push("action");
     throw new Error("Local search cannot contact providers");
@@ -250,6 +285,14 @@ export function useCommerceWallet() {
   return client;
 }
 export function useCommerceIdentity() {
+  if (parameters.has("formpending"))
+    return {
+      isAuthenticated: true,
+      isLoading: false,
+      linked: true,
+      connected: { account: { address: mints[0] } },
+      session: { authUserId: "invented-auth-author-0" },
+    };
   return {
     isAuthenticated: false,
     isLoading: false,

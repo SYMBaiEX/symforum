@@ -424,13 +424,7 @@ function CommunityContent({
             </ForumLink>
           </section>
         )}
-        {section === "projects" && (
-          <ProjectDirectoryBoundary
-            key={mint ?? "all"}
-            mint={mint}
-            client={client}
-          />
-        )}
+        {section === "projects" && <Projects mint={mint} client={client} />}
         {section === "work" && (
           <WorkBoard mint={mint} client={client} onPayment={setPayment} />
         )}
@@ -468,10 +462,7 @@ function CommunityContent({
   );
 }
 class ProjectDirectoryBoundary extends Component<
-  {
-    mint?: string;
-    client: CommerceWalletClient | null;
-  },
+  { children: ReactNode },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -480,8 +471,7 @@ class ProjectDirectoryBoundary extends Component<
   }
   render() {
     return this.state.failed ? (
-      <section className={styles.panel}>
-        <h2>Project hubs</h2>
+      <div>
         <p role="alert">
           Project hubs could not load. Try again when your connection is
           available.
@@ -489,9 +479,9 @@ class ProjectDirectoryBoundary extends Component<
         <Button onClick={() => this.setState({ failed: false })}>
           Retry project directory
         </Button>
-      </section>
+      </div>
     ) : (
-      <Projects {...this.props} />
+      this.props.children
     );
   }
 }
@@ -502,11 +492,6 @@ function Projects({
   mint?: string;
   client: CommerceWalletClient | null;
 }) {
-  const convex = useConvex();
-  const first = useQuery(api.forumCommunity.listProjectPage, {
-    mint,
-    paginationOpts: { ...PROJECT_PAGE_OPTIONS, cursor: null },
-  });
   const { isAuthenticated, isLoading } = useConvexAuth();
   const mine = useQuery(
     api.forumCommunity.getMine,
@@ -519,6 +504,112 @@ function Projects({
     isAuthenticated,
     authorId ?? null,
   ]);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AffiliationDraft | null>(null);
+  const creationTrigger = useRef<HTMLButtonElement | null>(null);
+  const addProjectTrigger = useRef<HTMLButtonElement | null>(null);
+  function openCreation(event: MouseEvent<HTMLButtonElement>) {
+    creationTrigger.current = event.currentTarget;
+    setEditing(null);
+    setCreating(true);
+  }
+  function openEdit(
+    event: MouseEvent<HTMLButtonElement>,
+    draft: AffiliationDraft,
+  ) {
+    creationTrigger.current = event.currentTarget;
+    setEditing(draft);
+    setCreating(true);
+  }
+  return (
+    <div className={styles.directory}>
+      <section className={styles.panel}>
+        <div className={styles.sectionHeading}>
+          <div>
+            <h2>Project hubs</h2>
+            <p className={styles.muted}>
+              {mint
+                ? "A hub for this exact mint, with up to 12 public affiliations."
+                : "Browse project hubs, 12 at a time, with up to 12 public affiliations per hub. Load another page when you choose."}
+            </p>
+          </div>
+          <Button ref={addProjectTrigger} onClick={openCreation}>
+            <Plus aria-hidden="true" /> Add project
+          </Button>
+        </div>
+        <ProjectDirectoryBoundary key={mint ?? "all"}>
+          <ProjectDirectoryReader
+            mint={mint}
+            scope={scope}
+            authorId={authorId}
+            onCreation={openCreation}
+            onEdit={openEdit}
+          />
+        </ProjectDirectoryBoundary>
+      </section>
+      <aside className={styles.contextNote}>
+        <ShieldCheck size={18} aria-hidden="true" />
+        <div>
+          <strong>Identity is not endorsement.</strong>
+          <p>
+            Affiliations are self-declared. A linked wallet proves wallet
+            control, not project ownership or safety. Always verify the exact
+            mint.
+          </p>
+        </div>
+      </aside>
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent
+          data-surface="forum"
+          className={styles.creationDialog}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (creationTrigger.current?.isConnected)
+              creationTrigger.current.focus();
+            else addProjectTrigger.current?.focus();
+          }}
+        >
+          {client ? (
+            <ProjectForm
+              mint={mint}
+              client={client}
+              editing={editing}
+              authorId={authorId}
+              authorLoading={
+                isLoading || (isAuthenticated && mine === undefined)
+              }
+            />
+          ) : (
+            <DialogHeader>
+              <DialogTitle>
+                {editing ? "Edit your affiliation" : "Introduce your project"}
+              </DialogTitle>
+              <DialogDescription>Loading wallet…</DialogDescription>
+            </DialogHeader>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+function ProjectDirectoryReader({
+  mint,
+  scope,
+  authorId,
+  onCreation,
+  onEdit,
+}: {
+  mint?: string;
+  scope: string;
+  authorId?: Id<"users">;
+  onCreation(event: MouseEvent<HTMLButtonElement>): void;
+  onEdit(event: MouseEvent<HTMLButtonElement>, draft: AffiliationDraft): void;
+}) {
+  const convex = useConvex();
+  const first = useQuery(api.forumCommunity.listProjectPage, {
+    mint,
+    paginationOpts: { ...PROJECT_PAGE_OPTIONS, cursor: null },
+  });
   const [directory, setDirectory] = useState(() =>
     directoryState<Project>(scope, first),
   );
@@ -566,8 +657,6 @@ function Projects({
       if (inFlight.current === request) inFlight.current = null;
     }
   }
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<AffiliationDraft | null>(null);
   const [search, setSearch] = useState("");
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchDescription = useId();
@@ -583,181 +672,176 @@ function Projects({
         ...project.claims.flatMap((claim) => [claim.username, claim.role]),
       ].some((value) => value.toLowerCase().includes(publicTerm)),
   );
-  const creationTrigger = useRef<HTMLButtonElement | null>(null);
-  const addProjectTrigger = useRef<HTMLButtonElement | null>(null);
-  function openCreation(event: MouseEvent<HTMLButtonElement>) {
-    creationTrigger.current = event.currentTarget;
-    setEditing(null);
-    setCreating(true);
-  }
   return (
-    <div className={styles.directory}>
-      <section className={styles.panel}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2>Project hubs</h2>
-            <p className={styles.muted}>
+    <>
+      <div className={styles.projectSearch}>
+        <Field label="Search loaded projects">
+          <Input
+            ref={searchInput}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            disabled={projects === undefined}
+            aria-describedby={searchDescription}
+            placeholder="Name, symbol, exact mint or contributor"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={256}
+          />
+        </Field>
+        {search.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setSearch("");
+              searchInput.current?.focus();
+            }}
+          >
+            Clear search
+          </Button>
+        )}
+      </div>
+      <p id={searchDescription} className={styles.muted}>
+        Filters only loaded hubs and their public contributor roles and handles.
+        Mint matching is case-sensitive. No additional data is fetched.
+      </p>
+      {projects !== undefined && (
+        <p
+          className={styles.projectCount}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {matches?.length ?? 0} of {projects.length} loaded{" "}
+          {projects.length === 1 ? "project" : "projects"}
+          {term
+            ? matches?.length === 1
+              ? " matches this search."
+              : " match this search."
+            : " shown."}
+        </p>
+      )}
+      <div className={styles.list}>
+        {projects === undefined ? (
+          <p className={styles.empty} role="status">
+            Loading project hubs…
+          </p>
+        ) : !projects.length ? (
+          <div className={styles.empty}>
+            <span className={styles.eyebrow}>Project directory</span>
+            <h3>
               {mint
-                ? "A hub for this exact mint, with up to 12 public affiliations."
-                : "Browse project hubs, 12 at a time, with up to 12 public affiliations per hub. Load another page when you choose."}
+                ? "This mint has no project hub yet."
+                : "The next project starts here."}
+            </h3>
+            <p>
+              Introduce what you are building, add an exact Solana mint and make
+              your role clear to the community.
+            </p>
+            <Button variant="outline" onClick={onCreation}>
+              Add the first affiliation <ArrowUpRight aria-hidden="true" />
+            </Button>
+          </div>
+        ) : matches?.length === 0 ? (
+          <div className={styles.empty}>
+            <h3>No loaded projects match</h3>
+            <p>
+              Try another term or clear this local search. Other projects may
+              exist outside the loaded pages. Load more hubs to widen this local
+              search.
             </p>
           </div>
-          <Button ref={addProjectTrigger} onClick={openCreation}>
-            <Plus aria-hidden="true" /> Add project
-          </Button>
-        </div>
-        <div className={styles.projectSearch}>
-          <Field label="Search loaded projects">
-            <Input
-              ref={searchInput}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              disabled={projects === undefined}
-              aria-describedby={searchDescription}
-              placeholder="Name, symbol, exact mint or contributor"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={256}
-            />
-          </Field>
-          {search.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setSearch("");
-                searchInput.current?.focus();
-              }}
-            >
-              Clear search
-            </Button>
-          )}
-        </div>
-        <p id={searchDescription} className={styles.muted}>
-          Filters only loaded hubs and their public contributor roles and
-          handles. Mint matching is case-sensitive. No additional data is
-          fetched.
-        </p>
-        {projects !== undefined && (
-          <p
-            className={styles.projectCount}
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            {matches?.length ?? 0} of {projects.length} loaded{" "}
-            {projects.length === 1 ? "project" : "projects"}
-            {term
-              ? matches?.length === 1
-                ? " matches this search."
-                : " match this search."
-              : " shown."}
-          </p>
-        )}
-        <div className={styles.list}>
-          {projects === undefined ? (
-            <p className={styles.empty} role="status">
-              Loading project hubs…
-            </p>
-          ) : !projects.length ? (
-            <div className={styles.empty}>
-              <span className={styles.eyebrow}>Project directory</span>
-              <h3>
-                {mint
-                  ? "This mint has no project hub yet."
-                  : "The next project starts here."}
-              </h3>
-              <p>
-                Introduce what you are building, add an exact Solana mint and
-                make your role clear to the community.
-              </p>
-              <Button variant="outline" onClick={openCreation}>
-                Add the first affiliation <ArrowUpRight aria-hidden="true" />
-              </Button>
-            </div>
-          ) : matches?.length === 0 ? (
-            <div className={styles.empty}>
-              <h3>No loaded projects match</h3>
-              <p>
-                Try another term or clear this local search. Other projects may
-                exist outside the loaded pages. Load more hubs to widen this
-                local search.
-              </p>
-            </div>
-          ) : (
-            matches?.map((project) => (
-              <article className={styles.item} key={project.projectId}>
-                <div className={styles.rowHeading}>
-                  <h3>
-                    {project.name}{" "}
-                    <span className={styles.symbol}>{project.symbol}</span>
-                  </h3>
-                  <a
-                    className={styles.rowLink}
-                    href={forumSiteUrl(
-                      `/trade?mint=${encodeURIComponent(project.mint)}`,
-                    )}
-                  >
-                    Market & discussion{" "}
-                    <ArrowUpRight size={15} aria-hidden="true" />
-                  </a>
-                </div>
-                <PublicMintIdentity key={project.mint} mint={project.mint} />
-                {project.claims.map((claim) => (
-                  <div className={styles.claim} key={claim.userId}>
-                    <div className={styles.meta}>
-                      {claim.username && claim.username !== "Forum member" ? (
-                        <ForumLink
-                          className={styles.contributorLink}
-                          href={forumMemberProfilePath(claim.username)}
-                          prefetch={false}
-                        >
-                          @{claim.username}
-                        </ForumLink>
-                      ) : (
-                        <strong>Forum member</strong>
-                      )}
-                      <span>{claim.role}</span>
-                      <span className={styles.badge}>
-                        Self-declared affiliation
-                      </span>
-                    </div>
-                    <p className={styles.prose}>{claim.description}</p>
-                    {claim.website && (
-                      <a
-                        className={styles.link}
-                        href={claim.website}
-                        {...external}
+        ) : (
+          matches?.map((project) => (
+            <article className={styles.item} key={project.projectId}>
+              <div className={styles.rowHeading}>
+                <h3>
+                  {project.name}{" "}
+                  <span className={styles.symbol}>{project.symbol}</span>
+                </h3>
+                <a
+                  className={styles.rowLink}
+                  href={forumSiteUrl(
+                    `/trade?mint=${encodeURIComponent(project.mint)}`,
+                  )}
+                >
+                  Market & discussion{" "}
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </a>
+              </div>
+              <PublicMintIdentity key={project.mint} mint={project.mint} />
+              {project.claims.map((claim) => (
+                <div className={styles.claim} key={claim.userId}>
+                  <div className={styles.meta}>
+                    {claim.username && claim.username !== "Forum member" ? (
+                      <ForumLink
+                        className={styles.contributorLink}
+                        href={forumMemberProfilePath(claim.username)}
+                        prefetch={false}
                       >
-                        Project website
-                      </a>
+                        @{claim.username}
+                      </ForumLink>
+                    ) : (
+                      <strong>Forum member</strong>
                     )}
-                    {authorId === claim.userId && (
-                      <div className={styles.actions}>
-                        <Button
-                          variant="outline"
-                          aria-label={`Edit your affiliation for ${project.name}`}
-                          onClick={(event) => {
-                            creationTrigger.current = event.currentTarget;
-                            setEditing({ mint: project.mint, claim });
-                            setCreating(true);
-                          }}
-                        >
-                          Edit your affiliation
-                        </Button>
-                      </div>
-                    )}
+                    <span>{claim.role}</span>
+                    <span className={styles.badge}>
+                      Self-declared affiliation
+                    </span>
                   </div>
-                ))}
-              </article>
-            ))
-          )}
-        </div>
-        {directory.error && <p role="alert">{directory.error}</p>}
-        {first && (
+                  <p className={styles.prose}>{claim.description}</p>
+                  {claim.website && (
+                    <a
+                      className={styles.link}
+                      href={claim.website}
+                      {...external}
+                    >
+                      Project website
+                    </a>
+                  )}
+                  {authorId === claim.userId && (
+                    <div className={styles.actions}>
+                      <Button
+                        variant="outline"
+                        aria-label={`Edit your affiliation for ${project.name}`}
+                        onClick={(event) => {
+                          onEdit(event, { mint: project.mint, claim });
+                        }}
+                      >
+                        Edit your affiliation
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </article>
+          ))
+        )}
+      </div>
+      {directory.error && <p role="alert">{directory.error}</p>}
+      {first && (
+        <>
+          <p className={styles.muted}>
+            The first page is live. Additional pages are snapshots; public
+            handles and affiliations may have changed since loading.
+          </p>
           <div className={styles.actions}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDirectory(
+                  directoryState(scope, first, directory.generation + 1),
+                )
+              }
+            >
+              Reset to live first page
+            </Button>
             {directory.isDone ? (
-              <p role="status">No more project hubs in this scope.</p>
+              <p role="status">
+                {directory.visited.length
+                  ? "Reached the end of these loaded snapshots."
+                  : "The live first page has no continuation in this scope."}
+              </p>
             ) : (
               <Button
                 variant="outline"
@@ -777,51 +861,9 @@ function Projects({
               </Button>
             )}
           </div>
-        )}
-      </section>
-      <aside className={styles.contextNote}>
-        <ShieldCheck size={18} aria-hidden="true" />
-        <div>
-          <strong>Identity is not endorsement.</strong>
-          <p>
-            Affiliations are self-declared. A linked wallet proves wallet
-            control, not project ownership or safety. Always verify the exact
-            mint.
-          </p>
-        </div>
-      </aside>
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent
-          data-surface="forum"
-          className={styles.creationDialog}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            if (creationTrigger.current?.isConnected)
-              creationTrigger.current.focus();
-            else addProjectTrigger.current?.focus();
-          }}
-        >
-          {client ? (
-            <ProjectForm
-              mint={mint}
-              client={client}
-              editing={editing}
-              authorId={authorId}
-              authorLoading={
-                isLoading || (isAuthenticated && mine === undefined)
-              }
-            />
-          ) : (
-            <DialogHeader>
-              <DialogTitle>
-                {editing ? "Edit your affiliation" : "Introduce your project"}
-              </DialogTitle>
-              <DialogDescription>Loading wallet…</DialogDescription>
-            </DialogHeader>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+        </>
+      )}
+    </>
   );
 }
 function ProjectForm({
