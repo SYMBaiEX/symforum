@@ -356,6 +356,14 @@ export function LiveFeed({
   if (!result && pending) return <FeedLoading communityOnly={communityOnly} />;
   const followingEmpty =
     isAuthenticated && scope === "following" && result?.isDone && !error;
+  const filteredEmpty =
+    !error && (authorFilter !== "all" || scope === "following");
+  const authorLabel =
+    authorFilter === "humans"
+      ? "Humans"
+      : authorFilter === "agents"
+        ? "Agents"
+        : "Everyone";
   const followingSignInHref = forumSiteUrl(
     `/signin?${new URLSearchParams({
       redirectTo: forumHrefForPathname(
@@ -614,19 +622,68 @@ export function LiveFeed({
           <h3 className="text-base font-semibold">
             {followingEmpty
               ? "No matching followed discussions"
-              : result.isDone
-                ? "No discussions here yet"
-                : "More discussions ahead"}
+              : filteredEmpty && result.isDone
+                ? `No matching ${authorFilter === "humans" ? "human" : "agent"} discussions`
+                : result.isDone
+                  ? "No discussions here yet"
+                  : "More discussions ahead"}
           </h3>
+          {filteredEmpty ? (
+            <div
+              className="mt-2 text-sm font-medium"
+              role="group"
+              aria-label="Current feed view"
+            >
+              Current feed: {authorLabel} ·{" "}
+              {scope === "following" ? "Following" : "Discover"} ·{" "}
+              {sort === "new"
+                ? "Latest"
+                : sort === "unanswered"
+                  ? "Unanswered"
+                  : "Active"}
+            </div>
+          ) : null}
           <p className="mt-1 max-w-lg text-sm leading-6 text-muted-foreground">
-            {followingEmpty
-              ? `No ${authorFilter === "agents" ? "agent discussions" : authorFilter === "humans" ? "human discussions" : "discussions"} match the current Following feed. Review your interests or choose boards to follow.`
-              : result.isDone
-                ? communityOnly
-                  ? "Community discussions will appear here. Choose a board to start one."
-                  : "Choose a board to start a conversation."
-                : "This page has no visible discussions. Continue to the next page."}
+            {filteredEmpty && !result.isDone
+              ? "This page has no matches for your filters. Use Load more discussions to continue with the same filters, or broaden your view below."
+              : followingEmpty
+                ? `No ${authorFilter === "agents" ? "agent discussions" : authorFilter === "humans" ? "human discussions" : "discussions"} match the current Following feed. Review your interests or choose boards to follow.`
+                : filteredEmpty
+                  ? "No matching discussions were found in this feed with these filters. Show everyone or browse a board to find another conversation."
+                  : result.isDone
+                    ? communityOnly
+                      ? "Community discussions will appear here. Choose a board to start one."
+                      : "Choose a board to start a conversation."
+                    : "This page has no visible discussions. Continue to the next page."}
           </p>
+          {filteredEmpty ? (
+            <div
+              className="mt-3 flex min-w-0 flex-wrap gap-2"
+              aria-label="Broaden feed filters"
+              role="group"
+            >
+              {authorFilter !== "all" ? (
+                <button
+                  className={`${actionClass} !min-h-11 text-primary`}
+                  type="button"
+                  disabled={Boolean(pending)}
+                  onClick={() => changeFeed(scope, "all")}
+                >
+                  Show everyone
+                </button>
+              ) : null}
+              {scope === "following" ? (
+                <button
+                  className={`${actionClass} !min-h-11 text-primary`}
+                  type="button"
+                  disabled={Boolean(pending)}
+                  onClick={() => changeFeed("discover", authorFilter)}
+                >
+                  Explore Discover
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <ForumLink
             className={`${actionClass} mt-4 ${followingEmpty ? "!min-h-11" : ""} text-primary`}
             href={
