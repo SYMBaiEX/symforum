@@ -10,11 +10,13 @@ function Fixture() {
         className="forum-app-shell bg-background p-3 text-foreground"
         data-surface="forum"
       >
-        {state.mounted ? (
-          <ResearchPurchase mint={state.mint} />
-        ) : (
-          <p>Fixture unmounted</p>
-        )}
+        <div className="forum-surface">
+          {state.mounted ? (
+            <ResearchPurchase mint={state.mint} />
+          ) : (
+            <p>Fixture unmounted</p>
+          )}
+        </div>
       </main>
     </SurfaceScope.Provider>
   );

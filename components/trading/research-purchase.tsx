@@ -802,7 +802,7 @@ function ResearchReceiptLibrary({
             <Input
               ref={searchInput}
               type="search"
-              className="mt-1 min-h-11 w-full min-w-0 text-base"
+              className="mt-1 !min-h-11 w-full min-w-0 text-base"
               value={search}
               maxLength={256}
               disabled={receipts === undefined}
@@ -813,7 +813,7 @@ function ResearchReceiptLibrary({
           <label className="min-w-0">
             Receipt status
             <select
-              className="focus-ring mt-1 min-h-11 w-full min-w-0 rounded-md border bg-background px-3 text-base"
+              className="focus-ring mt-1 !min-h-11 w-full min-w-0 rounded-md border bg-background px-3 text-base"
               value={filter}
               disabled={receipts === undefined}
               onChange={(event) =>
