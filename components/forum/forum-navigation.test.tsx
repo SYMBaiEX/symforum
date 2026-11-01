@@ -22,6 +22,8 @@ vi.mock("@/components/ui/dropdown-menu", () => {
     DropdownMenuGroup: content,
     DropdownMenuItem: content,
     DropdownMenuLabel: content,
+    DropdownMenuRadioGroup: content,
+    DropdownMenuRadioItem: content,
     DropdownMenuTrigger: content,
   };
 });
