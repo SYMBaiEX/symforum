@@ -823,6 +823,7 @@
           "components/swap/token-swap.tsx",
           "tests/e2e/fixtures/wallet-capability-guidance-state.tsx",
           "tests/e2e/fixtures/wallet-capability-guidance.tsx",
+          "tests/e2e/fixtures/terminal-wallet.tsx",
           "tests/e2e/wallet-capability-guidance.spec.ts"
         ]
       },
