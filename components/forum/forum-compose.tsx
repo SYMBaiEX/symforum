@@ -190,6 +190,11 @@ export function ForumCompose({
   >();
   const loadedDraftKey = useRef<string | undefined>(undefined);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [draftRestoredScope, setDraftRestoredScope] = useState("");
+  const [draftStorageFeedback, setDraftStorageFeedback] = useState({
+    scope: "",
+    message: "",
+  });
   const protectedDraftRef = useRef<ProtectedForumDraft | null>(null);
   const [protectedDraft, setProtectedDraft] =
     useState<ProtectedForumDraft | null>(null);
@@ -218,6 +223,9 @@ export function ForumCompose({
     setProtectedDraft(null);
     setReplaceConfirmed(false);
     setRecoveryMessage("");
+    setDraftSaved(false);
+    setDraftRestoredScope("");
+    setDraftStorageFeedback({ scope: draftScope, message: "" });
     let restoredBody = false;
     let raw: string | null = null;
     try {
@@ -232,11 +240,14 @@ export function ForumCompose({
         if (
           draft.data &&
           Object.values(draft.data).every((value) => typeof value === "string")
-        )
+        ) {
           onDraftDataChange?.(draft.data);
+          if (onDraftDataChange) setDraftRestoredScope(draftScope);
+        }
         if (body.trim().length === 0 && typeof draft.body === "string") {
           restoredBody = true;
           onBodyChange(draft.body);
+          setDraftRestoredScope(draftScope);
         }
         if (
           titleEnabled &&
@@ -244,6 +255,7 @@ export function ForumCompose({
           typeof draft.title === "string"
         ) {
           onTitleChange?.(draft.title);
+          setDraftRestoredScope(draftScope);
         }
       }
     } catch {
@@ -314,6 +326,11 @@ export function ForumCompose({
       ) {
         window.localStorage.removeItem(draftKey);
         setDraftSaved(false);
+        setDraftRestoredScope("");
+        setDraftStorageFeedback({
+          scope: draftScope,
+          message: "Empty editor: no draft text saved on this device.",
+        });
         return;
       }
       window.localStorage.setItem(
@@ -327,8 +344,16 @@ export function ForumCompose({
         }),
       );
       setDraftSaved(true);
+      setDraftStorageFeedback({ scope: draftScope, message: "" });
     } catch {
       setDraftSaved(false);
+      setDraftStorageFeedback({
+        scope: draftScope,
+        message:
+          body.trim().length === 0 && (!titleEnabled || title?.trim().length === 0)
+            ? "Could not clear the draft on this device. Previously saved text may return when you reopen the editor."
+            : "Could not save the draft on this device. Keep a copy of your current text before leaving.",
+      });
       // Storage can be unavailable in private or sandboxed browsers.
     }
   }, [
@@ -404,6 +429,8 @@ export function ForumCompose({
       setReplaceConfirmed(false);
       setRecoveryMessage("");
       setDraftSaved(true);
+      setDraftRestoredScope("");
+      setDraftStorageFeedback({ scope: draftScope, message: "" });
     } catch {
       setRecoveryMessage(
         "Could not replace the saved draft. Keep a backup and try again when local storage is available.",
@@ -423,8 +450,18 @@ export function ForumCompose({
       if (!canWriteStoredDraft()) return;
       try {
         window.localStorage.removeItem(draftKey);
+        setDraftSaved(false);
+        setDraftRestoredScope("");
+        setDraftStorageFeedback({
+          scope: draftScope,
+          message: "Posted successfully; the local draft was cleared.",
+        });
       } catch {
-        // Ignore storage cleanup failures after a successful post.
+        setDraftStorageFeedback({
+          scope: draftScope,
+          message:
+            "Posted successfully, but the local draft could not be cleared. It may be restored when you return.",
+        });
       }
     }
   }
@@ -454,7 +491,10 @@ export function ForumCompose({
   }
 
   return (
-    <div className="forum-composer forum-panel min-w-0" aria-busy={pending}>
+    <div
+      className="forum-composer forum-panel min-w-0 [&&_button]:!min-h-11 [&&_button]:!min-w-11"
+      aria-busy={pending}
+    >
       {protection && (
         <section
           className="mb-3 rounded-xl border border-border p-3 text-sm"
@@ -780,13 +820,29 @@ export function ForumCompose({
           {error}
         </p>
       ) : null}
+      {draftKey ? (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          Draft text stays in this browser on this device, not cloud sync. For
+          readable drafts, clearing the title and body clears saved text; clearing
+          browser site data also removes local drafts. Attached files are not
+          restored with draft text.
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-muted-foreground">
+        <p
+          className="min-w-0 break-words text-xs font-medium text-muted-foreground"
+          role={protection ? undefined : "status"}
+        >
           {protection
             ? "Saved draft protected; current edits are not saved"
-            : draftSaved
-              ? "Draft saved on this device"
-              : "Ctrl/⌘ Enter to post"}
+            : draftStorageFeedback.scope === draftScope &&
+                draftStorageFeedback.message
+              ? draftStorageFeedback.message
+              : hydratedDraftKey === draftScope && draftSaved
+                ? draftRestoredScope === draftScope
+                  ? "Draft restored from this device; current text saved on this device"
+                  : "Draft saved on this device"
+                : "Ctrl/⌘ Enter to post"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {footerActions}
@@ -828,6 +884,25 @@ export function ForumAttachmentDraftPanel({
   useEffect(() => () => onUploadingChange?.(false), [onUploadingChange]);
   const [error, setError] = useState("");
   const [remainingFiles, setRemainingFiles] = useState<string[]>([]);
+  const [fileFeedback, setFileFeedback] = useState<
+    {
+      name: string;
+      status:
+        "queued" | "waiting" | "confirmed" | "unconfirmed" | "not-started";
+    }[]
+  >([]);
+  const markUnconfirmed = () =>
+    setFileFeedback((files) =>
+      files.map((file) => ({
+        ...file,
+        status:
+          file.status === "waiting"
+            ? "unconfirmed"
+            : file.status === "queued"
+              ? "not-started"
+              : file.status,
+      })),
+    );
   const uploadBatch = useRef<{
     controller: AbortController;
     cancelled: boolean;
@@ -845,6 +920,7 @@ export function ForumAttachmentDraftPanel({
     }
     setUploading(false);
     setRemainingFiles([]);
+    setFileFeedback([]);
     setError("");
     return () => {
       if (uploadBatch.current) {
@@ -862,6 +938,7 @@ export function ForumAttachmentDraftPanel({
       uploadBatch.current = null;
       setUploading(false);
       setRemainingFiles([]);
+      setFileFeedback([]);
     }
   }, [attachmentIds]);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>(
@@ -897,6 +974,7 @@ export function ForumAttachmentDraftPanel({
     }
     setError("");
     setRemainingFiles([]);
+    setFileFeedback([]);
 
     if (usedAttachmentSlots + nextFiles.length > MAX_FORUM_ATTACHMENTS) {
       setError(`Attach up to ${MAX_FORUM_ATTACHMENTS} files.`);
@@ -924,9 +1002,21 @@ export function ForumAttachmentDraftPanel({
       (typeof window === "undefined" || `${window.location.pathname}${window.location.search}` === route);
     uploadBatch.current = batch;
     setUploading(true);
+    setFileFeedback(
+      nextFiles.map((file) => ({
+        name: file.name.slice(0, 160),
+        status: runtime.uploadFiles ? "waiting" : "queued",
+      })),
+    );
     const uploaded: ForumAttachmentDraft[] = [];
     const keepConfirmed = (claimed: ForumAttachmentDraft, file: File) => {
       uploaded.push(claimed);
+      const confirmedIndex = uploaded.length - 1;
+      setFileFeedback((files) =>
+        files.map((item, index) =>
+          index === confirmedIndex ? { ...item, status: "confirmed" } : item,
+        ),
+      );
       const retained = [...attachments, ...uploaded];
       batch.expectedIds = retained.map((attachment) => attachment.storageId).join(":");
       if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(claimed.contentType)) {
@@ -962,6 +1052,12 @@ export function ForumAttachmentDraftPanel({
         if (contentType === null) {
           throw new Error(`${file.name} is not an allowed forum attachment.`);
         }
+        const activeIndex = uploaded.length;
+        setFileFeedback((files) =>
+          files.map((item, index) =>
+            index === activeIndex ? { ...item, status: "waiting" } : item,
+          ),
+        );
         const response = await fetch(uploadEndpoint, {
           method: "POST",
           headers: {
@@ -999,9 +1095,13 @@ export function ForumAttachmentDraftPanel({
     } catch {
       if (!current()) return;
       setRemainingFiles(batch.remaining);
-      setError(`Could not confirm ${batch.remaining[0] ?? "the selected files"}. Confirmed attachments have been kept. Choose unconfirmed files again when ready; nothing is retried automatically.${runtime.host === "plugin" ? " Check Agent access for required owner approval first." : ""}`);
+      markUnconfirmed();
+      setError(
+        `Could not confirm ${batch.remaining[0] ?? "the selected files"}. Confirmed attachments have been kept. Check upload status before choosing unconfirmed files again; nothing is retried automatically.${runtime.host === "plugin" ? " Check Agent access for required owner approval first." : ""}`,
+      );
     } finally {
       if (uploadBatch.current === batch) {
+        if (!current()) setFileFeedback([]);
         uploadBatch.current = null;
         setUploading(false);
       }
@@ -1009,6 +1109,7 @@ export function ForumAttachmentDraftPanel({
   }
 
   function removeAttachment(storageId: string) {
+    setFileFeedback([]);
     onAttachmentsChange(
       attachments.filter((attachment) => attachment.storageId !== storageId),
     );
@@ -1022,11 +1123,14 @@ export function ForumAttachmentDraftPanel({
     uploadBatch.current = null;
     setUploading(false);
     setRemainingFiles(batch.remaining);
-    setError(`Stopped waiting. An in-flight upload may still finish outside this draft. Confirmed attachments are kept; no retry runs automatically.${runtime.host === "plugin" ? " Check Agent access and owner approval before choosing the files again." : ""}`);
+    markUnconfirmed();
+    setError(
+      `Stopped waiting. An in-flight upload may still finish outside this draft. Confirmed attachments are kept; no retry runs automatically.${runtime.host === "plugin" ? " Check Agent access and owner approval before choosing the files again." : ""}`,
+    );
   }
 
   return (
-    <section className="min-w-0 rounded-xl bg-muted/25 p-3">
+    <section className="min-w-0 rounded-xl bg-muted/25 p-3 [&&_button]:!min-h-11 [&&_button]:!min-w-11">
       <ForumAgentAttachmentPicker />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -1055,7 +1159,12 @@ export function ForumAttachmentDraftPanel({
           {uploading ? "Uploading" : "Add files"}
         </Button>
         {uploading ? (
-          <Button type="button" variant="ghost" className="min-h-11" onClick={stopUpload}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11"
+            onClick={stopUpload}
+          >
             Stop waiting
           </Button>
         ) : null}
@@ -1078,21 +1187,49 @@ export function ForumAttachmentDraftPanel({
           className="mt-3 font-mono text-[10px] uppercase text-muted-foreground"
           role="status"
         >
-          Uploading attachment...
+          Waiting for upload confirmation. Byte progress is unavailable.
         </p>
+      ) : null}
+      {fileFeedback.length > 0 ? (
+        <ul
+          className="mt-3 min-w-0 space-y-1 text-xs text-muted-foreground"
+          aria-label="File upload outcomes"
+          aria-live="polite"
+        >
+          {fileFeedback.map((file, index) => (
+            <li key={index} className="break-words [overflow-wrap:anywhere]">
+              {file.name} —{" "}
+              {file.status === "confirmed"
+                ? "Confirmed attachment"
+                : file.status === "waiting"
+                  ? "Awaiting confirmation"
+                  : file.status === "queued"
+                    ? "Waiting to start"
+                    : file.status === "not-started"
+                      ? "Not started"
+                      : "Not confirmed; may have uploaded. Check before choosing again."}
+            </li>
+          ))}
+        </ul>
       ) : null}
       {error ? (
         <p
-          className="mt-3 border border-row-border p-2 text-sm text-muted-foreground"
+          className="mt-3 break-words [overflow-wrap:anywhere] border border-row-border p-2 text-sm text-muted-foreground"
           role="alert"
         >
           {error}
         </p>
       ) : null}
       {remainingFiles.length > 0 ? (
-        <div className="mt-2 text-sm">
+        <div className="mt-2 min-w-0 break-words [overflow-wrap:anywhere] text-sm">
           <p>Not attached: {remainingFiles.join(", ")}</p>
-          <Button type="button" variant="outline" className="mt-2 min-h-11" disabled={disabled || uploading} onClick={() => inputRef.current?.click()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 min-h-11"
+            disabled={disabled || uploading}
+            onClick={() => inputRef.current?.click()}
+          >
             Choose unconfirmed files
           </Button>
         </div>
