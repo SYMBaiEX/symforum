@@ -64,6 +64,172 @@ type ReadySwap = {
 };
 const short = (mint: string) => `${mint.slice(0, 5)}…${mint.slice(-5)}`;
 
+// Display evidence only. This never participates in quote consent or execution.
+function QuoteClarity({
+  quote,
+  context,
+  revisionRef,
+  notice,
+  output,
+  feeLabel,
+  now,
+  sent,
+}: {
+  quote: Quote | undefined;
+  context: string;
+  revisionRef: { current: number };
+  notice: string;
+  output: TradeToken | undefined;
+  feeLabel: (quote: Quote) => string;
+  now: number;
+  sent: boolean;
+}) {
+  const displayed = useRef<{
+    quote: Quote;
+    context: string;
+    revision: number;
+  } | null>(null);
+  const displayedContext = useRef(context);
+  const [comparison, setComparison] = useState<{
+    previous: Quote;
+    next: Quote;
+    context: string;
+    revision: number;
+  } | null>(null);
+  useEffect(() => {
+    const inputRevision = revisionRef.current;
+    if (displayedContext.current !== context) {
+      displayedContext.current = context;
+      displayed.current = null;
+      return;
+    }
+    const previous = displayed.current;
+    if (!quote || !output || quote.expiresAt <= now) return;
+    if (previous && previous.quote.quoteId !== quote.quoteId) {
+      setComparison(
+        previous.context === context &&
+          previous.revision + 1 === inputRevision &&
+          previous.quote.inputMint === quote.inputMint &&
+          previous.quote.outputMint === quote.outputMint &&
+          previous.quote.amountRaw === quote.amountRaw &&
+          refreshedQuoteNeedsReview(previous.quote, quote)
+          ? {
+              previous: previous.quote,
+              next: quote,
+              context,
+              revision: inputRevision,
+            }
+          : null,
+      );
+    }
+    displayed.current = { quote, context, revision: inputRevision };
+  }, [quote, context, revisionRef, output, now]);
+  const showComparison =
+    comparison &&
+    output &&
+    quote &&
+    comparison.context === context &&
+    comparison.next.quoteId === quote.quoteId &&
+    output.mint === quote.outputMint &&
+    notice ===
+      "Quote updated: the minimum received or fee changed. Review the new amounts, then choose Swap if you accept. No wallet request was made.";
+  return (
+    <>
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {quote && quote.expiresAt <= now && !sent
+          ? "Quote expired. A fresh quote will be checked when you swap."
+          : ""}
+      </p>
+      {showComparison && (
+        <section
+          className="swap-preview min-w-0 [overflow-wrap:anywhere]"
+          aria-label="Quote changes requiring review"
+        >
+          <h3>Review the refreshed quote</h3>
+          <p>
+            Same pair and pay amount. Previous → refreshed estimate. This is not
+            a new approval.
+          </p>
+          <dl>
+            <div>
+              <dt>You receive · {output.symbol}</dt>
+              <dd>
+                {formatTokenAmount(
+                  comparison.previous.outputAmountRaw,
+                  output.decimals,
+                )}{" "}
+                →{" "}
+                {formatTokenAmount(
+                  comparison.next.outputAmountRaw,
+                  output.decimals,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Minimum received · {output.symbol}</dt>
+              <dd>
+                {formatTokenAmount(
+                  comparison.previous.minimumOutputAmountRaw,
+                  output.decimals,
+                )}{" "}
+                →{" "}
+                {formatTokenAmount(
+                  comparison.next.minimumOutputAmountRaw,
+                  output.decimals,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Platform fee · previous</dt>
+              <dd>{feeLabel(comparison.previous)}</dd>
+            </div>
+            <div>
+              <dt>Platform fee · refreshed</dt>
+              <dd>{feeLabel(comparison.next)}</dd>
+            </div>
+            {comparison.previous.platformFeeRaw !==
+              comparison.next.platformFeeRaw && (
+              <div>
+                <dt>Quoted fee · raw base units</dt>
+                <dd>
+                  {comparison.previous.platformFeeRaw} →{" "}
+                  {comparison.next.platformFeeRaw}
+                </dd>
+              </div>
+            )}
+            {(["previous", "next"] as const).map((version) => {
+              const fees = comparison[version].fees;
+              return fees ? (
+                <div key={version}>
+                  <dt>
+                    Fee breakdown ·{" "}
+                    {version === "next" ? "refreshed" : "previous"}
+                  </dt>
+                  <dd>
+                    {fees.totalFeeBps / 100}% total ·{" "}
+                    {fees.integratorFeeBps / 100}% integrator ·{" "}
+                    {fees.jupiterFeeBps / 100}% Jupiter. Collection mint:{" "}
+                    <code>{fees.feeMint}</code>
+                  </dd>
+                </div>
+              ) : null;
+            })}
+          </dl>
+          <p>
+            Network costs and rent remain separate. Choose Swap again only if
+            you accept the refreshed amounts.
+          </p>
+        </section>
+      )}
+    </>
+  );
+}
+
 export function TokenSwap({ outputToken }: { outputToken?: TradeToken }) {
   const client = useCommerceWallet();
   return client ? (
@@ -870,6 +1036,22 @@ function LiveSwap({
           approval.
         </p>
       )}
+      <QuoteClarity
+        quote={
+          best?.inputMint === inputMint &&
+          best.outputMint === outputMint &&
+          best.amountRaw === rawAmount
+            ? best
+            : undefined
+        }
+        context={inputKey}
+        revisionRef={revision}
+        notice={notice}
+        output={output}
+        feeLabel={feeLabel}
+        now={now}
+        sent={sent}
+      />
       <Button
         className="w-full swap-primary"
         disabled={
