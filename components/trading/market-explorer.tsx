@@ -239,6 +239,14 @@ export function MarketExplorer({
     now,
     data?.stale ?? false,
     data?.sampledAt ?? null,
+    {
+      band,
+      platform,
+      freshOnly,
+      sortKey: sort.key,
+      sortDirection: sort.direction,
+      searchApplied: search.trim().length > 0,
+    },
   );
   // Content, not a reactive payload object's identity, fences old feedback/text.
   if (exportState && exportState.csv !== exportCsv) setExportState(null);
@@ -251,7 +259,7 @@ export function MarketExplorer({
         csv: exportCsv,
         manual: true,
         message:
-          "Download unavailable here. Select the CSV text below; it contains only the displayed loaded sample.",
+          "Download unavailable here. Select the CSV text below; it contains only the displayed loaded sample. Public filters and sort are included; search text is excluded for privacy.",
       });
     if (
       host !== "website" ||
@@ -278,7 +286,7 @@ export function MarketExplorer({
       setExportState({
         csv: exportCsv,
         manual: false,
-        message: `CSV download requested for ${markets.length} displayed ${markets.length === 1 ? "row" : "rows"}. Loaded sample only; not full market coverage.`,
+        message: `CSV download requested for ${markets.length} displayed ${markets.length === 1 ? "row" : "rows"}. Loaded sample only; not full market coverage. Public filters and sort are included; search text is excluded for privacy.`,
       });
     } catch {
       exportUrl.current?.();
@@ -522,9 +530,9 @@ export function MarketExplorer({
         </label>
         <button
           type="button"
-          className="focus-ring inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-md px-2 text-xs disabled:opacity-50"
+          className="focus-ring inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-md px-2 text-xs disabled:opacity-50 [&&]:!min-h-11"
           aria-label="Export CSV of displayed market rows"
-          title="Only the displayed loaded sample, with original observation times. No additional data requests."
+          title="Only the displayed loaded sample, with public filters, sort and original observation times. Search text is excluded for privacy. No additional data requests."
           disabled={empty}
           onClick={exportRows}
         >
