@@ -1,7 +1,7 @@
 "use client";
 import { SYMF_TOKEN } from "@/lib/symf-token";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import {
@@ -62,6 +62,8 @@ import {
 } from "@/lib/forum-navigation-model";
 import { cn } from "@/lib/utils";
 import { FORUM_TELEGRAM_URL } from "@/lib/site-urls";
+import { forumSignInHref } from "@/lib/forum-signin-context";
+import { useForumRuntime } from "./forum-runtime-context";
 
 const navigationIcons = {
   feed: MessageSquare,
@@ -122,6 +124,7 @@ function ForumNavigationState() {
     return (
       <ForumNavigationLayout
         active={active}
+        signInSearch={searchParams.toString()}
         navState={{
           authenticated: false,
           username: null,
@@ -131,19 +134,27 @@ function ForumNavigationState() {
         }}
       />
     );
-  return <ConnectedForumNavigation active={active} />;
+  return (
+    <ConnectedForumNavigation
+      active={active}
+      signInSearch={searchParams.toString()}
+    />
+  );
 }
 
 function ConnectedForumNavigation({
   active,
+  signInSearch,
 }: {
   active: ForumHomeView | null;
+  signInSearch: string;
 }) {
   const navState = useQuery(forumRefs.getMyForumNavState, {});
   const overview = useQuery(forumRefs.overview, {});
   return (
     <ForumNavigationLayout
       active={active}
+      signInSearch={signInSearch}
       navState={navState}
       overview={overview}
     />
@@ -157,15 +168,37 @@ export function ForumNavigationLayout({
   active,
   navState,
   overview,
+  signInSearch = "",
 }: {
   active: ForumHomeView | null;
   navState?: NavState;
   overview?: ForumOverviewRecord;
+  signInSearch?: string;
 }) {
   const pathname = usePathname();
   const { primarySiteHref, compactNavigation, toggleNavigation } =
     useForumShellContext();
-  const signInHref = `/signin?${new URLSearchParams({ redirectTo: pathname ?? "/forum" })}`;
+  const runtime = useForumRuntime();
+  const context = `${pathname ?? "/forum"}?${signInSearch}`;
+  const [signInAnchor, setSignInAnchor] = useState<{
+    context: string;
+    hash: string;
+  } | null>(null);
+  const signInHref = forumSignInHref(
+    pathname,
+    signInSearch,
+    signInAnchor?.context === context ? signInAnchor.hash : "",
+  );
+  // Read the current anchor only during deliberate interaction. Native route
+  // fragments belong to the forum runtime, never the host document URL.
+  const prepareSignIn = () =>
+    setSignInAnchor({
+      context,
+      hash:
+        runtime.host === "plugin"
+          ? (runtime.routeHash ?? "")
+          : window.location.hash,
+    });
   const boards =
     overview?.categories.filter(
       (board) => board.kind !== "section" && board.status === "active",
@@ -327,6 +360,8 @@ export function ForumNavigationLayout({
           {navState?.authenticated === false && (
             <ForumLink
               href={signInHref}
+              onFocus={prepareSignIn}
+              onPointerDown={prepareSignIn}
               className="focus-ring hidden min-h-11 items-center px-3 text-sm font-medium sm:inline-flex"
             >
               Sign in
@@ -482,7 +517,11 @@ export function ForumNavigationLayout({
                     )}
                   </>
                 ) : navState ? (
-                  <ForumMenuLink href={signInHref} icon={UserRound}>
+                  <ForumMenuLink
+                    href={signInHref}
+                    icon={UserRound}
+                    onPrepare={prepareSignIn}
+                  >
                     Sign in to participate
                   </ForumMenuLink>
                 ) : (
@@ -606,7 +645,12 @@ export function ForumNavigationLayout({
               )}
             </nav>
           ) : (
-            <ForumLink href={signInHref} className="forum-rail-link">
+            <ForumLink
+              href={signInHref}
+              className="forum-rail-link"
+              onFocus={prepareSignIn}
+              onPointerDown={prepareSignIn}
+            >
               <UserRound aria-hidden="true" className="size-[19px]" />
               Sign in to join in
             </ForumLink>
@@ -719,17 +763,19 @@ function ForumMenuLink({
   href,
   icon: Icon,
   children,
+  onPrepare,
 }: {
   href: string;
   icon: typeof Search;
   children: React.ReactNode;
+  onPrepare?: () => void;
 }) {
   return (
     <DropdownMenuItem
       asChild
       className="min-h-11 rounded-lg px-3 focus:bg-muted focus:text-foreground"
     >
-      <ForumLink href={href}>
+      <ForumLink href={href} onFocus={onPrepare} onPointerDown={onPrepare}>
         <Icon aria-hidden="true" className="text-muted-foreground" />
         {children}
       </ForumLink>
