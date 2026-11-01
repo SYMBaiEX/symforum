@@ -33,9 +33,11 @@ agent payment delegation is intentionally not claimed by this release.
 
 1. Explicitly request a quote with `POST /api/research/token`, JSON
    `{wallet,mint,idempotencyKey}`. It returns HTTP402 and `PAYMENT-REQUIRED`.
-2. Decode the declaration with the official SDK. It binds exact mint, USDC,
-   amount, treasury, version, owner, resource identity, source/report hash,
-   idempotency key, expiry and a unique memo.
+2. Decode the declaration with the official SDK. Check exact USDC, amount,
+   treasury, version, resource identity and intent memo. The server's saved
+   intent binds the requested mint, owner, wallet, source/report hash,
+   idempotency key and expiry; decoding a header alone does not prove those
+   private bindings, wallet linkage, readiness or payment finality.
 3. Construct an `ExactSvmScheme` with the existing Kit wallet's **sign-only**
    projection. Set its RPC URL to `/api/research/rpc?intentKey=<intentKey>` on the
    authenticated first-party host. This proxy permits only USDC mint metadata
@@ -68,6 +70,53 @@ const payload = await sdk.createPaymentPayload(declaration);
 const header = encodePaymentSignatureHeader(payload);
 // One explicit authenticated GET to declaration.resource.url with that header.
 ```
+
+## Executable offline owner-client rehearsal
+
+`examples/research-owner-client.mock.ts` and its test are a **mock-only example**
+of the existing contract, not a second checkout implementation. Run offline:
+
+```sh
+bunx --no-install vitest run examples/research-owner-client.mock.test.ts
+```
+
+The example requires an injected in-memory transport, an explicit approval
+callback, an inert sign-only callback and a supplied clock. It has no default
+`fetch`, RPC, wallet client, facilitator, environment credential or private key.
+Only a fixed fake human-owner credential marker is accepted; an evidence-agent
+grant is never substituted for an owner session JWT. Its fake wire constants
+are not valid unsigned/signed Solana transactions and must never be submitted.
+Do not replace the mock seams with live networking or a wallet.
+
+The tests supply each seam directly and demonstrate:
+
+1. Read the catalog, refuse unavailable/exhausted readiness, and request one
+   intent with the exact wallet, mint and idempotency key.
+2. Decode `PAYMENT-REQUIRED` using the installed `@x402/core` **2.29.0** HTTP
+   helpers, then reuse this application's existing pure requirement/resource
+   builders and payload validator. A changed amount, asset, network, treasury,
+   memo, version or resource is refused before approval.
+3. Show the bound review summary and require explicit approval. Inside the
+   inert sign-only seam, call `prepare` exactly once with the same intent and
+   fake unsigned wire. Refusal, missing/duplicate preparation, changed payload
+   or expiry prevents the signature-bearing request.
+4. Make at most one resource request containing `PAYMENT-SIGNATURE`. Repeated
+   or concurrent `reviewOnce()` calls reuse one promise; they do not obtain a
+   new quote, ask again, or replay settlement after an ambiguous response.
+5. Treat HTTP202, unknown/rejected outcomes, malformed proof or transport
+   failure after that request as **mock-protected**, not paid. Only an explicit
+   `checkSavedReceipt()` reads the same resource again, without a payment
+   signature header. It never polls or requests settlement automatically.
+6. Return the already-supplied frozen report only for a matching mock fulfilled
+   receipt and `PAYMENT-RESPONSE`. No report is regenerated or retimed.
+
+This deliberately does **not** construct an `ExactSvmScheme`, build/sign/send a
+transaction, call the preparation RPC proxy, test a real session or wallet,
+reserve facilitator credits, settle funds, prove report provenance or validate
+on-chain finality. The installed `@x402/svm` **2.29.0** production sign-only/v0
+path above remains unchanged. `mock-fulfilled` is synthetic protocol evidence,
+never a claim that payment occurred. Real acceptance remains a separately
+authorized operator/user-controlled test with the existing holds and budgets.
 
 ## Durable failure policy
 
