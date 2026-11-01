@@ -9,6 +9,7 @@ export const STAGES = [
   "queued",
   "in_progress",
   "ready_review",
+  "partial",
   "source_implemented",
   "isolated_tested",
   "merged",
@@ -93,6 +94,7 @@ const itemSchema = z
       .array(z.object({ path, anchor: text, observation: text }).strict())
       .min(1),
     acceptance: z.array(text).min(1),
+    remainingAcceptance: z.array(text).min(1).optional(),
     boundaries: z.array(text).min(1),
     dependencies: z.array(
       z
@@ -156,6 +158,7 @@ const overlaps = (a: string, b: string) =>
   a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 const stageProofs = {
   ready_review: ["source_commit"],
+  partial: ["source_commit", "isolated_tests"],
   source_implemented: ["source_commit"],
   isolated_tested: ["source_commit", "isolated_tests"],
   merged: ["source_commit", "isolated_tests", "merge"],
@@ -170,6 +173,13 @@ const stageProofs = {
 } as const;
 
 const validateItem = (item: CompletionItem) => {
+  if (item.status === "partial" && !item.remainingAcceptance?.length)
+    throw Error(`${item.id}: partial delivery requires remaining acceptance`);
+  if (
+    (item.status === "source_deployed" || item.status === "live_verified") &&
+    item.remainingAcceptance?.length
+  )
+    throw Error(`${item.id}: remaining acceptance cannot be labelled complete`);
   if (item.id !== `PLATFORM-${String(item.number).padStart(3, "0")}`)
     throw Error(`${item.id}: number/ID mismatch`);
   if (

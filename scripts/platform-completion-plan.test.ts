@@ -259,6 +259,21 @@ describe("all-100 platform completion inventory", () => {
     item(plan, 6).blockers = [];
     expect(readyCompletionBatch(plan).map((row) => row.number)).toEqual([65]);
   });
+  test("partial delivery retains its remainder and cannot satisfy a whole-item dependency", () => {
+    const plan = fixture();
+    const source = item(plan, 6);
+    prove(source, "isolated_tested");
+    source.status = "partial";
+    expect(() => validateCompletionPlan(plan)).toThrow("remaining acceptance");
+    source.remainingAcceptance = [
+      "Finish and qualify the remaining original scope.",
+    ];
+    expect(() => validateCompletionPlan(plan)).not.toThrow();
+    assign(plan, 8, "status", "components/status.ts");
+    expect(readyCompletionBatch(plan)).toEqual([]);
+    source.status = "source_deployed";
+    expect(() => validateCompletionPlan(plan)).toThrow("remaining acceptance");
+  });
   test("ready batches avoid exact and parent-child paths, busy owners and candidate collisions", () => {
     const plan = fixture();
     assign(plan, 6, "active", "components/data.ts").status = "in_progress";

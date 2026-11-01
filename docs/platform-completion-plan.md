@@ -21,6 +21,7 @@ that every requested capability is absent or that its full acceptance is met.
 | queued                   | Requested work remains; proposed paths are not a writer assignment.                                  |
 | in_progress              | One named lane owns explicit literal files; no completion claim.                                     |
 | ready_review             | A frozen worker/source candidate exists; parent qualification is pending.                            |
+| partial                  | A qualified slice exists, but explicit remaining original acceptance is still outstanding.           |
 | source_implemented       | A source-commit receipt exists; not sufficient for release.                                          |
 | isolated_tested          | Source plus reproducible isolated-test evidence; not live provider/wallet proof.                     |
 | merged                   | Tested source has a normal protected merge receipt.                                                  |
@@ -54,11 +55,18 @@ one coherent named lane may share files and count as one active worker; they are
 not independent concurrent writers. A queued item without an assigned owner
 cannot enter the ready batch. The dry planner never creates agents or worktrees.
 
-Current coordinated lanes are research-precision (#4), panel-recovery (#5),
-swap-clarity (#12/#18), feed-recovery (#31), signin-context (#32), and the root's
-catalog-discovery (#64). Frozen candidates remain review-only until the parent
-finishes the release gates. A later market-export assignment (#26) is separately
-recorded and must not be represented as part of an earlier release.
+PR278 shipped the precise report formatter (#4), quote clarity (#12/#18), Feed
+recovery (#31), sign-in context (#32) and catalog discovery (#64). Only the three
+public terminal read-panel recovery slices of #5 shipped; remaining recovery
+scope is explicit, not silently counted complete. The tested/merged tree,
+automatic five-domain release and bounded public Feed acceptance were verified.
+
+Next-wave frozen candidates cover displayed-market CSV (#26), candle gaps (#28),
+search recovery (#33), exact receive-amount inspection (#19), configured-agent
+labels and owner-led onboarding (#51 partial/#52), and an offline x402 example
+(#65). Their worker checks do not substitute for parent full qualification or a
+release. The admin-only provider snapshot (#6) is separately frozen and awaits
+its exact backend approval and release; it is not part of the frontend-only wave.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. No item has been
@@ -128,3 +136,8 @@ It does not execute a DAG, change statuses, fetch an API, start an automation,
 create worktrees, grant approval or deploy anything. All other CLI flags are
 rejected. With five active lanes or unassigned remaining work, an empty ready
 list is correct, not an excuse to invent completion or overlap writers.
+
+Partial delivery never satisfies a whole-item dependency. For example, local
+recovery of the three public terminal read panels does not certify Community or
+private-panel recovery; honest configured-agent labels do not establish recent
+published activity when the existing projection supplies no timestamps.
