@@ -1,6 +1,22 @@
 import type { TerminalMarket } from "@/lib/forum-terminal-model";
-import { marketObservation, marketSources } from "./market-explorer-model";
+import type { MarketCapBand } from "@/lib/forum-market-cap";
+import {
+  marketObservation,
+  marketSources,
+  type MarketSortDirection,
+  type MarketSortKey,
+} from "./market-explorer-model";
 import { safeExternalUrl } from "./terminal-format";
+
+export type MarketExportContext = {
+  band: MarketCapBand;
+  platform: "all" | "bags" | "pumpfun";
+  freshOnly: boolean;
+  sortKey: MarketSortKey;
+  sortDirection: MarketSortDirection;
+  // Deliberately no search term: it can contain private identifiers.
+  searchApplied: boolean;
+};
 
 const sourceHosts = new Set([
   "solanatracker.io",
@@ -79,6 +95,12 @@ export const MARKET_EXPORT_HEADERS = [
   "holders_canonical_public_source_path",
   "discovery_checked_at_utc",
   "discovery_sample_stale",
+  "selected_market_cap_band",
+  "selected_platform",
+  "selected_fresh_only",
+  "selected_sort_key",
+  "selected_sort_direction",
+  "search_applied",
 ] as const;
 
 /** No discovery, sorting, fetching, fallback values or private fields here. */
@@ -87,6 +109,7 @@ export function marketExportCsv(
   now: number,
   sampleStale: boolean,
   sampledAt: number | null,
+  context: MarketExportContext,
 ) {
   const lines = rows.map((row, index) => {
     const sources = marketSources(row, now);
@@ -116,6 +139,12 @@ export function marketExportCsv(
         sampledAt === null ? null : marketObservation(sampledAt, now).dateTime,
       ),
       String(sampleStale),
+      textCell(context.band),
+      textCell(context.platform),
+      String(context.freshOnly),
+      textCell(context.sortKey),
+      textCell(context.sortDirection),
+      String(context.searchApplied),
     ].join(",");
   });
   return [MARKET_EXPORT_HEADERS.join(","), ...lines].join("\r\n") + "\r\n";

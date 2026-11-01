@@ -4,8 +4,17 @@ import {
   MARKET_EXPORT_HEADERS,
   marketExportCsv,
   marketExportNumber,
+  type MarketExportContext,
 } from "./market-export";
 const now = 1_800_000_000_000;
+const context: MarketExportContext = {
+  band: "all",
+  platform: "all",
+  freshOnly: false,
+  sortKey: "volume1h",
+  sortDirection: "desc",
+  searchApplied: false,
+};
 const row: TerminalMarket = {
   mint: "exact-mint",
   name: "Example",
@@ -59,7 +68,7 @@ test.each([null, undefined, NaN, Infinity, -Infinity, -1])(
   },
 );
 test("signed change remains numeric while original per-field times and canonical public paths stay separate", () => {
-  const csv = marketExportCsv([row], now, true, now - 900000);
+  const csv = marketExportCsv([row], now, true, now - 900000, context);
   expect(csv).toContain('"2027-01-15T07:59:00.000Z"');
   expect(csv).toContain(new Date(row.metricsAsOf).toISOString());
   expect(csv).toContain('"https://dexscreener.com/solana/pool"');
@@ -87,6 +96,7 @@ test.each([
     now,
     false,
     null,
+    context,
   );
   expect(csv).toContain(`"'${name.replaceAll('"', '""')}"`);
 });
@@ -103,7 +113,7 @@ test("only allowlisted fields and safe exact provider hosts are serialized; null
     sourceUrl: "https://user:password@dexscreener.com/pool",
     priceUsd: null,
   };
-  const csv = marketExportCsv([value], now, false, null);
+  const csv = marketExportCsv([value], now, false, null, context);
   expect(csv).not.toMatch(/PRIVATE_|password|evil\.test/);
   expect(csv).toContain('"unavailable",true,null');
   expect(csv).toContain(",null,0,null,");
@@ -117,11 +127,55 @@ test("serialization preserves supplied subset/order and never fills missing rows
     now,
     false,
     null,
+    context,
   );
   expect(csv.split("\r\n")[0]).toBe(MARKET_EXPORT_HEADERS.join(","));
   expect(csv.split("\r\n")[1]).toContain(',1,"B",');
   expect(csv.split("\r\n")[2]).toContain(',2,"A",');
-  expect(marketExportCsv([], now, false, null)).toBe(
+  expect(marketExportCsv([], now, false, null, context)).toBe(
     MARKET_EXPORT_HEADERS.join(",") + "\r\n",
   );
+});
+
+test("selected public control context is appended without changing row evidence or exporting private caller fields", () => {
+  const selected = {
+    band: "50k100k" as const,
+    platform: "bags" as const,
+    freshOnly: true,
+    sortKey: "holders" as const,
+    sortDirection: "asc" as const,
+    searchApplied: true,
+    search: "PRIVATE_SEARCH_WALLET",
+    wallet: "PRIVATE_WALLET",
+    payload: "PRIVATE_PAYLOAD",
+  };
+  const original = marketExportCsv([row], now, true, now - 900000, context);
+  const csv = marketExportCsv([row], now, true, now - 900000, selected);
+  expect(MARKET_EXPORT_HEADERS.slice(-6)).toEqual([
+    "selected_market_cap_band",
+    "selected_platform",
+    "selected_fresh_only",
+    "selected_sort_key",
+    "selected_sort_direction",
+    "search_applied",
+  ]);
+  expect(csv.split("\r\n")[1]).toMatch(
+    /,"50k100k","bags",true,"holders","asc",true$/,
+  );
+  expect(csv.split("\r\n")[1].split(",").slice(0, -6)).toEqual(
+    original.split("\r\n")[1].split(",").slice(0, -6),
+  );
+  expect(csv).not.toMatch(/PRIVATE_|PRIVATE_SEARCH_WALLET/);
+});
+
+test("CSV quoted commas, newlines and quotes retain the exact text while context remains separate", () => {
+  const csv = marketExportCsv(
+    [{ ...row, name: 'Quoted "name", with\r\na newline' }],
+    now,
+    false,
+    null,
+    context,
+  );
+  expect(csv).toContain('"Quoted ""name"", with\r\na newline"');
+  expect(csv).toContain(',"all","all",false,"volume1h","desc",false\r\n');
 });

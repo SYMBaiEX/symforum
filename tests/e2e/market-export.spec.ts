@@ -36,15 +36,29 @@ test.beforeAll(() => {
         "bun",
         [
           "-e",
-          `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./tailwind.config.ts";const css=(await Bun.file("apps/${app}/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
+          `import postcss from "postcss";import tailwind from "tailwindcss";import config from "./${app === "forum" ? "apps/forum/tailwind.config.ts" : "tailwind.config.ts"}";config.content=["./components/**/*.{ts,tsx}","./packages/forum-ui/src/**/*.{ts,tsx}"];const css=(await Bun.file("apps/${app}/app/globals.css").text()).replace(/^@import.*$/m,"");process.stdout.write((await postcss([tailwind(config)]).process(css,{from:undefined})).css);`,
         ],
         { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
       );
   const baseline =
-    process.env.MARKET_EXPORT_BASELINE === "1"
+    process.env.MARKET_EXPORT_CONTEXT_BASELINE === "1"
       ? execFileSync(
           "git",
-          ["show", "8ba7ac40:components/trading/market-explorer.tsx"],
+          ["show", "495672e8:components/trading/market-explorer.tsx"],
+          { encoding: "utf8" },
+        )
+      : process.env.MARKET_EXPORT_BASELINE === "1"
+        ? execFileSync(
+            "git",
+            ["show", "8ba7ac40:components/trading/market-explorer.tsx"],
+            { encoding: "utf8" },
+          )
+        : null;
+  const serializerBaseline =
+    process.env.MARKET_EXPORT_CONTEXT_BASELINE === "1"
+      ? execFileSync(
+          "git",
+          ["show", "495672e8:components/trading/market-export.ts"],
           { encoding: "utf8" },
         )
       : null;
@@ -52,7 +66,7 @@ test.beforeAll(() => {
     "bun",
     [
       "-e",
-      `const baseline=${JSON.stringify(baseline)};const r=await Bun.build({entrypoints:["tests/e2e/fixtures/market-export.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"public-loaded-sample",setup(build){if(baseline!==null)build.onLoad({filter:/market-explorer\\.tsx$/},()=>({contents:baseline,loader:"tsx"}));build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/market-export-state.tsx"}));}}]});if(!r.success)throw Error(r.logs.join("\\n"));for(const f of r.outputs){if(f.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await f.text())+"}));");else if(f.path.endsWith(".js"))process.stdout.write(await f.text());}`,
+      `const baseline=${JSON.stringify(baseline)};const serializerBaseline=${JSON.stringify(serializerBaseline)};const r=await Bun.build({entrypoints:["tests/e2e/fixtures/market-export.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"public-loaded-sample",setup(build){if(baseline!==null)build.onLoad({filter:/market-explorer\\.tsx$/},()=>({contents:baseline,loader:"tsx"}));if(serializerBaseline!==null)build.onLoad({filter:/market-export\\.ts$/},()=>({contents:serializerBaseline,loader:"ts"}));build.onResolve({filter:/^convex\\/react$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/market-export-state.tsx"}));}}]});if(!r.success)throw Error(r.logs.join("\\n"));for(const f of r.outputs){if(f.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await f.text())+"}));");else if(f.path.endsWith(".js"))process.stdout.write(await f.text());}`,
     ],
     { encoding: "utf8", maxBuffer: 6 * 1024 * 1024 },
   );
@@ -100,7 +114,7 @@ async function harness(
     if (u.origin === origin && u.pathname === "/")
       return r.fulfill({
         contentType: "text/html",
-        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css[app]}</style><div id="root"></div><script src="/fixture.js"></script>`,
+        body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css[app]}</style><div class="forum-surface"><div id="root"></div></div><script src="/fixture.js"></script>`,
       });
     if (u.origin === origin && u.pathname === "/fixture.js")
       return r.fulfill({ contentType: "text/javascript", body: script });
@@ -139,12 +153,12 @@ function parse(csv: string) {
     } else if (c === "," && !quoted) {
       row.push(cell);
       cell = "";
-    } else if (c === "\r" && csv[i + 1] === "\n" && !quoted) {
+    } else if ((c === "\n" || (c === "\r" && csv[i + 1] === "\n")) && !quoted) {
       row.push(cell);
       result.push(row);
       row = [];
       cell = "";
-      i++;
+      if (c === "\r") i++;
     } else cell += c;
   }
   return result;
@@ -157,6 +171,20 @@ async function download(page: Page) {
   );
   const texts = await page.evaluate(() => window.__marketDownload.texts());
   return parse(texts.at(-1)!);
+}
+function selectedContext(rows: string[][]) {
+  const headers = [
+    "selected_market_cap_band",
+    "selected_platform",
+    "selected_fresh_only",
+    "selected_sort_key",
+    "selected_sort_direction",
+    "search_applied",
+  ];
+  for (const header of headers) expect(rows[0]).toContain(header);
+  return rows
+    .slice(1)
+    .map((row) => headers.map((header) => row[rows[0].indexOf(header)]));
 }
 test("explicit download contains the current displayed order and original public evidence only", async ({
   page,
@@ -190,6 +218,10 @@ test("explicit download contains the current displayed order and original public
   expect(rows.flat().join(" ")).not.toMatch(
     /DO_NOT_EXPORT|not-public|secret|fragment/,
   );
+  expect(selectedContext(rows)).toEqual([
+    ["all", "all", "false", "volume1h", "desc", "false"],
+    ["all", "all", "false", "volume1h", "desc", "false"],
+  ]);
   expect(
     await page.evaluate(() => ({
       queries: window.__marketExport.queries.length,
@@ -213,17 +245,85 @@ test("local search/sort/freshness changes export only matching visible rows with
   await page.getByLabel("Sort sampled tokens").selectOption("volume1h:asc");
   let rows = await download(page);
   expect(rows.slice(1).map((r) => r[3])).toEqual([mintA, mintB]);
+  expect(selectedContext(rows)).toEqual([
+    ["all", "all", "false", "volume1h", "asc", "false"],
+    ["all", "all", "false", "volume1h", "asc", "false"],
+  ]);
   await page.getByLabel("Search sampled tokens").fill("AAA");
   rows = await download(page);
   expect(rows).toHaveLength(2);
   expect(rows[1][3]).toBe(mintA);
+  expect(selectedContext(rows)).toEqual([
+    ["all", "all", "false", "volume1h", "asc", "true"],
+  ]);
   await page
     .getByRole("button", { name: "Fresh market rows only", exact: true })
     .click();
   rows = await download(page);
   expect(rows).toHaveLength(2);
+  expect(selectedContext(rows)).toEqual([
+    ["all", "all", "true", "volume1h", "asc", "true"],
+  ]);
   expect(await page.evaluate(() => window.__marketExport.queries)).toHaveLength(
     1,
+  );
+});
+test("selected filter provenance follows current public controls, not cached response band or raw search text", async ({
+  page,
+}) => {
+  await harness(page);
+  await page
+    .getByRole("combobox", { name: "Market cap", exact: true })
+    .selectOption("50k100k");
+  await page
+    .getByRole("combobox", { name: "Platform", exact: true })
+    .selectOption("pumpfun");
+  await page.getByLabel("Sort sampled tokens").selectOption("price:asc");
+  await page.getByLabel("Search sampled tokens").fill("  aAa  ");
+  await page
+    .getByRole("button", { name: "Fresh market rows only", exact: true })
+    .click();
+  const before = await page.evaluate(() => ({
+    queries: window.__marketExport.queries.length,
+    actions: window.__marketExport.actions.length,
+  }));
+  const rows = await download(page);
+  expect(rows).toHaveLength(2);
+  expect(rows[1][3]).toBe(mintA);
+  expect(selectedContext(rows)).toEqual([
+    ["50k100k", "pumpfun", "true", "price", "asc", "true"],
+  ]);
+  expect(rows.flat().join(" ")).not.toContain("aAa");
+  await expect(page.getByLabel("Search sampled tokens")).toHaveValue("  aAa  ");
+  expect(
+    await page.evaluate(() => ({
+      queries: window.__marketExport.queries.length,
+      actions: window.__marketExport.actions.length,
+    })),
+  ).toEqual(before);
+  await expect(
+    page.getByText(/search text is excluded for privacy/),
+  ).toBeVisible();
+});
+test("changing only public sort context invalidates old manual feedback even when displayed row data is identical", async ({
+  page,
+}) => {
+  await harness(page, "native");
+  await page.getByLabel("Search sampled tokens").fill("AAA");
+  await control(page).click();
+  const text = page.getByRole("textbox", { name: "Displayed market rows CSV" });
+  await expect(text).toBeVisible();
+  await page.getByLabel("Sort sampled tokens").selectOption("price:asc");
+  await expect(text).toHaveCount(0);
+  await control(page).click();
+  expect(selectedContext(parse(await text.inputValue()))).toEqual([
+    ["all", "all", "false", "price", "asc", "true"],
+  ]);
+  expect(await page.evaluate(() => window.__marketExport.queries)).toHaveLength(
+    1,
+  );
+  expect(await page.evaluate(() => window.__marketDownload.created)).toEqual(
+    [],
   );
 });
 test("reactive replacement hides old feedback and exports the new loaded snapshot", async ({
@@ -268,6 +368,18 @@ test("native host exposes manual CSV text without Blob URLs, transport or automa
   await expect(
     page.getByRole("textbox", { name: "Displayed market rows CSV" }),
   ).toHaveValue(/displayed_loaded_sample_only/);
+  expect(
+    selectedContext(
+      parse(
+        await page
+          .getByRole("textbox", { name: "Displayed market rows CSV" })
+          .inputValue(),
+      ),
+    ),
+  ).toEqual([
+    ["all", "all", "false", "volume1h", "desc", "false"],
+    ["all", "all", "false", "volume1h", "desc", "false"],
+  ]);
   expect(await page.evaluate(() => window.__marketDownload.created)).toEqual(
     [],
   );
