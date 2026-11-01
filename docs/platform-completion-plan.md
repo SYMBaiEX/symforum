@@ -72,16 +72,25 @@ publication activity remains explicit unfinished scope. A frozen CSV follow-up
 adds exact public filter/sort context without raw search text and corrects its
 native-theme target; its combined qualification and rollout remain pending.
 
-The next frozen frontend candidates cover explicit device-local public market
-views (#27 partial), loaded-only protected research receipt filtering (#66
-partial), and per-file upload/local draft feedback (#89/#90 partial). They do not
-add private search persistence, backend receipt pagination, a removed-file ledger
-or collaborative draft conflict resolution. Independent real-forum ancestry
-checks reproduced 40px controls in two candidates; narrow fixes restored 44px
-targets while retaining every original assertion and financial handler. Parent
-combined qualification is still pending. The admin-only provider snapshot (#6)
-is separately frozen and awaits its exact backend approval and release; it is
-not part of either frontend-only wave.
+PR280 shipped explicit device-local public market views (#27 partial),
+loaded-only protected research receipt filtering (#66 partial), per-file
+upload/local draft feedback (#89/#90 partial), and CSV public filter/sort
+provenance (#26). It passed 4,841 unit/backend and 1,082 isolated browser tests,
+both types, five builds, parity, audits and security checks on the unchanged
+candidate. The tested/merged tree, authors, exact automatic five-domain rollout
+and bounded public Feed acceptance were verified. No private search persistence,
+backend receipt pagination, removed-file ledger or collaborative draft conflict
+resolution is implied. Actual-forum 40px control failures were corrected with
+scoped 44px rules without weakening assertions or changing financial handlers.
+
+The next frozen candidates cover safe original search excerpts/highlights (#34),
+requested-versus-saved agent permission cards (#54), a read-only private HTML view
+of existing fulfilled reports (#63), and forced-color chart/table access (#85).
+Greek matching and middleware CSP integration failures were reproduced and
+corrected before freezing; all original text, authority and payment paths stay
+intact. Full parent qualification and rollout remain pending. The admin-only
+provider snapshot (#6) is separately frozen and awaits its exact backend
+approval; it is excluded from these web-only releases.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. No item has been
