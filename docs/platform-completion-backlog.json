@@ -1,0 +1,4565 @@
+{
+  "version": 1,
+  "baseCommit": "8ba7ac402cde10c6650c127deea050d897a2e840",
+  "constraints": {
+    "modelUsdPerDay": 2,
+    "swapFeeBps": 50,
+    "preserveSchedules": true,
+    "preserveProviderFreeCaps": true,
+    "preserveSafetyGates": true,
+    "preserveHolds": true,
+    "noRealPaymentsByPlanner": true,
+    "noNetworkOrExecution": true
+  },
+  "items": [
+    {
+      "id": "PLATFORM-001",
+      "number": 1,
+      "title": "User-controlled real swaps on terminal, token and post surfaces",
+      "area": "operations",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "owner_controlled_wallet"],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "With an owner-selected wallet and exact test amounts, verify approved transaction signatures and finalized balances from each surface; retain every failed/uncertain attempt without replay."
+      ],
+      "boundaries": [
+        "No agent may sign, fund or repeat an uncertain swap; real-wallet acceptance is not replaced by mocked signing.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-011",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-012",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-019",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/swap/token-swap.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Owner must choose wallet, exact amounts and three surface-specific live test approvals; preserve all uncertain attempts.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-002",
+      "number": 2,
+      "title": "Five sign-in methods, secure linking and cross-app logout verification",
+      "area": "operations",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "components/auth/identity-connections.tsx",
+          "anchor": "export function IdentityConnections(",
+          "observation": "Existing account connections UI is the linking boundary; real provider lifecycle proof remains separate."
+        }
+      ],
+      "acceptance": [
+        "Exercise Google/Gmail, email, username, Telegram and wallet sign-in/linking using owner-controlled accounts; verify ownership conflicts and logout across all five sites without account loss."
+      ],
+      "boundaries": [
+        "Do not merge accounts from matching names/emails without ownership proof; preserve existing sessions and agent settings.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-032",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/auth/identity-connections.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Owner-controlled Google/email/username/Telegram/wallet accounts and access to all five real app sessions are required.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-003",
+      "number": 3,
+      "title": "200-reader warm, cold, denial and cost benchmark",
+      "area": "operations",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "provider_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "docs/server-authoritative-capacity.md",
+          "anchor": "# Server-authoritative reads and capacity",
+          "observation": "Current capacity contract explicitly separates source-backed limits from production load certification."
+        }
+      ],
+      "acceptance": [
+        "Run a separately approved bounded benchmark with 200 reader identities; measure origin/provider requests, cache sharing, denial behavior and Convex amplification against documented ceilings."
+      ],
+      "boundaries": [
+        "No production load test, provider traffic spike, paid tier or invented sustained-throughput claim.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-006",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["docs/server-authoritative-capacity.md"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Approve the exact isolated/live benchmark target, traffic envelope, provider allowance and measurement window before load.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-004",
+      "number": 4,
+      "title": "Tiny-value research-export precision",
+      "area": "data",
+      "status": "ready_review",
+      "changeType": "backend",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-research.ts",
+          "anchor": "export function buildResearchReport(",
+          "observation": "Existing research report builder is the data/precision boundary, not proof of paid fulfillment."
+        }
+      ],
+      "acceptance": [
+        "Export tiny, zero, missing and extreme token values without rounding meaningful nonzero facts to zero; retain source time and exact deterministic serialization."
+      ],
+      "boundaries": [
+        "Report formatting must not change price eligibility, payment amount, entitlement or receipt checks.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "research-precision",
+        "paths": ["lib/forum-research.ts", "lib/forum-research.test.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate 2216c85f integrated by the parent as cbf8f546. Parent full qualification, merge, deployment and live acceptance remain pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-005",
+      "number": 5,
+      "title": "Panel-local terminal error recovery",
+      "area": "data",
+      "status": "ready_review",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/forum-terminal.tsx",
+          "anchor": "export function ForumTerminal(",
+          "observation": "Existing terminal composes protected controllers and panels; preserve their mounted state."
+        }
+      ],
+      "acceptance": [
+        "A failed panel offers local, accessible recovery without discarding unaffected chart, token, wallet or protected-payment state.",
+        "The first source candidate covers only three public terminal sibling panels. Community section-local and private/protected-panel recovery remain separate unqualified work within item 5; do not call the entire item complete from that public-panel slice."
+      ],
+      "boundaries": [
+        "Do not remount an active signing/receipt controller, replay a request or turn an error into a successful financial state.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "panel-recovery",
+        "paths": [
+          "components/trading/terminal-boundary.tsx",
+          "components/trading/forum-terminal.tsx",
+          "tests/e2e/terminal-panel-recovery.spec.ts",
+          "tests/e2e/fixtures/terminal-panel-recovery.tsx",
+          "tests/e2e/fixtures/terminal-panel-recovery-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate 412847bf integrated as parent 55712260; only three public terminal siblings are covered. Full parent qualification and remaining Community/private-panel recovery are pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-006",
+      "number": 6,
+      "title": "Operator provider usage and allowance dashboard",
+      "area": "data",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumProviderAdmission.ts",
+          "anchor": "export const admit = internalMutation(",
+          "observation": "Existing provider admission owns durable quota decisions; a dashboard must not reset or consume them."
+        }
+      ],
+      "acceptance": [
+        "Show server-derived provider reservations, known usage windows, denials and safe reset eligibility with original times; distinguish account-unknown usage from application counters."
+      ],
+      "boundaries": [
+        "Admin-only metadata; no keys, bodies, wallet histories, counter resets or quota-increasing controls.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumProviderAdmission.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-007",
+      "number": 7,
+      "title": "Private error, freshness, latency and quota alerts",
+      "area": "data",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/cronWatchdog.ts",
+          "anchor": "export const summaryAdmin = query(",
+          "observation": "Existing admin watchdog summary is an operational foundation, not public alert delivery proof."
+        }
+      ],
+      "acceptance": [
+        "Deduplicate threshold breach/recovery notices for authorized operators with bounded safe metadata and delivery receipts; expose unknown delivery honestly."
+      ],
+      "boundaries": [
+        "No new destination, email/social send or monitoring cadence without exact approval; no raw private errors.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-006",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/cronWatchdog.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose an operator-only destination, threshold policy and exact outbound delivery authorization.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-008",
+      "number": 8,
+      "title": "Public service-status surface",
+      "area": "data",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/cronWatchdog.ts",
+          "anchor": "export const summaryAdmin = query(",
+          "observation": "Existing admin watchdog summary is an operational foundation, not public alert delivery proof."
+        }
+      ],
+      "acceptance": [
+        "Publish an allowlisted coarse status and original update time; unknown/stale monitors remain explicit and do not reveal internal job/account details."
+      ],
+      "boundaries": [
+        "Status reads must not trigger providers, models or operational work.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-006",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/cronWatchdog.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-009",
+      "number": 9,
+      "title": "Reconcile stale documentation, backlog and deployed state",
+      "area": "operations",
+      "status": "queued",
+      "changeType": "documentation",
+      "verification": ["unit", "types_lint"],
+      "sourceEvidence": [
+        {
+          "path": "docs/platform-build-roadmap.md",
+          "anchor": "## Release gate",
+          "observation": "Historical roadmap distinguishes source candidates from deployed/credential-qualified capabilities; reconcile rather than inherit completion."
+        }
+      ],
+      "acceptance": [
+        "Identify stale numerical/provider/release claims, reconcile them against exact source and release evidence, and preserve historical receipts as historical."
+      ],
+      "boundaries": [
+        "Do not overwrite old evidence or label a source candidate, plan row or previous roadmap checkbox as live acceptance.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["docs/platform-build-roadmap.md"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-010",
+      "number": 10,
+      "title": "Newcomer browse, login, interests, reply and return journey",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-start-here.tsx",
+          "anchor": "ForumStartHere",
+          "observation": "Existing onboarding and pillar navigation are the integration boundary."
+        }
+      ],
+      "acceptance": [
+        "A new visitor can browse freely, sign in, choose interests and make an explicitly submitted reply, returning to the validated original context; failures retain their inputs."
+      ],
+      "boundaries": [
+        "Use existing account/publication gates; fixture journeys are not live human publication certification.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-031",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-032",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-start-here.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-011",
+      "number": 11,
+      "title": "Route-bound SOL Max",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "lib/swap-transactions.ts",
+          "anchor": "export async function prepareManagedSwap(",
+          "observation": "Existing server preparation owns exact route validation, fees and simulation; new controls must reuse it."
+        }
+      ],
+      "acceptance": [
+        "Max reflects the exact current route, spendable balance, rent/priority/fee reserve and token program; pair or wallet changes invalidate prior calculations."
+      ],
+      "boundaries": [
+        "Server simulation and exact signed-message checks remain mandatory; never guess a spendable reserve.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/swap-transactions.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-012",
+      "number": 12,
+      "title": "Old and refreshed quote comparison",
+      "area": "trading",
+      "status": "ready_review",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "Before materially changed output/fees are approved, show old versus current values and require explicit current consent while rejecting stale-pair callbacks."
+      ],
+      "boundaries": [
+        "No automatic approval, quote expiry extension or submission replay.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "swap-clarity",
+        "paths": [
+          "components/swap/token-swap.tsx",
+          "tests/e2e/swap-quote-consent.spec.ts",
+          "tests/e2e/fixtures/swap-quote-consent.tsx",
+          "tests/e2e/fixtures/swap-quote-consent-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate b34effb9 integrated as parent e1550348; full parent qualification, merge and deployment remain pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-013",
+      "number": 13,
+      "title": "Recorded protected-attempt timeline",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function SwapHistory(",
+          "observation": "Existing private swap-history window is a foundation, not a complete wallet ledger or profit certificate."
+        }
+      ],
+      "acceptance": [
+        "Present safe chronological recorded stages for the current owner's attempt, including saved signature, verification and unknown state; distinguish absence of evidence from failure."
+      ],
+      "boundaries": [
+        "Do not expose payloads, infer non-submission from missing wallet UI, or clear holds.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-005",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-014",
+      "number": 14,
+      "title": "Paginated and exportable private swaps",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function SwapHistory(",
+          "observation": "Existing private swap-history window is a foundation, not a complete wallet ledger or profit certificate."
+        }
+      ],
+      "acceptance": [
+        "Provide bounded, owner-scoped cursor pagination and an exact export of selected recorded swap receipts with completeness and original timestamps."
+      ],
+      "boundaries": [
+        "Never expose another owner's receipts or equate recorded swap history with complete on-chain activity.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-013",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-015",
+      "number": 15,
+      "title": "Sanitized support bundle",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function SwapHistory(",
+          "observation": "Existing private swap-history window is a foundation, not a complete wallet ledger or profit certificate."
+        }
+      ],
+      "acceptance": [
+        "A deliberate preview/download contains only allowlisted safe stage codes, app version and public signatures chosen by the user; secrets and transaction bodies are excluded by tests."
+      ],
+      "boundaries": [
+        "No automatic upload or private account/linked-wallet identifiers; redact before logging or export.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-013",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-016",
+      "number": 16,
+      "title": "Unsupported-wallet guidance",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "Explain missing connect/message/transaction capabilities accurately and offer explicit supported-wallet selection without repeated prompts or false locked-wallet claims."
+      ],
+      "boundaries": [
+        "Use current Wallet Standard capabilities; no alternate custom provider injection or automatic wallet action.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/swap/token-swap.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-017",
+      "number": 17,
+      "title": "Retain pair and amount through linking or reauthentication",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "Validated mint pair and user-entered amount survive the existing sign-in/linking return, but an old quote/signature is never restored as approvable."
+      ],
+      "boundaries": [
+        "Persist no private wallet result, prepared bytes or held operation into return parameters.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-032",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/swap/token-swap.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-018",
+      "number": 18,
+      "title": "Single deliberate quote-expiry announcement",
+      "area": "trading",
+      "status": "ready_review",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "Announce expiration once per relevant quote, retaining current pair/amount and providing explicit recovery without tick-by-tick live-region chatter."
+      ],
+      "boundaries": [
+        "No added provider timer, automatic refresh loop or changed quote lifetime.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "swap-clarity",
+        "paths": [
+          "components/swap/token-swap.tsx",
+          "tests/e2e/swap-quote-consent.spec.ts",
+          "tests/e2e/fixtures/swap-quote-consent.tsx",
+          "tests/e2e/fixtures/swap-quote-consent-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate b34effb9 integrated as parent e1550348; full parent qualification, merge and deployment remain pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-019",
+      "number": 19,
+      "title": "Full tiny and extreme receive estimates",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/swap/token-swap.tsx",
+          "anchor": "export function TokenSwap(",
+          "observation": "Existing swap controller is the integration boundary; this is not live payment proof."
+        }
+      ],
+      "acceptance": [
+        "Small, large, zero and unavailable estimated amounts remain distinguishable, inspectable and consistently formatted across terminal/token/post swaps."
+      ],
+      "boundaries": [
+        "Presentation must not silently change input precision, slippage, minimum receive or transaction semantics.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-004",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/swap/token-swap.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-020",
+      "number": 20,
+      "title": "Hardware-wallet authentication qualification",
+      "area": "trading",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "human_device"],
+      "sourceEvidence": [
+        {
+          "path": "components/auth/identity-connections.tsx",
+          "anchor": "export function IdentityConnections(",
+          "observation": "Existing account connections UI is the linking boundary; real provider lifecycle proof remains separate."
+        }
+      ],
+      "acceptance": [
+        "Verify supported hardware-wallet message sign-in and rejection paths on owner-approved physical devices, documenting unsupported capabilities without workarounds."
+      ],
+      "boundaries": [
+        "No seed entry, transaction signing, device purchase or simulated hardware-success claim.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-002",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-016",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/auth/identity-connections.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Identify supported hardware device/model, firmware and a present owner to approve authentication-only prompts.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-021",
+      "number": 21,
+      "title": "Fuller paginated wallet holdings",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function WalletPanel(",
+          "observation": "Existing linked-wallet read panel separates authorized balances from public token data."
+        }
+      ],
+      "acceptance": [
+        "Return bounded owner-authorized holdings pages with cursor/source/checked-time and truthful partial coverage; refreshes share server admission and exact wallet identity."
+      ],
+      "boundaries": [
+        "No browser-wide RPC fan-out, ownership inference from an unlinked address or automatic background balance scanning.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-022",
+      "number": 22,
+      "title": "Evidence-based P&L and cost basis",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function SwapHistory(",
+          "observation": "Existing private swap-history window is a foundation, not a complete wallet ledger or profit certificate."
+        }
+      ],
+      "acceptance": [
+        "Define and test realized/unrealized accounting against finalized activity, transfer handling, incomplete history and fees; unknown basis remains unknown."
+      ],
+      "boundaries": [
+        "No fabricated profitable ranking, spot-price liquidation profit or claim of comprehensive wallet P&L from a receipt window.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-014",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-021",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-023",
+      "number": 23,
+      "title": "Watched-token coverage",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function WalletPanel(",
+          "observation": "Existing linked-wallet read panel separates authorized balances from public token data."
+        }
+      ],
+      "acceptance": [
+        "Show which watched mints have actual stored observations, source age and supported alert state; out-of-coverage tokens are not fabricated as live."
+      ],
+      "boundaries": [
+        "Do not start a separate scan/provider loop or exceed existing watch/query limits.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-024",
+      "number": 24,
+      "title": "Opt-in external token-alert delivery",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forum.ts",
+          "anchor": "export const listMyNotifications",
+          "observation": "Existing private notification source is the authority for cross-utility presentation."
+        }
+      ],
+      "acceptance": [
+        "An owner can opt in to an approved channel, revoke it and inspect a bounded deduplicated alert delivery state without exposing private wallets."
+      ],
+      "boundaries": [
+        "New outbound channels, destinations and sends need explicit authorization; uncertain delivery is never replayed automatically.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-023",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-072",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forum.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose opt-in alert channels and approved external destinations without changing existing schedules.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-025",
+      "number": 25,
+      "title": "Discovery bands for 50–100k and 500k–1m projects",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/market-explorer.tsx",
+          "anchor": "export function MarketExplorer(",
+          "observation": "Existing loaded-market explorer exposes bounded filters and sorting; do not infer exhaustive coverage."
+        }
+      ],
+      "acceptance": [
+        "Reuse exact market-cap band filters for the requested ranges, with source age, liquidity context and honest loaded-sample counts across desktop/mobile."
+      ],
+      "boundaries": [
+        "Market cap is not FDV; do not widen provider scans or imply exhaustive or investment-safe discovery.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/market-explorer.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-026",
+      "number": 26,
+      "title": "Loaded-market provenance export",
+      "area": "trading",
+      "status": "in_progress",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/market-explorer.tsx",
+          "anchor": "export function MarketExplorer(",
+          "observation": "Existing loaded-market explorer exposes bounded filters and sorting; do not infer exhaustive coverage."
+        }
+      ],
+      "acceptance": [
+        "Export only the actual displayed loaded sample with exact mint, source, checked time, selected filters and missing fields; preserve current row order."
+      ],
+      "boundaries": [
+        "No extra provider query, hidden rows, invented price precision or false full-market coverage.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "market-export",
+        "paths": [
+          "components/trading/market-explorer.tsx",
+          "components/trading/market-export.ts",
+          "components/trading/market-export.test.ts",
+          "tests/e2e/market-export.spec.ts",
+          "tests/e2e/fixtures/market-export.tsx",
+          "tests/e2e/fixtures/market-export-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-027",
+      "number": 27,
+      "title": "Saved discovery controls",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/market-explorer.tsx",
+          "anchor": "export function MarketExplorer(",
+          "observation": "Existing loaded-market explorer exposes bounded filters and sorting; do not infer exhaustive coverage."
+        }
+      ],
+      "acceptance": [
+        "After a retention choice, opt in to restoring validated filter/sort/search controls and provide reset; corrupt and unknown schemas fail safely."
+      ],
+      "boundaries": [
+        "Store controls only, not wallet data, prices, consent or protected operations; avoid a new polling path.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-025",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/market-explorer.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose session-only or device-local persistence and retention/reset policy for controls.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-028",
+      "number": 28,
+      "title": "Candle-gap explanation",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/candle-readings.tsx",
+          "anchor": "export function CandleReadings(",
+          "observation": "Existing candle disclosure is based on a bounded, already loaded provider payload."
+        }
+      ],
+      "acceptance": [
+        "Explain observed gaps, bounded loaded range, provider time units and unknown volume units without filling candles or inventing trades."
+      ],
+      "boundaries": [
+        "Existing chart transport, cache/backoff and financial controllers remain unchanged.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/candle-readings.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-029",
+      "number": 29,
+      "title": "Recorded authority-change history",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/token-detail.tsx",
+          "anchor": "export function RiskPanel(",
+          "observation": "Existing recorded risk panel preserves original checked-time and unknown authority state."
+        }
+      ],
+      "acceptance": [
+        "Persist or display only verified, time-stamped authority observations and explicit unknown periods; compare exact token/program identities over time."
+      ],
+      "boundaries": [
+        "No historical safety guarantee, fabricated snapshot or automatic high-cost RPC indexer.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/token-detail.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-030",
+      "number": 30,
+      "title": "Sourced concentration and liquidity unknowns",
+      "area": "trading",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/token-detail.tsx",
+          "anchor": "export function RiskPanel(",
+          "observation": "Existing recorded risk panel preserves original checked-time and unknown authority state."
+        }
+      ],
+      "acceptance": [
+        "Each concentration/liquidity field carries its actual source, coverage and original time; missing or unsupported inputs are visibly unknown."
+      ],
+      "boundaries": [
+        "Never infer holder concentration from partial accounts or treat null authority as an endorsement.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/token-detail.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-031",
+      "number": 31,
+      "title": "Feed filter chips and empty-feed reset",
+      "area": "forum",
+      "status": "ready_review",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-feed-list.tsx",
+          "anchor": "export function LiveFeed(",
+          "observation": "Existing feed owns auth-scoped filters, bounded pagination and reading restoration."
+        }
+      ],
+      "acceptance": [
+        "Expose active filter context and a single deliberate reset that restores visible discussions without changing auth, pagination or preference semantics."
+      ],
+      "boundaries": [
+        "Preserve human/agent filters until explicitly reset; no invented global empty state or extra query.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "feed-recovery",
+        "paths": [
+          "components/forum/forum-feed-list.tsx",
+          "tests/e2e/feed-filter-recovery.spec.ts",
+          "tests/e2e/fixtures/feed-filter-recovery.tsx",
+          "tests/e2e/fixtures/feed-filter-recovery-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate fbf798e9 integrated as parent 05ca29c9; full parent qualification, merge and deployment remain pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-032",
+      "number": 32,
+      "title": "Sign-in preserves validated context",
+      "area": "forum",
+      "status": "ready_review",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-navigation.tsx",
+          "anchor": "export",
+          "observation": "Existing host-aware forum navigation is the first-party context handoff boundary."
+        }
+      ],
+      "acceptance": [
+        "Allowlisted first-party feed, author, sort, board and utility context survives sign-in, with malformed/external/private return values rejected."
+      ],
+      "boundaries": [
+        "No open redirect, auth token in URL or widening of owner-control handoff trust.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "signin-context",
+        "paths": [
+          "components/forum/forum-navigation.tsx",
+          "lib/forum-signin-context.ts",
+          "lib/forum-signin-context.test.ts",
+          "tests/e2e/signin-context.spec.ts",
+          "tests/e2e/fixtures/signin-context.tsx",
+          "tests/e2e/fixtures/signin-context-state.tsx"
+        ]
+      },
+      "blockers": [],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Worker candidate 3c9927e0 integrated as parent ec82a411; full parent qualification, merge and deployment remain pending."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-033",
+      "number": 33,
+      "title": "Empty-search recovery",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-search-page.tsx",
+          "anchor": "export function ForumSearchPage(",
+          "observation": "Existing search uses bounded authorized queries; new presentation must preserve visibility and arguments."
+        }
+      ],
+      "acceptance": [
+        "Differentiate loading, filtered zero, exhausted zero and denied access; clear or adjust a valid local query while preserving relevant route context."
+      ],
+      "boundaries": [
+        "Search minimums, author-only behavior, visibility and server query caps remain intact.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-search-page.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-034",
+      "number": 34,
+      "title": "Search match highlights and useful excerpts",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-search-page.tsx",
+          "anchor": "export function ForumSearchPage(",
+          "observation": "Existing search uses bounded authorized queries; new presentation must preserve visibility and arguments."
+        }
+      ],
+      "acceptance": [
+        "Highlight only actual returned matching text with escaped content and accessible excerpts; keyboard links retain canonical destinations."
+      ],
+      "boundaries": [
+        "No unsafe HTML, phantom match claims or disclosure of hidden body/private search context.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-033",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-search-page.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-035",
+      "number": 35,
+      "title": "Saved searches",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-search-page.tsx",
+          "anchor": "export function ForumSearchPage(",
+          "observation": "Existing search uses bounded authorized queries; new presentation must preserve visibility and arguments."
+        }
+      ],
+      "acceptance": [
+        "An explicit owner-scoped saved search stores validated query controls with rename/delete and empty/loading/error states; reopening performs only the usual authorized search."
+      ],
+      "boundaries": [
+        "Retention and sync behavior require a privacy decision; no automatic query polling or notifications by default.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-033",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-search-page.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose saved-query privacy, retention and local-versus-account storage semantics.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-036",
+      "number": 36,
+      "title": "Bookmark collections",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-saved-threads.tsx",
+          "anchor": "export function ForumSavedThreads(",
+          "observation": "Existing saved-thread UI is private and loaded-window bounded."
+        }
+      ],
+      "acceptance": [
+        "Let an owner organize bookmarks into bounded named collections while preserving saved-thread visibility checks, pagination and clear partial counts."
+      ],
+      "boundaries": [
+        "No cross-owner collection reads or copied private thread content.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-saved-threads.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-037",
+      "number": 37,
+      "title": "Optional cross-device reading state",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-catch-up.tsx",
+          "anchor": "export function ForumCatchUp(",
+          "observation": "Existing interests/catch-up controls are the opt-in preference boundary."
+        }
+      ],
+      "acceptance": [
+        "Opt-in owner-scoped reading-position sync can be disabled/deleted and distinguishes device-local state, stale remote state and missing permissions."
+      ],
+      "boundaries": [
+        "Retention/conflict policy must be chosen first; no anonymous fingerprinting or private navigation-history leak.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-catch-up.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose explicit cross-device consent, retention and conflict-resolution policy.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-038",
+      "number": 38,
+      "title": "Optional private cloud drafts",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-compose.tsx",
+          "anchor": "export function ForumCompose(",
+          "observation": "Existing composer owns local drafts, attachments and publication admission."
+        }
+      ],
+      "acceptance": [
+        "After explicit retention/consent policy, sync owner-scoped versioned drafts with conflict recovery and delete/export controls; failed saves never replace newer drafts."
+      ],
+      "boundaries": [
+        "No default cloud upload of unpublished text or attachments; exclude auth/transaction material.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-compose.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve cloud-draft privacy, retention, storage limits and deletion/conflict rules.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-039",
+      "number": 39,
+      "title": "Composer duplicate suggestions",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-compose.tsx",
+          "anchor": "export function ForumCompose(",
+          "observation": "Existing composer owns local drafts, attachments and publication admission."
+        }
+      ],
+      "acceptance": [
+        "Before deliberate submission, show bounded visible same-board candidates with reasons and dismiss/continue controls; no automatic content rewrite."
+      ],
+      "boundaries": [
+        "Reuse authorized existing evidence and gates; no new model spend or hidden draft publication.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-compose.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-040",
+      "number": 40,
+      "title": "Archive-to-active continuation",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-thread-view.tsx",
+          "anchor": "export function ForumThreadView(",
+          "observation": "Existing thread view owns visible content, links and report interactions."
+        }
+      ],
+      "acceptance": [
+        "Archived discussions retain their URLs/readability and offer an explicit relevant active-pillar continuation linked back to the historical context."
+      ],
+      "boundaries": [
+        "Never reopen or mutate archived content automatically or redirect agents outside approved focus.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-thread-view.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-041",
+      "number": 41,
+      "title": "Project-directory pagination",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const listProjects = query(",
+          "observation": "Existing authorized project directory is bounded; pagination must preserve mint and affiliation semantics."
+        }
+      ],
+      "acceptance": [
+        "Cursor-paginate exact public project records, preserving filters, source order and honest shown/loaded/total-unknown distinctions."
+      ],
+      "boundaries": [
+        "Indexed bounded queries and public affiliation projection remain authoritative.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-042",
+      "number": 42,
+      "title": "Complete owner Your Affiliations view",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const getMine = query(",
+          "observation": "Existing owner-scoped community projection is the private affiliation boundary."
+        }
+      ],
+      "acceptance": [
+        "An owner can inspect every relevant affiliation through bounded pagination with exact status and current visibility, without conflating a limited projection with all records."
+      ],
+      "boundaries": [
+        "No cross-owner reads or private linked-wallet leakage.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-041",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-043",
+      "number": 43,
+      "title": "Cryptographic control is not project affiliation",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/community/community-hub.tsx",
+          "anchor": "export function CommunityHub(",
+          "observation": "Existing community utilities reuse protected controllers and immutable payment/receipt paths."
+        }
+      ],
+      "acceptance": [
+        "Use precise labels distinguishing wallet/message control, self-asserted project claim and reviewed affiliation; expose actual evidence and revocation state."
+      ],
+      "boundaries": [
+        "No verified-partnership or ownership badge inferred solely from a wallet signature.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-042",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/community/community-hub.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-044",
+      "number": 44,
+      "title": "Work-directory pagination",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const listBounties = query(",
+          "observation": "Existing bounded work query and non-escrow workflow are the integration boundary."
+        }
+      ],
+      "acceptance": [
+        "Paginate work listings with existing kind/status/mint filters, stable cursors and loading/empty/partial-result states."
+      ],
+      "boundaries": [
+        "Do not alter reward admission, amount, cancellation or sponsor authorization.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-045",
+      "number": 45,
+      "title": "Canonical brief and bounty links",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/community/community-hub.tsx",
+          "anchor": "export function CommunityHub(",
+          "observation": "Existing community utilities reuse protected controllers and immutable payment/receipt paths."
+        }
+      ],
+      "acceptance": [
+        "Each existing project/work record has a validated first-party deep link that resolves the exact record after sign-in or refresh and handles deleted/private records safely."
+      ],
+      "boundaries": [
+        "No ticker-based identity resolution, private identifier leaks or changed payment controller mounting.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-044",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-032",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/community/community-hub.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-046",
+      "number": 46,
+      "title": "Sponsor submission pagination",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const listSubmissions = query(",
+          "observation": "Existing sponsor-scoped submissions query enforces current actor and bounty admission."
+        }
+      ],
+      "acceptance": [
+        "Authorized sponsors can page all eligible submissions with stable exact IDs, current review state and preserved selection across local filters."
+      ],
+      "boundaries": [
+        "Existing claim/select/payment ownership checks remain server authoritative.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-044",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-047",
+      "number": 47,
+      "title": "Optional requested deadlines and overdue context",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const listBounties = query(",
+          "observation": "Existing bounded work query and non-escrow workflow are the integration boundary."
+        }
+      ],
+      "acceptance": [
+        "Store/display an optional explicitly requested deadline with timezone and non-enforced overdue context; editing does not silently change existing terms."
+      ],
+      "boundaries": [
+        "No automatic payment, cancellation, escrow or invented contractual enforcement.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-044",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-048",
+      "number": 48,
+      "title": "Milestone tracking and sponsor acceptance without escrow",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const listBounties = query(",
+          "observation": "Existing bounded work query and non-escrow workflow are the integration boundary."
+        }
+      ],
+      "acceptance": [
+        "Define editable milestones and explicit sponsor acceptance events with actor/time history while preserving unresolved/disputed state."
+      ],
+      "boundaries": [
+        "No custody, escrow, release promise or autonomous payout; reward transfer still uses canonical explicit payment.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-046",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-047",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-049",
+      "number": 49,
+      "title": "Approved real Solana Pay acceptance",
+      "area": "community",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "owner_controlled_wallet"],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const preparePayment = mutation(",
+          "observation": "Existing canonical payment preparation/verification remains authority; no automatic payout is implied."
+        }
+      ],
+      "acceptance": [
+        "With approved exact recipient, asset and amount, verify one owner-controlled payment and finalized canonical receipt, including refusal/error boundaries."
+      ],
+      "boundaries": [
+        "No real payment, replay, claim of settlement or clearing of unknown outcomes without exact approval.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Owner must approve the exact asset, recipient, amount and one live payment acceptance attempt.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-050",
+      "number": 50,
+      "title": "Disputed reward support",
+      "area": "community",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumCommunity.ts",
+          "anchor": "export const preparePayment = mutation(",
+          "observation": "Existing canonical payment preparation/verification remains authority; no automatic payout is implied."
+        }
+      ],
+      "acceptance": [
+        "Provide safe dispute context, current sponsor/submission history and a deliberate support path without exposing private accounts or changing payment state."
+      ],
+      "boundaries": [
+        "A dispute is not an automatic refund, payout, arbitration result or escrow claim.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-048",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumCommunity.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-051",
+      "number": 51,
+      "title": "Enabled and recently active agent directory",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agents-page.tsx",
+          "anchor": "export function ForumAgentsPage(",
+          "observation": "Existing public agent directory is a projection; enabled and recently active are distinct claims."
+        }
+      ],
+      "acceptance": [
+        "Distinguish enabled agents, observed recent activity and platform connectivity using actual allowlisted metadata and source times."
+      ],
+      "boundaries": [
+        "Do not imply constant activity, expose private jobs or turn held/pending work into successes.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agents-page.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-052",
+      "number": 52,
+      "title": "Bring-your-own-agent onboarding",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agent-access.tsx",
+          "anchor": "export function ForumAgentAccess(",
+          "observation": "Existing agent connection and review controls enforce owner scopes and capability boundaries."
+        }
+      ],
+      "acceptance": [
+        "Guide a human owner through local key custody, scopes, review modes and connection troubleshooting with exact canonical public URLs."
+      ],
+      "boundaries": [
+        "Never ask for private keys in chat, enroll without explicit intent or create an alternate authority path.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-054",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agent-access.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-053",
+      "number": 53,
+      "title": "Real agent lifecycle certification",
+      "area": "agents",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "scripts/certify-agent-auth.mjs",
+          "anchor": "certificationPlan(",
+          "observation": "Existing certification harness is dry by default; credentials and lifecycle approval are separate."
+        }
+      ],
+      "acceptance": [
+        "Use an approved disposable owner agent to verify enrollment, challenge, restart/refresh, insufficient scope, rotation and revocation with redacted phase receipts."
+      ],
+      "boundaries": [
+        "No production key/account mutation, token printing or inferred certification from public metadata alone.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-052",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["scripts/certify-agent-auth.mjs"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Provide a disposable owner agent, privately held credentials and explicit refresh/rotation/revocation phase approvals.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-054",
+      "number": 54,
+      "title": "Agent permission cards",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agent-access.tsx",
+          "anchor": "export function ForumConnectionFields(",
+          "observation": "Existing owner-selected connection capabilities are the permission-card source."
+        }
+      ],
+      "acceptance": [
+        "Show current effective requested/granted scopes and review/direct modes with plain consequences and revocation entry points."
+      ],
+      "boundaries": [
+        "Do not widen scopes, enable publishing or infer capability from merely connected state.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agent-access.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-055",
+      "number": 55,
+      "title": "Agent request and queue state",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agent-access.tsx",
+          "anchor": "export function ForumApprovalQueue(",
+          "observation": "Existing owner approval queue separates pending proposals from executed actions."
+        }
+      ],
+      "acceptance": [
+        "Expose safe owner-visible queued/reviewed/executing/unknown/terminal metadata from actual records with original timestamps and partial coverage."
+      ],
+      "boundaries": [
+        "No private prompt/body leakage, automatic approval, replay or hold release.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-054",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agent-access.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-056",
+      "number": 56,
+      "title": "Public research evidence cards",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-content-quality.ts",
+          "anchor": "export",
+          "observation": "Existing deterministic editorial quality helpers provide a foundation, not a licensed comparative benchmark."
+        }
+      ],
+      "acceptance": [
+        "Show visible claim/source/version citations and correction context with canonical public links; missing source evidence remains explicit."
+      ],
+      "boundaries": [
+        "Never leak drafts or represent lexical quality as independent semantic review.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/forum-content-quality.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-057",
+      "number": 57,
+      "title": "Correction and retraction history",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forum.ts",
+          "anchor": "export const listFeedThreads",
+          "observation": "Existing canonical forum operations enforce visibility, moderation and bounded projections."
+        }
+      ],
+      "acceptance": [
+        "Display immutable public correction/retraction context linked to original visible versions and current status; private moderation detail remains private."
+      ],
+      "boundaries": [
+        "Edits invalidate prior review when current gates require it; no rewriting history to imply earlier evidence.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-056",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forum.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-058",
+      "number": 58,
+      "title": "Licensed benchmark corpus and human rubric",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "decision",
+      "verification": ["security", "custody_review"],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-content-quality.ts",
+          "anchor": "export",
+          "observation": "Existing deterministic editorial quality helpers provide a foundation, not a licensed comparative benchmark."
+        }
+      ],
+      "acceptance": [
+        "Define approved corpus licenses, consent/governance, human scoring rubric and reproducible isolated evaluation before publishing comparative claims."
+      ],
+      "boundaries": [
+        "No paid corpus acquisition, raw private examples, new model budget or invented ranking.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/forum-content-quality.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Provide licensed/consented benchmark corpus governance and an approved human rubric.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-059",
+      "number": 59,
+      "title": "Contribution reputation",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forum.ts",
+          "anchor": "export const listFeedThreads",
+          "observation": "Existing canonical forum operations enforce visibility, moderation and bounded projections."
+        }
+      ],
+      "acceptance": [
+        "Specify/test transparent contribution signals, anti-gaming rules, appeals and visibility before applying public reputation changes."
+      ],
+      "boundaries": [
+        "No token wealth, self-tip loop, undisclosed agent activity or unreviewed model score as trusted reputation.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-058",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forum.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve transparent contribution/reputation governance and anti-gaming/appeal rules.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-060",
+      "number": 60,
+      "title": "Actual five-pillar coverage",
+      "area": "agents",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agents-page.tsx",
+          "anchor": "export function ForumAgentsPage(",
+          "observation": "Existing public agent directory is a projection; enabled and recently active are distinct claims."
+        }
+      ],
+      "acceptance": [
+        "Show actual recent AI, Gaming, Web3/Solana, Hacking and Music coverage with source dates and honest empty/unknown periods."
+      ],
+      "boundaries": [
+        "Do not change agent schedules, publication targets, budgets or create posts to fill a dashboard.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-051",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agents-page.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-061",
+      "number": 61,
+      "title": "Verify facilitator support and existing free-credit readiness",
+      "area": "research",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-research-readiness.ts",
+          "anchor": "export function researchRateWithinReserve(",
+          "observation": "Existing facilitator readiness is fail-closed and does not authorize real charging."
+        }
+      ],
+      "acceptance": [
+        "Read the exact facilitator-supported Solana asset/network/fee contract and receiving-account readiness under approved bounded credentials; record freshness and fail-closed outcomes."
+      ],
+      "boundaries": [
+        "No top-up, paid upgrade, activation or assumption that UI traces prove supported settlement.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/forum-research-readiness.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "external_readiness",
+          "phase": "implementation",
+          "detail": "Verify exact facilitator supported network/asset, existing free-credit balance/reserve and receiving account with bounded approved access.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-062",
+      "number": 62,
+      "title": "Approved real research fulfillment",
+      "area": "research",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "owner_controlled_wallet"],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/research-purchase.tsx",
+          "anchor": "export function ResearchPurchase(",
+          "observation": "Existing research controller preserves original intent, approval, settlement and uncertainty gates."
+        }
+      ],
+      "acceptance": [
+        "After readiness and exact payment approval, verify one owner-controlled research purchase through settlement, frozen export and receipt download with uncertainty retained."
+      ],
+      "boundaries": [
+        "No real settlement, replay or spend without exact approval; source/fixture readiness is not fulfillment proof.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-061",
+          "requires": "live_verified"
+        },
+        {
+          "id": "PLATFORM-063",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/research-purchase.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Approve the exact ready product, payer, amount and one actual research payment/fulfillment test.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-063",
+      "number": 63,
+      "title": "HTML frozen research reports",
+      "area": "research",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-research.ts",
+          "anchor": "export function buildResearchReport(",
+          "observation": "Existing research report builder is the data/precision boundary, not proof of paid fulfillment."
+        }
+      ],
+      "acceptance": [
+        "Render an immutable accessible HTML report from the exact stored signed/hashed export, preserving original sources, units and generated time."
+      ],
+      "boundaries": [
+        "No fresh price/provider lookup or content mutation while opening a purchased report.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-004",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/forum-research.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-064",
+      "number": 64,
+      "title": "Paid catalog discovery",
+      "area": "research",
+      "status": "ready_review",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/research-purchase.tsx",
+          "anchor": "export function ResearchPurchase(",
+          "observation": "Existing research controller preserves original intent, approval, settlement and uncertainty gates."
+        }
+      ],
+      "acceptance": [
+        "List only actually configured products with exact asset/network/price, readiness and terms, clearly separated from existing free forum APIs."
+      ],
+      "boundaries": [
+        "Charging remains disabled until canonical readiness/entitlement gates pass; no new paid product pricing implied.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": "catalog-discovery",
+        "paths": [
+          "lib/agent-discovery.ts",
+          "lib/ard-catalog.ts",
+          "apps/platform/app/developers/page.tsx",
+          "apps/platform/app/agent-discovery.test.ts",
+          "apps/platform/app/developers/page.test.tsx"
+        ]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "Read-only catalog discovery may ship while readiness is unavailable. Charging or any backend change still requires actual facilitator/account readiness, exact activation authority and the applicable release approval.",
+          "resolved": false
+        }
+      ],
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Root source candidate 57eb7493 integrated with 12 focused contracts passing; full parent qualification, merge and deployment remain pending. This is read-only discovery, not paid activation."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-065",
+      "number": 65,
+      "title": "Mocked x402 owner example",
+      "area": "research",
+      "status": "queued",
+      "changeType": "tests",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "packages/agent-sdk/src/index.ts",
+          "anchor": "export",
+          "observation": "Existing public SDK contracts must retain the same canonical scope and visibility authority."
+        }
+      ],
+      "acceptance": [
+        "Provide a zero-network-by-default example that validates challenge, approval refusal, mock settlement and receipt retrieval without repository-private endpoints."
+      ],
+      "boundaries": [
+        "No automatic wallet spending, embedded key, production request or false real-payment success.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["packages/agent-sdk/src/index.ts"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-066",
+      "number": 66,
+      "title": "Searchable owner export and receipt library",
+      "area": "research",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forumResearch.ts",
+          "anchor": "export const listMine = query(",
+          "observation": "Existing owner research receipt window is private; larger libraries need bounded pagination."
+        }
+      ],
+      "acceptance": [
+        "Use owner-scoped bounded pagination and validated filters to locate frozen reports and receipts; distinguish unavailable artifacts from unsettled intent state."
+      ],
+      "boundaries": [
+        "Revalidate current entitlement at access; no private artifact URLs or protected bytes in public indexes.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-063",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forumResearch.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-067",
+      "number": 67,
+      "title": "Read-only project and work MCP tools",
+      "area": "developer",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "packages/agent-sdk/src/index.ts",
+          "anchor": "export",
+          "observation": "Existing public SDK contracts must retain the same canonical scope and visibility authority."
+        }
+      ],
+      "acceptance": [
+        "Add bounded read-only canonical tools sharing existing visibility, quotas and pagination; denied/private records remain indistinguishable as required."
+      ],
+      "boundaries": [
+        "No new writes, independent DB, auth bypass or wallet/payment tool implicitly exposed.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-041",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-044",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["packages/agent-sdk/src/index.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-068",
+      "number": 68,
+      "title": "Python SDK publishing and clean installation qualification",
+      "area": "developer",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "packages/agent-python-sdk/pyproject.toml",
+          "anchor": "[project]",
+          "observation": "Existing Python package metadata is a publishing foundation, not a current PyPI/install receipt."
+        }
+      ],
+      "acceptance": [
+        "With approved package account/2FA/trusted publisher, publish the exact reviewed archive and verify a clean public install against versioned public contracts."
+      ],
+      "boundaries": [
+        "No credential disclosure, package takeover, paid upgrade or simulated publication receipt.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["packages/agent-python-sdk/pyproject.toml"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Package owner must supply approved PyPI identity, 2FA/trusted publisher and exact version/publication authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-069",
+      "number": 69,
+      "title": "Signed webhook qualification",
+      "area": "developer",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "scripts/webhook-cert-core.ts",
+          "anchor": "verifyWebhookRequest",
+          "observation": "Existing local verifier proves bounded signature/schema behavior only, not hosted signed delivery."
+        }
+      ],
+      "acceptance": [
+        "With a disposable approved HTTPS endpoint and subscription, verify real signed bounded delivery, key rotation/revocation and duplicate handling with redacted receipts."
+      ],
+      "boundaries": [
+        "No new destination/send, unsafe replay, unknown-delivery retry or broad host allowlist.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["scripts/webhook-cert-core.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Choose a disposable exact HTTPS host, owner subscription/signing key custody and one signed-delivery/rotation test approval.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-070",
+      "number": 70,
+      "title": "Separate agent spending-grant design",
+      "area": "developer",
+      "status": "queued",
+      "changeType": "decision",
+      "verification": ["security", "custody_review"],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-agent-access.tsx",
+          "anchor": "export function ForumConnectionFields(",
+          "observation": "Existing owner-selected connection capabilities are the permission-card source."
+        }
+      ],
+      "acceptance": [
+        "Specify owner-issued asset/amount/time/domain limits, revocation, audit and explicit consent as a separate reviewed authority before any implementation enables spending."
+      ],
+      "boundaries": [
+        "No custody, standing token allowance, autonomous transaction signing or change to existing agent budgets.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-054",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-agent-access.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve a separate spending-authority design; current account/agent access is not a wallet spend grant.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-071",
+      "number": 71,
+      "title": "Cross-utility notifications",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forum.ts",
+          "anchor": "export const listMyNotifications",
+          "observation": "Existing private notification source is the authority for cross-utility presentation."
+        }
+      ],
+      "acceptance": [
+        "Aggregate actual authorized forum/work/research/receipt notifications with provenance, bounded pagination and explicit read state."
+      ],
+      "boundaries": [
+        "No private cross-account joins, fabricated completion events or new outbound delivery.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forum.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-072",
+      "number": 72,
+      "title": "Granular notification preferences",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-control-panel.tsx",
+          "anchor": "ForumControlPanel",
+          "observation": "Existing settings control privacy, relationships and notification preferences."
+        }
+      ],
+      "acceptance": [
+        "Owners can choose per-category/channel preferences with accessible save/error states and clear existing delivery defaults."
+      ],
+      "boundaries": [
+        "No opt-out bypass, surprise email/social sends or widened retention/tracking.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-071",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-control-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-073",
+      "number": 73,
+      "title": "Opt-in digest of existing content",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/forum.ts",
+          "anchor": "export const listMyNotifications",
+          "observation": "Existing private notification source is the authority for cross-utility presentation."
+        }
+      ],
+      "acceptance": [
+        "Design an explicit subscription using only currently visible existing content, with unsubscribe, delivery receipts and bounded dedupe."
+      ],
+      "boundaries": [
+        "No content generation, unapproved new schedule, subscriber leak or uncertain-send replay.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-072",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/forum.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve opt-in digest channel, existing-content policy and delivery/scheduling authority.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-074",
+      "number": 74,
+      "title": "Solved-discussion search facet",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-search-page.tsx",
+          "anchor": "export function ForumSearchPage(",
+          "observation": "Existing search uses bounded authorized queries; new presentation must preserve visibility and arguments."
+        }
+      ],
+      "acceptance": [
+        "Filter only actual accepted-answer state in authorized search and preserve pagination, canonical URLs and honest zero-result context."
+      ],
+      "boundaries": [
+        "Do not infer solved status from sentiment or silently alter accepted answers.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-033",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-search-page.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-075",
+      "number": 75,
+      "title": "Attachment alt text and credits in composer",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-compose.tsx",
+          "anchor": "export function ForumCompose(",
+          "observation": "Existing composer owns local drafts, attachments and publication admission."
+        }
+      ],
+      "acceptance": [
+        "Allow editable alternative text and attribution for each actual attachment with preview, validation and failure persistence across draft restore."
+      ],
+      "boundaries": [
+        "No AI-generated attribution, cross-owner attachment access or invisible upload failures.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-compose.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-076",
+      "number": 76,
+      "title": "Moderation outcome history",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-moderation-page.tsx",
+          "anchor": "export function ForumModerationPage(",
+          "observation": "Existing moderation view is role/visibility bounded; public explanations must exclude private reports."
+        }
+      ],
+      "acceptance": [
+        "Display role-appropriate current/historical outcomes with actual actor/time context and explicit appeal/help entry points."
+      ],
+      "boundaries": [
+        "Public users never receive private reports, member details or unreviewed raw reasons.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-moderation-page.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-077",
+      "number": 77,
+      "title": "Reporting-dialog lifecycle",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-thread-view.tsx",
+          "anchor": "export function ForumThreadView(",
+          "observation": "Existing thread view owns visible content, links and report interactions."
+        }
+      ],
+      "acceptance": [
+        "Validate keyboard/focus/closing/error/double-submit behavior for actual report dialogs while preserving typed context on failed submission."
+      ],
+      "boundaries": [
+        "No real report submission in isolated tests; keep moderator authority and existing rate limits.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-thread-view.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-078",
+      "number": 78,
+      "title": "Private research notebooks",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "lib/forum-research.ts",
+          "anchor": "export function buildResearchReport(",
+          "observation": "Existing research report builder is the data/precision boundary, not proof of paid fulfillment."
+        }
+      ],
+      "acceptance": [
+        "Define owner-scoped note/report references with versioning, bounded search, deletion/export and explicit private/public distinction."
+      ],
+      "boundaries": [
+        "Retention/consent policy and storage costs need approval; no automatic publication or provider/model requests.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-066",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/forum-research.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose private-notebook retention, storage/visibility and consent policy.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-079",
+      "number": 79,
+      "title": "Public thread share cards",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-thread-view.tsx",
+          "anchor": "export function ForumThreadView(",
+          "observation": "Existing thread view owns visible content, links and report interactions."
+        }
+      ],
+      "acceptance": [
+        "Generate canonical metadata/images from currently public content, with safe cropping, attribution and deleted/private-content invalidation."
+      ],
+      "boundaries": [
+        "No private drafts, member-only excerpts or generated factual claims in cached cards.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-thread-view.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-080",
+      "number": 80,
+      "title": "Canonical community social links",
+      "area": "forum",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-start-here.tsx",
+          "anchor": "ForumStartHere",
+          "observation": "Existing onboarding and pillar navigation are the integration boundary."
+        }
+      ],
+      "acceptance": [
+        "Use the configured official forum/Telegram/X/token destinations consistently with accessible labels and external-link safety."
+      ],
+      "boundaries": [
+        "No invented social handles, promotional sends or historical-token replacement of immutable receipt identities.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-start-here.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-081",
+      "number": 81,
+      "title": "Compact and comfortable layout preference",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-site-shell.tsx",
+          "anchor": "ForumSiteShell",
+          "observation": "Existing shared shell owns responsive navigation and route framing across sites."
+        }
+      ],
+      "acceptance": [
+        "A deliberate density choice works across Feed, Community and Terminal on desktop/mobile without hiding actions or resetting controller state."
+      ],
+      "boundaries": [
+        "No global CSS workaround, unreadable touch targets, new privacy persistence or layout-driven wallet remount.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-site-shell.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-082",
+      "number": 82,
+      "title": "Market column preferences",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/market-explorer.tsx",
+          "anchor": "export function MarketExplorer(",
+          "observation": "Existing loaded-market explorer exposes bounded filters and sorting; do not infer exhaustive coverage."
+        }
+      ],
+      "acceptance": [
+        "Explicitly choose/reorder only supported loaded-market columns with accessible reset and full metric/mint inspection."
+      ],
+      "boundaries": [
+        "No hidden provider queries, false unavailable-as-zero values or account/wallet data persistence.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-025",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-081",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/market-explorer.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-083",
+      "number": 83,
+      "title": "Real iOS and Android device qualification",
+      "area": "accessibility",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "human_device"],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-site-shell.tsx",
+          "anchor": "ForumSiteShell",
+          "observation": "Existing shared shell owns responsive navigation and route framing across sites."
+        }
+      ],
+      "acceptance": [
+        "On approved physical iOS/Android devices, verify viewport, keyboard, safe areas, wallet handoff, back/forward and scroll behavior with actual device receipts."
+      ],
+      "boundaries": [
+        "Emulation is not physical-device certification; no wallet/payment approvals or purchases by automation.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-081",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-site-shell.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Provide physical iOS and Android devices with OS/browser/wallet versions and human-controlled test access.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-084",
+      "number": 84,
+      "title": "Reachable token identity during long scrolling",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/token-detail.tsx",
+          "anchor": "export function TokenDetail(",
+          "observation": "Existing selected-token detail owns mint identity, source provenance and chart/order integration."
+        }
+      ],
+      "acceptance": [
+        "Maintain a compact reachable exact mint/token identity and deliberate navigation while preserving chart/order viewport budgets and mobile controls."
+      ],
+      "boundaries": [
+        "No sticky element covering dialogs, tiny copy targets or remount of protected state.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-081",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/token-detail.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-085",
+      "number": 85,
+      "title": "Forced-color chart and table support",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/candle-readings.tsx",
+          "anchor": "export function CandleReadings(",
+          "observation": "Existing candle disclosure is based on a bounded, already loaded provider payload."
+        }
+      ],
+      "acceptance": [
+        "In forced colors, preserve named controls, real data-table access, focus visibility and source/unknown labels without relying solely on candle color."
+      ],
+      "boundaries": [
+        "Do not synthesize prices or claim a canvas is fully accessible without equivalent readable data.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-028",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/candle-readings.tsx"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-086",
+      "number": 86,
+      "title": "Hands-on keyboard, assistive technology and zoom qualification",
+      "area": "accessibility",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "human_device"],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-site-shell.tsx",
+          "anchor": "ForumSiteShell",
+          "observation": "Existing shared shell owns responsive navigation and route framing across sites."
+        }
+      ],
+      "acceptance": [
+        "With a human tester, verify real keyboard, screen reader, 200/400% zoom and focus recovery across critical journeys; record actual limitations."
+      ],
+      "boundaries": [
+        "Automated accessibility checks do not replace AT certification or authorize real financial actions.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-081",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-085",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-site-shell.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "operational_input",
+          "phase": "implementation",
+          "detail": "Provide a human keyboard/assistive-technology tester, tool/OS/browser combination and zoom/device test scope.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-087",
+      "number": 87,
+      "title": "Forum PWA branding and offline reading",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-site-shell.tsx",
+          "anchor": "ForumSiteShell",
+          "observation": "Existing shared shell owns responsive navigation and route framing across sites."
+        }
+      ],
+      "acceptance": [
+        "Define install branding and an explicit public-read-only offline cache with stale labels, bounded retention and clear online-required actions."
+      ],
+      "boundaries": [
+        "Do not cache auth tokens, private drafts, wallet data, payment controllers or claim offline transactions work.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-site-shell.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Choose bounded public offline retention and private-content exclusion policy.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-088",
+      "number": 88,
+      "title": "Motion and render-cost review",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "tests",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/webVitals.ts",
+          "anchor": "export const summaryAdmin = query(",
+          "observation": "Existing bounded privacy-preserving field metrics differ from lab or physical-device certification."
+        }
+      ],
+      "acceptance": [
+        "Measure purposeful motion and rendering under reduced motion, background visibility and loaded lists; retain only tested effects within explicit budgets."
+      ],
+      "boundaries": [
+        "No fabricated performance win, disabled safety controller or new polling/model/provider work.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-081",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/webVitals.ts"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-089",
+      "number": 89,
+      "title": "Per-file upload outcomes",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-compose.tsx",
+          "anchor": "export function ForumCompose(",
+          "observation": "Existing composer owns local drafts, attachments and publication admission."
+        }
+      ],
+      "acceptance": [
+        "Every selected file retains its own uploading/success/failure/removed state, safe retry decision and associated metadata without losing successful attachments."
+      ],
+      "boundaries": [
+        "No automatic replay of uncertain uploads, private storage URL leakage or false batch-wide success.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-075",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-compose.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-090",
+      "number": 90,
+      "title": "Draft restoration, failure and retention",
+      "area": "accessibility",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/forum/forum-compose.tsx",
+          "anchor": "export function ForumCompose(",
+          "observation": "Existing composer owns local drafts, attachments and publication admission."
+        }
+      ],
+      "acceptance": [
+        "Test valid/unknown/corrupt schemas, authored text, failed writes, restore/delete and multi-tab races; explain actual local/cloud retention choice."
+      ],
+      "boundaries": [
+        "Never overwrite unknown/newer bytes, store credentials/transaction payloads or silently enable cloud drafts.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/forum/forum-compose.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-091",
+      "number": 91,
+      "title": "Treasury and burn reconciliation",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/transparency-panel.tsx",
+          "anchor": "export function TransparencyPanel(",
+          "observation": "Existing treasury view counts confirmed recorded promotion receipts and explicitly limits its display window."
+        }
+      ],
+      "acceptance": [
+        "Reconcile recorded totals with bounded finalized exact-signature evidence, retaining coverage gaps and original terms; discrepancies become explicit review states."
+      ],
+      "boundaries": [
+        "No payment replay, historical fee rewrite, treasury movement or dead-wallet-as-burn claim.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/transparency-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-092",
+      "number": 92,
+      "title": "Public promotion receipt pagination",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/transparency-panel.tsx",
+          "anchor": "export function TransparencyPanel(",
+          "observation": "Existing treasury view counts confirmed recorded promotion receipts and explicitly limits its display window."
+        }
+      ],
+      "acceptance": [
+        "Expose bounded canonical verified promotion-receipt pages with exact totals/window provenance, immutable signatures and incomplete-history labels."
+      ],
+      "boundaries": [
+        "Pending/unknown payments and estimated swap revenue never count as verified receipts.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-091",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/transparency-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-093",
+      "number": 93,
+      "title": "Privacy-preserving campaign analytics",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "convex/webVitals.ts",
+          "anchor": "export const summaryAdmin = query(",
+          "observation": "Existing bounded privacy-preserving field metrics differ from lab or physical-device certification."
+        }
+      ],
+      "acceptance": [
+        "Specify bounded first-party aggregate campaign attribution, retention and consent with no visitor/wallet identity, private query strings or fingerprinting."
+      ],
+      "boundaries": [
+        "New tracking, external analytics or data sharing needs a privacy decision; do not imply trading causation.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["convex/webVitals.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve aggregate attribution/consent/retention and explicitly excluded identifiers.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-094",
+      "number": 94,
+      "title": "Stream article QR codes",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "frontend",
+      "verification": [
+        "unit",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "apps/forum/public/broadcast/desk.js",
+          "anchor": "function",
+          "observation": "Existing broadcast presentation is a video-only surface; QR/index additions must reuse public article identity."
+        }
+      ],
+      "acceptance": [
+        "Display a readable static QR for the exact currently public canonical article, updating only with the shown article and respecting stream layout margins."
+      ],
+      "boundaries": [
+        "No private links, tracking identifiers, unrelated token destination or automatic broadcasting changes.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["apps/forum/public/broadcast/desk.js"]
+      },
+      "blockers": [],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-095",
+      "number": 95,
+      "title": "Recently-on-stream index",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "apps/forum/public/broadcast/desk.js",
+          "anchor": "function",
+          "observation": "Existing broadcast presentation is a video-only surface; QR/index additions must reuse public article identity."
+        }
+      ],
+      "acceptance": [
+        "List only actual recorded public article appearances with timestamps and bounded pagination; remove hidden content without fabricating historical airtime."
+      ],
+      "boundaries": [
+        "No inference that every selected draft aired or that a stream was live without a receipt.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-094",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["apps/forum/public/broadcast/desk.js"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-096",
+      "number": 96,
+      "title": "Opt-in trader performance from trusted P&L only",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/wallet-panel.tsx",
+          "anchor": "export function SwapHistory(",
+          "observation": "Existing private swap-history window is a foundation, not a complete wallet ledger or profit certificate."
+        }
+      ],
+      "acceptance": [
+        "After explicit opt-in, expose only methodology-qualified finalized performance with coverage/time limits, revocation and incomplete-basis warnings."
+      ],
+      "boundaries": [
+        "No scraped wallet-identity matching, private balance leak, fake leaderboard or simulated results presented as realized P&L.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-022",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/wallet-panel.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Approve opt-in performance visibility and trusted P&L methodology before any public ranking.",
+          "resolved": false
+        },
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-097",
+      "number": 97,
+      "title": "Token comparison",
+      "area": "growth",
+      "status": "queued",
+      "changeType": "cross_stack",
+      "verification": [
+        "unit",
+        "backend",
+        "browser_fixture",
+        "types_lint",
+        "five_app_builds",
+        "security"
+      ],
+      "sourceEvidence": [
+        {
+          "path": "components/trading/token-detail.tsx",
+          "anchor": "export function TokenDetail(",
+          "observation": "Existing selected-token detail owns mint identity, source provenance and chart/order integration."
+        }
+      ],
+      "acceptance": [
+        "Compare explicit exact mints using shared loaded/cache-backed data, per-field sources/times and honest missing values at responsive sizes."
+      ],
+      "boundaries": [
+        "No ticker identity guessing, extra unbounded providers, investment endorsement or automatic swap.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-025",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-030",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["components/trading/token-detail.tsx"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "live_acceptance",
+          "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-098",
+      "number": 98,
+      "title": "Limit-order evaluation and custody review",
+      "area": "trading",
+      "status": "needs_decision",
+      "changeType": "decision",
+      "verification": ["security", "custody_review"],
+      "sourceEvidence": [
+        {
+          "path": "lib/swap-transactions.ts",
+          "anchor": "export async function prepareManagedSwap(",
+          "observation": "Existing server preparation owns exact route validation, fees and simulation; new controls must reuse it."
+        }
+      ],
+      "acceptance": [
+        "Decide supported execution venue, cancellation, expiry, fee, key custody and owner-consent threat model before enabling any limit-order operation."
+      ],
+      "boundaries": [
+        "No new standing authority, order placement, custody, paid integration or simulated live execution.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-070",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/swap-transactions.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Owner must select execution/custody model, provider, cancellation guarantees and exact order authority after threat review.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-099",
+      "number": 99,
+      "title": "DCA custody, spending and cancellation approval",
+      "area": "trading",
+      "status": "needs_decision",
+      "changeType": "decision",
+      "verification": ["security", "custody_review"],
+      "sourceEvidence": [
+        {
+          "path": "lib/swap-transactions.ts",
+          "anchor": "export async function prepareManagedSwap(",
+          "observation": "Existing server preparation owns exact route validation, fees and simulation; new controls must reuse it."
+        }
+      ],
+      "acceptance": [
+        "Review exact spend caps, custody, schedule/expiry, cancellation/revocation and failure/uncertain-outcome policy before an explicitly approved DCA implementation."
+      ],
+      "boundaries": [
+        "No new schedule, recurring charge, wallet authority or automatic transaction send is authorized by this plan.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [
+        {
+          "id": "PLATFORM-070",
+          "requires": "source_deployed"
+        },
+        {
+          "id": "PLATFORM-098",
+          "requires": "source_deployed"
+        }
+      ],
+      "ownership": {
+        "owner": null,
+        "paths": ["lib/swap-transactions.ts"]
+      },
+      "blockers": [
+        {
+          "kind": "product_decision",
+          "phase": "implementation",
+          "detail": "Owner must approve DCA custody, explicit spending grant, recurring schedule, cancellation and uncertain-outcome policy.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    },
+    {
+      "id": "PLATFORM-100",
+      "number": 100,
+      "title": "Isolated restore rehearsal",
+      "area": "operations",
+      "status": "blocked",
+      "changeType": "operations",
+      "verification": ["types_lint", "security", "public_read_only"],
+      "sourceEvidence": [
+        {
+          "path": "docs/platform-build-roadmap.md",
+          "anchor": "## Release gate",
+          "observation": "Historical roadmap distinguishes source candidates from deployed/credential-qualified capabilities; reconcile rather than inherit completion."
+        }
+      ],
+      "acceptance": [
+        "Using an approved isolated destination and sanitized backup, rehearse restore, schema/auth compatibility, visibility and rollback procedures with redacted evidence."
+      ],
+      "boundaries": [
+        "Never overwrite production, copy private user data into an unapproved environment, restore secrets blindly or treat a written runbook as a rehearsal.",
+        "Preserve the $2/day shared model cap, 50bps swap fee, provider free-tier caps, existing schedules, safety checks and every uncertain-outcome hold."
+      ],
+      "dependencies": [],
+      "ownership": {
+        "owner": null,
+        "paths": ["docs/platform-build-roadmap.md"]
+      },
+      "blockers": [
+        {
+          "kind": "approval",
+          "phase": "implementation",
+          "detail": "Select a separate restore target, sanitized backup, data-handling/access rules, rollback scope and exact rehearsal authorization.",
+          "resolved": false
+        }
+      ],
+      "qualification": []
+    }
+  ]
+}
