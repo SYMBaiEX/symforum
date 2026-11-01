@@ -1222,9 +1222,20 @@ function LiveSwap({
               </span>
               <span>
                 <strong>
-                  {formatTokenAmount(q.outputAmountRaw, output?.decimals ?? 6)}{" "}
-                  {output?.symbol}
+                  {output && output.mint === q.outputMint ? (
+                    <>
+                      {formatTokenAmount(q.outputAmountRaw, output.decimals)}{" "}
+                      {output.symbol}
+                    </>
+                  ) : (
+                    "Receive amount unavailable · token precision not loaded"
+                  )}
                 </strong>
+                {(!output || output.mint !== q.outputMint) && (
+                  <small>
+                    Quoted output · raw base units: {q.outputAmountRaw}
+                  </small>
+                )}
                 <small>
                   {Math.max(0, Math.ceil((q.expiresAt - now) / 1000))}s to quote
                 </small>
