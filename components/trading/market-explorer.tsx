@@ -55,6 +55,11 @@ import {
 import styles from "./market-explorer.module.css";
 import { marketEligibility, marketSampleView } from "./market-sample-view";
 import { marketExportCsv } from "./market-export";
+import {
+  forgetMarketViewPreferences,
+  readMarketViewPreferences,
+  saveMarketViewPreferences,
+} from "./market-view-preferences";
 
 const columns = [
   ["price", "Price"],
@@ -164,6 +169,7 @@ export function MarketExplorer({
 }) {
   const [search, setSearch] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [savedViewMessage, setSavedViewMessage] = useState("");
   const { host } = useForumRuntime();
   const [exportState, setExportState] = useState<{
     csv: string;
@@ -322,6 +328,59 @@ export function MarketExplorer({
       direction:
         current.key === key && current.direction === "desc" ? "asc" : "desc",
     }));
+  }
+  function manageSavedView(action: "save" | "restore" | "forget") {
+    if (host !== "website") return;
+    try {
+      const storage = window.localStorage;
+      const result =
+        action === "save"
+          ? saveMarketViewPreferences(storage, {
+              band,
+              platform,
+              freshOnly,
+              sortKey: sort.key,
+              sortDirection: sort.direction,
+            })
+          : action === "forget"
+            ? forgetMarketViewPreferences(storage)
+            : readMarketViewPreferences(storage);
+      if (result.state === "saved") {
+        if (action === "restore") {
+          setBand(result.view.band);
+          setPlatform(result.view.platform);
+          setFreshOnly(result.view.freshOnly);
+          setSort({
+            key: result.view.sortKey,
+            direction: result.view.sortDirection,
+          });
+          announceViewChange();
+        }
+        setSavedViewMessage(
+          action === "restore"
+            ? "Saved public filters and sort restored. Search and selected token are unchanged."
+            : "Public filters and sort saved on this device only. They will not apply automatically.",
+        );
+      } else if (result.state === "missing") {
+        setSavedViewMessage(
+          action === "forget"
+            ? "Saved view forgotten. Current controls are unchanged."
+            : "No saved market view on this device.",
+        );
+      } else if (result.state === "unsupported" || result.state === "invalid") {
+        setSavedViewMessage(
+          "This saved view is unrecognized or unreadable. It was left untouched; your current controls are unchanged.",
+        );
+      } else {
+        setSavedViewMessage(
+          "Device storage is unavailable. No saved view was applied.",
+        );
+      }
+    } catch {
+      setSavedViewMessage(
+        "Device storage is unavailable. No saved view was applied.",
+      );
+    }
   }
   return (
     <section
@@ -665,6 +724,45 @@ export function MarketExplorer({
             Eligibility is not a scheduled or guaranteed refresh. Visible online
             demand and shared allowances still apply.
           </p>
+          <details className="mt-2 min-w-0">
+            <summary className="focus-ring [&&]:!min-h-11">
+              Saved market view
+            </summary>
+            <div className="min-w-0 space-y-2 py-2 [overflow-wrap:anywhere]">
+              <p>
+                Opt-in, device-local public filters and sort only. Search text,
+                selected tokens, wallets, quotes and market data are not saved.
+                Nothing applies automatically. Restore keeps the current search
+                and selected token, using the existing data limits.
+              </p>
+              {host !== "website" ? (
+                <p>
+                  Device view storage is unavailable in this embedded surface.
+                  Use the existing controls instead.
+                </p>
+              ) : null}
+              <div className="flex min-w-0 flex-wrap gap-2">
+                {(["save", "restore", "forget"] as const).map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    disabled={host !== "website"}
+                    className="focus-ring inline-flex min-h-11 max-w-full items-center rounded-md border border-border px-3 text-sm disabled:opacity-50"
+                    onClick={() => manageSavedView(action)}
+                  >
+                    {action === "save"
+                      ? "Save view on this device"
+                      : action === "restore"
+                        ? "Restore saved view"
+                        : "Forget saved view"}
+                  </button>
+                ))}
+              </div>
+              <p role="status" aria-live="polite">
+                {savedViewMessage}
+              </p>
+            </div>
+          </details>
         </details>
       </div>
     </section>
