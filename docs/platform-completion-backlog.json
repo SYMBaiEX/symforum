@@ -1268,7 +1268,7 @@
       "number": 26,
       "title": "Loaded-market provenance export",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1332,6 +1332,18 @@
         {
           "kind": "isolated_tests",
           "reference": "68 focusedunits,15export+14preferences+5strictlayout browsers,both types/lint. Actualforum40px target RED corrected export-button-only; previousCSVassertions retained."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR280 unchanged candidate1d93ed24:4841 unit/backend,1082 isolated browser,both types,all five builds,parity,audits/security. Independent component/combined reviews; actual-ancestor RED histories retained."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR280 normal protected rebase merge mainf6a469ee8ee834e6556c53c330974e28e6047ec3; exact tested complete treef557b2b3719f7d912f71f466fafc4007b15cc858 and all authors verified. Reported merge timestamp inconsistent with response Date; chronology not inferred from it."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR280 exact automatic production revision/all five original domains verified. Bounded signed-out Feed desktop/phone check populated,nooverflow,0observedpageerrors/providerattempts. Protected real owner/financial/upload/OS behavior unclaimed."
         }
       ]
     },
@@ -1340,7 +1352,7 @@
       "number": 27,
       "title": "Saved discovery controls",
       "area": "trading",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1396,6 +1408,18 @@
         {
           "kind": "isolated_tests",
           "reference": "106 focused browsers,80 units,both types/lint; independent real-ancestor44px320/390 proof closed P2. No mount storage I/O; unknown bytes preserved."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR280 unchanged candidate1d93ed24:4841 unit/backend,1082 isolated browser,both types,all five builds,parity,audits/security. Independent component/combined reviews; actual-ancestor RED histories retained."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR280 normal protected rebase merge mainf6a469ee8ee834e6556c53c330974e28e6047ec3; exact tested complete treef557b2b3719f7d912f71f466fafc4007b15cc858 and all authors verified. Reported merge timestamp inconsistent with response Date; chronology not inferred from it."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR280 exact automatic production revision/all five original domains verified. Bounded signed-out Feed desktop/phone check populated,nooverflow,0observedpageerrors/providerattempts. Protected real owner/financial/upload/OS behavior unclaimed."
         }
       ],
       "remainingAcceptance": [
@@ -1739,7 +1763,7 @@
       "number": 34,
       "title": "Search match highlights and useful excerpts",
       "area": "forum",
-      "status": "in_progress",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1780,7 +1804,16 @@
         ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain655d1036 plus666d4f23; parent combined qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "33 units and34 browsers; independent33units13browsers/3000preservation checks. Six Greek-case RED failures fixed by consistent matching-only fold; original text/hrefs/query/auth preserved."
+        }
+      ]
     },
     {
       "id": "PLATFORM-035",
@@ -2742,7 +2775,7 @@
       "number": 54,
       "title": "Agent permission cards",
       "area": "agents",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -2767,11 +2800,25 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-agent-access.tsx"]
+        "owner": "agent-permission-cards",
+        "paths": [
+          "components/forum/forum-agent-access.tsx",
+          "tests/e2e/agent-permission-cards.spec.ts",
+          "tests/e2e/fixtures/agent-permission-cards.tsx",
+          "tests/e2e/fixtures/agent-permission-cards-state.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chainf68e910c; parent combined qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "22 new checks,25 unchanged browsers,12 original units,both types/lint. Independent22browsers12units; all original authority handlers/defaults/ceilings/hooks unchanged."
+        }
+      ]
     },
     {
       "id": "PLATFORM-055",
@@ -3144,7 +3191,7 @@
       "number": 63,
       "title": "HTML frozen research reports",
       "area": "research",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -3175,8 +3222,18 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["lib/forum-research.ts"]
+        "owner": "research-report-reader",
+        "paths": [
+          "lib/forum-research-http.ts",
+          "lib/forum-research-report-html.ts",
+          "lib/forum-research-report-html.test.ts",
+          "lib/forum-research-report-http.test.ts",
+          "apps/platform/app/api/research/token/[intentKey]/view/route.ts",
+          "apps/forum/app/api/research/token/[intentKey]/view/route.ts",
+          "tests/e2e/research-report-view.spec.ts",
+          "tests/e2e/fixtures/research-report-view.ts",
+          "components/trading/research-purchase.tsx"
+        ]
       },
       "blockers": [
         {
@@ -3186,7 +3243,16 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain4c396c90; parent combined qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "58 focused units/79 browsers; independent69units6readerbrowsers. Retained middleware-CSP style RED fixed with early restrictive meta/static style hash/validated proxy nonce; actual installed Next response merge tested. Existing owner status query only,zero actions; all prior HTTP/payment behavior unchanged."
+        }
+      ]
     },
     {
       "id": "PLATFORM-064",
@@ -3321,7 +3387,7 @@
       "number": 66,
       "title": "Searchable owner export and receipt library",
       "area": "research",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -3378,6 +3444,18 @@
         {
           "kind": "isolated_tests",
           "reference": "73 focused browsers,48 units,both types/lint; actual-ancestor40px RED fixed narrowly, independent44px proof. Financial handlers/Dialog/hooks unchanged."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR280 unchanged candidate1d93ed24:4841 unit/backend,1082 isolated browser,both types,all five builds,parity,audits/security. Independent component/combined reviews; actual-ancestor RED histories retained."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR280 normal protected rebase merge mainf6a469ee8ee834e6556c53c330974e28e6047ec3; exact tested complete treef557b2b3719f7d912f71f466fafc4007b15cc858 and all authors verified. Reported merge timestamp inconsistent with response Date; chronology not inferred from it."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR280 exact automatic production revision/all five original domains verified. Bounded signed-out Feed desktop/phone check populated,nooverflow,0observedpageerrors/providerattempts. Protected real owner/financial/upload/OS behavior unclaimed."
         }
       ],
       "remainingAcceptance": [
@@ -4178,7 +4256,7 @@
       "number": 85,
       "title": "Forced-color chart and table support",
       "area": "accessibility",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4208,11 +4286,27 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/trading/candle-readings.tsx"]
+        "owner": "forced-colors-build",
+        "paths": [
+          "components/trading/candle-readings.tsx",
+          "components/trading/price-chart.tsx",
+          "components/trading/forum-terminal.module.css",
+          "tests/e2e/forced-colors.spec.ts",
+          "tests/e2e/fixtures/forced-colors.tsx",
+          "tests/e2e/fixtures/forced-colors-state.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chaine36b2c42; parent combined qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "5 actual-renderer new browsers/84 unchanged browsers/55 units/types/lint; independent5new+5strictlayout. Retained missing non-color marker,40px and missing-focus RED; only24 scoped forced-color CSS lines changed in production,all lifecycle/data/state code unchanged."
+        }
+      ]
     },
     {
       "id": "PLATFORM-086",
@@ -4356,7 +4450,7 @@
       "number": 89,
       "title": "Per-file upload outcomes",
       "area": "accessibility",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -4411,6 +4505,18 @@
         {
           "kind": "isolated_tests",
           "reference": "48 focused browsers including32 unchanged upload/schema regressions,20 original units,both types/lint. Independent48browser15unit rerun; unknown uploads never replayed."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR280 unchanged candidate1d93ed24:4841 unit/backend,1082 isolated browser,both types,all five builds,parity,audits/security. Independent component/combined reviews; actual-ancestor RED histories retained."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR280 normal protected rebase merge mainf6a469ee8ee834e6556c53c330974e28e6047ec3; exact tested complete treef557b2b3719f7d912f71f466fafc4007b15cc858 and all authors verified. Reported merge timestamp inconsistent with response Date; chronology not inferred from it."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR280 exact automatic production revision/all five original domains verified. Bounded signed-out Feed desktop/phone check populated,nooverflow,0observedpageerrors/providerattempts. Protected real owner/financial/upload/OS behavior unclaimed."
         }
       ],
       "remainingAcceptance": [
@@ -4422,7 +4528,7 @@
       "number": 90,
       "title": "Draft restoration, failure and retention",
       "area": "accessibility",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -4472,6 +4578,18 @@
         {
           "kind": "isolated_tests",
           "reference": "48 focused browsers including32 unchanged upload/schema regressions,20 original units,both types/lint. Draft read/write/clear/restore failures and unknown-schema protection tested."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR280 unchanged candidate1d93ed24:4841 unit/backend,1082 isolated browser,both types,all five builds,parity,audits/security. Independent component/combined reviews; actual-ancestor RED histories retained."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR280 normal protected rebase merge mainf6a469ee8ee834e6556c53c330974e28e6047ec3; exact tested complete treef557b2b3719f7d912f71f466fafc4007b15cc858 and all authors verified. Reported merge timestamp inconsistent with response Date; chronology not inferred from it."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR280 exact automatic production revision/all five original domains verified. Bounded signed-out Feed desktop/phone check populated,nooverflow,0observedpageerrors/providerattempts. Protected real owner/financial/upload/OS behavior unclaimed."
         }
       ],
       "remainingAcceptance": [
