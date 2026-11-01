@@ -176,7 +176,9 @@ const validateItem = (item: CompletionItem) => {
   if (item.status === "partial" && !item.remainingAcceptance?.length)
     throw Error(`${item.id}: partial delivery requires remaining acceptance`);
   if (
-    (item.status === "source_deployed" || item.status === "live_verified") &&
+    ["isolated_tested", "merged", "source_deployed", "live_verified"].includes(
+      item.status,
+    ) &&
     item.remainingAcceptance?.length
   )
     throw Error(`${item.id}: remaining acceptance cannot be labelled complete`);

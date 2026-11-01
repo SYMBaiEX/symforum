@@ -274,6 +274,41 @@ describe("all-100 platform completion inventory", () => {
     source.status = "source_deployed";
     expect(() => validateCompletionPlan(plan)).toThrow("remaining acceptance");
   });
+  test.each([
+    "isolated_tested",
+    "merged",
+    "source_deployed",
+    "live_verified",
+  ] as const)(
+    "known remaining acceptance cannot be relabelled %s",
+    (status) => {
+      const plan = fixture();
+      const source = item(plan, 6);
+      source.blockers = [];
+      prove(source, status);
+      source.remainingAcceptance = [
+        "Original acceptance is still outstanding.",
+      ];
+      expect(() => validateCompletionPlan(plan)).toThrow(
+        "remaining acceptance",
+      );
+    },
+  );
+  test.each(["isolated_tested", "source_deployed", "live_verified"] as const)(
+    "partial delivery never meets the whole-item %s dependency",
+    (requires) => {
+      const plan = fixture();
+      const source = item(plan, 6);
+      prove(source, "isolated_tested");
+      source.status = "partial";
+      source.remainingAcceptance = [
+        "Original acceptance is still outstanding.",
+      ];
+      const target = assign(plan, 8, "status", "components/status.ts");
+      target.dependencies = [{ id: source.id, requires }];
+      expect(readyCompletionBatch(plan)).toEqual([]);
+    },
+  );
   test("ready batches avoid exact and parent-child paths, busy owners and candidate collisions", () => {
     const plan = fixture();
     assign(plan, 6, "active", "components/data.ts").status = "in_progress";
