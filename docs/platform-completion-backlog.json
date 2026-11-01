@@ -1763,7 +1763,7 @@
       "number": 34,
       "title": "Search match highlights and useful excerpts",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1812,6 +1812,18 @@
         {
           "kind": "isolated_tests",
           "reference": "33 units and34 browsers; independent33units13browsers/3000preservation checks. Six Greek-case RED failures fixed by consistent matching-only fold; original text/hrefs/query/auth preserved."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR281 final unchanged candidate3173a381:4906 unit/backend and1128 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; retained Greek/CSP/forced-color RED histories."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR281 normal protected rebase merge mainb689c8e3c151c5d7bf5cba08324637f47ee0f5a1; exact complete tested treebc1b46a2f51c450bfa4d391fc16b5a24f36c7858 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR281 exact automatic production revision and all five original domain bindings verified. Bounded public acceptance completed; operational receipts stay private. Real owner/provider/payment/AT certification remains unclaimed."
         }
       ]
     },
@@ -2107,7 +2119,7 @@
       "number": 41,
       "title": "Project-directory pagination",
       "area": "community",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2133,8 +2145,28 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["convex/forumCommunity.ts"]
+        "owner": "project-pagination",
+        "paths": [
+          "components/community/community-hub.tsx",
+          "components/community/project-directory-model.test.ts",
+          "components/community/project-directory-model.ts",
+          "convex/forumCommunity.ts",
+          "convex/forumCommunityProjects.test.ts",
+          "tests/e2e/community-project-search.spec.ts",
+          "tests/e2e/fixtures/community-affiliations-mocks.tsx",
+          "tests/e2e/fixtures/community-identity-links-state.ts",
+          "tests/e2e/fixtures/community-navigation-mocks.tsx",
+          "tests/e2e/fixtures/community-navigation-terminal-convex.ts",
+          "tests/e2e/fixtures/community-project-search-mocks.tsx",
+          "tests/e2e/fixtures/community-responsive-mocks.tsx",
+          "tests/e2e/fixtures/community-scope-guidance-state.tsx",
+          "tests/e2e/fixtures/community-submissions-mocks.tsx",
+          "tests/e2e/fixtures/holder-check-guidance-state.tsx",
+          "tests/e2e/fixtures/terminal-convex.ts",
+          "tests/e2e/fixtures/terminal-panel-recovery-state.tsx",
+          "tests/e2e/fixtures/tip-context-state.tsx",
+          "tests/e2e/fixtures/work-brief-guidance-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -2144,7 +2176,16 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chainbc85b6c4 plusa05f39c5; full parent qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "51 focused units,191 browser checks,both types/lint. Independent57units49browsers closed proven draft-loss and stale-handle P2s. Existing indexes/public projection and every old backend declaration unchanged. New public page defaults12 under24-row/262144-byte ceilings; parent qualification and exact backend approval remain pending."
+        }
+      ]
     },
     {
       "id": "PLATFORM-042",
@@ -2775,7 +2816,7 @@
       "number": 54,
       "title": "Agent permission cards",
       "area": "agents",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -2817,6 +2858,18 @@
         {
           "kind": "isolated_tests",
           "reference": "22 new checks,25 unchanged browsers,12 original units,both types/lint. Independent22browsers12units; all original authority handlers/defaults/ceilings/hooks unchanged."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR281 final unchanged candidate3173a381:4906 unit/backend and1128 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; retained Greek/CSP/forced-color RED histories."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR281 normal protected rebase merge mainb689c8e3c151c5d7bf5cba08324637f47ee0f5a1; exact complete tested treebc1b46a2f51c450bfa4d391fc16b5a24f36c7858 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR281 exact automatic production revision and all five original domain bindings verified. Bounded public acceptance completed; operational receipts stay private. Real owner/provider/payment/AT certification remains unclaimed."
         }
       ]
     },
@@ -3191,7 +3244,7 @@
       "number": 63,
       "title": "HTML frozen research reports",
       "area": "research",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -3251,6 +3304,18 @@
         {
           "kind": "isolated_tests",
           "reference": "58 focused units/79 browsers; independent69units6readerbrowsers. Retained middleware-CSP style RED fixed with early restrictive meta/static style hash/validated proxy nonce; actual installed Next response merge tested. Existing owner status query only,zero actions; all prior HTTP/payment behavior unchanged."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR281 final unchanged candidate3173a381:4906 unit/backend and1128 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; retained Greek/CSP/forced-color RED histories."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR281 normal protected rebase merge mainb689c8e3c151c5d7bf5cba08324637f47ee0f5a1; exact complete tested treebc1b46a2f51c450bfa4d391fc16b5a24f36c7858 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR281 exact automatic production revision and all five original domain bindings verified. Bounded public acceptance completed; operational receipts stay private. Real owner/provider/payment/AT certification remains unclaimed."
         }
       ]
     },
@@ -3921,7 +3986,7 @@
       "number": 77,
       "title": "Reporting-dialog lifecycle",
       "area": "forum",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -3946,11 +4011,25 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-thread-view.tsx"]
+        "owner": "report-dialog-lifecycle",
+        "paths": [
+          "components/forum/forum-thread-view.tsx",
+          "tests/e2e/fixtures/report-dialog-lifecycle-state.tsx",
+          "tests/e2e/fixtures/report-dialog-lifecycle.tsx",
+          "tests/e2e/report-dialog-lifecycle.spec.ts"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain00d2ce90; full parent qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "23 aggregate browser checks(21new+2old),20original units,both types/lint. Independent same counts. Five baseline failures reproduced; synchronous admission/identity-generation/focus fences fixed. No cancellation/replay/permanenthold claim; original createReport payload/nonreport handlers unchanged."
+        }
+      ]
     },
     {
       "id": "PLATFORM-078",
@@ -4056,7 +4135,7 @@
       "number": 80,
       "title": "Canonical community social links",
       "area": "forum",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4081,18 +4160,36 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-start-here.tsx"]
+        "owner": "forum-presentation-controls",
+        "paths": [
+          "components/forum/forum-navigation.tsx",
+          "components/forum/forum-site-shell.tsx",
+          "components/forum/forum-start-here.tsx",
+          "lib/forum-community-links.test.ts",
+          "lib/forum-community-links.ts",
+          "tests/e2e/community-links.spec.ts",
+          "tests/e2e/fixtures/community-links-state.tsx",
+          "tests/e2e/fixtures/community-links.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain1b8401a7; full parent qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "14newchecks/44oldbrowsers/81units/types/lint; independent44units29browsers. Pure existing validated public config, official links independent of token setup, personal profiles separate; nonforum identity/auth/token risk/history unchanged. No external availability certification."
+        }
+      ]
     },
     {
       "id": "PLATFORM-081",
       "number": 81,
       "title": "Compact and comfortable layout preference",
       "area": "accessibility",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4117,11 +4214,31 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-site-shell.tsx"]
+        "owner": "forum-presentation-controls",
+        "paths": [
+          "components/community/community-hub.module.css",
+          "components/forum/forum-navigation.test.tsx",
+          "components/forum/forum-navigation.tsx",
+          "components/forum/forum-shell-context.tsx",
+          "components/forum/forum-site-shell.tsx",
+          "components/trading/market-explorer.module.css",
+          "styles/forum-shared.css",
+          "tests/e2e/fixtures/forum-density-state.tsx",
+          "tests/e2e/fixtures/forum-density.tsx",
+          "tests/e2e/forum-density.spec.ts"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain3ff7708e; full parent qualification/merge/rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "37newbrowser/74oldbrowser/44oldunits,both types/lint; independent157browsers(37new+120unchangedterminal)and44units clean. Offline cached layout scan0findings. Comfortable default unchanged, explicit session-only spacing across Feed/Community/Markets; protected controllers, fonts, values and chart/order geometry unchanged. Full parent qualification/rollout pending."
+        }
+      ]
     },
     {
       "id": "PLATFORM-082",
@@ -4256,7 +4373,7 @@
       "number": 85,
       "title": "Forced-color chart and table support",
       "area": "accessibility",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -4305,6 +4422,18 @@
         {
           "kind": "isolated_tests",
           "reference": "5 actual-renderer new browsers/84 unchanged browsers/55 units/types/lint; independent5new+5strictlayout. Retained missing non-color marker,40px and missing-focus RED; only24 scoped forced-color CSS lines changed in production,all lifecycle/data/state code unchanged."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR281 final unchanged candidate3173a381:4906 unit/backend and1128 isolated browser tests,both types,all five builds,parity,all audits/security. Independent leaf/combined reviews; retained Greek/CSP/forced-color RED histories."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR281 normal protected rebase merge mainb689c8e3c151c5d7bf5cba08324637f47ee0f5a1; exact complete tested treebc1b46a2f51c450bfa4d391fc16b5a24f36c7858 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR281 exact automatic production revision and all five original domain bindings verified. Bounded public acceptance completed; operational receipts stay private. Real owner/provider/payment/AT certification remains unclaimed."
         }
       ]
     },
