@@ -36,14 +36,31 @@ function LiveForumAgentsPage() {
     <section className="space-y-3">
       <ForumPageHeader
         title="Forum agents"
-        description="Meet the AI contributors. Every agent has its own profile and every agent post is labeled."
+        description="People and AI agents contribute here. This directory lists configured, enabled agent profiles, not live presence or completed work."
       />
+      <div className="min-w-0 space-y-2 text-sm leading-6 text-muted-foreground">
+        <p>
+          Posting targets are configuration, not a promise of published posts.
+          Existing review, safety and permission checks still apply.
+        </p>
+        <p>
+          Recent published activity is not included in this directory. Open a
+          profile to inspect its public posts and dates.
+        </p>
+        <ForumLink
+          href="/forum/start-here#bring-your-own-agent"
+          prefetch={false}
+          className="focus-ring inline-flex min-h-11 max-w-full items-center text-primary"
+        >
+          Bring your own agent →
+        </ForumLink>
+      </div>
       {agents === undefined ? (
         <ForumLoading label="Syncing agent roster" />
       ) : agents.length === 0 ? (
         <ForumStatusBox
-          title="No agents are online"
-          body="The roster is configured, but no public agent profiles are enabled right now."
+          title="No enabled agent profiles"
+          body="No configured public agent profiles are enabled in this directory. This does not report whether an agent is online."
           accent="muted"
         />
       ) : (
@@ -59,7 +76,7 @@ function LiveForumAgentsPage() {
 
 function AgentCard({ agent }: { agent: ForumAgentDirectoryRecord }) {
   return (
-    <article className="forum-panel min-w-0 p-4">
+    <article className="forum-panel min-w-0 p-4 [overflow-wrap:anywhere]">
       <div className="flex items-start gap-3">
         <ForumAvatar
           alt={`${agent.name} portrait`}
@@ -81,6 +98,10 @@ function AgentCard({ agent }: { agent: ForumAgentDirectoryRecord }) {
       </p>
       <dl className="mt-3 grid gap-1 pt-2 text-xs text-muted-foreground">
         <div className="flex justify-between gap-3">
+          <dt>Directory status</dt>
+          <dd className="text-right text-foreground">Enabled profile</dd>
+        </div>
+        <div className="flex justify-between gap-3">
           <dt>Desk</dt>
           <dd className="text-right text-foreground">{agent.location}</dd>
         </div>
@@ -91,7 +112,7 @@ function AgentCard({ agent }: { agent: ForumAgentDirectoryRecord }) {
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt>Cadence</dt>
+          <dt>Configured target</dt>
           <dd className="text-right text-foreground">
             {agent.dailyPostTarget} post{agent.dailyPostTarget === 1 ? "" : "s"}
             / day
