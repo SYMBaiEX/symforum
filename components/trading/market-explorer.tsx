@@ -17,6 +17,7 @@ import {
   ArrowUpRight,
   Check,
   Copy,
+  Download,
   Search,
   X,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
 } from "./market-explorer-model";
 import styles from "./market-explorer.module.css";
 import { marketEligibility, marketSampleView } from "./market-sample-view";
+import { marketExportCsv } from "./market-export";
 
 const columns = [
   ["price", "Price"],
@@ -162,6 +164,19 @@ export function MarketExplorer({
 }) {
   const [search, setSearch] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const { host } = useForumRuntime();
+  const [exportState, setExportState] = useState<{
+    csv: string;
+    manual: boolean;
+    message: string;
+  } | null>(null);
+  const exportUrl = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      exportUrl.current?.();
+    },
+    [],
+  );
   const [freshOnly, setFreshOnly] = useState(false);
   const [viewAnnouncement, setViewAnnouncement] = useState({
     pending: false,
@@ -213,6 +228,60 @@ export function MarketExplorer({
     platform !== "all" ||
     freshOnly;
   const empty = data === undefined || markets.length === 0;
+  const exportCsv = marketExportCsv(
+    markets,
+    now,
+    data?.stale ?? false,
+    data?.sampledAt ?? null,
+  );
+  // Content, not a reactive payload object's identity, fences old feedback/text.
+  if (exportState && exportState.csv !== exportCsv) setExportState(null);
+  function exportRows() {
+    if (empty) return;
+    exportUrl.current?.();
+    exportUrl.current = null;
+    const manual = () =>
+      setExportState({
+        csv: exportCsv,
+        manual: true,
+        message:
+          "Download unavailable here. Select the CSV text below; it contains only the displayed loaded sample.",
+      });
+    if (
+      host !== "website" ||
+      typeof Blob === "undefined" ||
+      typeof URL.createObjectURL !== "function" ||
+      typeof URL.revokeObjectURL !== "function"
+    ) {
+      manual();
+      return;
+    }
+    let anchor: HTMLAnchorElement | undefined;
+    try {
+      const url = URL.createObjectURL(
+        new Blob([exportCsv], { type: "text/csv;charset=utf-8" }),
+      );
+      const revoke = URL.revokeObjectURL.bind(URL);
+      exportUrl.current = () => revoke(url);
+      anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "symforum-displayed-market-sample.csv";
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      setExportState({
+        csv: exportCsv,
+        manual: false,
+        message: `CSV download requested for ${markets.length} displayed ${markets.length === 1 ? "row" : "rows"}. Loaded sample only; not full market coverage.`,
+      });
+    } catch {
+      exportUrl.current?.();
+      exportUrl.current = null;
+      manual();
+    } finally {
+      anchor?.remove();
+    }
+  }
   const eligibility = marketEligibility(refresh.result?.nextRefreshAt);
   // Consume a deliberate control change once loaded, not on later clock/data updates.
   if (viewAnnouncement.pending && data !== undefined) {
@@ -392,7 +461,38 @@ export function MarketExplorer({
             )}
           </select>
         </label>
+        <button
+          type="button"
+          className="focus-ring inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-md px-2 text-xs disabled:opacity-50"
+          aria-label="Export CSV of displayed market rows"
+          title="Only the displayed loaded sample, with original observation times. No additional data requests."
+          disabled={empty}
+          onClick={exportRows}
+        >
+          <Download size={14} aria-hidden="true" /> Export CSV
+        </button>
       </div>
+      <p
+        role="status"
+        className={
+          exportState
+            ? "min-w-0 shrink-0 px-3 py-1 text-xs text-muted-foreground"
+            : "sr-only"
+        }
+      >
+        {exportState?.message ?? ""}
+      </p>
+      {exportState?.manual ? (
+        <label className="block min-w-0 shrink-0 px-3 text-sm">
+          Displayed market rows CSV
+          <textarea
+            aria-label="Displayed market rows CSV"
+            readOnly
+            value={exportState.csv}
+            className="mt-1 block min-h-28 w-full resize-y rounded-md border border-border bg-card p-2 font-mono text-base"
+          />
+        </label>
+      ) : null}
       <p
         role="status"
         aria-live="polite"
