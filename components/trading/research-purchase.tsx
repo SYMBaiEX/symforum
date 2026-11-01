@@ -569,6 +569,16 @@ function ResearchPurchaseConnected({
                       Verify saved receipt
                     </Button>
                   ) : null}
+                  {item.state === "fulfilled" && (
+                    <a
+                      className="text-xs underline"
+                      href={`/api/research/token/${item.intentKey}/view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Read saved report
+                    </a>
+                  )}
                   {item.state === "fulfilled" ? (
                     <a
                       className="text-xs underline"
