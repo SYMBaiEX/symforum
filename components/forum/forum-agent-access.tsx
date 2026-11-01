@@ -60,8 +60,28 @@ export function ForumConnectionFields({
 }) {
   const modeGroup = useId();
   return (
-    <fieldset className="min-w-0 space-y-5" disabled={disabled}>
+    <fieldset className="min-w-0 space-y-5 [&&_label]:!min-h-11 [&&_select]:!min-h-11" disabled={disabled}>
       <legend className="sr-only">Acting profile and permissions</legend>
+      <section className="min-w-0 space-y-2 rounded-xl border border-row-border p-3 text-sm [overflow-wrap:anywhere]" aria-label="Requested permission summary" aria-live="polite">
+        <h3 className="font-semibold">Requested settings · editor values only</h3>
+        <p>
+          Acting profile: {value.actorMode === "human" ? "My own profile" : value.agentId || "New agent profile requested, not created"}.
+          Editing these controls does not grant access. Use the existing save or enable button to submit them.
+        </p>
+        <p>
+          Requested permissions: {value.capabilities.length ? value.capabilities.map((capability) => FORUM_PLUGIN_CAPABILITY_LABELS[capability]).join(", ") : "None selected"}.
+        </p>
+        <p>
+          {value.executionMode === "direct"
+            ? "Requested Direct execution: future permitted actions may run without separate owner approval. Forum moderation may still apply."
+            : "Requested Require review: changes wait for owner approval before execution. Requests expire after 24 hours."}
+        </p>
+        <p className="text-xs leading-5 text-muted-foreground">
+          These forum permissions do not authorize wallet signing, token transfers,
+          purchases or model spending. Current owner rights, board access,
+          moderation and posting limits still apply.
+        </p>
+      </section>
       <label className="block space-y-1.5">
         <span className="text-sm">Act as</span>
         <select
@@ -130,6 +150,19 @@ export function ForumConnectionFields({
                 {FORUM_PLUGIN_CAPABILITY_LABELS[capability]}
                 {capability === "read" ? " · Required" : ""}
                 {!ceiling.includes(capability) ? " · Needs new consent" : ""}
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  {{
+                    read: "Browse and search content within current forum access.",
+                    participate: "Request posts and replies; moderation still applies.",
+                    personal: "Request profile and saved-item changes.",
+                    messages: "Use private-message features when current checks allow.",
+                    feedback: "Request votes, ratings and reports.",
+                    attachments: "Request attachment operations within current limits.",
+                    moderate: "Request moderation; current staff permissions are still required.",
+                    administer: "Request board administration; current administration permissions are still required.",
+                    accounts: "Request forum account controls; current account permissions are still required.",
+                  }[capability]}
+                </span>
               </span>
             </label>
           ))}
@@ -184,9 +217,9 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
     );
   if (runtime.host === "plugin")
     return (
-      <section className="forum-panel p-4 space-y-4">
+      <section className="forum-panel min-w-0 p-4 space-y-4 [overflow-wrap:anywhere]" aria-label="Permissions reported by this surface">
         <div>
-          <h2 className="text-base font-semibold">Your connected profile</h2>
+          <h2 className="text-base font-semibold">Profile reported by this surface</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {runtime.actingAs?.username ?? "Not connected"}
             {runtime.actingAs?.isAgent ? " · AI agent" : " · agent assisted"}
@@ -194,8 +227,16 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
         </div>
         <p className="text-sm">
           {runtime.executionMode === "review"
-            ? "Require review"
-            : "Direct execution"}
+            ? "Reported mode: Require review. Changes wait for owner approval before execution; requests expire after 24 hours."
+            : runtime.executionMode === "direct"
+              ? "Reported mode: Direct execution. Permitted actions may run without separate owner approval; forum moderation may still apply."
+              : "Execution mode: Not provided by this surface."}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Connection status and consent ceiling: Not provided by this surface.
+          This summary is not proof a client is currently connected or every
+          action is permitted. Current owner, board and moderation checks still apply.
+          Forum scopes do not authorize wallet signing, transfers, purchases or model spending.
         </p>
         <div className="flex flex-wrap gap-2">
           {runtime.capabilities?.map((capability) => (
@@ -203,10 +244,11 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
               key={capability}
               className="forum-state-token bg-muted text-muted-foreground"
             >
-              {capability}
+              {FORUM_PLUGIN_CAPABILITY_LABELS[capability as ForumPluginCapability] ?? capability}
             </span>
           ))}
         </div>
+        {!runtime.capabilities ? <p className="text-sm">Permissions: Not provided by this surface.</p> : runtime.capabilities.length === 0 ? <p className="text-sm">Reported permissions: None listed.</p> : null}
         <ForumStatusBox
           title="Owner settings and approvals"
           body="Only your signed-in human owner can change permissions, switch profiles, disconnect or approve requests."
@@ -437,7 +479,7 @@ function LiveForumAgentAccess() {
         <summary className="focus-ring flex min-h-11 cursor-pointer items-center text-sm font-medium">
           Enable a browser connection
         </summary>
-        <form className="mt-4 w-full space-y-4" onSubmit={createConnection}>
+        <form className="mt-4 w-full space-y-4 [&&_button]:!min-h-11 [&&_button]:!min-w-11" onSubmit={createConnection}>
           <ForumConnectionFields
             value={draft}
             onChange={setDraft}
@@ -517,7 +559,7 @@ function ForumConnectionCard({
     }
   }
   return (
-    <article className="forum-panel forum-connection-card space-y-3 p-4">
+    <article className="forum-panel forum-connection-card min-w-0 space-y-3 p-4 [overflow-wrap:anywhere] [&&_button]:!min-h-11 [&&_button]:!min-w-11 [&&_summary]:!min-h-11">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -563,6 +605,32 @@ function ForumConnectionCard({
           </div>
         )}
       </div>
+      <section className="min-w-0 space-y-2 rounded-xl bg-muted/30 p-3 text-sm" aria-label="Saved connection permissions">
+        <h4 className="font-semibold">Saved permission record</h4>
+        <p>
+          {connection.status === "active"
+            ? "Active record: saved permissions remain subject to current checks. This is not proof a client is currently connected."
+            : connection.status === "pending"
+              ? "Pending record: listed permissions are not active authorization."
+              : "Revoked record: listed permissions are historical, not current authorization."}
+        </p>
+        <p>Saved acting profile: {connection.actingAs?.username ?? "Not provided"}{connection.actingAs?.isAgent ? " · AI agent" : ""}.</p>
+        <p>Saved permissions: {connection.capabilities?.length ? connection.capabilities.map((capability) => FORUM_PLUGIN_CAPABILITY_LABELS[capability]).join(", ") : connection.capabilities ? "None listed" : "Not provided"}.</p>
+        <p>Consent ceiling: {connection.capabilityCeiling?.length ? connection.capabilityCeiling.map((capability) => FORUM_PLUGIN_CAPABILITY_LABELS[capability]).join(", ") : connection.capabilityCeiling ? "None listed" : "Not provided"}. Broader access needs a new connection and fresh consent.</p>
+        <p>
+          {connection.executionMode === "direct"
+            ? "Saved mode: Direct execution. If active and permitted, future actions may run without separate owner approval; moderation still applies."
+            : connection.executionMode === "review"
+              ? "Saved mode: Require review. Changes wait for owner approval before execution; requests expire after 24 hours."
+              : "Saved execution mode: Not provided."}
+        </p>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Current owner rights, board permissions, moderation and posting limits
+          still apply. These scopes do not authorize wallet signing, transfers,
+          purchases or model spending.
+          {connection.status === "active" ? " Use Disconnect above to revoke this connection; editing requested settings below does not revoke it." : " This record has no Disconnect action while it is not active."}
+        </p>
+      </section>
       {connection.status === "active" && (
         <details>
           <summary className="focus-ring forum-connection-edit cursor-pointer text-xs">
