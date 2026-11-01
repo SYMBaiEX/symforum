@@ -151,7 +151,7 @@
       "number": 4,
       "title": "Tiny-value research-export precision",
       "area": "data",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "backend",
       "verification": [
         "unit",
@@ -185,13 +185,26 @@
           "kind": "approval",
           "phase": "live_acceptance",
           "detail": "A fresh exact production Convex target/action approval and unchanged-candidate release verification are required before backend rollout; source work is not deployment authority.",
-          "resolved": false
+          "resolved": true,
+          "receipt": "Explicit owner confirmation in this build chat for formatting-only production rollout, followed by successful PR278 deployment and unchanged schema/index/schedule metadata."
         }
       ],
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate 2216c85f integrated by the parent as cbf8f546. Parent full qualification, merge, deployment and live acceptance remain pending."
+          "reference": "Qualified candidate cbf8f546 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -200,7 +213,7 @@
       "number": 5,
       "title": "Panel-local terminal error recovery",
       "area": "data",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -239,8 +252,23 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate 412847bf integrated as parent 55712260; only three public terminal siblings are covered. Full parent qualification and remaining Community/private-panel recovery are pending."
+          "reference": "Qualified candidate 55712260 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
+      ],
+      "remainingAcceptance": [
+        "Community and private-panel recovery remain unqualified. Only three public terminal read subtrees use local retry; their own failed state may remount, while protected siblings stay mounted."
       ]
     },
     {
@@ -248,7 +276,7 @@
       "number": 6,
       "title": "Operator provider usage and allowance dashboard",
       "area": "data",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -274,8 +302,19 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["convex/forumProviderAdmission.ts"]
+        "owner": "provider-dashboard",
+        "paths": [
+          "components/admin/provider-usage-panel.tsx",
+          "components/admin-dashboard.tsx",
+          "lib/admin-sections.ts",
+          "convex/forumProviderUsage.ts",
+          "convex/forumProviderUsage.test.ts",
+          "lib/provider-usage-model.ts",
+          "lib/provider-usage-model.test.ts",
+          "tests/e2e/provider-usage.spec.ts",
+          "tests/e2e/fixtures/provider-usage.tsx",
+          "tests/e2e/fixtures/provider-usage-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -285,7 +324,16 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate 7c007220; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "98 focused units and 8 isolated browser cases; full parent qualification and explicit backend release approval remain pending. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-007",
@@ -523,7 +571,7 @@
       "number": 12,
       "title": "Old and refreshed quote comparison",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -560,7 +608,19 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate b34effb9 integrated as parent e1550348; full parent qualification, merge and deployment remain pending."
+          "reference": "Qualified candidate e1550348 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -801,7 +861,7 @@
       "number": 18,
       "title": "Single deliberate quote-expiry announcement",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -838,7 +898,19 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate b34effb9 integrated as parent e1550348; full parent qualification, merge and deployment remain pending."
+          "reference": "Qualified candidate e1550348 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -847,7 +919,7 @@
       "number": 19,
       "title": "Full tiny and extreme receive estimates",
       "area": "trading",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -877,11 +949,25 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/swap/token-swap.tsx"]
+        "owner": "swap-amount-inspection",
+        "paths": [
+          "components/swap/token-swap.tsx",
+          "tests/e2e/swap-amount-inspection.spec.ts",
+          "tests/e2e/fixtures/swap-amount-inspection.tsx",
+          "tests/e2e/fixtures/swap-amount-inspection-state.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate e986fbc0; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "67 focused browser cases,46 existing units and both types passed; missing-metadata fallback defect reproduced and fixed in presentation only. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-020",
@@ -1170,7 +1256,7 @@
       "number": 26,
       "title": "Loaded-market provenance export",
       "area": "trading",
-      "status": "in_progress",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1206,7 +1292,16 @@
         ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate 97075d60; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "41 focused browsers and39 units; loaded public sample only, not complete market/provider decimal history. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-027",
@@ -1261,7 +1356,7 @@
       "number": 28,
       "title": "Candle-gap explanation",
       "area": "trading",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1286,11 +1381,27 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/trading/candle-readings.tsx"]
+        "owner": "candle-gaps",
+        "paths": [
+          "components/trading/price-chart.tsx",
+          "components/trading/candle-gaps.ts",
+          "components/trading/candle-gaps.test.ts",
+          "tests/e2e/candle-gaps.spec.ts",
+          "tests/e2e/fixtures/candle-gaps.tsx",
+          "tests/e2e/fixtures/candle-gaps-state.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate 84066f81; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "44 focused browsers and66 units; gaps only in bounded loaded aligned UTC timestamps, no synthetic bars or provider-history claims. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-029",
@@ -1385,7 +1496,7 @@
       "number": 31,
       "title": "Feed filter chips and empty-feed reset",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1422,7 +1533,19 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate fbf798e9 integrated as parent 05ca29c9; full parent qualification, merge and deployment remain pending."
+          "reference": "Qualified candidate 05ca29c9 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -1431,7 +1554,7 @@
       "number": 32,
       "title": "Sign-in preserves validated context",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1470,7 +1593,19 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Worker candidate 3c9927e0 integrated as parent ec82a411; full parent qualification, merge and deployment remain pending."
+          "reference": "Qualified candidate ec82a411 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -1479,7 +1614,7 @@
       "number": 33,
       "title": "Empty-search recovery",
       "area": "forum",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1504,11 +1639,25 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-search-page.tsx"]
+        "owner": "search-recovery",
+        "paths": [
+          "components/forum/forum-search-page.tsx",
+          "tests/e2e/search-recovery.spec.ts",
+          "tests/e2e/fixtures/search-recovery.tsx",
+          "tests/e2e/fixtures/search-recovery-state.tsx"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate cdb6c5ed; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "21 focused browsers and4 original units; submitted-filter recovery and bounded-scan honesty, no automatic query. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-034",
@@ -2319,7 +2468,7 @@
       "number": 51,
       "title": "Enabled and recently active agent directory",
       "area": "agents",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2345,8 +2494,14 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-agents-page.tsx"]
+        "owner": "agent-onboarding",
+        "paths": [
+          "components/forum/forum-agents-page.tsx",
+          "components/forum/forum-start-here.tsx",
+          "tests/e2e/agent-directory-onboarding.spec.ts",
+          "tests/e2e/fixtures/agent-directory-onboarding.tsx",
+          "tests/e2e/fixtures/agent-directory-onboarding-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -2356,14 +2511,26 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate d6ebe701; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "34 focused browsers and10 original units; configured/enabled target labels only. Existing projection supplies no recent-publication timestamps. Worker checks are not parent full qualification or live proof."
+        }
+      ],
+      "remainingAcceptance": [
+        "Recent actual publication/activity requires a separately reviewed authoritative public projection. Current roster has no such timestamps; configured targets and enabled profiles do not prove execution."
+      ]
     },
     {
       "id": "PLATFORM-052",
       "number": 52,
       "title": "Bring-your-own-agent onboarding",
       "area": "agents",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2394,8 +2561,14 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-agent-access.tsx"]
+        "owner": "agent-onboarding",
+        "paths": [
+          "components/forum/forum-agents-page.tsx",
+          "components/forum/forum-start-here.tsx",
+          "tests/e2e/agent-directory-onboarding.spec.ts",
+          "tests/e2e/fixtures/agent-directory-onboarding.tsx",
+          "tests/e2e/fixtures/agent-directory-onboarding-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -2405,7 +2578,16 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate d6ebe701; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "34 focused browsers and10 original units; existing owner enrollment/instructions/review routes, no real enrollment certification. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-053",
@@ -2905,7 +3087,7 @@
       "number": 64,
       "title": "Paid catalog discovery",
       "area": "research",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2951,7 +3133,19 @@
       "qualification": [
         {
           "kind": "source_commit",
-          "reference": "Root source candidate 57eb7493 integrated with 12 focused contracts passing; full parent qualification, merge and deployment remain pending. This is read-only discovery, not paid activation."
+          "reference": "Qualified candidate 57eb7493 in exact combined tree13f41ebeb47a0d7001ab7db9a3441e8fb22a7b8c."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "Parent PR278 unchanged-tree qualification:4704 unit/backend and963 isolated browser tests,both types,all five builds,parity,audits/security; independent reviews. Protected live flows unclaimed."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR278 normally rebase-merged2026-11-01T07:08:41Z, main ebe1a3e0e817de60feb47749fa9d5bfc4b254276; complete tree and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR278 exact automatic production commit and all five original domains verified; bounded public Feed acceptance restored12 discussions after explicit filter recovery. Approved new-report formatter backend release verified; no signing/provider canary."
         }
       ]
     },
@@ -2960,7 +3154,7 @@
       "number": 65,
       "title": "Mocked x402 owner example",
       "area": "research",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "tests",
       "verification": [
         "unit",
@@ -2985,11 +3179,24 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["packages/agent-sdk/src/index.ts"]
+        "owner": "x402-owner-example",
+        "paths": [
+          "examples/research-owner-client.mock.ts",
+          "examples/research-owner-client.mock.test.ts",
+          "docs/forum-research-x402.md"
+        ]
       },
       "blockers": [],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen worker candidate e2639e8f; parent next-wave qualification, merge and deployment remain pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "32 offline mock cases plus25 existing research cases; fake owner/wire only, not real session/settlement acceptance. Worker checks are not parent full qualification or live proof."
+        }
+      ]
     },
     {
       "id": "PLATFORM-066",
