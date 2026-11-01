@@ -22,13 +22,15 @@ function Fixture() {
           data-surface="forum"
           style={{ height: "100dvh", overflow: "hidden" }}
         >
-          <MarketExplorer
-            now={now}
-            selected="So11111111111111111111111111111111111111112"
-            onSelect={(choice) => {
-              evidence.selected.push(choice.mint);
-            }}
-          />
+          <div className="forum-surface h-full min-h-0">
+            <MarketExplorer
+              now={now}
+              selected="So11111111111111111111111111111111111111112"
+              onSelect={(choice) => {
+                evidence.selected.push(choice.mint);
+              }}
+            />
+          </div>
         </main>
       </ForumRuntimeContext.Provider>
     </SurfaceScope.Provider>
