@@ -114,6 +114,14 @@ is included in this web-only release. The frozen pagination/history candidates
 share one inert test fixture; a single parent integration lane now owns their
 serial integration, preserving both exact changes without concurrent writers.
 
+The initial combined browser run exposed two unchanged Community/terminal
+regressions: an older inert wallet fixture omitted the chain/feature arrays
+provided by the actual SDK. A test-only metadata correction retained its lack
+of signing capability, all existing actions and every original assertion. The
+two original regressions and 40 new guidance cases passed afterward. The
+initial interrupted run is retained; every full final gate must pass again on
+the corrected unchanged tree before release.
+
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. At inventory
 creation no item was marked deployed or live-verified. These are dated planning

@@ -7,7 +7,13 @@ const client = {
   wallet: {
     getState: () => ({
       connected: fixtureFlags.has("orderquote")
-        ? { account: { address: "11111111111111111111111111111111" } }
+        ? {
+            account: {
+              address: "11111111111111111111111111111111",
+              chains: ["solana:mainnet"],
+              features: [],
+            },
+          }
         : null,
     }),
   },
@@ -32,7 +38,11 @@ export function useCommerceIdentity() {
     linked,
     connected: linked
       ? {
-          account: { address: "11111111111111111111111111111111" },
+          account: {
+            address: "11111111111111111111111111111111",
+            chains: ["solana:mainnet"],
+            features: [],
+          },
           supportedTransactionVersions: new Set([0]),
         }
       : null,
