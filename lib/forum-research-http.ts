@@ -16,6 +16,11 @@ import {
   RESEARCH_TREASURY,
 } from "./forum-research";
 import type { ResearchReport, ResearchState } from "./forum-research";
+import {
+  researchReportCsp,
+  researchReportHtml,
+  researchReportUnavailableHtml,
+} from "./forum-research-report-html";
 
 type Receipt = {
   intentKey: string;
@@ -380,5 +385,58 @@ export async function researchRpcHttp(request: Request) {
       },
       { status: 400, headers: privateHeaders },
     );
+  }
+}
+
+/** Human reader only: never delegate to the payment-capable resource handler. */
+export async function researchReportViewHttp(request: Request, intentKey: string) {
+  const nonce = request.headers.get("x-nonce");
+  const headers = {
+    ...privateHeaders,
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Security-Policy": await researchReportCsp(),
+    "Referrer-Policy": "no-referrer",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
+  };
+  const unavailable = (status: number, extra?: Record<string, string>) =>
+    new Response(researchReportUnavailableHtml(nonce), {
+      status,
+      headers: { ...headers, ...extra },
+    });
+  if (request.method !== "GET") return unavailable(405, { Allow: "GET" });
+  if (request.headers.has("PAYMENT-SIGNATURE")) return unavailable(403);
+  if (!/^[a-f0-9]{64}$/.test(intentKey)) return unavailable(404);
+  try {
+    const client = await auth(request);
+    if (!client) return unavailable(401);
+    // The existing backend query resolves the actual current human principal
+    // and saved owner. Query/Host/claim headers cannot establish ownership.
+    const receipt = await client.query(statusRef, { intentKey });
+    if (receipt.state !== "fulfilled" || !receipt.report || !receipt.signature)
+      return unavailable(
+        ["unknown", "verifying", "settlement_claimed"].includes(receipt.state)
+          ? 202
+          : 409,
+      );
+    if (
+      receipt.intentKey !== intentKey ||
+      receipt.report.mint !== receipt.mint ||
+      receipt.report.product !== RESEARCH_PRODUCT
+    )
+      return unavailable(409);
+    return new Response(
+      researchReportHtml(
+        {
+          ...receipt,
+          signature: receipt.signature,
+          report: receipt.report,
+        },
+        nonce,
+      ),
+      { headers },
+    );
+  } catch {
+    // No provider/backend bodies, report fragments or existence hints on denial.
+    return unavailable(409);
   }
 }
