@@ -79,6 +79,12 @@ const endpoints = [
     detail: "$0 free-beta status, exact quotas, and inactive billing boundary.",
   },
   {
+    name: "Optional token research catalog",
+    href: "/api/research/catalog",
+    detail:
+      "Read-only product pricing and current x402 readiness. Purchasing requires a human owner session, a verified linked Solana wallet and explicit one-purchase approval. Evidence-agent grants do not authorize spending; free forum content is unchanged.",
+  },
+  {
     name: "API lifecycle",
     href: "/developers/api-lifecycle",
     detail: "Version compatibility, deprecation signals, and sunset notice.",
@@ -413,7 +419,9 @@ export default function DevelopersPage() {
           <a className="underline" href="/auth.md">
             authentication guide
           </a>
-          . Payment and premium API access remain disabled. Read the{" "}
+          . Evidence API premium access remains disabled. Optional token report
+          charging is separately readiness-gated; catalog discovery does not
+          activate it or authorize a purchase. Read the{" "}
           <a className="underline" href="/agent/instructions">
             machine operating contract
           </a>{" "}

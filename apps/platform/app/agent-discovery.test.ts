@@ -33,7 +33,7 @@ describe("agent discovery surfaces", () => {
     );
     expect(catalog.specVersion).toBe("1.0");
     expect(catalog.host.identifier).toBe("symbaiex.com");
-    expect(catalog.entries).toHaveLength(9);
+    expect(catalog.entries).toHaveLength(10);
     expect(catalog.entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -59,6 +59,19 @@ describe("agent discovery surfaces", () => {
           type: "application/vnd.oai.openapi+json;version=3.1",
           url: "https://www.symbaiex.com/api/sandbox/openapi.json",
           tags: expect.arrayContaining(["sandbox", "openapi"]),
+        }),
+        expect.objectContaining({
+          identifier: "urn:air:symbaiex.com:api:research-catalog-v1",
+          type: "application/json",
+          url: "https://www.symbaiex.com/api/research/catalog",
+          description: expect.stringContaining(
+            "Evidence-agent grants do not authorize spending",
+          ),
+          tags: expect.arrayContaining([
+            "catalog",
+            "read-only",
+            "owner-approved",
+          ]),
         }),
       ]),
     );
