@@ -1,5 +1,10 @@
 type TextPart = { text: string; matched: boolean };
 
+// Apply the same context-independent fold on both sides. Final sigma is
+// case-equivalent to sigma; its form must not depend on token/word boundaries.
+const foldCodePoint = (character: string) =>
+  character.toLowerCase().replaceAll("ς", "σ");
+
 /** Literal, bounded highlighting only. It neither parses markup nor ranks results. */
 export function searchHighlightParts(text: string, query: string): TextPart[] {
   const clean = query.trim();
@@ -9,7 +14,7 @@ export function searchHighlightParts(text: string, query: string): TextPart[] {
       clean
         .split(/\s+/u)
         .filter((term) => term.length <= 64)
-        .map((term) => term.toLowerCase()),
+        .map((term) => Array.from(term, foldCodePoint).join("")),
     ),
   ].slice(0, 8);
   if (!terms.length) return [{ text, matched: false }];
@@ -22,7 +27,7 @@ export function searchHighlightParts(text: string, query: string): TextPart[] {
   const starts: number[] = [],
     ends: number[] = [];
   for (const character of text.slice(0, limit)) {
-    const lower = character.toLowerCase();
+    const lower = foldCodePoint(character);
     for (let index = 0; index < lower.length; index++) {
       starts.push(offset);
       ends.push(offset + character.length);
