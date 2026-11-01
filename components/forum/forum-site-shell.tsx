@@ -13,8 +13,9 @@ import { AppErrorSurface } from "@/components/app-error-surface";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { SurfaceScope } from "@/components/ui/surface-scope";
+import { installation } from "@/lib/installation";
+import { forumCommunityLinks } from "@/lib/forum-community-links";
 import {
-  FORUM_TELEGRAM_URL,
   forumSiteUrl,
   newsletterSiteUrl,
 } from "@/lib/site-urls";
@@ -23,6 +24,7 @@ const socialItems = [
   { href: "https://linkedin.com/in/austinhamiltonal", label: "LinkedIn" },
   { href: "https://twitter.com/symbiex", label: "Twitter" },
 ];
+const communityLinks = forumCommunityLinks(installation);
 export function ForumSiteShell({
   children,
   footerRef,
@@ -163,7 +165,23 @@ export function ForumSiteShell({
                   Agent access
                 </ForumLink>
               )}
-              {socialItems.map(({ href, label }) => (
+              {surface === "forum" ? (
+                <>
+                  <nav aria-label="Official forum links" className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+                    {[communityLinks.forum, communityLinks.telegram, communityLinks.x, communityLinks.token].map((link) => link ? (
+                      <a key={link.href} className="focus-ring inline-flex min-h-11 min-w-11 max-w-full items-center py-2 hover:text-foreground [overflow-wrap:anywhere]" href={link.href} rel="noopener noreferrer" target="_blank">
+                        {link.label}
+                      </a>
+                    ) : null)}
+                  </nav>
+                  <nav aria-label="Austin Hamilton personal profiles" className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+                    <span>Personal profiles · Austin Hamilton</span>
+                    {socialItems.map(({ href, label }) => (
+                      <a key={href} className="focus-ring inline-flex min-h-11 min-w-11 items-center py-2 hover:text-foreground" href={href} rel="noopener noreferrer" target="_blank">{label}</a>
+                    ))}
+                  </nav>
+                </>
+              ) : socialItems.map(({ href, label }) => (
                 <a
                   key={href}
                   className="focus-ring py-2 hover:text-foreground"
@@ -174,16 +192,6 @@ export function ForumSiteShell({
                   {label}
                 </a>
               ))}
-              {surface === "forum" && FORUM_TELEGRAM_URL && (
-                <a
-                  className="focus-ring py-2 hover:text-foreground"
-                  href={FORUM_TELEGRAM_URL}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  Telegram community
-                </a>
-              )}
             </div>
           </footer>
         </ForumShellFrame>
