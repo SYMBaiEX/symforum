@@ -57,7 +57,7 @@ async function harness(page: Page, scenario = "") {
             .projectSearchSubscriptions.length,
       ),
     )
-    .toBe(1);
+    .toBe(scenario.includes("formpending") ? 2 : 1);
   const initial = await reads(page);
   return async (additionalPages = 0, allowSubscriptionChanges = false) => {
     expect(errors).toEqual([]);
@@ -182,6 +182,11 @@ test("exactmint scoped directory retains its scope and does not implyglobalcover
   await expect(page.getByRole("article")).toHaveCount(1);
   await input(page).fill("Alpha");
   await expect(page.getByRole("article")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Reset to live first page", exact: true })
+    .click();
+  await expect(input(page)).toHaveValue("Alpha");
+  expect(new URL(page.url()).searchParams.get("mint")).toBe(mint);
   await page.getByRole("button", { name: "Clear search", exact: true }).click();
   await expect(page.getByRole("article")).toHaveCount(1);
   expect((await reads(page))[0]).toContain(mint);
@@ -227,6 +232,241 @@ for (const width of [320, 390])
       });
 const loadMore = (page: Page) =>
   page.getByRole("button", { name: "Load more project hubs", exact: true });
+test("an inert pending affiliation check stays mounted through public failure/retry and rejects without a mutation", async ({
+  page,
+}) => {
+  const check = await harness(page, "formpending");
+  await page.getByRole("button", { name: "Add project", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("textbox", { name: "Exact Solana mint", exact: true })
+    .fill(mint);
+  await dialog
+    .getByRole("textbox", { name: "Your role", exact: true })
+    .fill("Pending authored role");
+  await dialog
+    .getByRole("textbox", { name: "What are you building?", exact: true })
+    .fill(
+      "An inert local draft with a deferred mint check that must remain mounted.",
+    );
+  await dialog
+    .getByRole("button", { name: "Save public affiliation", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "Checking mint…", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(() => window.projectDirectoryFixture.failInitial());
+  await expect(
+    dialog.getByRole("button", { name: "Checking mint…", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(() => window.projectDirectoryFixture.initialReady());
+  await page
+    .getByRole("button", {
+      name: "Retry project directory",
+      includeHidden: true,
+    })
+    .evaluate((button: HTMLButtonElement) => button.click());
+  await expect(
+    dialog.getByRole("textbox", { name: "Your role", exact: true }),
+  ).toHaveValue("Pending authored role");
+  await expect(
+    dialog.getByRole("button", { name: "Checking mint…", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(() => window.projectDirectoryFixture.rejectForm());
+  await expect(dialog.getByRole("status")).toContainText(
+    "This action could not complete",
+  );
+  await expect(
+    dialog.getByRole("textbox", { name: "Your role", exact: true }),
+  ).toHaveValue("Pending authored role");
+  expect(
+    await page.evaluate(() => window.projectDirectoryFixture.formOperations),
+  ).toEqual([
+    {
+      name: "forumCommerce:resolveMint",
+      args: { wallet: "11111111111111111111111111111111", mint },
+    },
+  ]);
+  await check(0, true);
+});
+test("snapshot notice and explicit live reset reconcile a renamed later-page profile without automatic reads", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await loadMore(page).click();
+  await loadMore(page).click();
+  const older = page.getByRole("article").filter({
+    has: page.getByRole("heading", { name: /Older loaded project 24/ }),
+  });
+  await expect(older).toBeVisible();
+  const oldHref = await older
+    .getByRole("link", { name: "@member_0", exact: true })
+    .getAttribute("href");
+  await page.evaluate(() => window.projectDirectoryFixture.renameLaterHandle());
+  await expect(
+    older.getByRole("link", { name: "@member_0", exact: true }),
+  ).toHaveAttribute("href", oldHref!);
+  await expect(
+    page.getByText(
+      "The first page is live. Additional pages are snapshots; public handles and affiliations may have changed since loading.",
+    ),
+  ).toBeVisible();
+  await input(page).fill("Older loaded project 24");
+  await page
+    .getByRole("button", { name: "Reset to live first page", exact: true })
+    .click();
+  await expect(input(page)).toHaveValue("Older loaded project 24");
+  await expect(page.getByRole("article")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => window.projectDirectoryFixture.pageRequests.length,
+    ),
+  ).toBe(2);
+  await loadMore(page).click();
+  await loadMore(page).click();
+  await expect(
+    older.getByRole("link", { name: "@renamed_builder", exact: true }),
+  ).toHaveAttribute("href", /renamed_builder/);
+  await expect(
+    older.getByRole("link", { name: "@member_0", exact: true }),
+  ).toHaveCount(0);
+  await check(4);
+});
+for (const pending of [false, true])
+  test(`public reader failure and retry preserve the open project draft${pending ? " with a pending page" : ""}`, async ({
+    page,
+  }) => {
+    const check = await harness(page, pending ? "deferred" : "");
+    if (pending) await loadMore(page).click();
+    await page
+      .getByRole("button", { name: "Add project", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("textbox", { name: "Exact Solana mint", exact: true })
+      .fill(mint);
+    await dialog
+      .getByRole("textbox", { name: "Your role", exact: true })
+      .fill("Retain my authored role");
+    await dialog
+      .getByRole("textbox", { name: "What are you building?", exact: true })
+      .fill(
+        "A draft that must survive a public project reader failure and retry.",
+      );
+    await dialog
+      .getByRole("textbox", { name: "Project website (optional)", exact: true })
+      .fill("https://example.test/draft");
+    await page.evaluate(() => window.projectDirectoryFixture.failInitial());
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("textbox", { name: "Your role", exact: true }),
+    ).toHaveValue("Retain my authored role");
+    await page.evaluate(() => window.projectDirectoryFixture.initialReady());
+    // A modal intentionally makes its sibling directory inaccessible to pointer input.
+    // Exercise the sibling retry without dismissing (and intentionally resetting) the draft.
+    await page
+      .getByRole("button", {
+        name: "Retry project directory",
+        includeHidden: true,
+      })
+      .evaluate((button: HTMLButtonElement) => button.click());
+    if (pending)
+      await page.evaluate(() =>
+        window.projectDirectoryFixture.settle(0, false),
+      );
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("textbox", { name: "Exact Solana mint", exact: true }),
+    ).toHaveValue(mint);
+    await expect(
+      dialog.getByRole("textbox", { name: "Your role", exact: true }),
+    ).toHaveValue("Retain my authored role");
+    await expect(
+      dialog.getByRole("textbox", {
+        name: "What are you building?",
+        exact: true,
+      }),
+    ).toHaveValue(
+      "A draft that must survive a public project reader failure and retry.",
+    );
+    await expect(
+      dialog.getByRole("textbox", {
+        name: "Project website (optional)",
+        exact: true,
+      }),
+    ).toHaveValue("https://example.test/draft");
+    await expect(
+      dialog.getByRole("button", { name: "Save public affiliation" }),
+    ).toBeDisabled();
+    await check(pending ? 1 : 0, true);
+  });
+for (const ok of [true, false])
+  test(`explicit live reset preserves filter and open draft while fencing a pending ${ok ? "success" : "error"}`, async ({
+    page,
+  }) => {
+    const check = await harness(page, "deferred");
+    await input(page).fill("Alpha");
+    await loadMore(page).click();
+    await page
+      .getByRole("button", { name: "Add project", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("textbox", { name: "Your role", exact: true })
+      .fill("Keep this draft through live reset");
+    await page
+      .getByRole("button", {
+        name: "Reset to live first page",
+        includeHidden: true,
+      })
+      .evaluate((button: HTMLButtonElement) => button.click());
+    await page.evaluate(
+      (ok) => window.projectDirectoryFixture.settle(0, ok),
+      ok,
+    );
+    await expect(
+      dialog.getByRole("textbox", { name: "Your role", exact: true }),
+    ).toHaveValue("Keep this draft through live reset");
+    await expect(
+      dialog.getByRole("button", { name: "Save public affiliation" }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(input(page)).toHaveValue("Alpha");
+    await expect(page.getByRole("article")).toHaveCount(1);
+    await expect(
+      page.getByText("1 of 12 loaded projects matches this search."),
+    ).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await check(1);
+  });
+test("public mint-scope changes reset only the reader while keeping an open authored draft", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await page.getByRole("button", { name: "Add project", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("textbox", { name: "Exact Solana mint", exact: true })
+    .fill(mint);
+  await dialog
+    .getByRole("textbox", { name: "Your role", exact: true })
+    .fill("Keep my scoped draft");
+  await page.evaluate(
+    (mint) => window.projectDirectoryFixture.scope(mint),
+    mint,
+  );
+  await expect(
+    dialog.getByRole("textbox", { name: "Your role", exact: true }),
+  ).toHaveValue("Keep my scoped draft");
+  await expect(
+    dialog.getByRole("textbox", { name: "Exact Solana mint", exact: true }),
+  ).toHaveValue(mint);
+  await page.evaluate(() => window.projectDirectoryFixture.scope());
+  await expect(
+    dialog.getByRole("textbox", { name: "Your role", exact: true }),
+  ).toHaveValue("Keep my scoped draft");
+  await check(0, true);
+});
 test("repeated same-turn clicks issue one bounded request", async ({
   page,
 }) => {
@@ -298,7 +538,7 @@ test("explicit pages extend beyond24, dedupe and exhaust without automatic drain
   await loadMore(page).click();
   await expect(page.getByRole("article")).toHaveCount(49);
   await expect(
-    page.getByText("No more project hubs in this scope."),
+    page.getByText("Reached the end of these loaded snapshots."),
   ).toBeVisible();
   await expect(loadMore(page)).toHaveCount(0);
   await check(4);
@@ -387,7 +627,7 @@ test("split and no-progress results retain rows and never pretend exhaustion", a
   await loadMore(page).click();
   await expect(page.getByRole("alert")).toContainText("did not advance");
   await expect(
-    page.getByText("No more project hubs in this scope."),
+    page.getByText("Reached the end of these loaded snapshots."),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Retry smaller project page" }),

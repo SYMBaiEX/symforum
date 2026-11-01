@@ -10,6 +10,23 @@ import {
 const row = (projectId: string) => ({ projectId });
 const first = { page: [row("a")], continueCursor: "one", isDone: false };
 describe("explicit project cursor state", () => {
+  test("manual live reset clears snapshots and invalidates pending outcomes without changing scope", () => {
+    const old = requestDirectoryPage(
+      directoryState("exact-mint/current-owner", first),
+    );
+    const reset = directoryState(old.scope, first, old.generation + 1);
+    expect(reset.rows).toEqual([]);
+    expect(reset.scope).toBe(old.scope);
+    expect(reset.cursor).toBe(first.continueCursor);
+    expect(
+      receiveDirectoryPage(reset, old.pending!, {
+        page: [row("stale")],
+        continueCursor: "done",
+        isDone: true,
+      }),
+    ).toBe(reset);
+    expect(failDirectoryPage(reset, old.pending!)).toBe(reset);
+  });
   test("first-page identity changes invalidate the chain, but stable public content edits do not", () => {
     const state = directoryState("all", first);
     expect(
