@@ -202,6 +202,12 @@ describe("all-100 platform completion inventory", () => {
       expect(() => validateCompletionPlan(plan)).toThrow("qualification");
     }
     const plan = fixture();
+    item(plan, 6).blockers = [{
+      kind: "approval",
+      phase: "live_acceptance",
+      detail: "Isolated unresolved approval fixture, not actual release authority.",
+      resolved: false,
+    }];
     prove(item(plan, 6), "source_deployed");
     expect(() => validateCompletionPlan(plan)).not.toThrow();
     prove(item(plan, 6), "live_verified");
