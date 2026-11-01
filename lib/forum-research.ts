@@ -162,7 +162,15 @@ export function buildResearchReport(input: {
     );
   const metric = (value: number | null, currency = false) =>
     value !== null && Number.isFinite(value)
-      ? `${currency ? "$" : ""}${value.toLocaleString("en-US", { maximumFractionDigits: 8 })}`
+      ? `${currency ? "$" : ""}${(value === 0 ? 0 : value).toLocaleString(
+          "en-US",
+          // Match raw market inspection's significant-digit convention below
+          // the normal decimal floor, without rounding a nonzero fact to zero.
+          // Plain decimals also remain readable in the JSON export without ARIA.
+          value !== 0 && Math.abs(value) < 1e-8
+            ? { maximumSignificantDigits: 21 }
+            : { maximumFractionDigits: 8 },
+        )}`
       : "Unavailable";
   const cap = input.marketCapUsd;
   const depth =
