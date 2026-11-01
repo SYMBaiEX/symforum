@@ -122,6 +122,13 @@ two original regressions and 40 new guidance cases passed afterward. The
 initial interrupted run is retained; every full final gate must pass again on
 the corrected unchanged tree before release.
 
+A later full run also caught an unchanged pillar-menu test sampling its existing
+95% opening animation at 41.8px. Its helper now waits for the settled 44px target
+before performing every original bounds, hit-test and focus assertion. Runtime
+menu/CSS behavior and the 44px threshold are unchanged. All 15 cases passed
+independently; the interrupted run and captured failure remain recorded, and
+the complete parent qualification is rerun rather than inferred from that fix.
+
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. At inventory
 creation no item was marked deployed or live-verified. These are dated planning
