@@ -84,6 +84,27 @@ export function useQuery(ref: FunctionReference<"query">, args: unknown) {
     if (active) subscriptions.push(key);
   }, [key, active]);
   if (args === "skip") return undefined;
+  if (name === "forumCommunity:listProjectPage")
+    return {
+      isDone: true,
+      continueCursor: "",
+      page: [firstMint, mintB].map((mint, index) => ({
+        projectId: `invented-project-${index}`,
+        mint,
+        name: index ? "Project two" : "Project one",
+        symbol: "DUP",
+        claims: [
+          {
+            userId: `invented-public-user-${index}`,
+            username: index ? "case/sensitive?name" : firstUsername,
+            role: "Public contributor",
+            description: "Invented public affiliation, not verified ownership",
+            website: null,
+            updatedAt: 1,
+          },
+        ],
+      })),
+    };
   if (name === "forumCommunity:listProjects")
     return [firstMint, mintB].map((mint, index) => ({
       projectId: `invented-project-${index}`,
@@ -178,4 +199,11 @@ export default function NextLink({
   ...props
 }: ComponentProps<"a"> & { prefetch?: boolean }) {
   return createElement("a", props);
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

@@ -2,6 +2,7 @@
 
 import {
   Suspense,
+  Component,
   useEffect,
   useId,
   useRef,
@@ -11,7 +12,13 @@ import {
   type ReactNode,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useAction,
+  useConvex,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
   ArrowUpRight,
@@ -52,6 +59,15 @@ import { forumSiteUrl } from "@/lib/site-urls";
 import { useTerminalAttention } from "@/components/trading/terminal-attention";
 import styles from "./community-hub.module.css";
 import { filterTipRecipients } from "./tip-recipient-model";
+import {
+  directoryState,
+  directoryPageIdentity,
+  failDirectoryPage,
+  mergeDirectoryRows,
+  PROJECT_PAGE_OPTIONS,
+  receiveDirectoryPage,
+  requestDirectoryPage,
+} from "./project-directory-model";
 import { appendWorkBrief, deliveryUrlPreview } from "./work-brief-model";
 import {
   communityHref,
@@ -408,7 +424,13 @@ function CommunityContent({
             </ForumLink>
           </section>
         )}
-        {section === "projects" && <Projects mint={mint} client={client} />}
+        {section === "projects" && (
+          <ProjectDirectoryBoundary
+            key={mint ?? "all"}
+            mint={mint}
+            client={client}
+          />
+        )}
         {section === "work" && (
           <WorkBoard mint={mint} client={client} onPayment={setPayment} />
         )}
@@ -445,6 +467,34 @@ function CommunityContent({
     </div>
   );
 }
+class ProjectDirectoryBoundary extends Component<
+  {
+    mint?: string;
+    client: CommerceWalletClient | null;
+  },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <section className={styles.panel}>
+        <h2>Project hubs</h2>
+        <p role="alert">
+          Project hubs could not load. Try again when your connection is
+          available.
+        </p>
+        <Button onClick={() => this.setState({ failed: false })}>
+          Retry project directory
+        </Button>
+      </section>
+    ) : (
+      <Projects {...this.props} />
+    );
+  }
+}
 function Projects({
   mint,
   client,
@@ -452,13 +502,70 @@ function Projects({
   mint?: string;
   client: CommerceWalletClient | null;
 }) {
-  const projects = useQuery(api.forumCommunity.listProjects, { mint });
+  const convex = useConvex();
+  const first = useQuery(api.forumCommunity.listProjectPage, {
+    mint,
+    paginationOpts: { ...PROJECT_PAGE_OPTIONS, cursor: null },
+  });
   const { isAuthenticated, isLoading } = useConvexAuth();
   const mine = useQuery(
     api.forumCommunity.getMine,
     isAuthenticated && !isLoading ? { now: 0 } : "skip",
   );
   const authorId = isAuthenticated && !isLoading ? mine?.userId : undefined;
+  const scope = JSON.stringify([
+    mint ?? null,
+    isLoading,
+    isAuthenticated,
+    authorId ?? null,
+  ]);
+  const [directory, setDirectory] = useState(() =>
+    directoryState<Project>(scope, first),
+  );
+  // Cursor/identity changes invalidate the whole old chain, including A -> B -> A.
+  if (
+    directory.scope !== scope ||
+    (first && directory.seedIdentity !== directoryPageIdentity(first))
+  )
+    setDirectory(directoryState(scope, first, directory.generation + 1));
+  const mounted = useRef(true);
+  const inFlight = useRef<{ generation: number; requestId: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const projects = first
+    ? mergeDirectoryRows(first.page, directory.rows)
+    : undefined;
+  async function loadMore() {
+    if (inFlight.current?.generation === directory.generation) return;
+    const next = requestDirectoryPage(directory);
+    if (!next.pending || next === directory) return;
+    const request = next.pending;
+    inFlight.current = request;
+    setDirectory(next);
+    try {
+      const page = await convex.query(api.forumCommunity.listProjectPage, {
+        mint,
+        paginationOpts: {
+          ...PROJECT_PAGE_OPTIONS,
+          numItems: next.pageSize,
+          cursor: request.cursor,
+        },
+      });
+      if (mounted.current)
+        setDirectory((current) => receiveDirectoryPage(current, request, page));
+    } catch {
+      if (mounted.current)
+        setDirectory((current) => failDirectoryPage(current, request));
+    } finally {
+      if (inFlight.current === request) inFlight.current = null;
+    }
+  }
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AffiliationDraft | null>(null);
   const [search, setSearch] = useState("");
@@ -492,7 +599,7 @@ function Projects({
             <p className={styles.muted}>
               {mint
                 ? "A hub for this exact mint, with up to 12 public affiliations."
-                : "A recent sample of up to 24 hubs and 12 public affiliations per hub, not a complete directory."}
+                : "Browse project hubs, 12 at a time, with up to 12 public affiliations per hub. Load another page when you choose."}
             </p>
           </div>
           <Button ref={addProjectTrigger} onClick={openCreation}>
@@ -573,7 +680,8 @@ function Projects({
               <h3>No loaded projects match</h3>
               <p>
                 Try another term or clear this local search. Other projects may
-                exist outside this recent sample.
+                exist outside the loaded pages. Load more hubs to widen this
+                local search.
               </p>
             </div>
           ) : (
@@ -645,6 +753,31 @@ function Projects({
             ))
           )}
         </div>
+        {directory.error && <p role="alert">{directory.error}</p>}
+        {first && (
+          <div className={styles.actions}>
+            {directory.isDone ? (
+              <p role="status">No more project hubs in this scope.</p>
+            ) : (
+              <Button
+                variant="outline"
+                disabled={
+                  !!directory.pending ||
+                  (directory.blocked && directory.pageSize === 1)
+                }
+                onClick={loadMore}
+              >
+                {directory.pending
+                  ? "Loading more project hubs…"
+                  : directory.blocked
+                    ? "Retry smaller project page"
+                    : directory.error
+                      ? "Retry loading project hubs"
+                      : "Load more project hubs"}
+              </Button>
+            )}
+          </div>
+        )}
       </section>
       <aside className={styles.contextNote}>
         <ShieldCheck size={18} aria-hidden="true" />

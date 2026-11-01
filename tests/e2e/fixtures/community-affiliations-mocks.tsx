@@ -91,6 +91,8 @@ export function useQuery(reference: FunctionReference<"query">, args: unknown) {
   if (args === "skip") return undefined;
   const name = getFunctionName(reference);
   if (name === "forumCommunity:listProjects") return [project];
+  if (name === "forumCommunity:listProjectPage")
+    return { page: [project], isDone: true, continueCursor: "" };
   if (name === "forumCommunity:listBounties") {
     const status = (args as { status: string }).status;
     workStatuses.push(status);
@@ -177,4 +179,11 @@ export function CommerceWalletButton({ disabled }: { disabled?: boolean }) {
       Fixture wallet
     </button>
   );
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

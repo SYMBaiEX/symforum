@@ -269,6 +269,12 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   const name = getFunctionName(ref);
   queryNames.push(name);
   let result: unknown;
+  if (name === "forumCommunity:listProjectPage")
+    return {
+      page: fixtureFlags.has("empty") ? [] : projects,
+      isDone: true,
+      continueCursor: "",
+    } as FunctionReturnType<Ref>;
   if (name === "forumCommunity:listProjects")
     result = fixtureFlags.has("empty") ? [] : projects;
   else if (name === "forumCommunity:listBounties")
@@ -607,4 +613,11 @@ export function useAction<Ref extends FunctionReference<"action">>(ref: Ref) {
     },
     [name],
   );
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

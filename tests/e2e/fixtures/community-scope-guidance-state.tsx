@@ -67,6 +67,8 @@ export function useQuery(ref: FunctionReference<"query">, args: unknown) {
   }, [name, signature]);
   if (args === "skip") return undefined;
   if (native) throw Error("Native handoff cannot query");
+  if (name === "forumCommunity:listProjectPage")
+    return { page: empty, isDone: true, continueCursor: "" };
   if (
     [
       "forumCommunity:listProjects",
@@ -117,4 +119,11 @@ export default function Link({
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { prefetch?: boolean }) {
   return <a {...props} />;
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

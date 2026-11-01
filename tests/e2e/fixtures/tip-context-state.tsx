@@ -75,6 +75,8 @@ export function useQuery(ref: FunctionReference<"query">, args: unknown) {
     if (key !== '"skip"') reads.push({ name, args: JSON.parse(key) });
   }, [name, key]);
   if (args === "skip") return undefined;
+  if (name === "forumCommunity:listProjectPage")
+    return { page: [], isDone: true, continueCursor: "" };
   if (name === "forumCommunity:listTipRecipients") return value.recipients;
   if (name === "forumCommunity:getThreadRecipient")
     return value.optedIn
@@ -164,4 +166,11 @@ export function useSearchParams() {
 }
 export function usePathname() {
   return location.pathname;
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

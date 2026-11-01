@@ -92,3 +92,10 @@ export function usePathname() {
 export function useSearchParams() {
   return params;
 }
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
+}
