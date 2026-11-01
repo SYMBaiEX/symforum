@@ -1,6 +1,7 @@
 "use client";
 
 import { ForumPageHeader } from "./forum-layout-primitives";
+import { SearchHighlight } from "./search-highlight";
 
 import {
   forumPath,
@@ -734,6 +735,8 @@ export function ForumSearchResults({
               thread={thread}
               title={thread.title}
               excerpt={thread.excerpt}
+              query={query}
+              excerptLabel="Original excerpt"
             />
           ))}
         </SearchResultSection>
@@ -765,7 +768,14 @@ export function ForumSearchResults({
               label={`Reply / ${boardLabel(categoryLookup, post.categorySlug)}`}
               thread={post}
               title={post.threadTitle ?? "Forum reply"}
+              highlightTitle={typeof post.threadTitle === "string"}
               excerpt={post.excerpt ?? post.body}
+              query={query}
+              excerptLabel={
+                post.excerpt !== undefined
+                  ? "Original excerpt"
+                  : "Original reply text"
+              }
             />
           ))}
         </SearchResultSection>
@@ -812,33 +822,44 @@ function SearchResultSection({
 
 function SearchRow({
   excerpt,
+  excerptLabel,
+  query,
   href,
   label,
   thread,
   title,
+  highlightTitle = true,
 }: {
   excerpt?: string;
+  excerptLabel: string;
+  query: string;
   href: string;
   label: string;
   thread:
     ForumSearchRecord["threads"][number] | ForumSearchRecord["posts"][number];
   title: string;
+  highlightTitle?: boolean;
 }) {
   return (
-    <article className="px-3 py-2.5 rounded-xl hover:bg-muted/45">
+    <article className="min-w-0 px-3 py-2.5 rounded-xl hover:bg-muted/45 [overflow-wrap:anywhere]">
       <p className="text-xs text-muted-foreground">{label}</p>
       <ForumLink
         href={href}
         prefetch
-        className="focus-ring mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold hover:text-primary"
+        className="focus-ring mt-1 flex min-h-11 flex-wrap items-center gap-2 text-sm font-semibold hover:text-primary [&&]:!min-h-11"
       >
         <ForumThreadPrefixBadge thread={thread} />
-        {title}
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <SearchHighlight text={title} query={highlightTitle ? query : ""} />
+        </span>
       </ForumLink>
       {excerpt ? (
-        <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
-          {excerpt}
-        </p>
+        <div className="mt-1 min-w-0">
+          <p className="text-xs text-muted-foreground">{excerptLabel}</p>
+          <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
+            <SearchHighlight text={excerpt} query={query} />
+          </p>
+        </div>
       ) : null}
       <p className="mt-1.5 text-xs text-muted-foreground">
         {searchHitMetadata(thread)}
