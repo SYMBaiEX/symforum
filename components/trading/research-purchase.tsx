@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import {
@@ -13,6 +13,7 @@ import { encodePaymentSignatureHeader } from "@x402/core/http";
 import type { PaymentRequirements } from "@x402/core/types";
 import type { ClientSvmSigner } from "@x402/svm";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,10 @@ import {
 import type { ResearchReport, ResearchState } from "@/lib/forum-research";
 import { useTerminalAttention } from "./terminal-attention";
 import { researchExportPreviewJson } from "./research-export-preview";
+import {
+  researchReceiptView,
+  type ReceiptFilter,
+} from "./research-receipt-view";
 
 type Quote = {
   intentKey: string;
@@ -182,7 +187,7 @@ function ResearchPurchaseConnected({
   client: CommerceWalletClient;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  const { connected, linked } = useCommerceIdentity(
+  const { connected, linked, session } = useCommerceIdentity(
     client,
     "solana:signTransaction",
   );
@@ -535,60 +540,63 @@ function ResearchPurchaseConnected({
           {error}
         </p>
       )}
-      {!!history?.length && (
-        <details className="mt-4 border-t pt-3 text-sm">
-          <summary className="cursor-pointer text-muted-foreground">
-            Your recent research receipts
-          </summary>
-          <ul className="mt-3 space-y-3">
-            {history.map((item) => (
-              <li
-                key={item.intentKey}
-                className="flex flex-wrap items-center justify-between gap-2"
-              >
-                <span className="text-xs text-muted-foreground">
-                  {item.mint.slice(0, 4)}…{item.mint.slice(-4)} ·{" "}
-                  {item.state === "quoted" && item.expiresAt <= now
-                    ? "expired quote"
-                    : item.state.replaceAll("_", " ")}
-                </span>
-                {item.state === "unknown" && item.signature ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void verifySaved(item.intentKey)}
-                  >
-                    Verify saved receipt
-                  </Button>
-                ) : null}
-                {item.state === "fulfilled" ? (
-                  <a
-                    className="text-xs underline"
-                    href={`/api/research/token/${item.intentKey}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open report + receipt
-                  </a>
-                ) : item.signature ? (
-                  <a
-                    className="text-xs underline"
-                    href={`https://solscan.io/tx/${item.signature}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View transaction
-                  </a>
-                ) : (
+      {isAuthenticated && (
+        <ResearchReceiptLibrary
+          key={session?.authUserId ?? "current-owner"}
+          receipts={history}
+          now={now}
+        >
+          {(visibleRows) => (
+            <ul className="mt-3 space-y-3">
+              {visibleRows.map((item) => (
+                <li
+                  key={item.intentKey}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
                   <span className="text-xs text-muted-foreground">
-                    No finalized payment receipt
+                    {item.mint.slice(0, 4)}…{item.mint.slice(-4)} ·{" "}
+                    {item.state === "quoted" && item.expiresAt <= now
+                      ? "expired quote"
+                      : item.state.replaceAll("_", " ")}
                   </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
+                  {item.state === "unknown" && item.signature ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void verifySaved(item.intentKey)}
+                    >
+                      Verify saved receipt
+                    </Button>
+                  ) : null}
+                  {item.state === "fulfilled" ? (
+                    <a
+                      className="text-xs underline"
+                      href={`/api/research/token/${item.intentKey}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open report + receipt
+                    </a>
+                  ) : item.signature ? (
+                    <a
+                      className="text-xs underline"
+                      href={`https://solscan.io/tx/${item.signature}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View transaction
+                    </a>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      No finalized payment receipt
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </ResearchReceiptLibrary>
       )}
       <Dialog
         open={open}
@@ -740,6 +748,118 @@ function ResearchPurchaseConnected({
           </p>
         </DialogContent>
       </Dialog>
+    </section>
+  );
+}
+
+/** Local presentation only; all payment and recovery controllers stay above. */
+function ResearchReceiptLibrary({
+  receipts,
+  now,
+  children,
+}: {
+  receipts: Receipt[] | undefined;
+  now: number;
+  children: (rows: Receipt[]) => ReactNode;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ReceiptFilter>("all");
+  const searchInput = useRef<HTMLInputElement>(null);
+  const description = useId();
+  const view = researchReceiptView(receipts ?? [], search, filter, now);
+  return (
+    <section
+      aria-label="Research receipt library"
+      className="mt-4 min-w-0 border-t pt-3 text-sm [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_button]:!min-h-11 [&_button]:whitespace-normal [&_li]:min-w-0"
+    >
+      {view.pinned.length > 0 && (
+        <section
+          aria-label="Protected research payment attempts"
+          className="mb-4 min-w-0 rounded-lg border p-3"
+        >
+          <h4 className="font-semibold">Protected payment attempts</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {view.pinned.length} protected attempts always shown;{" "}
+            {view.pinnedSearchMatches} match this search. Search and status
+            filters never hide these saved attempts. Missing finality is not
+            proof of nonpayment.
+          </p>
+          {children(view.pinned)}
+        </section>
+      )}
+      <details className="min-w-0">
+        <summary className="focus-ring min-h-11 cursor-pointer content-center text-muted-foreground">
+          Your recent research receipts
+        </summary>
+        <p id={description} className="my-3 text-xs text-muted-foreground">
+          Filters only receipts already loaded for your account, not your
+          complete history. Search exact-case mint text or receipt ID. No new
+          data is requested.
+        </p>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="min-w-0">
+            Search loaded receipts
+            <Input
+              ref={searchInput}
+              type="search"
+              className="mt-1 min-h-11 w-full min-w-0 text-base"
+              value={search}
+              maxLength={256}
+              disabled={receipts === undefined}
+              aria-describedby={description}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <label className="min-w-0">
+            Receipt status
+            <select
+              className="focus-ring mt-1 min-h-11 w-full min-w-0 rounded-md border bg-background px-3 text-base"
+              value={filter}
+              disabled={receipts === undefined}
+              onChange={(event) =>
+                setFilter(event.target.value as ReceiptFilter)
+              }
+            >
+              <option value="all">All other receipts</option>
+              <option value="fulfilled">Fulfilled</option>
+              <option value="quoted">Quoted</option>
+              <option value="expired">Expired quotes</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+        </div>
+        {search && (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              setSearch("");
+              searchInput.current?.focus();
+            }}
+          >
+            Clear receipt search
+          </Button>
+        )}
+        {receipts === undefined ? (
+          <p role="status" className="mt-3">
+            Loading your research receipts…
+          </p>
+        ) : (
+          <>
+            <p role="status" className="mt-3 text-xs text-muted-foreground">
+              Showing {view.shown} of {view.loaded} loaded receipts.
+            </p>
+            {view.loaded === 0 ? (
+              <p className="mt-3">No research receipts are loaded.</p>
+            ) : view.matches.length === 0 ? (
+              <p className="mt-3">No other loaded receipts match.</p>
+            ) : (
+              children(view.matches)
+            )}
+          </>
+        )}
+      </details>
     </section>
   );
 }
