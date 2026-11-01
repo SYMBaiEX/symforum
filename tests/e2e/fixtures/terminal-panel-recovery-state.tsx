@@ -113,6 +113,7 @@ export const useCommerceIdentity = wallet.useCommerceIdentity;
 export const CommerceWalletButton = wallet.CommerceWalletButton;
 export { RiskPanel };
 export const useConvexAuth = convex.useConvexAuth;
+export const useConvex = convex.useConvex;
 export function useQuery<Ref extends FunctionReference<"query">>(
   ref: Ref,
   args: FunctionArgs<Ref> | "skip",

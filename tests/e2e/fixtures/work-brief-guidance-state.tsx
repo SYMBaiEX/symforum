@@ -3,6 +3,7 @@ import { getFunctionName, type FunctionReference } from "convex/server";
 import { useMutation as useBaseMutation } from "./community-submissions-mocks";
 export {
   useQuery,
+  useConvex,
   useConvexAuth,
   useCommerceWallet,
   useCommerceIdentity,

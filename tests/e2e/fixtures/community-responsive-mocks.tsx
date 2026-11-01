@@ -32,6 +32,28 @@ export function useQuery(reference: FunctionReference<"query">, args: unknown) {
   if (args === "skip") return undefined;
   const name = getFunctionName(reference);
   reads.push(name);
+  if (name === "forumCommunity:listProjectPage")
+    return {
+      isDone: true,
+      continueCursor: "",
+      page: [
+        {
+          projectId: "fixture-project",
+          mint,
+          name: "A long project title that remains readable in the community directory",
+          symbol: "LONGDEMO",
+          claims: [
+            {
+              userId: "fixture-reader",
+              username: "long_builder_name_with_32_letters",
+              role: "r".repeat(60),
+              description: `Source-backed community project notes. ${"x".repeat(180)}`,
+              website: "https://example.com/",
+            },
+          ],
+        },
+      ],
+    };
   if (name === "forumCommunity:listProjects")
     return [
       {
@@ -145,4 +167,11 @@ export function ForumLink({
   ...props
 }: ComponentProps<"a"> & { prefetch?: boolean }) {
   return <a {...props} />;
+}
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
 }

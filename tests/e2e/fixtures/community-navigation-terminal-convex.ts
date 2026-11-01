@@ -4,7 +4,12 @@ import {
   type FunctionReference,
 } from "convex/server";
 import * as original from "./terminal-convex";
-export { useAction, useMutation, useConvexAuth } from "./terminal-convex";
+export {
+  useAction,
+  useMutation,
+  useConvexAuth,
+  useConvex,
+} from "./terminal-convex";
 const communityMints: unknown[] = [];
 Object.assign(window, { communityTerminalMints: communityMints });
 export function useQuery<Ref extends FunctionReference<"query">>(
@@ -12,7 +17,9 @@ export function useQuery<Ref extends FunctionReference<"query">>(
   args: FunctionArgs<Ref> | "skip",
 ) {
   if (
-    getFunctionName(reference) === "forumCommunity:listProjects" &&
+    ["forumCommunity:listProjects", "forumCommunity:listProjectPage"].includes(
+      getFunctionName(reference),
+    ) &&
     args !== "skip"
   )
     communityMints.push((args as { mint?: string }).mint);

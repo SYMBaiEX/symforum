@@ -1,5 +1,9 @@
 import { RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server";
 import { components } from "./_generated/api";
 import {
   internalMutation,
@@ -184,6 +188,76 @@ export const listProjects = query({
         };
       }),
     );
+  },
+});
+/** Additive cursor contract: the existing recent-sample query remains unchanged. */
+export const listProjectPage = query({
+  args: {
+    mint: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(projectView),
+  handler: async (ctx, { mint, paginationOpts }) => {
+    checkedMint(mint);
+    for (const [value, cap] of [
+      [paginationOpts.numItems, 24],
+      [paginationOpts.maximumRowsRead, 24],
+      [paginationOpts.maximumBytesRead, 262144],
+    ] as const) {
+      if (
+        !Number.isSafeInteger(value) ||
+        value === undefined ||
+        value < 1 ||
+        value > cap
+      )
+        throw new ConvexError(
+          "Use a bounded project page (24 rows, 262144 bytes maximum).",
+        );
+    }
+    if (
+      (paginationOpts.id !== undefined &&
+        (!Number.isSafeInteger(paginationOpts.id) || paginationOpts.id < 0)) ||
+      [paginationOpts.cursor, paginationOpts.endCursor].some(
+        (cursor) => typeof cursor === "string" && cursor.length > 16384,
+      )
+    )
+      throw new ConvexError("Invalid project pagination metadata.");
+    const projects = ctx.db.query("forumCommunityProjects");
+    const result = await (
+      mint
+        ? projects.withIndex("by_mint", (q) => q.eq("mint", mint))
+        : projects.withIndex("by_updatedAt").order("desc")
+    ).paginate(paginationOpts);
+    // Match listProjects' public projection exactly, including its affiliation cap.
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map(async (project) => {
+          const claims = await ctx.db
+            .query("forumCommunityProjectClaims")
+            .withIndex("by_projectId_and_userId", (q) =>
+              q.eq("projectId", project._id),
+            )
+            .take(12);
+          return {
+            projectId: project._id,
+            mint: project.mint,
+            name: project.name,
+            symbol: project.symbol,
+            claims: await Promise.all(
+              claims.map(async (claim) => ({
+                userId: claim.userId,
+                username: await name(ctx, claim.userId),
+                role: claim.role,
+                description: claim.description,
+                website: claim.website,
+                updatedAt: claim.updatedAt,
+              })),
+            ),
+          };
+        }),
+      ),
+    };
   },
 });
 export const createProjectClaim = mutation({

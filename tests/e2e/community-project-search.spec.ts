@@ -59,10 +59,15 @@ async function harness(page: Page, scenario = "") {
     )
     .toBe(1);
   const initial = await reads(page);
-  return async () => {
+  return async (additionalPages = 0, allowSubscriptionChanges = false) => {
     expect(errors).toEqual([]);
     expect(unexpected).toEqual([]);
-    expect(await reads(page)).toEqual(initial);
+    if (!allowSubscriptionChanges) expect(await reads(page)).toEqual(initial);
+    expect(
+      await page.evaluate(
+        () => window.projectDirectoryFixture.pageRequests.length,
+      ),
+    ).toBe(additionalPages);
     expect(
       await page.evaluate(
         () =>
@@ -81,19 +86,21 @@ async function reads(page: Page) {
 }
 const input = (page: Page) =>
   page.getByRole("textbox", { name: "Search loaded projects", exact: true });
-test("searches only the24loaded hubs and public fields with truthful local counts", async ({
+test("searches only the12loaded hubs and public fields with truthful local counts", async ({
   page,
 }) => {
   const check = await harness(page);
-  await expect(page.getByText(/recent sample of up to 24 hubs/)).toBeVisible();
-  await expect(page.getByRole("article")).toHaveCount(24);
+  await expect(
+    page.getByText(/Browse project hubs, 12 at a time/),
+  ).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(12);
   for (const term of ["nOvA", "NOVA_BUILDER", "PROTOCOL RESEARCHER"]) {
     await input(page).fill(term);
     await expect(page.getByRole("article")).toHaveCount(1);
     await expect(
       page
         .getByRole("status")
-        .filter({ hasText: /1 of 24 loaded projects match/ }),
+        .filter({ hasText: /1 of 12 loaded projects match/ }),
     ).toBeVisible();
   }
   await input(page).fill("does-not-exist");
@@ -101,12 +108,12 @@ test("searches only the24loaded hubs and public fields with truthful local count
     page.getByRole("heading", { name: "No loaded projects match" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Other projects may exist outside this recent sample/),
+    page.getByText(/Other projects may exist outside the loaded pages/),
   ).toBeVisible();
   await page.getByRole("button", { name: "Clear search", exact: true }).click();
   await expect(input(page)).toBeFocused();
   await expect(input(page)).toHaveValue("");
-  await expect(page.getByRole("article")).toHaveCount(24);
+  await expect(page.getByRole("article")).toHaveCount(12);
   await check();
 });
 test("mint search preserves case-sensitive exact identity and original terminal links", async ({
@@ -135,7 +142,7 @@ test("loading and trulyempty coverage never masquerade as filtered search result
     window.dispatchEvent(new Event("project-search:loaded")),
   );
   await expect(input(page)).toBeEnabled();
-  await expect(page.getByRole("article")).toHaveCount(24);
+  await expect(page.getByRole("article")).toHaveCount(12);
   await check();
   check = await harness(page, "empty");
   await input(page).fill("anything");
@@ -215,6 +222,220 @@ for (const width of [320, 390])
           .focus();
         await page.keyboard.press("Enter");
         await expect(input(page)).toBeFocused();
-        await expect(page.getByRole("article")).toHaveCount(24);
+        await expect(page.getByRole("article")).toHaveCount(12);
         await check();
       });
+const loadMore = (page: Page) =>
+  page.getByRole("button", { name: "Load more project hubs", exact: true });
+test("repeated same-turn clicks issue one bounded request", async ({
+  page,
+}) => {
+  const check = await harness(page, "deferred");
+  await loadMore(page).evaluate((button: HTMLButtonElement) => {
+    button.click();
+    button.click();
+  });
+  expect(
+    await page.evaluate(
+      () => window.projectDirectoryFixture.pageRequests.length,
+    ),
+  ).toBe(1);
+  await page.evaluate(() => window.projectDirectoryFixture.settle(0));
+  await expect(page.getByRole("article")).toHaveCount(23);
+  await check(1);
+});
+test("initial split retries from the beginning with a smaller page without claiming exhaustion", async ({
+  page,
+}) => {
+  const check = await harness(page, "initialsplit");
+  await expect(page.getByRole("alert")).toContainText("read limit");
+  await page
+    .getByRole("button", { name: "Retry smaller project page" })
+    .click();
+  await expect(loadMore(page)).toBeEnabled();
+  const request = await page.evaluate(
+    () =>
+      window.projectDirectoryFixture.pageRequests[0] as {
+        paginationOpts: { cursor: string | null; numItems: number };
+      },
+  );
+  expect(request.paginationOpts.cursor).toBeNull();
+  expect(request.paginationOpts.numItems).toBe(6);
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await check(1);
+});
+test("stable first-page public edits retain loaded pages but replacement identities reset the chain", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(23);
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("project-search:update")),
+  );
+  await expect(page.getByRole("article")).toHaveCount(23);
+  await page.evaluate(() => window.projectDirectoryFixture.replaceFirstId());
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await expect(loadMore(page)).toBeEnabled();
+  await check(1);
+});
+test("explicit pages extend beyond24, dedupe and exhaust without automatic draining", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await loadMore(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("article")).toHaveCount(23);
+  expect(
+    await page.evaluate(
+      () => window.projectDirectoryFixture.pageRequests.length,
+    ),
+  ).toBe(1);
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(34);
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(45);
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(49);
+  await expect(
+    page.getByText("No more project hubs in this scope."),
+  ).toBeVisible();
+  await expect(loadMore(page)).toHaveCount(0);
+  await check(4);
+});
+test("search changes during a pending page remain local and filter the late page with the current term", async ({
+  page,
+}) => {
+  const check = await harness(page, "deferred");
+  await loadMore(page).click();
+  await expect(
+    page.getByRole("button", { name: "Loading more project hubs…" }),
+  ).toBeDisabled();
+  await input(page).fill("Other loaded project 12");
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await page.evaluate(() => window.projectDirectoryFixture.settle(0));
+  await expect(page.getByRole("article")).toHaveCount(1);
+  await expect(
+    page.getByText("1 of 23 loaded projects matches this search."),
+  ).toBeVisible();
+  await check(1);
+});
+test("later failure keeps hubs and retries the identical cursor only on click", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await page.evaluate(() => window.projectDirectoryFixture.mode("error"));
+  await loadMore(page).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Your loaded hubs are kept",
+  );
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.evaluate(() => window.projectDirectoryFixture.mode("ok"));
+  await page
+    .getByRole("button", { name: "Retry loading project hubs" })
+    .click();
+  await expect(page.getByRole("article")).toHaveCount(23);
+  const requests = await page.evaluate(
+    () => window.projectDirectoryFixture.pageRequests,
+  );
+  expect(requests[0]).toEqual(requests[1]);
+  await check(2);
+});
+test("initial failure offers explicit recovery without claiming an empty directory", async ({
+  page,
+}) => {
+  // The initial query throws before its subscription commits, so use a direct local harness setup.
+  await harness(page, "empty");
+  await page.goto("http://127.0.0.1:43228/community?initialerror");
+  await expect(page.getByRole("alert")).toContainText(
+    "Project hubs could not load",
+  );
+  await expect(
+    page.getByRole("heading", { name: "The next project starts here." }),
+  ).toHaveCount(0);
+  await page.evaluate(() => window.projectDirectoryFixture.initialReady());
+  await page.getByRole("button", { name: "Retry project directory" }).click();
+  await expect(page.getByRole("article")).toHaveCount(12);
+  expect(
+    await page.evaluate(() => window.projectDirectoryFixture.pageRequests),
+  ).toEqual([]);
+});
+test("split and no-progress results retain rows and never pretend exhaustion", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await page.evaluate(() => window.projectDirectoryFixture.mode("split"));
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await expect(page.getByRole("alert")).toContainText("read limit");
+  await page.evaluate(() => window.projectDirectoryFixture.mode("ok"));
+  await page
+    .getByRole("button", { name: "Retry smaller project page" })
+    .click();
+  await expect(page.getByRole("article")).toHaveCount(17);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window.projectDirectoryFixture.pageRequests[1] as {
+            paginationOpts: { numItems: number };
+          }
+        ).paginationOpts.numItems,
+    ),
+  ).toBe(6);
+  await page.evaluate(() => window.projectDirectoryFixture.mode("repeat"));
+  await loadMore(page).click();
+  await expect(page.getByRole("alert")).toContainText("did not advance");
+  await expect(
+    page.getByText("No more project hubs in this scope."),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Retry smaller project page" }),
+  ).toBeDisabled();
+  await check(3);
+});
+test("empty partial page still needs an explicit next click", async ({
+  page,
+}) => {
+  const check = await harness(page);
+  await page.evaluate(() => window.projectDirectoryFixture.mode("empty-page"));
+  await loadMore(page).click();
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await expect(loadMore(page)).toBeEnabled();
+  await check(1);
+});
+for (const change of ["mint", "owner", "cursor"] as const)
+  for (const ok of [true, false])
+    test(`${change} ABA rejects stale ${ok ? "success" : "error"} without cross-scope state`, async ({
+      page,
+    }) => {
+      const check = await harness(page, "deferred");
+      await loadMore(page).click();
+      await page.evaluate(
+        ({ change, mint }) => {
+          const f = window.projectDirectoryFixture;
+          if (change === "mint") f.scope(mint);
+          else if (change === "owner") f.owner("author-other");
+          else f.moveCursor();
+        },
+        { change, mint },
+      );
+      if (change === "mint")
+        await expect(page.getByRole("article")).toHaveCount(1);
+      else await expect(loadMore(page)).toBeEnabled();
+      await page.evaluate((change) => {
+        const f = window.projectDirectoryFixture;
+        if (change === "mint") f.scope();
+        else if (change === "owner") f.owner(null);
+        else f.moveCursor();
+      }, change);
+      await expect(page.getByRole("article")).toHaveCount(12);
+      await page.evaluate(
+        (ok) => window.projectDirectoryFixture.settle(0, ok),
+        ok,
+      );
+      await expect(loadMore(page)).toBeEnabled();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("article")).toHaveCount(12);
+      await check(1, change !== "cursor");
+    });
