@@ -86,6 +86,9 @@ async function harness(
 }
 async function bounded(control: Locator, width: number) {
   await control.scrollIntoViewIfNeeded();
+  await expect
+    .poll(async () => (await control.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(44);
   const box = await control.boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(width);
