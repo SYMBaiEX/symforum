@@ -410,6 +410,7 @@ function TerminalWorkspace({
               <TerminalBoundary
                 key={`market:${selected.mint}`}
                 label="Selected token data"
+                recovery="read-only"
               >
                 <TokenDetail
                   token={selected}
@@ -426,7 +427,7 @@ function TerminalWorkspace({
               className={styles.marketsWorkspace}
               tabIndex={-1}
             >
-              <TerminalBoundary label="Token discovery">
+              <TerminalBoundary label="Token discovery" recovery="read-only">
                 <MarketExplorer
                   selected={selected.mint}
                   onSelect={selectToken}
@@ -573,7 +574,10 @@ function TerminalWorkspace({
                 )}
               </div>
               <div hidden={tool !== "treasury"}>
-                <TerminalBoundary label="Treasury transparency">
+                <TerminalBoundary
+                  label="Treasury transparency"
+                  recovery="read-only"
+                >
                   <TransparencyPanel />
                 </TerminalBoundary>
                 <p className={styles.footer}>
