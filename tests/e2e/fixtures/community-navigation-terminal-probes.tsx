@@ -19,7 +19,7 @@ export function ResearchPurchase(props: ComponentProps<typeof ActualResearch>) {
   useMount("research");
   return <ActualResearch {...props} />;
 }
-export function SwapHistory() {
+export function SwapHistory(props: ComponentProps<typeof ActualHistory>) {
   useMount("receipts");
-  return <ActualHistory />;
+  return <ActualHistory {...props} />;
 }

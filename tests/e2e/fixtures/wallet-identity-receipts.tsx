@@ -39,7 +39,7 @@ function Fixture() {
                 selectedMint={selectedMint}
                 selectedSymbol="SYMF"
               />
-              <SwapHistory />
+              <SwapHistory ownerId="isolated-wallet-reader" />
             </>
           )}
         </main>

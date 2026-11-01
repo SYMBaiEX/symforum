@@ -944,7 +944,11 @@ function AccountPanels({
       </div>
       <div hidden={active !== "receipts"}>
         <TerminalBoundary label="Swap history">
-          <SwapHistory />
+          <SwapHistory
+            ownerId={
+              identity.isLoading ? null : (identity.session?.authUserId ?? null)
+            }
+          />
         </TerminalBoundary>
       </div>
     </>
