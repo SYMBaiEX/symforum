@@ -298,6 +298,31 @@ function LiveForumSearchPage() {
     );
   }
 
+  function clearSubmittedFilter(filter: "q" | "author" | "board") {
+    const nextQuery = filter === "q" ? "" : submittedQuery;
+    const nextAuthor = filter === "author" ? "" : submittedAuthor;
+    if (!(
+      nextQuery.length >= 2 ||
+      (nextQuery.length === 0 && nextAuthor.length > 0)
+    ))
+      return;
+    const params = new URLSearchParams();
+    for (const key of [
+      "q",
+      "author",
+      "board",
+      "type",
+      "target",
+      "sort",
+      "days",
+      "size",
+    ]) {
+      const value = searchParams.get(key);
+      if (key !== filter && value !== null) params.set(key, value);
+    }
+    router.push(`/forum/search?${params}`);
+  }
+
   return (
     <div className="space-y-3">
       <section className="space-y-3">
@@ -533,6 +558,7 @@ function LiveForumSearchPage() {
         result={searchResult}
         error={searchError}
         onRetry={() => setSearchRevision((revision) => revision + 1)}
+        onClearFilter={clearSubmittedFilter}
         searchParams={searchParams}
       />
     </div>
@@ -547,6 +573,7 @@ export function ForumSearchResults({
   result,
   error,
   onRetry,
+  onClearFilter,
   searchParams,
 }: {
   author: string;
@@ -556,6 +583,7 @@ export function ForumSearchResults({
   result: ForumSearchRecord | undefined;
   error: string | null;
   onRetry: () => void;
+  onClearFilter?: (filter: "q" | "author" | "board") => void;
   searchParams: { toString(): string };
 }) {
   const authorLabel = author.trim();
@@ -603,10 +631,70 @@ export function ForumSearchResults({
   }
 
   if (result.threads.length === 0 && result.posts.length === 0) {
+    const applied = new URLSearchParams(searchParams.toString());
+    const board = applied.get("board");
     return (
       <ForumStatusBox
-        title="Search"
-        body={`No public matches for ${searchResultLabel(query, result.filters.author ?? authorLabel)}.`}
+        title={result.limited ? "Search limited" : "Search"}
+        body={
+          result.limited
+            ? "No visible matches in this bounded scan. The search reached its safety limit; narrow the board, author, or keywords to search a smaller set."
+            : `No public matches for ${searchResultLabel(query, result.filters.author ?? authorLabel)} with these filters.`
+        }
+        action={
+          onClearFilter ? (
+            <div className="min-w-0 space-y-3">
+              <p className="break-words text-sm text-muted-foreground">
+                These actions change the submitted search, not unsaved form
+                edits. Other filters stay selected.
+              </p>
+              <div
+                className="flex min-w-0 flex-wrap gap-2"
+                role="group"
+                aria-label="Adjust submitted search"
+              >
+                {query.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="max-w-full whitespace-normal [&&]:!min-h-11"
+                    disabled={authorLabel.length === 0}
+                    onClick={() => onClearFilter("q")}
+                  >
+                    Clear keywords
+                  </Button>
+                )}
+                {authorLabel.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="max-w-full whitespace-normal [&&]:!min-h-11"
+                    disabled={query.length < 2}
+                    onClick={() => onClearFilter("author")}
+                  >
+                    Clear author
+                  </Button>
+                )}
+                {board && board !== ALL_BOARDS && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="max-w-full whitespace-normal [&&]:!min-h-11"
+                    onClick={() => onClearFilter("board")}
+                  >
+                    Search all boards
+                  </Button>
+                )}
+              </div>
+              {(query.length === 0 || authorLabel.length === 0) && (
+                <p className="text-sm text-muted-foreground">
+                  Keep at least two keyword characters or a member handle to run
+                  a search.
+                </p>
+              )}
+            </div>
+          ) : undefined
+        }
       />
     );
   }
