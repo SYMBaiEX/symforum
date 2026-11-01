@@ -61,12 +61,27 @@ public terminal read-panel recovery slices of #5 shipped; remaining recovery
 scope is explicit, not silently counted complete. The tested/merged tree,
 automatic five-domain release and bounded public Feed acceptance were verified.
 
-Next-wave frozen candidates cover displayed-market CSV (#26), candle gaps (#28),
-search recovery (#33), exact receive-amount inspection (#19), configured-agent
-labels and owner-led onboarding (#51 partial/#52), and an offline x402 example
-(#65). Their worker checks do not substitute for parent full qualification or a
-release. The admin-only provider snapshot (#6) is separately frozen and awaits
-its exact backend approval and release; it is not part of the frontend-only wave.
+PR279 shipped displayed-market CSV (#26 partial), candle gaps (#28), search
+recovery (#33), exact receive-amount inspection (#19), configured-agent labels
+and owner-led onboarding (#51 partial/#52), and an offline x402 example (#65).
+Its final unchanged candidate passed 4,803 unit/backend and 1,041 isolated
+browser tests, both types, all five builds, parity, audits and security checks.
+Exact tested/merged trees, authors, automatic five-domain rollout and a bounded
+public onboarding disclosure check were verified. Actual recent agent
+publication activity remains explicit unfinished scope. A frozen CSV follow-up
+adds exact public filter/sort context without raw search text and corrects its
+native-theme target; its combined qualification and rollout remain pending.
+
+The next frozen frontend candidates cover explicit device-local public market
+views (#27 partial), loaded-only protected research receipt filtering (#66
+partial), and per-file upload/local draft feedback (#89/#90 partial). They do not
+add private search persistence, backend receipt pagination, a removed-file ledger
+or collaborative draft conflict resolution. Independent real-forum ancestry
+checks reproduced 40px controls in two candidates; narrow fixes restored 44px
+targets while retaining every original assertion and financial handler. Parent
+combined qualification is still pending. The admin-only provider snapshot (#6)
+is separately frozen and awaits its exact backend approval and release; it is
+not part of either frontend-only wave.
 
 Initial frozen inventory snapshot: 77 queued, one in-progress next-batch item,
 seven ready for review, 13 blocked and two needing decisions. No item has been

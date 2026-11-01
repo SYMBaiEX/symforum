@@ -919,7 +919,7 @@
       "number": 19,
       "title": "Full tiny and extreme receive estimates",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -966,6 +966,18 @@
         {
           "kind": "isolated_tests",
           "reference": "67 focused browser cases,46 existing units and both types passed; missing-metadata fallback defect reproduced and fixed in presentation only. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ]
     },
@@ -1281,7 +1293,7 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": "market-export",
+        "owner": "market-public-utilities",
         "paths": [
           "components/trading/market-explorer.tsx",
           "components/trading/market-export.ts",
@@ -1300,6 +1312,26 @@
         {
           "kind": "isolated_tests",
           "reference": "41 focused browsers and39 units; loaded public sample only, not complete market/provider decimal history. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
+        },
+        {
+          "kind": "source_commit",
+          "reference": "Frozen CSV context follow-up46636a9d integrated21f697e6; original23columns retained,6public filter/sort/search-applied columns added. Rawsearch intentionally excluded and explained. Parent combined qualification pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "68 focusedunits,15export+14preferences+5strictlayout browsers,both types/lint. Actualforum40px target RED corrected export-button-only; previousCSVassertions retained."
         }
       ]
     },
@@ -1308,7 +1340,7 @@
       "number": 27,
       "title": "Saved discovery controls",
       "area": "trading",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1338,8 +1370,15 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/trading/market-explorer.tsx"]
+        "owner": "market-public-utilities",
+        "paths": [
+          "components/trading/market-explorer.tsx",
+          "components/trading/market-view-preferences.ts",
+          "components/trading/market-view-preferences.test.ts",
+          "tests/e2e/market-view-preferences.spec.ts",
+          "tests/e2e/fixtures/market-view-preferences.tsx",
+          "tests/e2e/fixtures/market-view-preferences-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -1349,14 +1388,26 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain1644e647 plus668c5836; parent combined qualification and rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "106 focused browsers,80 units,both types/lint; independent real-ancestor44px320/390 proof closed P2. No mount storage I/O; unknown bytes preserved."
+        }
+      ],
+      "remainingAcceptance": [
+        "Search text persistence is intentionally excluded to avoid storing wallet/private identifiers. The original wider search-persistence/retention decision remains unresolved; this slice saves only explicit device-local public filters and sort."
+      ]
     },
     {
       "id": "PLATFORM-028",
       "number": 28,
       "title": "Candle-gap explanation",
       "area": "trading",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1400,6 +1451,18 @@
         {
           "kind": "isolated_tests",
           "reference": "44 focused browsers and66 units; gaps only in bounded loaded aligned UTC timestamps, no synthetic bars or provider-history claims. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ]
     },
@@ -1614,7 +1677,7 @@
       "number": 33,
       "title": "Empty-search recovery",
       "area": "forum",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1656,6 +1719,18 @@
         {
           "kind": "isolated_tests",
           "reference": "21 focused browsers and4 original units; submitted-filter recovery and bounded-scan honesty, no automatic query. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ]
     },
@@ -1664,7 +1739,7 @@
       "number": 34,
       "title": "Search match highlights and useful excerpts",
       "area": "forum",
-      "status": "queued",
+      "status": "in_progress",
       "changeType": "frontend",
       "verification": [
         "unit",
@@ -1694,8 +1769,15 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-search-page.tsx"]
+        "owner": "search-excerpts",
+        "paths": [
+          "components/forum/forum-search-page.tsx",
+          "components/forum/search-highlight.tsx",
+          "components/forum/search-highlight.test.tsx",
+          "tests/e2e/search-excerpts.spec.ts",
+          "tests/e2e/fixtures/search-excerpts.tsx",
+          "tests/e2e/fixtures/search-excerpts-state.tsx"
+        ]
       },
       "blockers": [],
       "qualification": []
@@ -2468,7 +2550,7 @@
       "number": 51,
       "title": "Enabled and recently active agent directory",
       "area": "agents",
-      "status": "ready_review",
+      "status": "partial",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2519,6 +2601,18 @@
         {
           "kind": "isolated_tests",
           "reference": "34 focused browsers and10 original units; configured/enabled target labels only. Existing projection supplies no recent-publication timestamps. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ],
       "remainingAcceptance": [
@@ -2530,7 +2624,7 @@
       "number": 52,
       "title": "Bring-your-own-agent onboarding",
       "area": "agents",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -2586,6 +2680,18 @@
         {
           "kind": "isolated_tests",
           "reference": "34 focused browsers and10 original units; existing owner enrollment/instructions/review routes, no real enrollment certification. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ]
     },
@@ -3154,7 +3260,7 @@
       "number": 65,
       "title": "Mocked x402 owner example",
       "area": "research",
-      "status": "ready_review",
+      "status": "source_deployed",
       "changeType": "tests",
       "verification": [
         "unit",
@@ -3195,6 +3301,18 @@
         {
           "kind": "isolated_tests",
           "reference": "32 offline mock cases plus25 existing research cases; fake owner/wire only, not real session/settlement acceptance. Worker checks are not parent full qualification or live proof."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "PR279 final unchanged candidate37b8a13a:4803 unit/backend and1041 isolated browser tests,both types,all five builds,parity,audits/security. Initial interrupted browser/planner RED history retained; no live financial certification."
+        },
+        {
+          "kind": "merge",
+          "reference": "PR279 normally rebase-merged2026-11-01T07:40:56Z, main0beb80494c08a1cb34f5cb4dae4ee0b9da7f7bcb; exact complete tested tree9cc3ba73f9380890e70aa24ea904e36f62c91119 and all authors verified."
+        },
+        {
+          "kind": "deployment",
+          "reference": "PR279 exact automatic production revision and all five original domains verified; one bounded public StartHere desktop/phone guide check passed with44px canonical links and no overflow. Protected financial/provider/OS behavior unclaimed."
         }
       ]
     },
@@ -3203,7 +3321,7 @@
       "number": 66,
       "title": "Searchable owner export and receipt library",
       "area": "research",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -3234,8 +3352,15 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["convex/forumResearch.ts"]
+        "owner": "research-receipt-library",
+        "paths": [
+          "components/trading/research-purchase.tsx",
+          "components/trading/research-receipt-view.ts",
+          "components/trading/research-receipt-view.test.ts",
+          "tests/e2e/research-receipt-library.spec.ts",
+          "tests/e2e/fixtures/research-receipt-library.tsx",
+          "tests/e2e/fixtures/research-receipt-library-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -3245,7 +3370,19 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chainbbe001c1 plusc78ffe7d; parent combined qualification and rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "73 focused browsers,48 units,both types/lint; actual-ancestor40px RED fixed narrowly, independent44px proof. Financial handlers/Dialog/hooks unchanged."
+        }
+      ],
+      "remainingAcceptance": [
+        "Only the existing bounded owner receipt window is searchable. Owner-scoped backend pagination and a larger complete library remain unimplemented and require separate backend review/approval."
+      ]
     },
     {
       "id": "PLATFORM-067",
@@ -4219,7 +4356,7 @@
       "number": 89,
       "title": "Per-file upload outcomes",
       "area": "accessibility",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -4250,8 +4387,13 @@
         }
       ],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-compose.tsx"]
+        "owner": "composer-feedback",
+        "paths": [
+          "components/forum/forum-compose.tsx",
+          "tests/e2e/composer-feedback.spec.ts",
+          "tests/e2e/fixtures/composer-feedback.tsx",
+          "tests/e2e/fixtures/composer-feedback-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -4261,14 +4403,26 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain57ad5a0c; parent combined qualification and rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "48 focused browsers including32 unchanged upload/schema regressions,20 original units,both types/lint. Independent48browser15unit rerun; unknown uploads never replayed."
+        }
+      ],
+      "remainingAcceptance": [
+        "A persistent removed-file outcome history is not added; explicit removal continues to update the existing attachment list. New feedback covers actual current batch confirmed/uncertain/not-started outcomes only."
+      ]
     },
     {
       "id": "PLATFORM-090",
       "number": 90,
       "title": "Draft restoration, failure and retention",
       "area": "accessibility",
-      "status": "queued",
+      "status": "ready_review",
       "changeType": "cross_stack",
       "verification": [
         "unit",
@@ -4294,8 +4448,13 @@
       ],
       "dependencies": [],
       "ownership": {
-        "owner": null,
-        "paths": ["components/forum/forum-compose.tsx"]
+        "owner": "composer-feedback",
+        "paths": [
+          "components/forum/forum-compose.tsx",
+          "tests/e2e/composer-feedback.spec.ts",
+          "tests/e2e/fixtures/composer-feedback.tsx",
+          "tests/e2e/fixtures/composer-feedback-state.tsx"
+        ]
       },
       "blockers": [
         {
@@ -4305,7 +4464,19 @@
           "resolved": false
         }
       ],
-      "qualification": []
+      "qualification": [
+        {
+          "kind": "source_commit",
+          "reference": "Frozen reviewed chain57ad5a0c; parent combined qualification and rollout pending."
+        },
+        {
+          "kind": "isolated_tests",
+          "reference": "48 focused browsers including32 unchanged upload/schema regressions,20 original units,both types/lint. Draft read/write/clear/restore failures and unknown-schema protection tested."
+        }
+      ],
+      "remainingAcceptance": [
+        "Valid-v1 collaborative multi-tab conflict resolution remains outside this narrow feedback change. Existing unknown/newer-byte protection stays intact; device-local storage is not an atomic collaborative store."
+      ]
     },
     {
       "id": "PLATFORM-091",
