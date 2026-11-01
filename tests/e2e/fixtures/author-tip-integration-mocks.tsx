@@ -95,6 +95,13 @@ export function useConvexAuth() {
     isLoading: false,
   };
 }
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
+}
 function denied(name: string, args: unknown) {
   operations.push({ name, args });
   throw new Error(

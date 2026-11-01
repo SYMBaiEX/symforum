@@ -141,6 +141,15 @@ Current post-PR283 source ledger: 20 source-deployed, six partial, two separatel
 reviewed backend candidates, 57 queued, 13 blocked and two needing decisions.
 All 100 original items remain present; none is marked live-verified. Source
 deployment is not live wallet, provider, hardware or assistive-technology proof.
+
+The approved reader integration's first complete run retained one planner-unit
+failure and two browser setup failures (1,223 passed, 60 not run). The planner
+fixture had inherited the newly resolved real approval; it now supplies its own
+explicit unresolved approval, preserving every original assertion. Two older
+commerce fixtures imported the new client hook transitively but did not export
+it. Their added inert adapters reject any unexpected page read. No original
+assertion, payment action or runtime handler changed. All final gates must pass
+again on the corrected unchanged candidate before either deployment or merge.
 Post-deployment planning receipts may await the next planning commit; they do
 not represent additional unqualified runtime changes.
 

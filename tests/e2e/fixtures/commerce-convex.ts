@@ -31,6 +31,13 @@ export function useConvexAuth() {
     isLoading: false,
   };
 }
+export function useConvex() {
+  return {
+    query: async () => {
+      throw new Error("Unexpected directory page read");
+    },
+  };
+}
 export function useQuery(
   ref: Parameters<typeof getFunctionName>[0],
   args: unknown,
