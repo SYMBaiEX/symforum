@@ -43,6 +43,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ForumLink } from "./forum-link";
@@ -179,6 +181,7 @@ export function ForumNavigationLayout({
   const pathname = usePathname();
   const { primarySiteHref, compactNavigation, toggleNavigation } =
     useForumShellContext();
+  const { density, setDensity } = useForumShellContext();
   const runtime = useForumRuntime();
   const context = `${pathname ?? "/forum"}?${signInSearch}`;
   const [signInAnchor, setSignInAnchor] = useState<{
@@ -534,6 +537,25 @@ export function ForumNavigationLayout({
                   </p>
                 )}
               </DropdownMenuGroup>
+              <DropdownMenuLabel className="mt-2 px-3 py-2 text-xs text-muted-foreground">
+                Display density · this session only
+              </DropdownMenuLabel>
+              <p id="forum-density-help" className="px-3 pb-2 text-xs text-muted-foreground">
+                Resets to Comfortable on reload. Changes informational spacing only.
+              </p>
+              <DropdownMenuRadioGroup
+                aria-label="Display density"
+                aria-describedby="forum-density-help"
+                value={density}
+                onValueChange={(value) => setDensity(value === "compact" ? "compact" : "comfortable")}
+              >
+                <DropdownMenuRadioItem value="comfortable" className="[&&]:!min-h-11">
+                  Comfortable
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="compact" className="[&&]:!min-h-11">
+                  Compact
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
               <div className="mt-2 flex items-center justify-between gap-2 px-3 py-1">
                 <a
                   href={primarySiteHref}

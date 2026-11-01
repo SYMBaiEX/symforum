@@ -308,6 +308,9 @@
   text-align: right;
   white-space: nowrap;
 }
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .scroll tbody td.number {
+  padding-inline: 4px;
+}
 .number[data-direction="positive"] {
   color: hsl(var(--accent));
 }

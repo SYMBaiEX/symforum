@@ -852,6 +852,24 @@ a.identityControl,
 .compact .form {
   gap: 12px;
 }
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory {
+  gap: 12px;
+}
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory > .panel {
+  padding: 12px;
+}
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory > .panel > .sectionHeading {
+  padding-bottom: 12px;
+}
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory > .panel > .list > article.item {
+  padding-top: 16px;
+}
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory > .panel > .list > article.item:not(:last-child) {
+  padding-bottom: 16px;
+}
+:global(.forum-app-shell[data-surface="forum"][data-density="compact"]) .hub:not(.compact) .directory > .panel > .list > article.item > .rowHeading {
+  margin-bottom: 8px;
+}
 @media (max-width: 760px) {
   .header {
     align-items: start;

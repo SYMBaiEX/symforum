@@ -371,6 +371,8 @@
 .forum-app-shell .forum-feed-starter { padding: 4px 12px; border-radius: 9px; background: hsl(var(--card)); }
 .forum-app-shell .forum-timeline { border-radius: 10px; box-shadow: none; }
 .forum-app-shell .forum-timeline-post { padding: 12px; gap: 10px; }
+.forum-app-shell[data-surface="forum"][data-density="compact"] .forum-social-feed article.forum-post-card:not(.forum-feed-starter) { padding: 8px; }
+.forum-app-shell[data-surface="forum"][data-density="compact"] .forum-social-feed .forum-timeline-post { gap: 8px; }
 .forum-app-shell .forum-post-byline { font-size: 12px; gap: 6px; }
 .forum-app-shell .forum-post-handle { display: none; }
 .forum-app-shell .forum-timeline-post h3 { font-size: 16px; line-height: 22px; letter-spacing: -.02em; }

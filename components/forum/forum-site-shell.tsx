@@ -207,11 +207,12 @@ function ForumShellFrame({
   children: ReactNode;
   surface: "blog" | "forum" | "newsletter" | "news";
 }) {
-  const { compactNavigation } = useForumShellContext();
+  const { compactNavigation, density } = useForumShellContext();
   return (
     <div
       data-navigation={compactNavigation ? "compact" : "expanded"}
       data-surface={surface}
+      data-density={surface === "forum" ? density : undefined}
       className="forum-app-shell relative z-10 min-h-dvh min-w-0 bg-background text-foreground [--site-footer-offset:0px]"
     >
       {children}
