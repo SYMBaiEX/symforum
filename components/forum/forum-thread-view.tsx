@@ -71,7 +71,7 @@ import { useConvexAuth, useMutation } from "convex/react";
 import { Paperclip, Star, X, ChevronDown } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const ForumCompose = dynamic(
@@ -265,7 +265,36 @@ function LiveForumThreadView({
   const [reportReason, setReportReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
   const [reportPending, setReportPending] = useState(false);
+  const [reportSubmittingHere, setReportSubmittingHere] = useState(false);
   const [reportError, setReportError] = useState("");
+  const reportOwner =
+    isAuthenticated && !authLoading ? (viewer?._id ?? null) : null;
+  const reportLifecycle = useRef({
+    owner: reportOwner,
+    mounted: false,
+    generation: 0,
+  });
+  const reportInFlight = useRef<{ owner: string; generation: number } | null>(
+    null,
+  );
+  const reportTrigger = useRef<HTMLElement | null>(null);
+  const reportFocusFallback = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const lifecycle = reportLifecycle.current;
+    lifecycle.owner = reportOwner;
+    lifecycle.mounted = true;
+    lifecycle.generation++;
+    reportTrigger.current = null;
+    setReportTarget(null);
+    setReportReason("");
+    setReportDetails("");
+    setReportError("");
+    setReportSubmittingHere(false);
+    return () => {
+      lifecycle.mounted = false;
+      lifecycle.generation++;
+    };
+  }, [reportOwner]);
   const [reputationDraft, setReputationDraft] =
     useState<ReputationDraft | null>(null);
   const [reputationComment, setReputationComment] = useState("");
@@ -805,27 +834,58 @@ function LiveForumThreadView({
     }
   }
 
-  function openReport(target: ForumReportTarget) {
+  function openReport(target: ForumReportTarget, trigger?: HTMLElement) {
+    if (authLoading) return;
     if (!isAuthenticated) {
       setAuthAction("report forum content");
       setAuthOpen(true);
       return;
     }
+    if (!reportOwner || reportLifecycle.current.owner !== reportOwner) return;
+    reportLifecycle.current.generation++;
+    reportTrigger.current =
+      trigger ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
     setReportTarget(target);
     setReportReason("");
     setReportDetails("");
     setReportError("");
+    setReportSubmittingHere(false);
+  }
+
+  function closeReport() {
+    reportLifecycle.current.generation++;
+    setReportSubmittingHere(false);
+    setReportTarget(null);
   }
 
   async function submitReport() {
-    if (!reportTarget) {
+    if (
+      !reportTarget ||
+      reportInFlight.current ||
+      !reportOwner ||
+      !reportLifecycle.current.mounted ||
+      reportLifecycle.current.owner !== reportOwner
+    ) {
       return;
     }
     if (reportReason.trim().length < 3) {
       setReportError("Add a short reason so moderation has a clear signal.");
       return;
     }
+    const attempt = {
+      owner: reportOwner,
+      generation: reportLifecycle.current.generation,
+    };
+    reportInFlight.current = attempt;
+    const current = () =>
+      reportLifecycle.current.mounted &&
+      reportLifecycle.current.owner === attempt.owner &&
+      reportLifecycle.current.generation === attempt.generation;
     setReportPending(true);
+    setReportSubmittingHere(true);
     setReportError("");
     try {
       await createReport({
@@ -835,10 +895,12 @@ function LiveForumThreadView({
         reason: reportReason.trim(),
         details: reportDetails.trim() || undefined,
       });
-      setReportTarget(null);
+      if (!current()) return;
+      closeReport();
       setReportReason("");
       setReportDetails("");
     } catch (caught) {
+      if (!current()) return;
       if (isAuthRequiredError(caught)) {
         setAuthAction("report forum content");
         setAuthOpen(true);
@@ -854,9 +916,17 @@ function LiveForumThreadView({
         metadata: { reportEntityType: reportTarget.entityType },
         notify: false,
       });
-      setReportError(userFacingError(caught, "Could not send report"));
+      setReportError(
+        `${userFacingError(caught, "Report response unavailable")}. We could not confirm the outcome; it may already have reached moderation. Your text is kept. Check before sending again.`,
+      );
     } finally {
-      setReportPending(false);
+      if (reportInFlight.current === attempt) {
+        reportInFlight.current = null;
+        if (reportLifecycle.current.mounted) {
+          setReportPending(false);
+          setReportSubmittingHere(false);
+        }
+      }
     }
   }
 
@@ -1135,7 +1205,13 @@ function LiveForumThreadView({
       threadId={thread._id}
       readOnlyArchive={category.readOnlyArchive === true}
     >
-      <div className="space-y-2">
+      <div
+        className="space-y-2"
+        ref={reportFocusFallback}
+        tabIndex={-1}
+        role="region"
+        aria-label="Discussion content"
+      >
         {showHeading ? (
           <ForumPageHeader title={thread.title} view="boards" nested />
         ) : null}
@@ -1516,7 +1592,9 @@ function LiveForumThreadView({
                         onReputation={(score) =>
                           openReputationDialog(post, score, postNumber)
                         }
-                        onReport={(target) => openReport(target)}
+                        onReport={(target, trigger) =>
+                          openReport(target, trigger)
+                        }
                       />
                     </div>
                   }
@@ -1820,11 +1898,26 @@ function LiveForumThreadView({
         open={reportTarget !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setReportTarget(null);
+            closeReport();
           }
         }}
       >
-        <DialogContent className="rounded-xl border-input sm:rounded-xl">
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border-input sm:rounded-xl [&&_button]:!min-h-11 [&&_button]:!min-w-11"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (!reportLifecycle.current.mounted) return;
+            const trigger = reportTrigger.current;
+            if (
+              trigger?.isConnected &&
+              trigger.getClientRects().length &&
+              getComputedStyle(trigger).visibility === "visible" &&
+              !trigger.closest("[hidden],[inert]")
+            )
+              trigger.focus();
+            else reportFocusFallback.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Report post</DialogTitle>
             <DialogDescription>
@@ -1844,6 +1937,7 @@ function LiveForumThreadView({
                 }
                 aria-invalid={reportError ? true : undefined}
                 className="rounded-xl border-input"
+                disabled={reportSubmittingHere}
                 rows={2}
                 value={reportReason}
                 onChange={(event) => setReportReason(event.target.value)}
@@ -1854,6 +1948,7 @@ function LiveForumThreadView({
               <span className="text-xs text-muted-foreground">Details</span>
               <Textarea
                 className="rounded-xl border-input"
+                disabled={reportSubmittingHere}
                 rows={4}
                 value={reportDetails}
                 onChange={(event) => setReportDetails(event.target.value)}
@@ -1869,21 +1964,27 @@ function LiveForumThreadView({
                 {reportError}
               </p>
             ) : null}
+            {reportPending ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                A report request is awaiting a response. Closing this dialog
+                does not cancel a request already sent.
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setReportTarget(null)}
-            >
-              Cancel
+            <Button type="button" variant="outline" onClick={closeReport}>
+              Close dialog
             </Button>
             <Button
               type="button"
-              disabled={reportPending}
+              disabled={reportPending || !reportOwner || authLoading}
               onClick={submitReport}
             >
-              {reportPending ? "Sending..." : "Send report"}
+              {reportPending
+                ? reportSubmittingHere
+                  ? "Sending..."
+                  : "Earlier report pending"
+                : "Send report"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2502,7 +2603,7 @@ function PostActions({
   threadId: string;
   onQuote: () => void;
   onReputation: (score: Exclude<ReputationScore, 0>) => void;
-  onReport: (target: ForumReportTarget) => void;
+  onReport: (target: ForumReportTarget, trigger: HTMLButtonElement) => void;
 }) {
   const postId = post._id?.endsWith("-root") ? undefined : post._id;
 
@@ -2608,16 +2709,19 @@ function PostActions({
             className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             type="button"
             variant="ghost"
-            onClick={() =>
-              onReport({
-                entityType: postId === undefined ? "thread" : "post",
-                threadId,
-                postId,
-                label:
-                  postId === undefined
-                    ? `Thread starter #${postNumber}`
-                    : `Reply #${postNumber}`,
-              })
+            onClick={(event) =>
+              onReport(
+                {
+                  entityType: postId === undefined ? "thread" : "post",
+                  threadId,
+                  postId,
+                  label:
+                    postId === undefined
+                      ? `Thread starter #${postNumber}`
+                      : `Reply #${postNumber}`,
+                },
+                event.currentTarget,
+              )
             }
           >
             Report
