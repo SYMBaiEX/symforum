@@ -1,0 +1,161 @@
+.section {
+  min-width: 0;
+  padding: clamp(16px, 2.5vw, 28px);
+  border: 1px solid hsl(var(--border) / 0.65);
+  border-radius: var(--forum-panel-radius, 10px);
+  background: hsl(var(--card));
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.header h2 {
+  margin: 4px 0 0;
+  font-size: clamp(19px, 2vw, 23px);
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  font-weight: 650;
+}
+.eyebrow {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  letter-spacing: 0.04em;
+}
+.searchLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 0;
+  color: hsl(var(--primary));
+  font-size: 13px;
+  font-weight: 600;
+}
+.context,
+.state,
+.coverage {
+  color: hsl(var(--muted-foreground));
+  line-height: 1.65;
+}
+.context {
+  margin: 12px 0 20px;
+  max-width: 80ch;
+  font-size: 13px;
+}
+.announcement {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  padding: 16px;
+  border: 1px solid hsl(var(--primary) / 0.2);
+  border-radius: 8px;
+  background: hsl(var(--primary) / 0.045);
+}
+.announcement > span {
+  flex: 1;
+  min-width: 0;
+}
+.announcement strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.announcement > svg {
+  flex-shrink: 0;
+  color: hsl(var(--primary));
+}
+.list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.list li + li {
+  border-top: 1px solid hsl(var(--border) / 0.6);
+}
+.discussion {
+  display: flex;
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 18px 0;
+}
+.discussionCopy {
+  flex: 1;
+  min-width: 0;
+}
+.discussion strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.discussion > svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground));
+}
+.excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-top: 6px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.65;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin-top: 9px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.6;
+}
+.state {
+  padding: 20px 0 0;
+  font-size: 14px;
+}
+.coverage {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.section :is(p, strong, span, a) {
+  overflow-wrap: anywhere;
+}
+.section a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.section a:hover strong {
+  color: hsl(var(--primary));
+}
+@media (max-width: 480px) {
+  .announcement {
+    gap: 10px;
+    padding: 12px;
+  }
+  .searchLink {
+    font-size: 14px;
+  }
+  .discussion strong,
+  .announcement strong {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .section a strong {
+    transition: color 140ms ease;
+  }
+}
