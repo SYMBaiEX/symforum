@@ -311,6 +311,12 @@
   border-radius: 10px;
   background: hsl(var(--card));
 }
+.page .swap :is(input:not([type="checkbox"]), select) {
+  min-height: 44px !important;
+}
+.page .swap select {
+  min-width: 44px !important;
+}
 .swapHeading {
   padding-bottom: 12px;
   margin-bottom: 12px;
