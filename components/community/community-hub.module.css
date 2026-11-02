@@ -80,6 +80,12 @@
   outline-offset: -3px;
   box-shadow: none;
 }
+/* The project toolbar sits outside the retained project-page subtree. */
+.projectHub .nav button,
+.projectHub .safetyNote button {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
 .directory {
   display: grid;
   gap: 16px;

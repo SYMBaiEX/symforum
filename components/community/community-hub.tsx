@@ -318,7 +318,9 @@ function CommunityContent({
     navigate("receipts");
   }
   return (
-    <div className={`${styles.hub} ${compact ? styles.compact : ""}`}>
+    <div
+      className={`${styles.hub} ${compact ? styles.compact : ""} ${symfScope ? styles.projectHub : ""}`}
+    >
       {route.invalid && (
         <p role="status">
           This community link contains invalid options. Showing the public
