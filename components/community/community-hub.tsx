@@ -69,6 +69,8 @@ import {
   requestDirectoryPage,
 } from "./project-directory-model";
 import { appendWorkBrief, deliveryUrlPreview } from "./work-brief-model";
+import { SYMF_TOKEN, TOKEN_CONFIGURED } from "@/lib/symf-token";
+import { SymfProjectPage } from "./symf-project-page";
 import {
   communityHref,
   communityRoute,
@@ -282,6 +284,11 @@ function CommunityContent({
     setPreviousSearch(search);
     setSection(route.section);
   }
+  const symfScope =
+    !compact && !route.invalid && TOKEN_CONFIGURED && mint === SYMF_TOKEN.mint;
+  const symfActive = symfScope && section === "projects";
+  const [symfVisited, setSymfVisited] = useState(symfActive);
+  if (symfActive && !symfVisited) setSymfVisited(true);
   if (section === "receipts" && !receiptsVisited) setReceiptsVisited(true);
   function navigate(next: Section) {
     if (compact) {
@@ -318,7 +325,7 @@ function CommunityContent({
           project directory; no payment was opened.
         </p>
       )}
-      {!compact && (
+      {!compact && !symfActive && (
         <header className={styles.header}>
           <div>
             <span className={styles.eyebrow}>SYMBaiEX / Community</span>
@@ -334,7 +341,7 @@ function CommunityContent({
           </div>
         </header>
       )}
-      <details className={styles.taskGuide}>
+      <details className={styles.taskGuide} hidden={symfActive}>
         <summary className="focus-ring">Find your next step</summary>
         <nav aria-label="Community task guide">
           {(
@@ -401,30 +408,44 @@ function CommunityContent({
         ))}
       </nav>
       <div id={contentId} role="region" aria-label={sectionLabels[section]}>
-        {mint && (section === "projects" || section === "work") && (
-          <section
-            className={styles.scopeNotice}
-            aria-label="Community mint scope"
-          >
-            <div>
-              <strong>Projects and work for this exact mint</strong>
-              <code>{mint}</code>
-            </div>
-            <p>
-              {compact
-                ? "This view follows the terminal’s selected token. Open the full community to browse beyond it."
-                : "These projects and work items are filtered to this token, not the full community."}
-            </p>
-            <ForumLink
-              href={communityHref({ section, invalid: false })}
-              prefetch={false}
+        {mint &&
+          !symfActive &&
+          (section === "projects" || section === "work") && (
+            <section
+              className={styles.scopeNotice}
+              aria-label="Community mint scope"
             >
-              {compact ? "Open full community" : "Browse full community"}
-              <ArrowUpRight size={15} aria-hidden="true" />
-            </ForumLink>
-          </section>
+              <div>
+                <strong>Projects and work for this exact mint</strong>
+                <code>{mint}</code>
+              </div>
+              <p>
+                {compact
+                  ? "This view follows the terminal’s selected token. Open the full community to browse beyond it."
+                  : "These projects and work items are filtered to this token, not the full community."}
+              </p>
+              <ForumLink
+                href={communityHref({ section, invalid: false })}
+                prefetch={false}
+              >
+                {compact ? "Open full community" : "Browse full community"}
+                <ArrowUpRight size={15} aria-hidden="true" />
+              </ForumLink>
+            </section>
+          )}
+        {/* Once opened, retain the native swap and its protected receipt state
+            when the visitor switches utility sections. Never duplicate it for
+            the desktop/mobile layout. Other mints retain the ordinary directory. */}
+        {symfScope && symfVisited && (
+          <div hidden={!symfActive}>
+            <SymfProjectPage>
+              <Projects mint={mint} client={client} presentation="profile" />
+            </SymfProjectPage>
+          </div>
         )}
-        {section === "projects" && <Projects mint={mint} client={client} />}
+        {!symfScope && section === "projects" && (
+          <Projects mint={mint} client={client} />
+        )}
         {section === "work" && (
           <WorkBoard mint={mint} client={client} onPayment={setPayment} />
         )}
@@ -488,9 +509,11 @@ class ProjectDirectoryBoundary extends Component<
 function Projects({
   mint,
   client,
+  presentation = "directory",
 }: {
   mint?: string;
   client: CommerceWalletClient | null;
+  presentation?: "directory" | "profile";
 }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const mine = useQuery(
@@ -526,15 +549,24 @@ function Projects({
       <section className={styles.panel}>
         <div className={styles.sectionHeading}>
           <div>
-            <h2>Project hubs</h2>
+            <h2>
+              {presentation === "profile"
+                ? "Project contributors"
+                : "Project hubs"}
+            </h2>
             <p className={styles.muted}>
-              {mint
-                ? "A hub for this exact mint, with up to 12 public affiliations."
-                : "Browse project hubs, 12 at a time, with up to 12 public affiliations per hub. Load another page when you choose."}
+              {presentation === "profile"
+                ? "Public, self-declared affiliations with this exact mint."
+                : mint
+                  ? "A hub for this exact mint, with up to 12 public affiliations."
+                  : "Browse project hubs, 12 at a time, with up to 12 public affiliations per hub. Load another page when you choose."}
             </p>
           </div>
           <Button ref={addProjectTrigger} onClick={openCreation}>
-            <Plus aria-hidden="true" /> Add project
+            <Plus aria-hidden="true" />{" "}
+            {presentation === "profile"
+              ? "Add your affiliation"
+              : "Add project"}
           </Button>
         </div>
         <ProjectDirectoryBoundary key={mint ?? "all"}>
@@ -544,6 +576,7 @@ function Projects({
             authorId={authorId}
             onCreation={openCreation}
             onEdit={openEdit}
+            presentation={presentation}
           />
         </ProjectDirectoryBoundary>
       </section>
@@ -598,12 +631,14 @@ function ProjectDirectoryReader({
   authorId,
   onCreation,
   onEdit,
+  presentation = "directory",
 }: {
   mint?: string;
   scope: string;
   authorId?: Id<"users">;
   onCreation(event: MouseEvent<HTMLButtonElement>): void;
   onEdit(event: MouseEvent<HTMLButtonElement>, draft: AffiliationDraft): void;
+  presentation?: "directory" | "profile";
 }) {
   const convex = useConvex();
   const first = useQuery(api.forumCommunity.listProjectPage, {
@@ -674,7 +709,7 @@ function ProjectDirectoryReader({
   );
   return (
     <>
-      <div className={styles.projectSearch}>
+      <div className={styles.projectSearch} hidden={presentation === "profile"}>
         <Field label="Search loaded projects">
           <Input
             ref={searchInput}
@@ -701,11 +736,15 @@ function ProjectDirectoryReader({
           </Button>
         )}
       </div>
-      <p id={searchDescription} className={styles.muted}>
+      <p
+        id={searchDescription}
+        className={styles.muted}
+        hidden={presentation === "profile"}
+      >
         Filters only loaded hubs and their public contributor roles and handles.
         Mint matching is case-sensitive. No additional data is fetched.
       </p>
-      {projects !== undefined && (
+      {projects !== undefined && presentation !== "profile" && (
         <p
           className={styles.projectCount}
           role="status"
@@ -759,6 +798,22 @@ function ProjectDirectoryReader({
                   {project.name}{" "}
                   <span className={styles.symbol}>{project.symbol}</span>
                 </h3>
+                {presentation === "directory" &&
+                  TOKEN_CONFIGURED &&
+                  project.mint === SYMF_TOKEN.mint && (
+                    <ForumLink
+                      className={styles.rowLink}
+                      href={communityHref({
+                        section: "projects",
+                        mint: project.mint,
+                        invalid: false,
+                      })}
+                      prefetch={false}
+                    >
+                      Open project page{" "}
+                      <ArrowUpRight size={15} aria-hidden="true" />
+                    </ForumLink>
+                  )}
                 <a
                   className={styles.rowLink}
                   href={forumSiteUrl(
