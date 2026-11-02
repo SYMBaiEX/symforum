@@ -14,8 +14,34 @@ import { SYMF_TOKEN } from "@/lib/symf-token";
 import styles from "./symf-project-discussions.module.css";
 
 const discussionLimit = 6;
-// Installation configuration validates this first-party announcement path.
-const announcementBoard = SYMF_TOKEN.announcementPath.split("/").at(-2);
+// Configuration permits an empty or non-thread path. Only a canonical thread
+// shape can scope this automatic read; never silently broaden it to all boards.
+const announcementMatch =
+  /^\/forum\/([a-z0-9][a-z0-9-]{1,63})\/([a-z0-9][a-z0-9-]{1,95})$/.exec(
+    SYMF_TOKEN.announcementPath,
+  );
+const nonDiscussionBoards = new Set([
+  "announcements",
+  "calendar",
+  "control-panel",
+  "help",
+  "members",
+  "messages",
+  "new-posts",
+  "online",
+  "search",
+  "saved",
+  "subscriptions",
+  "swap",
+  "todays-posts",
+]);
+const announcementBoard =
+  announcementMatch && !nonDiscussionBoards.has(announcementMatch[1])
+    ? announcementMatch[1]
+    : null;
+export const symfAnnouncementPath = announcementBoard
+  ? SYMF_TOKEN.announcementPath
+  : null;
 const searchQuery = new URLSearchParams({
   q: SYMF_TOKEN.symbol,
   ...(announcementBoard ? { board: announcementBoard } : {}),
@@ -37,37 +63,45 @@ export function SymfProjectDiscussions() {
           href={searchHref}
           prefetch={false}
         >
-          Search discussions <ArrowUpRight size={16} aria-hidden="true" />
+          {announcementBoard ? "Search discussions" : "Search the full forum"}
+          <ArrowUpRight size={16} aria-hidden="true" />
         </ForumLink>
       </header>
       <p className={styles.context}>
-        {SYMF_TOKEN.symbol} text mentions in the token announcement’s board,
-        visible to you. These are not verified mint associations or a complete
-        discussion history.
+        {announcementBoard
+          ? `${SYMF_TOKEN.symbol} text mentions in the token announcement’s board, visible to you. These are not verified mint associations or a complete discussion history.`
+          : "The configured discussion link is unavailable. No automatic search has run; you can choose to search the full forum for text mentions."}
       </p>
-      <ForumLink
-        className={styles.announcement}
-        href={SYMF_TOKEN.announcementPath}
-        prefetch={false}
-      >
-        <MessageSquare size={20} aria-hidden="true" />
-        <span>
-          <span className={styles.eyebrow}>Official starting point</span>
-          <strong>Read the {SYMF_TOKEN.symbol} token announcement</strong>
-        </span>
-        <ArrowUpRight size={18} aria-hidden="true" />
-      </ForumLink>
-      <TerminalBoundary label="Related forum discussions" recovery="read-only">
-        <RelatedMentions />
-      </TerminalBoundary>
+      {symfAnnouncementPath && (
+        <ForumLink
+          className={styles.announcement}
+          href={symfAnnouncementPath}
+          prefetch={false}
+        >
+          <MessageSquare size={20} aria-hidden="true" />
+          <span>
+            <span className={styles.eyebrow}>Official starting point</span>
+            <strong>Read the {SYMF_TOKEN.symbol} token announcement</strong>
+          </span>
+          <ArrowUpRight size={18} aria-hidden="true" />
+        </ForumLink>
+      )}
+      {announcementBoard && (
+        <TerminalBoundary
+          label="Related forum discussions"
+          recovery="read-only"
+        >
+          <RelatedMentions board={announcementBoard} />
+        </TerminalBoundary>
+      )}
     </section>
   );
 }
 
-function RelatedMentions() {
+function RelatedMentions({ board }: { board: string }) {
   const result = useQuery(forumRefs.search, {
     query: SYMF_TOKEN.symbol,
-    ...(announcementBoard ? { categorySlug: announcementBoard } : {}),
+    categorySlug: board,
     resultType: "threads",
     page: 1,
     pageSize: discussionLimit,
@@ -89,7 +123,7 @@ function RelatedMentions() {
         encodeURIComponent(thread.slug),
       ),
     }))
-    .filter(({ href }) => href !== SYMF_TOKEN.announcementPath)
+    .filter(({ href }) => href !== symfAnnouncementPath)
     .slice(0, discussionLimit);
   if (!threads.length)
     return (

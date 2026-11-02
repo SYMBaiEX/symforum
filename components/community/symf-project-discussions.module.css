@@ -138,6 +138,10 @@
   outline-offset: 3px;
   border-radius: 6px;
 }
+.section.section [data-ui="button"] {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
 .section a:hover strong {
   color: hsl(var(--primary));
 }
