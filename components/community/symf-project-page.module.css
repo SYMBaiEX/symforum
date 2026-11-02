@@ -251,6 +251,11 @@
   min-width: 0;
   scroll-margin-top: 80px;
 }
+/* The real forum surface applies important 40px mobile button defaults. */
+.page .section button {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
 .sectionHeading {
   display: flex;
   align-items: center;
