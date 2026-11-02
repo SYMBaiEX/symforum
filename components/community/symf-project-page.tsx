@@ -9,10 +9,14 @@ import { symfChoice } from "@/components/trading/market-identity";
 import { TerminalBoundary } from "@/components/trading/terminal-boundary";
 import { TokenDetail } from "@/components/trading/token-detail";
 import terminalStyles from "@/components/trading/forum-terminal.module.css";
+import { forumCommunityLinks } from "@/lib/forum-community-links";
 import { installation } from "@/lib/installation";
-import { FORUM_TELEGRAM_URL, forumSiteUrl } from "@/lib/site-urls";
+import { forumSiteUrl } from "@/lib/site-urls";
 import { SYMF_EXPLORER_URL, SYMF_PUMP_URL, SYMF_TOKEN } from "@/lib/symf-token";
-import { SymfProjectDiscussions } from "./symf-project-discussions";
+import {
+  SymfProjectDiscussions,
+  symfAnnouncementPath,
+} from "./symf-project-discussions";
 import styles from "./symf-project-page.module.css";
 
 const outputToken: TradeToken = {
@@ -24,6 +28,7 @@ const outputToken: TradeToken = {
   icon: "/images/brand/symforum-icon-64.png",
 };
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
+const communityLinks = forumCommunityLinks(installation);
 
 /** The parent supplies the existing commerce wallet and exact-mint gate. */
 export function SymfProjectPage({ children }: { children: ReactNode }) {
@@ -90,16 +95,24 @@ export function SymfProjectPage({ children }: { children: ReactNode }) {
             <a href={forumSiteUrl()} className="focus-ring">
               <Globe size={16} aria-hidden="true" /> Website
             </a>
-            <a href={FORUM_TELEGRAM_URL} {...external} className="focus-ring">
-              <Send size={16} aria-hidden="true" /> Telegram
-            </a>
-            <a
-              href={`https://x.com/${installation.x.accounts.symforum}`}
-              {...external}
-              className="focus-ring"
-            >
-              X <ArrowUpRight size={14} aria-hidden="true" />
-            </a>
+            {communityLinks.telegram && (
+              <a
+                href={communityLinks.telegram.href}
+                {...external}
+                className="focus-ring"
+              >
+                <Send size={16} aria-hidden="true" /> Telegram
+              </a>
+            )}
+            {communityLinks.x && (
+              <a
+                href={communityLinks.x.href}
+                {...external}
+                className="focus-ring"
+              >
+                X <ArrowUpRight size={14} aria-hidden="true" />
+              </a>
+            )}
           </div>
         </div>
         <div className={styles.mintIdentity}>
@@ -202,14 +215,16 @@ export function SymfProjectPage({ children }: { children: ReactNode }) {
             .
           </p>
           <div className={styles.overviewLinks}>
-            <ForumLink
-              href={SYMF_TOKEN.announcementPath}
-              prefetch={false}
-              className={`${styles.textLink} focus-ring`}
-            >
-              <MessageSquare size={16} aria-hidden="true" /> Read the token
-              announcement
-            </ForumLink>
+            {symfAnnouncementPath && (
+              <ForumLink
+                href={symfAnnouncementPath}
+                prefetch={false}
+                className={`${styles.textLink} focus-ring`}
+              >
+                <MessageSquare size={16} aria-hidden="true" /> Read the token
+                announcement
+              </ForumLink>
+            )}
             <a
               href={SYMF_PUMP_URL}
               {...external}
