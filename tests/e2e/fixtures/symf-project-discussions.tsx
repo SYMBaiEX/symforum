@@ -13,7 +13,9 @@ createRoot(document.getElementById("root")!).render(
       data-surface="forum"
       style={{ padding: 16, maxWidth: 1200, margin: "auto" }}
     >
-      <SymfProjectDiscussions />
+      <div className="forum-surface">
+        <SymfProjectDiscussions />
+      </div>
     </main>
   </SurfaceScope.Provider>,
 );

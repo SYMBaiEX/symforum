@@ -5,9 +5,31 @@ import { FORUM_SHARED_THEME_CSS } from "../../packages/forum-ui/src/theme";
 import installation from "../fixtures/installation.symbaiex.json";
 
 const origin = "http://127.0.0.1:43381";
-let script: string;
+const scripts: Record<string, string> = {};
+const configs = {
+  configured: installation,
+  missing: {
+    ...installation,
+    token: { ...installation.token, announcementPath: "" },
+  },
+  boardOnly: {
+    ...installation,
+    token: { ...installation.token, announcementPath: "/forum/crypto-pumpfun" },
+  },
+  nonThread: {
+    ...installation,
+    token: { ...installation.token, announcementPath: "/forum/help/wallets" },
+  },
+  nonForum: {
+    ...installation,
+    token: { ...installation.token, announcementPath: "/about" },
+  },
+};
 const css: Record<string, string> = {};
-const audits = new WeakMap<Page, { errors: string[]; external: string[] }>();
+const audits = new WeakMap<
+  Page,
+  { errors: string[]; external: string[]; scoped: boolean }
+>();
 test.beforeAll(() => {
   for (const app of ["platform", "forum"])
     css[app] =
@@ -21,14 +43,15 @@ test.beforeAll(() => {
         ],
         { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 },
       );
-  script = execFileSync(
-    "bun",
-    [
-      "-e",
-      `const r=await Bun.build({entrypoints:["tests/e2e/fixtures/symf-project-discussions.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:await Bun.file("tests/fixtures/installation.symbaiex.json").text()})},plugins:[{name:"readonly-discussions",setup(build){build.onResolve({filter:/^convex\\/react$|^next\\/navigation$|^next\\/link$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/symf-project-discussions-state.tsx"}));}}]});if(!r.success)throw Error(r.logs.join("\\n"));for(const f of r.outputs){if(f.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await f.text())+"}));");else process.stdout.write(await f.text());}`,
-    ],
-    { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 },
-  );
+  for (const [name, config] of Object.entries(configs))
+    scripts[name] = execFileSync(
+      "bun",
+      [
+        "-e",
+        `const r=await Bun.build({entrypoints:["tests/e2e/fixtures/symf-project-discussions.tsx"],target:"browser",format:"iife",minify:true,define:{"process.env":JSON.stringify({NODE_ENV:"production",NEXT_PUBLIC_INSTALLATION_CONFIG:${JSON.stringify(JSON.stringify(config))}})},plugins:[{name:"readonly-discussions",setup(build){build.onResolve({filter:/^convex\\/react$|^next\\/navigation$|^next\\/link$/},()=>({path:process.cwd()+"/tests/e2e/fixtures/symf-project-discussions-state.tsx"}));}}]});if(!r.success)throw Error(r.logs.join("\\n"));for(const f of r.outputs){if(f.path.endsWith(".css"))process.stdout.write(";document.head.appendChild(Object.assign(document.createElement('style'),{textContent:"+JSON.stringify(await f.text())+"}));");else process.stdout.write(await f.text());}`,
+      ],
+      { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 },
+    );
 });
 async function open(
   page: Page,
@@ -37,9 +60,14 @@ async function open(
     app?: string;
     theme?: string;
     path?: string;
+    config?: keyof typeof configs;
   } = {},
 ) {
-  const audit = { errors: [] as string[], external: [] as string[] };
+  const audit = {
+    errors: [] as string[],
+    external: [] as string[],
+    scoped: !options.config || options.config === "configured",
+  };
   audits.set(page, audit);
   page.on("pageerror", (error) => audit.errors.push(error.message));
   await page.route("**/*", (route) => {
@@ -53,7 +81,10 @@ async function open(
         body: `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css[options.app ?? "platform"]}</style><div id="root"></div><script src="/fixture.js"></script>`,
       });
     if (url.origin === origin && url.pathname === "/fixture.js")
-      return route.fulfill({ contentType: "text/javascript", body: script });
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: scripts[options.config ?? "configured"],
+      });
     audit.external.push(url.href);
     return route.abort();
   });
@@ -78,7 +109,8 @@ test.afterEach(async ({ page }) => {
     await page.evaluate(() => window.symfDiscussionEvidence.forbidden),
   ).toEqual([]);
   const reads = await page.evaluate(() => window.symfDiscussionEvidence.reads);
-  expect(reads.length).toBeGreaterThan(0);
+  if (audit.scoped) expect(reads.length).toBeGreaterThan(0);
+  else expect(reads).toEqual([]);
   for (const read of reads)
     expect(read).toEqual({
       name: "forum:search",
@@ -174,6 +206,68 @@ test("query failure leaves the known announcement and safe search reachable with
     page.getByRole("link", { name: "Search discussions", exact: true }),
   ).toBeVisible();
 });
+for (const app of ["platform", "forum"])
+  for (const config of [
+    "missing",
+    "boardOnly",
+    "nonThread",
+    "nonForum",
+  ] as const)
+    test(`${app} ${config} announcement configuration does not auto-search or invent an official link`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 844 });
+      await open(page, { app, config });
+      await expect(section(page)).toContainText(
+        "The configured discussion link is unavailable",
+      );
+      await expect(section(page)).toContainText("No automatic search has run");
+      await expect(section(page)).not.toContainText(
+        "token announcement’s board",
+      );
+      await expect(
+        section(page).getByRole("link", {
+          name: /Read the SYMF token announcement/,
+        }),
+      ).toHaveCount(0);
+      await expect(section(page).getByRole("listitem")).toHaveCount(0);
+      const search = section(page).getByRole("link", {
+        name: "Search the full forum",
+        exact: true,
+      });
+      await expect(search).toHaveAttribute(
+        "href",
+        "/search?q=SYMF&type=threads",
+      );
+      expect(
+        await page.evaluate(() => window.symfDiscussionEvidence.reads),
+      ).toEqual([]);
+      await page.keyboard.press("Tab");
+      await expect(search).toBeFocused();
+    });
+for (const app of ["platform", "forum"])
+  for (const width of [320, 390])
+    test(`${app} real forum-surface ${width}px failure recovery retains a 44px target`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await open(page, { app, scenario: "error" });
+      await expect(page.locator(".forum-app-shell .forum-surface")).toHaveCount(
+        1,
+      );
+      const retry = section(page).getByRole("button", {
+        name: "Retry panel: Related forum discussions",
+        exact: true,
+      });
+      await expect(retry).toBeVisible();
+      const box = (await retry.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      await retry.focus();
+      await expect(retry).toBeFocused();
+    });
 for (const app of ["platform", "forum"])
   for (const theme of ["light", "dark"])
     for (const width of [320, 390, 1280])
